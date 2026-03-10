@@ -1,20 +1,24 @@
 import streamlit as st
-from streamlit_gsheets import GSheetsConnection
 import pandas as pd
 
 st.set_page_config(page_title="Smart Recommender POC", layout="wide")
 
-# 1. CONNECT TO YOUR GOOGLE SHEET
-# Streamlit will use this connection to read your live data
-conn = st.connection("gsheets", type=GSheetsConnection)
+# The Bulletproof Direct CSV Links
+SHEET_ID = "1PeLckGFNH-l9GrEvSs3ZQ0N0mXrEYwzA_JwO1wTzJWo"
 
-# Replace this URL with your actual Google Sheet link
-SHEET_URL = "https://docs.google.com/spreadsheets/d/1PeLckGFNH-l9GrEvSs3ZQ0N0mXrEYwzA_JwO1wTzJWo/edit?usp=sharing"
+@st.cache_data
+def load_data():
+    url_products = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet=Products"
+    url_history = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet=History"
+    url_slots = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet=Slot_Matrix"
+    
+    df_p = pd.read_csv(url_products)
+    df_h = pd.read_csv(url_history)
+    df_s = pd.read_csv(url_slots)
+    return df_p, df_h, df_s
 
-# Read the three tabs we created
-df_products = conn.read(spreadsheet=SHEET_URL, worksheet="Products")
-df_history = conn.read(spreadsheet=SHEET_URL, worksheet="History")
-df_slots = conn.read(spreadsheet=SHEET_URL, worksheet="Slot_Matrix")
+# Load the data
+df_products, df_history, df_slots = load_data()
 
 st.title("📱 Smartphone Recommendation Tool")
 
