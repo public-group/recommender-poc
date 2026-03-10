@@ -9,7 +9,7 @@ st.set_page_config(page_title="Smart Recommender POC", layout="wide")
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 # Replace this URL with your actual Google Sheet link
-SHEET_URL = "https://docs.google.com/spreadsheets/d/1PeLckGFNH-l9GrEvSs3ZQ0N0mXrEYwzA_JwO1wTzJWo/edit?usp=sharing"
+SHEET_URL = "https://docs.google.com/spreadsheets/d/1PeLckGFNH-l9GrEvSs3ZQ0N0mXrEYwzA_JwO1wTzJWo/edit?gid=0#gid=0"
 
 # Read the three tabs we created
 df_products = conn.read(spreadsheet=SHEET_URL, worksheet="Products")
