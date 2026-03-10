@@ -209,7 +209,16 @@ if not recs.empty:
         img_url = str(row.get('Thumbnails', ''))
         
         # Format the prices
-        raw_price = float(row.get('LIST PRICE', 0))
+        # Safely parse European prices (handles commas and € symbols)
+        price_str = str(row.get('LIST PRICE', '0')).replace('€', '').strip()
+        if ',' in price_str and '.' in price_str:
+            price_str = price_str.replace('.', '') # Remove thousands separator
+        price_str = price_str.replace(',', '.') # Change decimal comma to dot
+        
+        try:
+            raw_price = float(price_str)
+        except ValueError:
+            raw_price = 0.0
         new_price = f"{raw_price:.2f}".replace('.', ',')
         old_price = f"{(raw_price * 1.25):.2f}".replace('.', ',') # Mocking a 25% higher original price
         
