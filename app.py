@@ -384,12 +384,12 @@ def calculate_recommendations(trigger, df_products, df_history, df_slots):
         # LOGIC 6: Cross-Sell (Slot 6)
         elif slot_num == 6:
             if "με pen" in trig_extras:
-                sc = sc[sc['Τύπος3'].fillna('').str.contains("Γραφίδα", case=False)]
+                sc = sc[sc['Τύπος'].fillna('').str.contains("Γραφίδα", case=False)]
             elif trig_brand == "APPLE":
-                sc = sc[sc['Τύπος3'].fillna('').str.contains("AirTag", case=False)]
+                sc = sc[sc['Τύπος'].fillna('').str.contains("AirTag", case=False)]
             else:
                 allowed_types = "Λουράκι Λαιμού|Λουράκι Καρπού|Αξεσουάρ Smartphone|Αξεσουάρ Κάμερας|Αξεσουάρ Καθαρισμού"
-                sc = sc[sc['Τύπος3'].fillna('').str.contains(allowed_types, case=False)]
+                sc = sc[sc['Τύπος'].fillna('').str.contains(allowed_types, case=False)]
 
         # LOGIC 5: Wearable (Slot 8)
         elif slot_num == 8:
