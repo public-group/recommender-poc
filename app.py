@@ -6,7 +6,7 @@ import re
 from difflib import SequenceMatcher
 
 st.set_page_config(page_title="Smart Recommender POC", layout="wide")
-st.info("🟢 **Engine v7.0** — Enhance UI ")
+st.info("🟢 **Engine v7.1** — Enhance UI ")
 
 # ─────────────────────────────────────────────────────────────
 # CUSTOM TOP HEADER & GLOBAL STYLING
@@ -23,33 +23,30 @@ st.markdown("""
     }
 
     /* 2. FIX THE SIDEBAR TOGGLE BUTTON */
-    /* This forces Streamlit's open/close button to sit ON TOP of our orange header */
-    [data-testid="collapsedControl"] {
-        z-index: 1000000 !important; 
-        top: 15px !important; 
+    /* Instead of hiding the header entirely, we make it transparent and put it ABOVE our orange bar */
+    header[data-testid="stHeader"] { 
+        background: transparent !important;
+        box-shadow: none !important;
+        z-index: 1000001 !important; 
     }
-    [data-testid="collapsedControl"] svg {
-        fill: #ffffff !important; /* Makes the expand arrow white */
+    /* Turn the sidebar arrow and top right menu white so it pops on the orange background */
+    header[data-testid="stHeader"] svg {
+        fill: #ffffff !important;
         color: #ffffff !important;
     }
 
-    /* 3. Hide the default Streamlit header */
-    header[data-testid="stHeader"] { 
-        display: none !important; 
-    }
-
-    /* 4. Push the main content down so it doesn't hide under our new header */
+    /* 3. Push the main content down so it doesn't hide under our new header */
     .appview-container .main .block-container { 
         padding-top: 100px !important; 
     }
     
-    /* 5. The Fixed Dual-Orange Header (Fixed Width) */
+    /* 4. The Fixed Dual-Orange Header (Fixed Width) */
     .poc-header-wrapper {
         position: fixed;
         top: 0;
         left: 0;
         right: 0;
-        width: 100%; /* Fixes the horizontal line stretching */
+        width: 100%; 
         z-index: 999999;
     }
     
@@ -67,7 +64,7 @@ st.markdown("""
         width: 100%;
         display: flex;
         align-items: center;
-        padding: 0 40px;
+        padding: 0 40px 0 75px; /* Added left padding to make room for the sidebar arrow */
         box-shadow: 0 2px 5px rgba(0,0,0,0.15);
     }
     
@@ -80,7 +77,7 @@ st.markdown("""
         letter-spacing: -0.5px;
     }
 
-    /* 6. RESTORE THE VERTICAL ORANGE LINE FOR TITLES */
+    /* 5. RESTORE THE VERTICAL ORANGE LINE FOR TITLES */
     .public-header {
         font-family: -apple-system, BlinkMacSystemFont, sans-serif;
         font-size: 24px;
