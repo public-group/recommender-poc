@@ -52,7 +52,7 @@ st.markdown("""
     /* The Thin Dark Orange Bar */
     .poc-top-bar {
         background-color: #cc4a00;
-        height: 34px;
+        height: 24px;
         width: 100%;
     }
     
