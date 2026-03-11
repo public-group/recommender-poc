@@ -8,46 +8,99 @@ from difflib import SequenceMatcher
 st.set_page_config(page_title="Smart Recommender POC", layout="wide")
 st.info("🟢 **Engine v7.0** — Enhance UI ")
 
-# 🟢 GLOBAL BRAND STYLING (Matching Public's UI)
+# ─────────────────────────────────────────────────────────────
+# GLOBAL BRAND STYLING (Public.gr Replica)
+# ─────────────────────────────────────────────────────────────
 st.markdown("""
 <style>
-    /* 1. Make the sidebar crisp white with a subtle border */
-    [data-testid="stSidebar"] {
+    /* 1. Force the entire app and sidebar to be clean white, killing the grey */
+    .stApp, .main, [data-testid="stSidebar"] {
         background-color: #ffffff !important;
+    }
+    [data-testid="stSidebar"] {
         border-right: 1px solid #eaeaea !important;
     }
-    
-    /* 2. Set the main app background to the site's subtle off-white */
-    .stApp {
-        background-color: #f5f5f7 !important; 
+
+    /* 2. Hide the default Streamlit header */
+    header[data-testid="stHeader"] { 
+        display: none !important; 
     }
     
-    /* 3. Hide Streamlit's default top header line */
-    header[data-testid="stHeader"] {
-        background: transparent !important;
+    /* Push the Streamlit content down so it doesn't hide behind our custom fixed header */
+    .appview-container .main .block-container { 
+        padding-top: 130px !important; 
     }
 
-    /* 4. Create the signature Public header style (Orange vertical line) */
-    .public-header {
+    /* 3. Build the Custom Fixed Orange Header */
+    .public-header-wrapper {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        z-index: 999999;
         font-family: -apple-system, BlinkMacSystemFont, sans-serif;
-        font-size: 22px;
-        font-weight: 700;
-        color: #000000;
-        margin-top: 10px;
-        margin-bottom: 20px;
+    }
+    .public-top-bar {
+        background-color: #d94b00; /* Darker orange for the top thin bar */
+        height: 32px;
+        width: 100%;
+        display: flex;
+        justify-content: flex-end;
+        align-items: center;
+        padding: 0 40px;
+        color: #ffffff;
+        font-size: 12px;
+        font-weight: 500;
+        letter-spacing: 0.3px;
+    }
+    .public-main-bar {
+        background-color: #ff5e00; /* Bright brand orange */
+        height: 72px;
+        width: 100%;
         display: flex;
         align-items: center;
+        padding: 0 40px;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.1);
     }
-    .public-header::before {
-        content: '';
-        display: inline-block;
-        width: 4px;
-        height: 22px;
-        background-color: #ff5e00; /* Brand Orange */
+    .public-logo {
+        color: #ffffff;
+        font-weight: 900;
+        font-size: 34px;
+        letter-spacing: -1.5px;
+        margin-right: 50px;
+        cursor: pointer;
+    }
+    .public-search-bar {
+        background-color: #ffffff;
+        height: 44px;
+        border-radius: 12px;
+        flex-grow: 1;
+        max-width: 600px;
+        display: flex;
+        align-items: center;
+        padding-left: 15px;
+        color: #888;
+        font-size: 15px;
+        cursor: text;
+    }
+    .public-search-icon {
         margin-right: 10px;
-        border-radius: 2px;
+        font-size: 18px;
     }
 </style>
+
+<div class="public-header-wrapper">
+    <div class="public-top-bar">
+        <span>📞 210 8181333 &nbsp;&nbsp;&nbsp;&nbsp; 💼 Το Wallet μου &nbsp;&nbsp;&nbsp;&nbsp; 📍 Εξέλιξη παραγγελίας</span>
+    </div>
+    <div class="public-main-bar">
+        <div class="public-logo">Public</div>
+        <div class="public-search-bar">
+            <span class="public-search-icon">🔍</span>
+            Τι ψάχνεις σήμερα;
+        </div>
+    </div>
+</div>
 """, unsafe_allow_html=True)
 
 # ─────────────────────────────────────────────────────────────
