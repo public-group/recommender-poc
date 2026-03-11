@@ -5,8 +5,8 @@ import html as html_lib
 import re
 from difflib import SequenceMatcher
 
+
 st.set_page_config(page_title="Smart Recommender POC", layout="wide")
-st.info("🟢 **Engine v7.1** — Enhance UI ")
 
 # ─────────────────────────────────────────────────────────────
 # CUSTOM TOP HEADER & GLOBAL STYLING
@@ -19,17 +19,15 @@ st.markdown("""
     }
     [data-testid="stSidebar"] {
         border-right: 1px solid #eaeaea !important;
-        padding-top: 75px !important; /* Push sidebar down below header */
+        padding-top: 110px !important; /* Pushed further down to clear the yellow banner */
     }
 
     /* 2. FIX THE SIDEBAR TOGGLE BUTTON */
-    /* Instead of hiding the header entirely, we make it transparent and put it ABOVE our orange bar */
     header[data-testid="stHeader"] { 
         background: transparent !important;
         box-shadow: none !important;
         z-index: 1000001 !important; 
     }
-    /* Turn the sidebar arrow and top right menu white so it pops on the orange background */
     header[data-testid="stHeader"] svg {
         fill: #ffffff !important;
         color: #ffffff !important;
@@ -37,35 +35,35 @@ st.markdown("""
 
     /* 3. Push the main content down so it doesn't hide under our new header */
     .appview-container .main .block-container { 
-        padding-top: 100px !important; 
+        padding-top: 130px !important; 
     }
     
-    /* 4. The Fixed Dual-Orange Header (Fixed Width) */
+    /* 4. The Fixed Header Wrapper - WIDTH BUG FIXED */
     .poc-header-wrapper {
         position: fixed;
         top: 0;
         left: 0;
-        right: 0;
-        width: 100%; 
+        right: 0; /* FIX: Using right:0 instead of width:100% prevents the horizontal scrollbar gap */
         z-index: 999999;
+        display: flex;
+        flex-direction: column;
     }
     
     /* The Thin Dark Orange Bar */
     .poc-top-bar {
-        background-color: #cc4a00; /* Darker orange */
+        background-color: #cc4a00;
         height: 12px;
         width: 100%;
     }
     
     /* The Thick Bright Orange Bar with Text */
     .poc-main-bar {
-        background-color: #ff5e00; /* Bright brand orange */
+        background-color: #ff5e00; 
         height: 60px;
         width: 100%;
         display: flex;
         align-items: center;
-        padding: 0 40px 0 75px; /* Added left padding to make room for the sidebar arrow */
-        box-shadow: 0 2px 5px rgba(0,0,0,0.15);
+        padding: 0 40px 0 75px; 
     }
     
     /* The PoC Title Text */
@@ -77,7 +75,22 @@ st.markdown("""
         letter-spacing: -0.5px;
     }
 
-    /* 5. RESTORE THE VERTICAL ORANGE LINE FOR TITLES */
+    /* 🟢 NEW: The Yellow Promo Banner */
+    .poc-promo-banner {
+        background-color: #ffeb85;
+        height: 36px;
+        width: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+        font-size: 14px;
+        font-weight: 600;
+        color: #000000;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.08);
+    }
+
+    /* 5. The Vertical Orange Line for Titles */
     .public-header {
         font-family: -apple-system, BlinkMacSystemFont, sans-serif;
         font-size: 24px;
@@ -97,12 +110,20 @@ st.markdown("""
         margin-right: 10px;
         border-radius: 2px;
     }
+    
+    /* Ensure any default streamlit alerts/infos are hidden if they try to render */
+    [data-testid="stAlert"] {
+        display: none !important;
+    }
 </style>
 
 <div class="poc-header-wrapper">
     <div class="poc-top-bar"></div>
     <div class="poc-main-bar">
         <div class="poc-title">Recommendation PoC</div>
+    </div>
+    <div class="poc-promo-banner">
+        Όλα ΑΤΟΚΑ και χωρίς κάρτα
     </div>
 </div>
 """, unsafe_allow_html=True)
