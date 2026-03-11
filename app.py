@@ -7,6 +7,49 @@ from difflib import SequenceMatcher
 
 st.set_page_config(page_title="Smart Recommender POC", layout="wide")
 st.info("🟢 **Engine v6.0** — Dynamic Ecosystem Walls & Sales Volume Overrides")
+
+# 🟢 GLOBAL BRAND STYLING (Matching Public's UI)
+st.markdown("""
+<style>
+    /* 1. Make the sidebar crisp white with a subtle border */
+    [data-testid="stSidebar"] {
+        background-color: #ffffff !important;
+        border-right: 1px solid #eaeaea !important;
+    }
+    
+    /* 2. Set the main app background to the site's subtle off-white */
+    .stApp {
+        background-color: #f5f5f7 !important; 
+    }
+    
+    /* 3. Hide Streamlit's default top header line */
+    header[data-testid="stHeader"] {
+        background: transparent !important;
+    }
+
+    /* 4. Create the signature Public header style (Orange vertical line) */
+    .public-header {
+        font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+        font-size: 22px;
+        font-weight: 700;
+        color: #000000;
+        margin-top: 10px;
+        margin-bottom: 20px;
+        display: flex;
+        align-items: center;
+    }
+    .public-header::before {
+        content: '';
+        display: inline-block;
+        width: 4px;
+        height: 22px;
+        background-color: #ff5e00; /* Brand Orange */
+        margin-right: 10px;
+        border-radius: 2px;
+    }
+</style>
+""", unsafe_allow_html=True)
+
 # ─────────────────────────────────────────────────────────────
 # CONFIG
 # ─────────────────────────────────────────────────────────────
@@ -175,7 +218,6 @@ def load_data():
     return dp, dh, ds, found
 
 df_products, df_history, df_slots, compat_cols_found = load_data()
-st.title("📱 Smartphone Recommendation Tool")
 
 # ─────────────────────────────────────────────────────────────
 # TRIGGER
@@ -194,7 +236,12 @@ sel = st.sidebar.selectbox("Select a Smartphone:", phones['Title'].unique())
 
 if sel:
     trigger = phones[phones['Title']==sel].iloc[0]
-    st.subheader(f"Building the perfect loadout for: {sel}")
+    
+    # Use the custom CSS class to create the branded header
+    st.markdown('<div class="public-header">Επιλογές για εσένα</div>', unsafe_allow_html=True)
+    
+    # Add a subtle text below it indicating what phone they are shopping for
+    st.markdown(f"<p style='color: #555; font-size: 14px; margin-top: -15px; margin-bottom: 25px;'>Συμβατά αξεσουάρ για το <b>{sel}</b></p>", unsafe_allow_html=True)
     
     # Extract EXACT data from dataframe
     card_title = safe(str(trigger.get('Title', sel)))
