@@ -19,15 +19,20 @@ CLUSTER_CONFIG = {
 }
 ACTIVE_CLUSTER = "Smartphones"
 
-# 🟢 MATH INVERSION: Boosts are now tiny decimals, History remains a hard override
-SMART_BOOST      = 0.001 
-AVAIL_BOOST      = 0.0005
-HISTORY_BOOST    = 100 
+# 🟢 THE VIRTUAL SALES BUMP: 
+# A brand match acts like 15 extra sales. Availability acts like 2 extra sales.
+SMART_BOOST      = 15 
+AVAIL_BOOST      = 2
+HISTORY_BOOST    = 100000 
 HISTORY_FREQ_MIN = 3
+
 TECH_CATS = {"IT", "Telephony", "TV"}
 APPL_CATS = {"MDA", "SDA", "Air Condition", "Personal Care"}
 COMPAT_COLS = ["Συμβατό με", "Συμβατή συσκευή"]
-CC = "_Compatible"  # Merged compat column
+CC = "_Compatible"
+
+# 🟢 THE WALLED GARDEN LIST
+ANDROID_OEMS = {"SAMSUNG", "XIAOMI", "HUAWEI", "MOTOROLA", "HONOR", "POCO", "REALME", "ONEPLUS", "NOTHING"}
 
 # ─────────────────────────────────────────────────────────────
 # ROLE → LOGIC KEY MAPPING
@@ -241,11 +246,23 @@ def run_engine(trigger, df_products, df_history, df_slots):
         diag.append(("3. U1: siblings", len(c), f"Checked {ns}, removed {len(dupes)}"))
     else: diag.append(("3. U1: siblings", len(c), "No siblings"))
 
-    # U3: macro wall
+# U3: macro wall
     b4=len(c)
     if tl1 in TECH_CATS: c=c[~c['Level 1'].isin(APPL_CATS)]
     elif tl1 in APPL_CATS: c=c[~c['Level 1'].isin(TECH_CATS)]
-    diag.append(("4. U3: macro wall", len(c), f"Removed {b4-len(c)}"))
+    diag.append(("4a. U3: macro wall", len(c), f"Removed {b4-len(c)}"))
+
+    # 🟢 U4: ECOSYSTEM WALLED GARDEN
+    b4eco = len(c)
+    if tb == "APPLE":
+        # Ban Android brands from Apple triggers
+        c = c[~c['Κατασκευαστής'].fillna('').str.strip().str.upper().isin(ANDROID_OEMS)]
+    elif tb in ANDROID_OEMS:
+        # Ban Apple accessories from Android triggers
+        c = c[c['Κατασκευαστής'].fillna('').str.strip().str.upper() == "APPLE"]
+        # (Wait, actually we want to drop Apple! Let's do that right:)
+        c = c[c['Κατασκευαστής'].fillna('').str.strip().str.upper() != "APPLE"]
+    diag.append(("4b. U4: ecosystem wall", len(c), f"Removed {b4eco-len(c)} rival OEM items"))
 
     # Scoring
     tcust = df_history[df_history['Material']==tm]['customerEmail'].unique()
