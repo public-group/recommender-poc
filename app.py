@@ -28,7 +28,7 @@ HISTORY_FREQ_MIN = 3
 TECH_CATEGORIES      = {"IT", "Telephony", "TV"}
 APPLIANCE_CATEGORIES = {"MDA", "SDA", "Air Condition", "Personal Care"}
 
-COL_COMPATIBLE = "Συμβατό με"
+COL_COMPATIBLE = "Συμβατή συσκευή"
 
 # ─────────────────────────────────────────────────────────────
 # PORT EXTRACTION
