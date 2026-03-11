@@ -601,7 +601,7 @@ def run_engine(trigger, df_products, df_history, df_slots):
         c=c.drop(ok2[~ok2].index)
     diag.append(("5. U5: price ceiling", len(c), f"Removed {b4u5-len(c)} (ceil: €{max(tprice*0.40,45):.0f})"))
 
-    # ── SLOT ASSIGNMENT ──
+  # ── SLOT ASSIGNMENT ──
     all_slot = []
     for _, sr in df_slots.iterrows():
         sn = sr['Slot_Number']
@@ -612,16 +612,15 @@ def run_engine(trigger, df_products, df_history, df_slots):
         afh = len(sc)
         notes = [f"Logic: {lk}"]
 
-if lk == "PRIMARY_CASE":
+        if lk == "PRIMARY_CASE":
             if strict_tmod:
                 b4 = len(sc)
                 cv = sc[CC].fillna('').str.lower()
-                # 🟢 FIX: STRICT MATCH ONLY. Includes exact model or explicitly 'universal'.
                 m = sc[cv.str.contains(strict_tmod, case=False, regex=True) | cv.str.contains("universal", regex=False)]
                 notes.append(f"Strict Model '{tmod}': {b4}→{len(m)}")
-                sc = m  # If empty, it stays empty! No more random iPhone cases.
+                sc = m  
             else:
-                sc = sc.head(0) # Empty dataframe if no model is defined
+                sc = sc.head(0) 
 
             if not sc.empty:
                 b4=len(sc); f=sc[sc['Τύπος Θήκης'].fillna('').str.contains("Back Cover", case=False)]
@@ -631,12 +630,10 @@ if lk == "PRIMARY_CASE":
                 b4=len(sc); sc=sc[sc['Χρώμα'].fillna('').str.strip().str.lower().isin(ccols)]
                 notes.append(f"Color {ccols[:3]}: {b4}→{len(sc)}")
 
-# ───────────────────────────────────────
         elif lk == "ALT_CASE":
             if strict_tmod:
                 b4 = len(sc)
                 cv = sc[CC].fillna('').str.lower()
-                # 🟢 FIX: STRICT MATCH ONLY.
                 sc = sc[cv.str.contains(strict_tmod, case=False, regex=True) | cv.str.contains("universal", regex=False)]
                 notes.append(f"Strict Model '{tmod}': {b4}→{len(sc)}")
             else:
@@ -655,12 +652,10 @@ if lk == "PRIMARY_CASE":
                     sc = sc[is_book]
                     notes.append(f"Strict Book Cover (no phone color): {b4}→{len(sc)}")
 
-# ───────────────────────────────────────
         elif lk == "SCREEN_GLASS":
             if strict_tmod:
                 b4 = len(sc)
                 cv = sc[CC].fillna('').str.lower()
-                # 🟢 FIX: STRICT MATCH ONLY.
                 m = sc[cv.str.contains(strict_tmod, case=False, regex=True) | cv.str.contains("universal", regex=False)]
                 notes.append(f"Strict Model '{tmod}': {b4}→{len(m)}")
                 sc = m
@@ -673,12 +668,10 @@ if lk == "PRIMARY_CASE":
                 notes.append(f"Screen Protector type: {b4}→{len(f)}")
                 if not f.empty: sc=f
 
-# ───────────────────────────────────────
         elif lk == "CAMERA_GLASS":
             if strict_tmod:
                 b4 = len(sc)
                 cv = sc[CC].fillna('').str.lower()
-                # 🟢 FIX: STRICT MATCH ONLY.
                 m = sc[cv.str.contains(strict_tmod, case=False, regex=True) | cv.str.contains("universal", regex=False)]
                 notes.append(f"Strict Model '{tmod}': {b4}→{len(m)}")
                 sc = m
@@ -691,7 +684,6 @@ if lk == "PRIMARY_CASE":
                 notes.append(f"Camera type: {b4}→{len(f)}")
                 if not f.empty: sc=f
             
-            # Safe Fallback to Cable if no camera glass exists
             if sc.empty and tport:
                 fb_h = ['CABLE-CHARGER', 'APPLE ORIGINAL IPHONE CABLE-ADAPTORS', 'ΚΑΛΩΔΙΑ ΔΕΔΟΜΕΝΩΝ', 'MOBILE CABLE-ADAPTORS', 'IPHONE CABLE-ADAPTORS']
                 fb = c[c['Hierarchy'].isin(fb_h)].copy()
@@ -702,9 +694,7 @@ if lk == "PRIMARY_CASE":
                 notes.append(f"Cable fallback ({tport}): {len(fb_port)}")
                 if not fb_port.empty: sc = fb_port
 
-# ───────────────────────────────────────
         elif lk == "WALL_CHARGER":
-
             if not sc.empty:
                 b4=len(sc)
                 cv = sc[CC].fillna('').str.lower()
@@ -758,9 +748,6 @@ if lk == "PRIMARY_CASE":
             if not sc.empty:
                 sc.loc[sc['Κατασκευαστής'].fillna('').str.strip().str.upper()==tb,'Final_Score']+=SMART_BOOST
 
-# ───────────────────────────────────────
-        # SMARTWATCH: OS compat + MASSIVE ecosystem boost
-        # ───────────────────────────────────────
         elif lk == "SMARTWATCH":
             if not sc.empty and has_data(sc, CC):
                 b4=len(sc)
@@ -774,18 +761,10 @@ if lk == "PRIMARY_CASE":
                 if not f.empty: sc=f
                 else: notes.append(f"  ⚠ kept all (sample: {sample(sc,CC,3)})")
             
-# 🟢 FIX: Hardware Lock-in using the dynamic price tier!
             hw_boost = ECOSYSTEM_BOOST if tprice >= 700 else SMART_BOOST
             sc.loc[sc['Κατασκευαστής'].fillna('').str.strip().str.upper()==tb,'Final_Score'] += hw_boost
 
-# ───────────────────────────────────────
-        # EARBUDS: connection type + DYNAMIC ecosystem boost
-        # ───────────────────────────────────────
         elif lk == "EARBUDS":
-            
-            # 🟢 NEW: Dynamic Hardware Lock-in! 
-            # Premium phones (>= €700) get the massive 100,000 boost. 
-            # Mid/Low tier phones (< €700) only get the standard 15-point brand bump.
             hw_boost = ECOSYSTEM_BOOST if tprice >= 700 else SMART_BOOST
 
             if "3.5mm jack" in tex:
@@ -818,7 +797,6 @@ if lk == "PRIMARY_CASE":
                 if not f.empty: sc=f
                 else: notes.append(f"  ⚠ kept all")
                 
-                # Brand Boost
                 sc.loc[sc['Κατασκευαστής'].fillna('').str.strip().str.upper()==tb,'Final_Score']+=SMART_BOOST
 
         elif lk == "HOLDER":
@@ -868,6 +846,20 @@ if lk == "PRIMARY_CASE":
     # 🟢 NEW RETURN: Returning `full` so the UI can read the top 3
     if not all_slot:
         return pd.DataFrame(), diag, slot_diag, slot_notes, pd.DataFrame()
+
+    full = pd.concat(all_slot, ignore_index=True).sort_values('Draft_Score').reset_index(drop=True)
+
+    # S1: Hierarchy cap
+    sel, hc, seen = [], {}, set()
+    for _, r in full.iterrows():
+        h, mat = r['Hierarchy'], r['Material']
+        if mat in seen: continue
+        if hc.get(h,0)>=2: continue
+        sel.append(r); hc[h]=hc.get(h,0)+1; seen.add(mat)
+        if len(sel)>=10: break
+
+    diag.append(("6. Final", len(sel), f"Hierarchy cap=2"))
+    return (pd.DataFrame(sel) if sel else pd.DataFrame()), diag, slot_diag, slot_notes, full  
 
     full = pd.concat(all_slot, ignore_index=True).sort_values('Draft_Score').reset_index(drop=True)
 
