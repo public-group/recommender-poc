@@ -173,6 +173,7 @@ trigger = phones[phones['Title']==sel].iloc[0]
 st.subheader(f"Building the perfect loadout for: {sel}")
 
 # ─────────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────
 # ENGINE
 # ─────────────────────────────────────────────────────────────
 def run_engine(trigger, df_products, df_history, df_slots):
@@ -193,19 +194,17 @@ def run_engine(trigger, df_products, df_history, df_slots):
     tprice=parse_euro_price(trigger.get('LIST PRICE',0))
     ccols= get_case_colors(tcol)
 
-    # 🟢 THE "PRO MAX" FIX: Strict Regex Pattern using Negative Lookahead
+    # Strict Regex Pattern for Pro Max fix
     strict_tmod = ""
     if tmod:
-        # Matches the model ONLY if it is not immediately followed by Max, Plus, Ultra, +, or Pro
         strict_tmod = rf"{re.escape(tmod)}(?!\s*(Max|Plus|\+|Ultra|Pro))"
 
     c = df_products[df_products['Material']!=tm].copy()
     diag.append(("0. Start", len(c), ""))
 
-    # 🟢 THE SALES TIEBREAKER SETUP
+    # 🟢 THE SALES TIEBREAKER SETUP (Fixed Multiplier)
     if 'Sum of Sales' in c.columns:
-        # Scale it down so it acts as a tiebreaker, not a rule-breaker
-        c['Sales_Tiebreaker'] = pd.to_numeric(c['Sum of Sales'], errors='coerce').fillna(0) * 0.01
+        c['Sales_Tiebreaker'] = pd.to_numeric(c['Sum of Sales'], errors='coerce').fillna(0) * 0.0001
     else:
         c['Sales_Tiebreaker'] = 0
 
@@ -254,13 +253,12 @@ def run_engine(trigger, df_products, df_history, df_slots):
     c['Avail_Boost']=0; c.loc[c['AVAILABILITY']=='Άμεσα Διαθέσιμο','Avail_Boost']=AVAIL_BOOST
     c['Smart_Boost']=0
     
-    # Apply strict regex matching to the Smart Boost as well
     if strict_tmod:
         c.loc[c['Μοντέλο'].fillna('').str.contains(strict_tmod, case=False, regex=True), 'Smart_Boost'] += SMART_BOOST
         
     c.loc[c['Κατασκευαστής'].fillna('').str.strip().str.upper()==tb,'Smart_Boost']+=SMART_BOOST
     
-    # 🟢 FINAL SCORE NOW INCLUDES THE SALES TIEBREAKER
+    # Final Score includes tiebreaker
     c['Final_Score'] = c['History_Score'] + c['Frequency'] + c['Avail_Boost'] + c['Smart_Boost'] + c['Sales_Tiebreaker']
 
     b4u5=len(c)
@@ -281,9 +279,6 @@ def run_engine(trigger, df_products, df_history, df_slots):
         afh = len(sc)
         notes = [f"Logic: {lk}"]
 
-        # ───────────────────────────────────────
-        # PRIMARY CASE: Strict model match + Back Cover + color
-        # ───────────────────────────────────────
         if lk == "PRIMARY_CASE":
             if strict_tmod:
                 b4=len(sc); m=sc[sc[CC].fillna('').str.contains(strict_tmod, case=False, regex=True)]
@@ -298,9 +293,6 @@ def run_engine(trigger, df_products, df_history, df_slots):
                 b4=len(sc); sc=sc[sc['Χρώμα'].fillna('').str.strip().str.lower().isin(ccols)]
                 notes.append(f"Color {ccols[:3]}: {b4}→{len(sc)}")
 
-        # ───────────────────────────────────────
-        # ALT CASE: Strict model match + Book/Wallet/Folio
-        # ───────────────────────────────────────
         elif lk == "ALT_CASE":
             if strict_tmod:
                 b4=len(sc); m=sc[sc[CC].fillna('').str.contains(strict_tmod, case=False, regex=True)]
@@ -313,9 +305,6 @@ def run_engine(trigger, df_products, df_history, df_slots):
                 notes.append(f"Book/Wallet/Folio: {b4}→{len(f)}")
                 if not f.empty: sc=f
 
-        # ───────────────────────────────────────
-        # SCREEN GLASS: Strict model match (via _Compatible)
-        # ───────────────────────────────────────
         elif lk == "SCREEN_GLASS":
             if strict_tmod:
                 b4=len(sc); m=sc[sc[CC].fillna('').str.contains(strict_tmod, case=False, regex=True)]
@@ -328,9 +317,6 @@ def run_engine(trigger, df_products, df_history, df_slots):
                 notes.append(f"Screen Protector type: {b4}→{len(f)}")
                 if not f.empty: sc=f
 
-        # ───────────────────────────────────────
-        # CAMERA_GLASS: Strict model match
-        # ───────────────────────────────────────
         elif lk == "CAMERA_GLASS":
             if strict_tmod:
                 b4=len(sc); m=sc[sc[CC].fillna('').str.contains(strict_tmod, case=False, regex=True)]
@@ -352,9 +338,6 @@ def run_engine(trigger, df_products, df_history, df_slots):
                 notes.append(f"Cable fallback ({tport}): {len(fb_port)}")
                 if not fb_port.empty: sc = fb_port
 
-        # ───────────────────────────────────────
-        # WALL CHARGER: Compat + Strict model match
-        # ───────────────────────────────────────
         elif lk == "WALL_CHARGER":
             if not sc.empty:
                 b4=len(sc)
@@ -389,7 +372,6 @@ def run_engine(trigger, df_products, df_history, df_slots):
                     notes.append(f"Wall charger types: {b4}→{len(f)}")
                     if not f.empty: sc=f
 
-        # (Powerbank, Smartwatch, Earbuds, Holder, Cross-Sell logic remains unchanged)
         elif lk == "POWERBANK":
             if tport and not sc.empty:
                 cv = sc[CC].fillna('').str.lower()
@@ -433,8 +415,10 @@ def run_engine(trigger, df_products, df_history, df_slots):
             else:
                 if has_data(sc, 'Τύπος σύνδεσης'):
                     b4=len(sc)
-                    f=sc[sc['Τύπος σύνδεσης'].fillna('').str.contains("Bluetooth|USB-C|Type-C|Ασύρματη", case=False)]
-                    notes.append(f"BT/USB-C/Wireless: {b4}→{len(f)}")
+                    port_str = tport if tport else "USB-C"
+                    search_str = f"Bluetooth|Ασύρματη|{port_str}"
+                    f=sc[sc['Τύπος σύνδεσης'].fillna('').str.contains(search_str, case=False, regex=True)]
+                    notes.append(f"BT/Wireless/{port_str}: {b4}→{len(f)}")
                     if not f.empty: sc=f
                     else: notes.append(f"  ⚠ kept all")
                 else:
@@ -485,12 +469,13 @@ def run_engine(trigger, df_products, df_history, df_slots):
             sc['Draft_Score']=sc['Item_Rank']*100+sn
             all_slot.append(sc)
 
+    # 🟢 NEW RETURN: Returning `full` so the UI can read the top 3
     if not all_slot:
-        return pd.DataFrame(), diag, slot_diag, slot_notes
+        return pd.DataFrame(), diag, slot_diag, slot_notes, pd.DataFrame()
 
     full = pd.concat(all_slot, ignore_index=True).sort_values('Draft_Score').reset_index(drop=True)
 
-    # S1: Hierarchy cap (2 for smartphones)
+    # S1: Hierarchy cap
     sel, hc, seen = [], {}, set()
     for _, r in full.iterrows():
         h, mat = r['Hierarchy'], r['Material']
@@ -500,15 +485,16 @@ def run_engine(trigger, df_products, df_history, df_slots):
         if len(sel)>=10: break
 
     diag.append(("6. Final", len(sel), f"Hierarchy cap=2"))
-    return (pd.DataFrame(sel) if sel else pd.DataFrame()), diag, slot_diag, slot_notes
-
+    return (pd.DataFrame(sel) if sel else pd.DataFrame()), diag, slot_diag, slot_notes, full
 
 
 # ─────────────────────────────────────────────────────────────
 # RUN
 # ─────────────────────────────────────────────────────────────
 st.markdown("### <span style='color:#ff5e00; font-weight:bold;'>|</span> Μαζί με αυτό, οι περισσότεροι αγοράζουν", unsafe_allow_html=True)
-recs, diag, slot_diag, slot_notes = run_engine(trigger, df_products, df_history, df_slots)
+
+# 🟢 NEW: Unpacking 5 variables now instead of 4
+recs, diag, slot_diag, slot_notes, full_candidates = run_engine(trigger, df_products, df_history, df_slots)
 
 # ─────────────────────────────────────────────────────────────
 # DIAGNOSTICS
@@ -540,11 +526,20 @@ with st.expander("📋 Trigger"):
         st.text(f"{col}: {trigger.get(col,'N/A')}")
 
 if not recs.empty:
-    st.markdown("### Score Breakdown")
-    dc=['Title','Hierarchy','Assigned_Slot','Slot_Role','Item_Rank','History_Score','Frequency','Avail_Boost','Smart_Boost','Final_Score','Draft_Score']
+    # 🟢 NEW: The Top 3 Candidates Table
+    st.markdown("### 🏆 Top 3 Candidates per Slot")
+    top3 = full_candidates[full_candidates['Item_Rank'] <= 3].copy()
+    top3_cols = ['Assigned_Slot', 'Item_Rank', 'Title', 'Final_Score', 'Sales_Tiebreaker', 'Smart_Boost', 'Avail_Boost', 'Frequency', 'History_Score']
+    avail_top3 = [c for c in top3_cols if c in top3.columns]
+    st.dataframe(top3[avail_top3].sort_values(['Assigned_Slot', 'Item_Rank']), use_container_width=True, hide_index=True)
+
+    # Final 10 Breakdown (now includes Sales_Tiebreaker)
+    st.markdown("### Score Breakdown (Final 10 Winners)")
+    dc=['Title','Hierarchy','Assigned_Slot','Slot_Role','Item_Rank','History_Score','Frequency','Avail_Boost','Smart_Boost','Sales_Tiebreaker','Final_Score','Draft_Score']
     st.dataframe(recs[[c for c in dc if c in recs.columns]], use_container_width=True)
 
 st.markdown("---")
+
 
 # ─────────────────────────────────────────────────────────────
 # VISUALIZATION
