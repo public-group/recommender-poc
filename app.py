@@ -103,13 +103,13 @@ st.markdown("""
         box-shadow: 0 2px 4px rgba(0,0,0,0.08);
     }
 
-    /* 5. The Vertical Orange Line for Titles */
+/* 5. The Vertical Orange Line for Titles */
     .public-header {
         font-family: -apple-system, BlinkMacSystemFont, sans-serif;
         font-size: 24px;
         font-weight: 700;
         color: #111111;
-        margin-top: 10px;
+        margin-top: 80px !important; /* 🟢 FIX: Increased to push the title safely below the header */
         margin-bottom: 20px;
         display: flex;
         align-items: center;
