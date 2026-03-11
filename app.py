@@ -2,14 +2,12 @@ import streamlit as st
 import streamlit.components.v1 as components
 import pandas as pd
 import html as html_lib
+import re
 from difflib import SequenceMatcher
 
 st.set_page_config(page_title="Smart Recommender POC", layout="wide")
 
-# ═══════════════════════════════════════════════════════════════
-# VERSION BANNER — if you don't see this, you're running old code
-# ═══════════════════════════════════════════════════════════════
-st.info("🟢 **Engine v3.0** — If you don't see this banner, you are running old code. Clear Streamlit cache (⋮ menu → Clear cache) and hard-refresh your browser (Ctrl+Shift+R).")
+st.info("🟢 **Engine v4.0** — Port extraction fix, color mapping, flexible matching")
 
 # ─────────────────────────────────────────────────────────────
 # CONFIG
@@ -32,6 +30,66 @@ APPLIANCE_CATEGORIES = {"MDA", "SDA", "Air Condition", "Personal Care"}
 
 COL_COMPATIBLE = "Συμβατό με"
 
+# ─────────────────────────────────────────────────────────────
+# PORT EXTRACTION
+# "Type-C 3.2 Gen 2" → "Type-C"
+# "Lightning" → "Lightning"
+# "Micro USB 2.0" → "Micro USB"
+# ─────────────────────────────────────────────────────────────
+def extract_base_port(raw_port: str) -> str:
+    """Extract the base connector type, stripping version/gen info."""
+    s = str(raw_port).strip()
+    if not s or s.lower() == 'nan':
+        return ''
+    # Try to match common patterns
+    s_lower = s.lower()
+    if 'type-c' in s_lower or 'type c' in s_lower or 'usb-c' in s_lower or 'usb c' in s_lower:
+        return 'Type-C'
+    if 'lightning' in s_lower:
+        return 'Lightning'
+    if 'micro usb' in s_lower or 'micro-usb' in s_lower:
+        return 'Micro USB'
+    if 'usb' in s_lower:
+        return 'USB'
+    # Fallback: strip version numbers (e.g., "3.2 Gen 2")
+    cleaned = re.sub(r'\s*\d+\.?\d*\s*(gen\s*\d+)?', '', s, flags=re.IGNORECASE).strip()
+    return cleaned if cleaned else s
+
+# ─────────────────────────────────────────────────────────────
+# COLOR MAPPING
+# Map specific phone colors to case-friendly search terms
+# "Black Titanium" → search for "Μαύρο" or "Black" in cases
+# ─────────────────────────────────────────────────────────────
+COLOR_BASE_MAP = {
+    'black titanium': ['μαύρο', 'black', 'διάφανο'],
+    'natural titanium': ['διάφανο', 'μπεζ', 'natural'],
+    'white titanium': ['λευκό', 'white', 'διάφανο'],
+    'blue titanium': ['μπλε', 'blue', 'διάφανο'],
+    'deep purple': ['μωβ', 'μοβ', 'purple', 'διάφανο'],
+    'space black': ['μαύρο', 'black', 'διάφανο'],
+    'silver': ['ασημί', 'silver', 'διάφανο'],
+    'gold': ['χρυσό', 'gold', 'διάφανο'],
+    'starlight': ['λευκό', 'white', 'μπεζ', 'διάφανο'],
+    'midnight': ['μαύρο', 'black', 'σκούρο μπλε', 'διάφανο'],
+    'red': ['κόκκινο', 'red', 'διάφανο'],
+    'pink': ['ροζ', 'pink', 'διάφανο'],
+    'green': ['πράσινο', 'green', 'διάφανο'],
+    'blue': ['μπλε', 'blue', 'διάφανο'],
+    'yellow': ['κίτρινο', 'yellow', 'διάφανο'],
+}
+
+def get_case_colors(phone_color: str) -> list:
+    """Get list of acceptable case colors for a given phone color."""
+    key = phone_color.strip().lower()
+    if key in COLOR_BASE_MAP:
+        return COLOR_BASE_MAP[key]
+    # Fallback: try partial match
+    for map_key, colors in COLOR_BASE_MAP.items():
+        if map_key in key or key in map_key:
+            return colors
+    # Last resort: just allow transparent + the raw color
+    return [key, 'διάφανο']
+
 
 # ─────────────────────────────────────────────────────────────
 # DATA LOADING
@@ -49,7 +107,6 @@ def load_data():
 df_products, df_history, df_slots = load_data()
 
 st.title("📱 Smartphone Recommendation Tool")
-
 
 # ─────────────────────────────────────────────────────────────
 # TRIGGER SELECTION
@@ -70,33 +127,40 @@ st.subheader(f"Building the perfect loadout for: {selected_phone_name}")
 # ─────────────────────────────────────────────────────────────
 # HELPERS
 # ─────────────────────────────────────────────────────────────
-def title_similarity(a: str, b: str) -> float:
+def title_similarity(a, b):
     return SequenceMatcher(None, a.lower(), b.lower()).ratio() * 100
 
-def parse_euro_price(val) -> float:
+def parse_euro_price(val):
     s = str(val).replace('€', '').strip()
     if ',' in s and '.' in s:
         s = s.replace('.', '')
     s = s.replace(',', '.')
-    try:
-        return float(s)
-    except ValueError:
-        return 0.0
+    try: return float(s)
+    except: return 0.0
 
-def passes_price_ceiling(trigger_price: float, next_price: float, trigger_level1: str) -> bool:
+def passes_price_ceiling(trigger_price, next_price, trigger_level1):
     if next_price <= 0 or trigger_price <= 0:
         return True
-    peer_categories = {"Books", "Stationery", "Toys", "Music & Films", "Gaming"}
-    if trigger_level1 in peer_categories:
+    peer = {"Books", "Stationery", "Toys", "Music & Films", "Gaming"}
+    if trigger_level1 in peer:
         return next_price <= trigger_price * 1.5
     elif trigger_price <= 30:
         return next_price <= trigger_price * 1.5
     else:
-        ceiling = max(trigger_price * 0.40, 45)
-        return next_price <= ceiling
+        return next_price <= max(trigger_price * 0.40, 45)
 
-def safe(val) -> str:
+def safe(val):
     return html_lib.escape(str(val))
+
+def col_sample(df, col, n=5):
+    """Get sample non-empty values from a column for debugging."""
+    if col not in df.columns:
+        return f"[COLUMN '{col}' NOT FOUND]"
+    vals = df[col].dropna().astype(str)
+    vals = vals[vals.str.strip() != '']
+    if vals.empty:
+        return "[ALL EMPTY]"
+    return vals.head(n).tolist()
 
 
 # ─────────────────────────────────────────────────────────────
@@ -104,14 +168,17 @@ def safe(val) -> str:
 # ─────────────────────────────────────────────────────────────
 def calculate_recommendations(trigger, df_products, df_history, df_slots):
     config = CLUSTER_CONFIG[ACTIVE_CLUSTER]
-    diag = []  # List of (step_name, count, note) tuples
+    diag = []
+    slot_diag = []
+    slot_debug_notes = {}  # Extra notes per slot
 
     # ── Trigger attributes ──
     trig_material  = trigger['Material']
     trig_title     = str(trigger.get('Title', ''))
     trig_brand     = str(trigger.get('Κατασκευαστής', '')).strip().upper()
     trig_model     = str(trigger.get('Μοντέλο', '')).strip()
-    trig_port      = str(trigger.get('Θύρα USB', '')).strip()
+    trig_port_raw  = str(trigger.get('Θύρα USB', '')).strip()
+    trig_port      = extract_base_port(trig_port_raw)
     trig_color     = str(trigger.get('Χρώμα', '')).strip()
     trig_extras    = str(trigger.get('Extra Χαρακτηριστικά', '')).lower()
     trig_os        = str(trigger.get('Λειτουργικό σύστημα', '')).lower()
@@ -119,26 +186,27 @@ def calculate_recommendations(trigger, df_products, df_history, df_slots):
     trig_level1    = str(trigger.get('Level 1', ''))
     trig_price     = parse_euro_price(trigger.get('LIST PRICE', 0))
 
+    case_colors = get_case_colors(trig_color)
+
     c = df_products[df_products['Material'] != trig_material].copy()
-    diag.append(("0. Start (excl trigger Material)", len(c), ""))
+    diag.append(("0. Start", len(c), ""))
 
     # ── U2a: Exact title dedup ──
     c = c[c['Title'] != trig_title]
-    diag.append(("1. U2a: exact title dedup", len(c), ""))
+    diag.append(("1. U2a: title dedup", len(c), ""))
 
-    # ── U2b: Ghost SKU (zero stock) — DEFENSIVE ──
+    # ── U2b: Ghost SKU ──
     if 'CW Stock Units' in c.columns:
         stock = pd.to_numeric(c['CW Stock Units'], errors='coerce')
-        n_with_stock = (stock > 0).sum()
-        pct = n_with_stock / len(c) if len(c) > 0 else 0
+        pct = (stock > 0).sum() / len(c) if len(c) > 0 else 0
         if pct >= 0.10:
             c['CW Stock Units'] = stock.fillna(0)
             c = c[c['CW Stock Units'] > 0]
-            diag.append(("2. U2b: stock filter", len(c), f"APPLIED ({pct:.0%} had stock)"))
+            diag.append(("2. U2b: stock", len(c), f"Applied ({pct:.0%} populated)"))
         else:
-            diag.append(("2. U2b: stock filter", len(c), f"⚠ SKIPPED (only {pct:.0%} had stock > 0, threshold 10%)"))
+            diag.append(("2. U2b: stock", len(c), f"⚠ SKIPPED ({pct:.0%} populated)"))
     else:
-        diag.append(("2. U2b: stock filter", len(c), "⚠ SKIPPED (column missing)"))
+        diag.append(("2. U2b: stock", len(c), "⚠ SKIPPED (no column)"))
 
     # ── U1: Anti-Sibling ──
     if not config["allow_siblings"]:
@@ -146,43 +214,39 @@ def calculate_recommendations(trigger, df_products, df_history, df_slots):
             (c['Hierarchy'] == trig_hierarchy) &
             (c['Κατασκευαστής'].fillna('').str.strip().str.upper() == trig_brand)
         )
-        n_siblings = mask.sum()
+        n_sibs = mask.sum()
         if mask.any():
             sims = c.loc[mask, 'Title'].apply(lambda t: title_similarity(trig_title, str(t)))
             dupes = sims[sims >= 70].index
             c = c.drop(dupes)
-            diag.append(("3. U1: anti-sibling", len(c), f"Checked {n_siblings} siblings, removed {len(dupes)}"))
+            diag.append(("3. U1: siblings", len(c), f"Checked {n_sibs}, removed {len(dupes)}"))
         else:
-            diag.append(("3. U1: anti-sibling", len(c), "No siblings found"))
+            diag.append(("3. U1: siblings", len(c), "No siblings"))
     else:
-        diag.append(("3. U1: anti-sibling", len(c), "Bypassed (allow_siblings=True)"))
+        diag.append(("3. U1: siblings", len(c), "Bypassed"))
 
-    # ── U3: Macro-category wall ──
-    before_u3 = len(c)
+    # ── U3: Macro wall ──
+    b4 = len(c)
     if trig_level1 in TECH_CATEGORIES:
         c = c[~c['Level 1'].isin(APPLIANCE_CATEGORIES)]
     elif trig_level1 in APPLIANCE_CATEGORIES:
         c = c[~c['Level 1'].isin(TECH_CATEGORIES)]
-    diag.append(("4. U3: macro-category wall", len(c), f"Removed {before_u3 - len(c)} cross-category items"))
+    diag.append(("4. U3: macro wall", len(c), f"Removed {b4 - len(c)}"))
 
     # ── Scoring ──
-    trigger_customers = df_history[df_history['Material'] == trig_material]['customerEmail'].unique()
-    bought_with = df_history[
-        (df_history['customerEmail'].isin(trigger_customers)) &
-        (df_history['Material'] != trig_material)
-    ]
-    freq_df = bought_with['Material'].value_counts().reset_index()
-    freq_df.columns = ['Next_Item_ID', 'Frequency']
+    tcust = df_history[df_history['Material'] == trig_material]['customerEmail'].unique()
+    bw = df_history[(df_history['customerEmail'].isin(tcust)) & (df_history['Material'] != trig_material)]
+    fdf = bw['Material'].value_counts().reset_index()
+    fdf.columns = ['Next_Item_ID', 'Frequency']
 
-    c = c.merge(freq_df, left_on='Material', right_on='Next_Item_ID', how='left')
+    c = c.merge(fdf, left_on='Material', right_on='Next_Item_ID', how='left')
     c['Frequency'] = c['Frequency'].fillna(0).astype(int)
     c['History_Score'] = c['Frequency'].apply(lambda f: HISTORY_BOOST if f >= HISTORY_FREQ_MIN else 0)
     c['Next_Price'] = c['LIST PRICE'].apply(parse_euro_price)
 
-    # Price guardrail on history items
-    h_mask = c['History_Score'] > 0
-    if h_mask.any():
-        ok = c.loc[h_mask].apply(lambda r: passes_price_ceiling(trig_price, r['Next_Price'], trig_level1), axis=1)
+    hm = c['History_Score'] > 0
+    if hm.any():
+        ok = c.loc[hm].apply(lambda r: passes_price_ceiling(trig_price, r['Next_Price'], trig_level1), axis=1)
         c.loc[ok[~ok].index, 'History_Score'] = 0
 
     c['Avail_Boost'] = 0
@@ -194,106 +258,161 @@ def calculate_recommendations(trigger, df_products, df_history, df_slots):
 
     c['Final_Score'] = c['History_Score'] + c['Frequency'] + c['Avail_Boost'] + c['Smart_Boost']
 
-    # ── U5: Non-history price ceiling ──
-    before_u5 = len(c)
-    nh_mask = c['History_Score'] == 0
-    if nh_mask.any():
-        ok_nh = c.loc[nh_mask].apply(lambda r: passes_price_ceiling(trig_price, r['Next_Price'], trig_level1), axis=1)
-        drop_idx = ok_nh[~ok_nh].index
-        c = c.drop(drop_idx)
-    diag.append(("5. U5: price ceiling", len(c), f"Removed {before_u5 - len(c)} over-priced items (trigger: €{trig_price:.2f}, ceiling: €{max(trig_price*0.40, 45):.2f})"))
+    b4u5 = len(c)
+    nhm = c['History_Score'] == 0
+    if nhm.any():
+        ok2 = c.loc[nhm].apply(lambda r: passes_price_ceiling(trig_price, r['Next_Price'], trig_level1), axis=1)
+        c = c.drop(ok2[~ok2].index)
+    diag.append(("5. U5: price ceiling", len(c), f"Removed {b4u5 - len(c)} (ceiling: €{max(trig_price*0.40,45):.2f})"))
 
     # ─────────────────────────────────────────
     # SLOT ASSIGNMENT
     # ─────────────────────────────────────────
     all_slot = []
-    slot_diag = []
 
     for _, slot_rule in df_slots.iterrows():
         slot_num = slot_rule['Slot_Number']
         allowed_h = [h.strip() for h in slot_rule['Allowed_Hierarchies'].split(",")]
-
         sc = c[c['Hierarchy'].isin(allowed_h)].copy()
         after_h = len(sc)
+        notes = []
 
         # ── ATTRIBUTE LOGIC ──
+
         if slot_num in [1, 2, 7, 10]:
+            # Step 1: Model match
             if trig_model:
-                sc = sc[sc[COL_COMPATIBLE].fillna('').str.contains(trig_model, case=False)]
-            if slot_num == 1:
+                before_model = len(sc)
+                sc = sc[sc[COL_COMPATIBLE].fillna('').str.contains(trig_model, case=False, regex=False)]
+                notes.append(f"Model '{trig_model}': {before_model}→{len(sc)}")
+                if len(sc) == 0:
+                    notes.append(f"  Sample {COL_COMPATIBLE}: {col_sample(c[c['Hierarchy'].isin(allowed_h)], COL_COMPATIBLE, 5)}")
+
+            # Step 2: Sub-type filter
+            if slot_num == 1 and not sc.empty:
+                before_type = len(sc)
                 sc = sc[sc['Τύπος Θήκης'].fillna('').str.contains("Back Cover", case=False)]
-                if trig_color:
-                    sc = sc[sc['Χρώμα'].fillna('').str.strip().str.lower().isin([trig_color.lower(), 'διάφανο'])]
-            elif slot_num == 2:
+                notes.append(f"Back Cover: {before_type}→{len(sc)}")
+                if not sc.empty and trig_color:
+                    before_color = len(sc)
+                    sc = sc[sc['Χρώμα'].fillna('').str.strip().str.lower().isin(case_colors)]
+                    notes.append(f"Color {case_colors[:3]}: {before_color}→{len(sc)}")
+
+            elif slot_num == 2 and not sc.empty:
+                before = len(sc)
                 sc = sc[sc['Τύπος προϊόντος'].fillna('').str.contains("Προστατευτικό οθόνης", case=False)]
+                notes.append(f"Screen Protector: {before}→{len(sc)}")
+
             elif slot_num == 7:
-                sc = sc[sc['Τύπος προϊόντος'].fillna('').str.contains("Προστατευτικό καμερών", case=False)]
+                if not sc.empty:
+                    before = len(sc)
+                    sc = sc[sc['Τύπος προϊόντος'].fillna('').str.contains("Προστατευτικό καμερών", case=False)]
+                    notes.append(f"Camera Protector: {before}→{len(sc)}")
                 if sc.empty and trig_port:
                     fb_h = ['CABLE-CHARGER', 'APPLE ORIGINAL IPHONE CABLE-ADAPTORS']
                     sc = c[c['Hierarchy'].isin(fb_h)].copy()
-                    sc = sc[sc[COL_COMPATIBLE].fillna('').str.contains(trig_port, case=False)]
-            elif slot_num == 10:
+                    sc = sc[sc[COL_COMPATIBLE].fillna('').str.contains(trig_port, case=False, regex=False)]
+                    notes.append(f"Fallback cable ({trig_port}): {len(sc)}")
+
+            elif slot_num == 10 and not sc.empty:
+                before = len(sc)
                 sc = sc[sc['Τύπος Θήκης'].fillna('').str.contains("Book Cover|Wallet|360 Full Cover", case=False)]
+                notes.append(f"Book/Wallet: {before}→{len(sc)}")
 
         elif slot_num == 3:
             if trig_port:
-                sc = sc[sc[COL_COMPATIBLE].fillna('').str.contains(trig_port, case=False)]
-            if "γρήγορη φόρτιση" in trig_extras:
+                before = len(sc)
+                sc = sc[sc[COL_COMPATIBLE].fillna('').str.contains(trig_port, case=False, regex=False)]
+                notes.append(f"Port '{trig_port}': {before}→{len(sc)}")
+                if len(sc) == 0:
+                    notes.append(f"  Sample {COL_COMPATIBLE}: {col_sample(c[c['Hierarchy'].isin(allowed_h)], COL_COMPATIBLE, 5)}")
+            if "γρήγορη φόρτιση" in trig_extras and not sc.empty:
+                before = len(sc)
                 sc = sc[sc['Ισχύς (Watt)'].fillna('').str.contains("21 - 60|61 - 100", case=False)]
-            if "ασύρματη φόρτιση" in trig_extras:
-                sc = sc[sc['Τύπος'].fillna('').str.contains("Φορτιστής Πρίζας|Ασύρματος Φορτιστής|Σετ Φόρτισης", case=False)]
-                sc.loc[sc['Τύπος'].fillna('').str.contains("Ασύρματος Φορτιστής", case=False), 'Final_Score'] += SMART_BOOST
-                if trig_brand == "APPLE":
-                    sc.loc[sc['Title'].fillna('').str.contains("MagSafe", case=False), 'Final_Score'] += SMART_BOOST
-            else:
-                sc = sc[sc['Τύπος'].fillna('').str.contains("Φορτιστής Πρίζας|Σετ Φόρτισης", case=False)]
+                notes.append(f"Fast charge: {before}→{len(sc)}")
+            if not sc.empty:
+                if "ασύρματη φόρτιση" in trig_extras:
+                    before = len(sc)
+                    sc = sc[sc['Τύπος3'].fillna('').str.contains("Φορτιστής Πρίζας|Ασύρματος Φορτιστής|Σετ Φόρτισης", case=False)]
+                    notes.append(f"Wireless filter: {before}→{len(sc)}")
+                    sc.loc[sc['Τύπος3'].fillna('').str.contains("Ασύρματος Φορτιστής", case=False), 'Final_Score'] += SMART_BOOST
+                    if trig_brand == "APPLE":
+                        sc.loc[sc['Title'].fillna('').str.contains("MagSafe", case=False), 'Final_Score'] += SMART_BOOST
+                else:
+                    before = len(sc)
+                    sc = sc[sc['Τύπος3'].fillna('').str.contains("Φορτιστής Πρίζας|Σετ Φόρτισης", case=False)]
+                    notes.append(f"Wall charger filter: {before}→{len(sc)}")
 
         elif slot_num == 4:
             if "3.5mm jack" in trig_extras:
                 sc.loc[sc['Τύπος σύνδεσης'].fillna('').str.contains("Jack 3.5mm", case=False), 'Final_Score'] += SMART_BOOST
                 sc.loc[sc['Κατασκευαστής'].fillna('').str.strip().str.upper() == trig_brand, 'Final_Score'] += SMART_BOOST
+                notes.append(f"3.5mm boost applied, {len(sc)} remain")
             else:
+                before = len(sc)
                 sc = sc[sc['Τύπος σύνδεσης'].fillna('').str.contains(f"Bluetooth|{trig_port}", case=False)]
+                notes.append(f"BT/Port '{trig_port}': {before}→{len(sc)}")
+                if len(sc) == 0:
+                    notes.append(f"  Sample Τύπος σύνδεσης: {col_sample(c[c['Hierarchy'].isin(allowed_h)], 'Τύπος σύνδεσης', 5)}")
                 sc.loc[sc['Κατασκευαστής'].fillna('').str.strip().str.upper() == trig_brand, 'Final_Score'] += SMART_BOOST
 
         elif slot_num == 5:
             if trig_port:
-                sc = sc[sc['Τύπος θύρας'].fillna('').str.contains(trig_port, case=False)]
-            if "γρήγορη φόρτιση" in trig_extras:
+                before = len(sc)
+                sc = sc[sc['Τύπος θύρας'].fillna('').str.contains(trig_port, case=False, regex=False)]
+                notes.append(f"Port '{trig_port}': {before}→{len(sc)}")
+                if len(sc) == 0:
+                    notes.append(f"  Sample Τύπος θύρας: {col_sample(c[c['Hierarchy'].isin(allowed_h)], 'Τύπος θύρας', 5)}")
+            if "γρήγορη φόρτιση" in trig_extras and not sc.empty:
                 sc.loc[
                     sc['Ταχύτητα φόρτισης'].fillna('').str.contains("Ταχεία|Υπερταχεία", case=False) |
                     sc['Ισχύς (Watt)'].fillna('').str.contains("20|30|40|50|60", case=False),
                     'Final_Score'
                 ] += SMART_BOOST
-            if "ασύρματη φόρτιση" in trig_extras:
+            if "ασύρματη φόρτιση" in trig_extras and not sc.empty:
                 sc.loc[sc['Extra Χαρακτηριστικά'].fillna('').str.contains("Ασύρματη φόρτιση", case=False), 'Final_Score'] += SMART_BOOST
                 if trig_brand == "APPLE":
                     sc.loc[sc['Extra Χαρακτηριστικά'].fillna('').str.contains("Magsafe", case=False), 'Final_Score'] += SMART_BOOST
-            sc.loc[sc['Κατασκευαστής'].fillna('').str.strip().str.upper() == trig_brand, 'Final_Score'] += SMART_BOOST
+            if not sc.empty:
+                sc.loc[sc['Κατασκευαστής'].fillna('').str.strip().str.upper() == trig_brand, 'Final_Score'] += SMART_BOOST
 
         elif slot_num == 6:
+            before = len(sc)
             if "με pen" in trig_extras:
-                sc = sc[sc['Τύπος'].fillna('').str.contains("Γραφίδα", case=False)]
+                sc = sc[sc['Τύπος3'].fillna('').str.contains("Γραφίδα", case=False)]
+                notes.append(f"Stylus: {before}→{len(sc)}")
             elif trig_brand == "APPLE":
-                sc = sc[sc['Τύπος'].fillna('').str.contains("AirTag", case=False)]
+                sc = sc[sc['Τύπος3'].fillna('').str.contains("AirTag", case=False)]
+                notes.append(f"AirTag: {before}→{len(sc)}")
+                if len(sc) == 0:
+                    notes.append(f"  Sample Τύπος3: {col_sample(c[c['Hierarchy'].isin(allowed_h)], 'Τύπος3', 5)}")
             else:
-                sc = sc[sc['Τύπος'].fillna('').str.contains(
+                sc = sc[sc['Τύπος3'].fillna('').str.contains(
                     "Λουράκι Λαιμού|Λουράκι Καρπού|Αξεσουάρ Smartphone|Αξεσουάρ Κάμερας|Αξεσουάρ Καθαρισμού", case=False
                 )]
+                notes.append(f"Misc acc: {before}→{len(sc)}")
 
         elif slot_num == 8:
+            before = len(sc)
             if "ios" in trig_os or trig_brand == "APPLE":
-                sc = sc[sc[COL_COMPATIBLE].fillna('').str.contains("Apple iOS", case=False)]
+                # Try flexible matching: "iOS" or "Apple iOS" or "Apple"
+                sc = sc[sc[COL_COMPATIBLE].fillna('').str.contains("iOS|Apple", case=False)]
+                notes.append(f"iOS compat: {before}→{len(sc)}")
             elif "android" in trig_os or trig_brand in ["SAMSUNG", "XIAOMI", "MOTOROLA"]:
-                sc = sc[sc[COL_COMPATIBLE].fillna('').str.contains("Google Android", case=False)]
+                sc = sc[sc[COL_COMPATIBLE].fillna('').str.contains("Android", case=False)]
+                notes.append(f"Android compat: {before}→{len(sc)}")
+            if len(sc) == 0:
+                notes.append(f"  Sample {COL_COMPATIBLE}: {col_sample(c[c['Hierarchy'].isin(allowed_h)], COL_COMPATIBLE, 5)}")
             sc.loc[sc['Κατασκευαστής'].fillna('').str.strip().str.upper() == trig_brand, 'Final_Score'] += SMART_BOOST
 
         elif slot_num == 9:
             if trig_brand == "APPLE" and "ασύρματη φόρτιση" in trig_extras:
                 sc.loc[sc['Τρόπος τοποθέτησης'].fillna('').str.contains("Μαγνητική", case=False), 'Final_Score'] += SMART_BOOST
+            notes.append(f"No hard filter, {len(sc)} remain")
 
         after_attr = len(sc)
         slot_diag.append((slot_num, slot_rule.get('Slot_Role', ''), after_h, after_attr))
+        slot_debug_notes[slot_num] = notes
 
         if not sc.empty:
             sc = sc.sort_values(by='Final_Score', ascending=False).copy()
@@ -304,35 +423,30 @@ def calculate_recommendations(trigger, df_products, df_history, df_slots):
             all_slot.append(sc)
 
     if not all_slot:
-        return pd.DataFrame(), diag, slot_diag
+        return pd.DataFrame(), diag, slot_diag, slot_debug_notes
 
     full = pd.concat(all_slot, ignore_index=True)
 
-    # ── S1: Hierarchy diversity cap ──
+    # ── S1: Hierarchy cap ──
     hcap = config["hierarchy_cap"]
     full = full.sort_values(by='Draft_Score').reset_index(drop=True)
-
     selected = []
-    h_counts = {}
+    hcounts = {}
     seen = set()
-
     for _, row in full.iterrows():
         h, mat = row['Hierarchy'], row['Material']
-        if mat in seen:
-            continue
-        if h_counts.get(h, 0) >= hcap:
-            continue
+        if mat in seen: continue
+        if hcounts.get(h, 0) >= hcap: continue
         selected.append(row)
-        h_counts[h] = h_counts.get(h, 0) + 1
+        hcounts[h] = hcounts.get(h, 0) + 1
         seen.add(mat)
-        if len(selected) >= 10:
-            break
+        if len(selected) >= 10: break
 
-    diag.append(("6. Final (after slots + S1 cap)", len(selected), f"Hierarchy cap = {hcap}"))
+    diag.append(("6. Final", len(selected), f"Hierarchy cap={hcap}"))
 
     if selected:
-        return pd.DataFrame(selected), diag, slot_diag
-    return pd.DataFrame(), diag, slot_diag
+        return pd.DataFrame(selected), diag, slot_diag, slot_debug_notes
+    return pd.DataFrame(), diag, slot_diag, slot_debug_notes
 
 
 # ─────────────────────────────────────────────────────────────
@@ -340,41 +454,55 @@ def calculate_recommendations(trigger, df_products, df_history, df_slots):
 # ─────────────────────────────────────────────────────────────
 st.markdown("### <span style='color:#ff5e00; font-weight:bold;'>|</span> Μαζί με αυτό, οι περισσότεροι αγοράζουν", unsafe_allow_html=True)
 
-recs, diag, slot_diag = calculate_recommendations(trigger, df_products, df_history, df_slots)
+recs, diag, slot_diag, slot_notes = calculate_recommendations(trigger, df_products, df_history, df_slots)
 
 
 # ─────────────────────────────────────────────────────────────
-# DIAGNOSTICS — ALWAYS VISIBLE (not in expanders)
+# DIAGNOSTICS
 # ─────────────────────────────────────────────────────────────
 st.markdown("---")
 st.markdown("## 🩺 Diagnostics")
 
+# Derived values
+trig_port_raw = str(trigger.get('Θύρα USB', '')).strip()
+trig_port = extract_base_port(trig_port_raw)
+trig_color = str(trigger.get('Χρώμα', '')).strip()
+case_colors = get_case_colors(trig_color)
+
+st.markdown(f"""**Derived matching values:**
+- Port: `{trig_port_raw}` → **`{trig_port}`**
+- Color: `{trig_color}` → case colors: **{case_colors}**
+""")
+
 # Guardrail funnel
 st.markdown("### Guardrail Funnel")
-funnel_df = pd.DataFrame(diag, columns=["Step", "Candidates Left", "Note"])
-st.dataframe(funnel_df, use_container_width=True, hide_index=True)
+st.dataframe(pd.DataFrame(diag, columns=["Step", "Candidates Left", "Note"]), use_container_width=True, hide_index=True)
 
-# Slot breakdown
+# Slot breakdown with debug notes
 st.markdown("### Per-Slot Breakdown")
-slot_df = pd.DataFrame(slot_diag, columns=["Slot", "Role", "After Hierarchy Filter", "After Attribute Filter"])
-st.dataframe(slot_df, use_container_width=True, hide_index=True)
+st.dataframe(pd.DataFrame(slot_diag, columns=["Slot", "Role", "After Hierarchy", "After Attributes"]), use_container_width=True, hide_index=True)
+
+st.markdown("### Per-Slot Filter Details")
+for slot_num, notes in sorted(slot_notes.items()):
+    if notes:
+        with st.expander(f"Slot {slot_num} — {notes[0][:60]}..." if len(notes[0]) > 60 else f"Slot {slot_num} — {notes[0]}"):
+            for n in notes:
+                st.text(n)
 
 # Trigger info
 with st.expander("📋 Trigger Attributes"):
-    cols_to_show = ['Material', 'Title', 'Level 1', 'Level 2', 'Hierarchy',
-                    'Κατασκευαστής', 'Μοντέλο', 'Θύρα USB', 'Χρώμα',
-                    'Λειτουργικό σύστημα', 'Extra Χαρακτηριστικά', 'LIST PRICE']
-    for col in cols_to_show:
+    for col in ['Material', 'Title', 'Level 1', 'Level 2', 'Hierarchy',
+                'Κατασκευαστής', 'Μοντέλο', 'Θύρα USB', 'Χρώμα',
+                'Λειτουργικό σύστημα', 'Extra Χαρακτηριστικά', 'LIST PRICE']:
         st.text(f"{col}: {trigger.get(col, 'N/A')}")
 
-# Score breakdown
+# Score table
 if not recs.empty:
-    st.markdown("### Score Breakdown (Selected Recommendations)")
-    debug_cols = ['Title', 'Hierarchy', 'Assigned_Slot', 'Slot_Role', 'Item_Rank',
-                  'History_Score', 'Frequency', 'Avail_Boost', 'Smart_Boost',
-                  'Final_Score', 'Draft_Score']
-    avail = [c for c in debug_cols if c in recs.columns]
-    st.dataframe(recs[avail], use_container_width=True)
+    st.markdown("### Score Breakdown")
+    dcols = ['Title', 'Hierarchy', 'Assigned_Slot', 'Slot_Role', 'Item_Rank',
+             'History_Score', 'Frequency', 'Avail_Boost', 'Smart_Boost',
+             'Final_Score', 'Draft_Score']
+    st.dataframe(recs[[c for c in dcols if c in recs.columns]], use_container_width=True)
 
 st.markdown("---")
 
@@ -419,9 +547,7 @@ if not recs.empty:
             display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;margin-bottom:10px}
         .slot-role{font-size:10px;color:#888;margin-bottom:8px;text-align:center}
         .reviews{font-size:11px;margin-bottom:15px}
-        .score{color:#ff5e00;font-weight:700}
-        .stars{color:#ff5e00;letter-spacing:-2px}
-        .count{color:#1a73e8}
+        .score{color:#ff5e00;font-weight:700}.stars{color:#ff5e00;letter-spacing:-2px}.count{color:#1a73e8}
         .old-price{font-size:11px;color:#888;text-decoration:line-through;margin-bottom:2px}
         .new-price{font-size:18px;font-weight:700;color:#ff5e00;margin-bottom:15px}
         .decimals{font-size:12px}
@@ -431,28 +557,25 @@ if not recs.empty:
     """
 
     desktop_page = f"""<!DOCTYPE html><html><head><meta charset="utf-8"><style>
-        {card_css}
-        .carousel{{display:flex;overflow-x:auto;gap:15px;padding:10px 5px 15px;scrollbar-width:thin}}
-        .carousel .product-card{{width:200px;min-width:200px}}
+    {card_css}
+    .carousel{{display:flex;overflow-x:auto;gap:15px;padding:10px 5px 15px;scrollbar-width:thin}}
+    .carousel .product-card{{width:200px;min-width:200px}}
     </style></head><body><div class="carousel">{cards_html}</div></body></html>"""
 
     mobile_page = f"""<!DOCTYPE html><html><head><meta charset="utf-8"><style>
-        {card_css}
-        .mockup{{border:12px solid #333;border-radius:36px;padding:15px 10px;
-            background:#fafafa;height:470px;overflow:hidden}}
-        .m-header{{text-align:center;font-weight:700;font-size:18px;margin-bottom:15px;line-height:1.2}}
-        .m-carousel{{display:flex;overflow-x:auto;gap:10px;padding-bottom:15px;scrollbar-width:none}}
-        .m-carousel::-webkit-scrollbar{{display:none}}
-        .m-carousel .product-card{{width:calc(50% - 5px);min-width:calc(50% - 5px);padding:10px}}
-        .m-carousel .product-card img{{height:90px}}
-        .m-carousel .title{{font-size:11px;height:30px}}
-        .m-carousel .slot-role{{font-size:9px}}
-        .m-carousel .reviews{{font-size:10px}}
-        .m-carousel .old-price{{font-size:10px}}
-        .m-carousel .new-price{{font-size:16px}}
-        .m-carousel .decimals{{font-size:11px}}
-        .m-carousel .cart-btn{{width:36px;height:32px;font-size:14px}}
-        .m-carousel .slot-badge{{font-size:9px;padding:2px 6px}}
+    {card_css}
+    .mockup{{border:12px solid #333;border-radius:36px;padding:15px 10px;
+        background:#fafafa;height:470px;overflow:hidden}}
+    .m-header{{text-align:center;font-weight:700;font-size:18px;margin-bottom:15px;line-height:1.2}}
+    .m-carousel{{display:flex;overflow-x:auto;gap:10px;padding-bottom:15px;scrollbar-width:none}}
+    .m-carousel::-webkit-scrollbar{{display:none}}
+    .m-carousel .product-card{{width:calc(50% - 5px);min-width:calc(50% - 5px);padding:10px}}
+    .m-carousel .product-card img{{height:90px}}
+    .m-carousel .title{{font-size:11px;height:30px}}
+    .m-carousel .slot-role{{font-size:9px}}.m-carousel .reviews{{font-size:10px}}
+    .m-carousel .old-price{{font-size:10px}}.m-carousel .new-price{{font-size:16px}}
+    .m-carousel .decimals{{font-size:11px}}.m-carousel .cart-btn{{width:36px;height:32px;font-size:14px}}
+    .m-carousel .slot-badge{{font-size:9px;padding:2px 6px}}
     </style></head><body>
     <div class="mockup">
         <div class="m-header"><span style="color:#ff5e00">&#8212;</span><br>
@@ -462,14 +585,11 @@ if not recs.empty:
     </div></body></html>"""
 
     col_d, col_sp, col_m = st.columns([2.5, 0.2, 1.3])
-
     with col_d:
-        st.write("##### 💻 Web View (Scroll to see all 10)")
+        st.write("##### 💻 Web View")
         components.html(desktop_page, height=380, scrolling=True)
-
     with col_m:
-        st.write("##### 📱 Mobile View (2 items visible)")
+        st.write("##### 📱 Mobile View")
         components.html(mobile_page, height=520, scrolling=False)
-
 else:
-    st.error("❌ No recommendations found. Check the diagnostics above to see where candidates are dropping off.")
+    st.error("❌ No recommendations. Check diagnostics above — especially Per-Slot Filter Details.")
