@@ -52,7 +52,7 @@ st.markdown("""
     /* The Thin Dark Orange Bar */
     .poc-top-bar {
         background-color: #cc4a00;
-        height: 12px;
+        height: 34px;
         width: 100%;
     }
     
@@ -705,7 +705,6 @@ if lk == "PRIMARY_CASE":
 # ───────────────────────────────────────
         elif lk == "WALL_CHARGER":
 
-        elif lk == "WALL_CHARGER":
             if not sc.empty:
                 b4=len(sc)
                 cv = sc[CC].fillna('').str.lower()
