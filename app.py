@@ -7,7 +7,7 @@ from difflib import SequenceMatcher
 
 st.set_page_config(page_title="Smart Recommender POC", layout="wide")
 
-st.info("🟢 **Engine v4.0** — Port extraction fix, color mapping, flexible matching")
+st.info("🟢 **Engine v4.1** — Dual compatibility columns, port fix, color mapping")
 
 # ─────────────────────────────────────────────────────────────
 # CONFIG
@@ -28,7 +28,10 @@ HISTORY_FREQ_MIN = 3
 TECH_CATEGORIES      = {"IT", "Telephony", "TV"}
 APPLIANCE_CATEGORIES = {"MDA", "SDA", "Air Condition", "Personal Care"}
 
-COL_COMPATIBLE = "Συμβατή συσκευή"
+# Compatibility columns — different categories use different names
+# We'll merge them into a single "_Compatible" column at load time
+COMPAT_COLS = ["Συμβατό με", "Συμβατή συσκευή"]
+COL_COMPAT_MERGED = "_Compatible"  # Internal merged column name
 
 # ─────────────────────────────────────────────────────────────
 # PORT EXTRACTION
@@ -102,9 +105,34 @@ def load_data():
     df_p = pd.read_csv(url_p);  df_p.columns = df_p.columns.str.strip()
     df_h = pd.read_csv(url_h);  df_h.columns = df_h.columns.str.strip()
     df_s = pd.read_csv(url_s);  df_s.columns = df_s.columns.str.strip()
-    return df_p, df_h, df_s
 
-df_products, df_history, df_slots = load_data()
+    # Merge compatibility columns into one unified field
+    # Coalesce: take whichever column has data for each row
+    compat_parts = []
+    found_cols = []
+    for col in COMPAT_COLS:
+        if col in df_p.columns:
+            compat_parts.append(df_p[col].fillna('').astype(str).str.strip())
+            found_cols.append(col)
+    if compat_parts:
+        # Join all non-empty values with semicolon (in case a product has data in both)
+        df_p[COL_COMPAT_MERGED] = compat_parts[0]
+        for extra in compat_parts[1:]:
+            # Where the merged field is empty, take the other; otherwise append
+            empty_mask = df_p[COL_COMPAT_MERGED] == ''
+            df_p.loc[empty_mask, COL_COMPAT_MERGED] = extra[empty_mask]
+            df_p.loc[~empty_mask, COL_COMPAT_MERGED] = (
+                df_p.loc[~empty_mask, COL_COMPAT_MERGED] + ';' + extra[~empty_mask]
+            )
+        # Clean up trailing semicolons from empty values
+        df_p[COL_COMPAT_MERGED] = df_p[COL_COMPAT_MERGED].str.strip(';').str.replace(';;', ';')
+    else:
+        df_p[COL_COMPAT_MERGED] = ''
+        found_cols = []
+
+    return df_p, df_h, df_s, found_cols
+
+df_products, df_history, df_slots, compat_found_cols = load_data()
 
 st.title("📱 Smartphone Recommendation Tool")
 
@@ -283,10 +311,10 @@ def calculate_recommendations(trigger, df_products, df_history, df_slots):
             # Step 1: Model match
             if trig_model:
                 before_model = len(sc)
-                sc = sc[sc[COL_COMPATIBLE].fillna('').str.contains(trig_model, case=False, regex=False)]
+                sc = sc[sc[COL_COMPAT_MERGED].fillna('').str.contains(trig_model, case=False, regex=False)]
                 notes.append(f"Model '{trig_model}': {before_model}→{len(sc)}")
                 if len(sc) == 0:
-                    notes.append(f"  Sample {COL_COMPATIBLE}: {col_sample(c[c['Hierarchy'].isin(allowed_h)], COL_COMPATIBLE, 5)}")
+                    notes.append(f"  Sample {COL_COMPAT_MERGED}: {col_sample(c[c['Hierarchy'].isin(allowed_h)], COL_COMPAT_MERGED, 5)}")
 
             # Step 2: Sub-type filter
             if slot_num == 1 and not sc.empty:
@@ -311,7 +339,7 @@ def calculate_recommendations(trigger, df_products, df_history, df_slots):
                 if sc.empty and trig_port:
                     fb_h = ['CABLE-CHARGER', 'APPLE ORIGINAL IPHONE CABLE-ADAPTORS']
                     sc = c[c['Hierarchy'].isin(fb_h)].copy()
-                    sc = sc[sc[COL_COMPATIBLE].fillna('').str.contains(trig_port, case=False, regex=False)]
+                    sc = sc[sc[COL_COMPAT_MERGED].fillna('').str.contains(trig_port, case=False, regex=False)]
                     notes.append(f"Fallback cable ({trig_port}): {len(sc)}")
 
             elif slot_num == 10 and not sc.empty:
@@ -322,10 +350,10 @@ def calculate_recommendations(trigger, df_products, df_history, df_slots):
         elif slot_num == 3:
             if trig_port:
                 before = len(sc)
-                sc = sc[sc[COL_COMPATIBLE].fillna('').str.contains(trig_port, case=False, regex=False)]
+                sc = sc[sc[COL_COMPAT_MERGED].fillna('').str.contains(trig_port, case=False, regex=False)]
                 notes.append(f"Port '{trig_port}': {before}→{len(sc)}")
                 if len(sc) == 0:
-                    notes.append(f"  Sample {COL_COMPATIBLE}: {col_sample(c[c['Hierarchy'].isin(allowed_h)], COL_COMPATIBLE, 5)}")
+                    notes.append(f"  Sample {COL_COMPAT_MERGED}: {col_sample(c[c['Hierarchy'].isin(allowed_h)], COL_COMPAT_MERGED, 5)}")
             if "γρήγορη φόρτιση" in trig_extras and not sc.empty:
                 before = len(sc)
                 sc = sc[sc['Ισχύς (Watt)'].fillna('').str.contains("21 - 60|61 - 100", case=False)]
@@ -396,13 +424,13 @@ def calculate_recommendations(trigger, df_products, df_history, df_slots):
             before = len(sc)
             if "ios" in trig_os or trig_brand == "APPLE":
                 # Try flexible matching: "iOS" or "Apple iOS" or "Apple"
-                sc = sc[sc[COL_COMPATIBLE].fillna('').str.contains("iOS|Apple", case=False)]
+                sc = sc[sc[COL_COMPAT_MERGED].fillna('').str.contains("iOS|Apple", case=False)]
                 notes.append(f"iOS compat: {before}→{len(sc)}")
             elif "android" in trig_os or trig_brand in ["SAMSUNG", "XIAOMI", "MOTOROLA"]:
-                sc = sc[sc[COL_COMPATIBLE].fillna('').str.contains("Android", case=False)]
+                sc = sc[sc[COL_COMPAT_MERGED].fillna('').str.contains("Android", case=False)]
                 notes.append(f"Android compat: {before}→{len(sc)}")
             if len(sc) == 0:
-                notes.append(f"  Sample {COL_COMPATIBLE}: {col_sample(c[c['Hierarchy'].isin(allowed_h)], COL_COMPATIBLE, 5)}")
+                notes.append(f"  Sample {COL_COMPAT_MERGED}: {col_sample(c[c['Hierarchy'].isin(allowed_h)], COL_COMPAT_MERGED, 5)}")
             sc.loc[sc['Κατασκευαστής'].fillna('').str.strip().str.upper() == trig_brand, 'Final_Score'] += SMART_BOOST
 
         elif slot_num == 9:
@@ -472,6 +500,7 @@ case_colors = get_case_colors(trig_color)
 st.markdown(f"""**Derived matching values:**
 - Port: `{trig_port_raw}` → **`{trig_port}`**
 - Color: `{trig_color}` → case colors: **{case_colors}**
+- Compatibility columns found: **{compat_found_cols}** → merged into `_Compatible`
 """)
 
 # Guardrail funnel
