@@ -6,7 +6,7 @@ import re
 from difflib import SequenceMatcher
 
 st.set_page_config(page_title="Smart Recommender POC", layout="wide")
-st.info("🟢 **Engine v5.2** — Role-based logic aligned to spec (camera fallback, cross-sell fix)")
+st.info("🟢 **Engine v5.3** — Sales tiebreaker + regex")
 
 # ─────────────────────────────────────────────────────────────
 # CONFIG
