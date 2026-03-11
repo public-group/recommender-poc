@@ -195,6 +195,108 @@ sel = st.sidebar.selectbox("Select a Smartphone:", phones['Title'].unique())
 if sel:
     trigger = phones[phones['Title']==sel].iloc[0]
     st.subheader(f"Building the perfect loadout for: {sel}")
+    
+    # Extract data for the visual card (safely handling missing fields)
+    card_title = safe(str(trigger.get('Title', sel)))
+    card_sku = safe(str(trigger.get('Material', 'N/A')))
+    card_img = safe(str(trigger.get('Thumbnails', '')).strip())
+    # Fallback image if the dataframe doesn't have one
+    if not card_img or card_img == 'nan':
+        card_img = "https://via.placeholder.com/150?text=No+Image"
+        
+    card_avail = safe(str(trigger.get('AVAILABILITY', 'Άμεσα Διαθέσιμο')))
+
+    # Create the HTML/CSS for the sidebar card
+    sidebar_card_html = f"""
+    <style>
+    .sb-card {{
+        border: 1px solid #eaeaea;
+        border-radius: 12px;
+        overflow: hidden;
+        background: #fff;
+        font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+        margin-top: 15px;
+    }}
+    .sb-img-container {{
+        padding: 20px;
+        text-align: center;
+        background: #fff;
+    }}
+    .sb-img {{
+        max-width: 100%;
+        max-height: 220px;
+        object-fit: contain;
+    }}
+    .sb-details {{
+        background: #f8f9fa;
+        padding: 15px;
+        border-top: 1px solid #eaeaea;
+    }}
+    .sb-badges {{
+        display: flex;
+        gap: 6px;
+        margin-bottom: 8px;
+    }}
+    .sb-badge-promo {{
+        background: #cdd5eb;
+        color: #3b4e76;
+        font-size: 10px;
+        padding: 4px 6px;
+        border-radius: 4px;
+        font-weight: 600;
+    }}
+    .sb-title {{
+        font-size: 14px;
+        font-weight: 700;
+        color: #222;
+        margin-bottom: 6px;
+        line-height: 1.3;
+    }}
+    .sb-sku {{
+        font-size: 10px;
+        color: #666;
+        margin-bottom: 10px;
+    }}
+    .sb-energy {{
+        display: inline-block;
+        background: #4caf50;
+        color: #fff;
+        padding: 2px 8px;
+        font-size: 11px;
+        font-weight: 700;
+        border-radius: 4px 12px 12px 4px; /* Hexagon-ish illusion */
+        margin-bottom: 10px;
+    }}
+    .sb-avail {{
+        display: inline-block;
+        background: #e1f5fe;
+        color: #0288d1;
+        font-size: 11px;
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-weight: 600;
+    }}
+    </style>
+
+    <div class="sb-card">
+        <div class="sb-img-container">
+            <img class="sb-img" src="{card_img}" alt="Phone Image">
+        </div>
+        <div class="sb-details">
+            <div class="sb-badges">
+                <span class="sb-badge-promo">-300€ με Πρόγραμμα</span>
+                <span class="sb-badge-promo">+1</span>
+            </div>
+            <div class="sb-title">{card_title}</div>
+            <div class="sb-sku">ΚΩΔΙΚΟΣ: {card_sku}</div>
+            <div class="sb-energy">B</div><br>
+            <div class="sb-avail">✓ {card_avail}</div>
+        </div>
+    </div>
+    """
+    
+    st.sidebar.markdown(sidebar_card_html, unsafe_allow_html=True)
+
 else:
     st.warning("Please select a phone from the sidebar.")
     st.stop()
@@ -625,11 +727,10 @@ if not recs.empty:
     .cb { background:#ff5e00; color:#fff; border:none; border-radius:8px; width:40px; height:35px; font-size:16px; cursor:pointer; transition: background 0.2s; }
     .cb:hover { background:#e65500 }
     
-    /* 🟢 NEW: The Floating Arrow Button CSS */
-    .arrow-btn {
+    /* 🟢 UPDATED: Smart Navigation Arrows */
+    .nav-btn {
         position: absolute;
-        right: -15px; /* Hangs slightly off the edge */
-        top: 50%;
+        top: 55%;
         transform: translateY(-50%);
         width: 44px;
         height: 44px;
@@ -642,21 +743,39 @@ if not recs.empty:
         justify-content: center;
         cursor: pointer;
         z-index: 100;
-        transition: transform 0.2s, box-shadow 0.2s;
+        transition: transform 0.2s, box-shadow 0.2s, opacity 0.3s;
     }
-    .arrow-btn:hover {
+    .nav-btn:hover {
         transform: translateY(-50%) scale(1.05);
         box-shadow: 0 6px 14px rgba(0,0,0,0.15);
     }
-    /* Simple CSS caret for the arrow */
-    .arrow-btn::after {
+    
+    /* Positioning and Initial States */
+    .nav-left { 
+        left: 10px; 
+        opacity: 0; /* Hidden by default */
+        pointer-events: none; 
+    }
+    .nav-right { 
+        right: 10px; 
+    }
+    
+    /* Chevrons */
+    .nav-left::after {
         content: '';
-        width: 10px;
-        height: 10px;
+        width: 10px; height: 10px;
+        border-top: 2px solid #555;
+        border-left: 2px solid #555;
+        transform: rotate(-45deg);
+        margin-left: 4px;
+    }
+    .nav-right::after {
+        content: '';
+        width: 10px; height: 10px;
         border-top: 2px solid #555;
         border-right: 2px solid #555;
         transform: rotate(45deg);
-        margin-left: -4px; /* Centers it visually */
+        margin-right: 4px;
     }
     """
 
@@ -665,22 +784,57 @@ if not recs.empty:
     <div class="desktop-wrapper">
         <div class="desktop-header"><span>|</span>Μαζί με αυτό, οι περισσότεροι αγοράζουν</div>
         
+        <div class="nav-btn nav-left" id="btnLeft" onclick="scrollL()"></div>
+        
         <div class="car" id="scrollContainer">{ch}</div>
         
-        <div class="arrow-btn" onclick="scrollCarousel()"></div>
-        
+        <div class="nav-btn nav-right" id="btnRight" onclick="scrollR()"></div>
     </div>
 
     <script>
-        function scrollCarousel() {{
-            const container = document.getElementById('scrollContainer');
-            // Scrolls right by exactly two card widths + gap (195 + 195 + 15)
-            container.scrollBy({{ left: 405, behavior: 'smooth' }});
+        const container = document.getElementById('scrollContainer');
+        const btnLeft = document.getElementById('btnLeft');
+        const btnRight = document.getElementById('btnRight');
+        
+        // Scroll exactly two card widths + gap (195 + 195 + 15)
+        const scrollAmount = 405; 
+
+        function scrollL() {{
+            container.scrollBy({{ left: -scrollAmount, behavior: 'smooth' }});
         }}
+        
+        function scrollR() {{
+            container.scrollBy({{ left: scrollAmount, behavior: 'smooth' }});
+        }}
+
+        // Listen for scrolling to show/hide arrows
+        container.addEventListener('scroll', () => {{
+            
+            // Left Arrow Logic
+            if (container.scrollLeft > 5) {{
+                btnLeft.style.opacity = '1';
+                btnLeft.style.pointerEvents = 'auto';
+            }} else {{
+                btnLeft.style.opacity = '0';
+                btnLeft.style.pointerEvents = 'none';
+            }}
+
+            // Right Arrow Logic (Adding a 2px buffer for rounding errors)
+            if (container.scrollLeft + container.clientWidth >= container.scrollWidth - 2) {{
+                btnRight.style.opacity = '0';
+                btnRight.style.pointerEvents = 'none';
+            }} else {{
+                btnRight.style.opacity = '1';
+                btnRight.style.pointerEvents = 'auto';
+            }}
+        }});
+        
+        // Trigger once on load in case there are too few items to scroll at all
+        container.dispatchEvent(new Event('scroll'));
     </script>
     </body></html>"""
 
-    # Render Layout (Web Only, Full Width)
+    # Render Layout
     components.html(dp, height=520, scrolling=False)
 
 else:
