@@ -203,27 +203,48 @@ if not recs.empty:
     # Get up to 10 items
     recs_to_show = recs.head(10)
     
-    # 1. GENERATE THE HTML CARDS
+# 1. GENERATE THE HTML CARDS
     cards_html = ""
     for index, row in recs_to_show.iterrows():
-        img_url = str(row.get('Thumbnails', ''))
+        img_url = str(row.get('Thumbnails', '')).strip()
         
-        # Format the prices
-        # Safely parse European prices (handles commas and € symbols)
+        # Safely parse European prices
         price_str = str(row.get('LIST PRICE', '0')).replace('€', '').strip()
         if ',' in price_str and '.' in price_str:
-            price_str = price_str.replace('.', '') # Remove thousands separator
-        price_str = price_str.replace(',', '.') # Change decimal comma to dot
+            price_str = price_str.replace('.', '')
+        price_str = price_str.replace(',', '.')
         
         try:
             raw_price = float(price_str)
         except ValueError:
             raw_price = 0.0
+            
         new_price = f"{raw_price:.2f}".replace('.', ',')
-        old_price = f"{(raw_price * 1.25):.2f}".replace('.', ',') # Mocking a 25% higher original price
+        old_price = f"{(raw_price * 1.25):.2f}".replace('.', ',')
         
-        # Truncate title cleanly
-        title = str(row.get('Title', ''))
+        # Make the title HTML-safe so it doesn't break the CSS
+        raw_title = str(row.get('Title', ''))
+        title = raw_title.replace('"', '&quot;').replace("'", "&#39;")
+        
+        # Build the individual card HTML
+        cards_html += f"""
+        <div class="product-card">
+            <img src="{img_url}" alt="product">
+            <div class="title" title="{title}">{title}</div>
+            <div class="reviews">
+                <span class="score">4.8</span>
+                <span class="stars">★★★★★</span>
+                <span class="count">(305)</span>
+            </div>
+            <div class="old-price">Π.Λ.Τ. : {old_price}€</div>
+            <div class="new-price">{new_price.split(',')[0]}<span class="decimals">,{new_price.split(',')[1]}€</span></div>
+            <button class="cart-btn">🛒</button>
+        </div>
+        """
+        
+# Truncate title cleanly and make it HTML-safe
+        raw_title = str(row.get('Title', ''))
+        title = raw_title.replace('"', '&quot;').replace("'", "&#39;")
         
         # Build the individual card HTML
         cards_html += f"""
