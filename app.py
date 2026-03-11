@@ -27,13 +27,23 @@ st.markdown("""
         background: transparent !important;
         box-shadow: none !important;
         z-index: 1000001 !important; 
-        top: 24px !important; /* 🟢 FIX: Pushes the toolbar down into the bright orange bar */
+        top: 24px !important; /* Pushes the toolbar down into the bright orange bar */
     }
     
-    /* 🟢 FIX: Forces ALL elements inside the header (text, icons, buttons) to be pure white */
-    header[data-testid="stHeader"] * {
+    /* Target the text (like "Share") */
+    header[data-testid="stHeader"] span {
         color: #ffffff !important;
+    }
+    
+    /* Target the icons (Paths, Circles, etc) */
+    header[data-testid="stHeader"] svg {
         fill: #ffffff !important;
+        color: #ffffff !important;
+    }
+    
+    /* 🟢 FIX: Prevent the 3-dots transparent bounding box from turning into a solid white square */
+    header[data-testid="stHeader"] svg rect {
+        fill: transparent !important;
     }
 
     /* 3. Push the main content down so it doesn't hide under our new header */
