@@ -22,15 +22,18 @@ st.markdown("""
         padding-top: 110px !important; /* Pushed further down to clear the yellow banner */
     }
 
-    /* 2. FIX THE SIDEBAR TOGGLE BUTTON */
+/* 2. FIX THE SIDEBAR TOGGLE & TOP RIGHT ICONS */
     header[data-testid="stHeader"] { 
         background: transparent !important;
         box-shadow: none !important;
         z-index: 1000001 !important; 
+        top: 24px !important; /* 🟢 FIX: Pushes the toolbar down into the bright orange bar */
     }
-    header[data-testid="stHeader"] svg {
-        fill: #ffffff !important;
+    
+    /* 🟢 FIX: Forces ALL elements inside the header (text, icons, buttons) to be pure white */
+    header[data-testid="stHeader"] * {
         color: #ffffff !important;
+        fill: #ffffff !important;
     }
 
     /* 3. Push the main content down so it doesn't hide under our new header */
