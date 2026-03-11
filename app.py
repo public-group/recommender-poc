@@ -580,52 +580,7 @@ st.markdown("### <span style='color:#ff5e00; font-weight:bold;'>|</span> Μαζ�
 recs, diag, slot_diag, slot_notes, full_candidates = run_engine(trigger, df_products, df_history, df_slots)
 
 # ─────────────────────────────────────────────────────────────
-# DIAGNOSTICS
-# ─────────────────────────────────────────────────────────────
-st.markdown("---")
-st.markdown("## 🩺 Diagnostics")
-
-tpr = str(trigger.get('Θύρα USB','')).strip()
-tp2 = extract_base_port(tpr)
-tc2 = str(trigger.get('Χρώμα','')).strip()
-cc2 = get_case_colors(tc2)
-st.markdown(f"**Port:** `{tpr}` → **`{tp2}`** | **Color:** `{tc2}` → **{cc2}** | **Compat cols:** {compat_cols_found}")
-
-st.markdown("### Guardrail Funnel")
-st.dataframe(pd.DataFrame(diag, columns=["Step","Left","Note"]), use_container_width=True, hide_index=True)
-
-st.markdown("### Per-Slot Breakdown")
-st.dataframe(pd.DataFrame(slot_diag, columns=["Slot","Role","Logic","After Hierarchy","After Attributes"]), use_container_width=True, hide_index=True)
-
-st.markdown("### Slot Filter Details")
-for sn, notes in sorted(slot_notes.items()):
-    if notes:
-        with st.expander(f"Slot {sn} — {' | '.join(notes[:2])}"):
-            for n in notes: st.text(n)
-
-with st.expander("📋 Trigger"):
-    for col in ['Material','Title','Level 1','Level 2','Hierarchy','Κατασκευαστής','Μοντέλο',
-                'Θύρα USB','Χρώμα','Λειτουργικό σύστημα','Extra Χαρακτηριστικά','LIST PRICE']:
-        st.text(f"{col}: {trigger.get(col,'N/A')}")
-
-if not recs.empty:
-    # 🟢 NEW: The Top 3 Candidates Table
-    st.markdown("### 🏆 Top 3 Candidates per Slot")
-    top3 = full_candidates[full_candidates['Item_Rank'] <= 3].copy()
-    top3_cols = ['Assigned_Slot', 'Item_Rank', 'Title', 'Final_Score', 'Sales_Tiebreaker', 'Smart_Boost', 'Avail_Boost', 'Frequency', 'History_Score']
-    avail_top3 = [c for c in top3_cols if c in top3.columns]
-    st.dataframe(top3[avail_top3].sort_values(['Assigned_Slot', 'Item_Rank']), use_container_width=True, hide_index=True)
-
-    # Final 10 Breakdown (now includes Sales_Tiebreaker)
-    st.markdown("### Score Breakdown (Final 10 Winners)")
-    dc=['Title','Hierarchy','Assigned_Slot','Slot_Role','Item_Rank','History_Score','Frequency','Avail_Boost','Smart_Boost','Sales_Tiebreaker','Final_Score','Draft_Score']
-    st.dataframe(recs[[c for c in dc if c in recs.columns]], use_container_width=True)
-
-st.markdown("---")
-
-
-# ─────────────────────────────────────────────────────────────
-# VISUALIZATION
+# VISUALIZATION (MOVED UP)
 # ─────────────────────────────────────────────────────────────
 if not recs.empty:
     rts = recs.head(10)
@@ -669,8 +624,53 @@ if not recs.empty:
 
     cd, _, cm = st.columns([2.5, 0.2, 1.3])
     with cd:
-        st.write("##### 💻 Web View"); components.html(dp, height=380, scrolling=True)
+        st.write("##### 💻 Web View")
+        # 🟢 FIX: Height increased to 450, scrolling set to False to kill the vertical bar
+        components.html(dp, height=450, scrolling=False)
     with cm:
-        st.write("##### 📱 Mobile View"); components.html(mp, height=520, scrolling=False)
+        st.write("##### 📱 Mobile View")
+        components.html(mp, height=520, scrolling=False)
 else:
-    st.error("❌ No recommendations. Check diagnostics above.")
+    st.error("❌ No recommendations. Check diagnostics below.")
+
+
+# ─────────────────────────────────────────────────────────────
+# DIAGNOSTICS (HIDDEN AT BOTTOM)
+# ─────────────────────────────────────────────────────────────
+st.markdown("---")
+
+# 🟢 FIX: Wrap the entire diagnostics block in an expander
+with st.expander("⚙️ System Diagnostics & Engine Math"):
+    tpr = str(trigger.get('Θύρα USB','')).strip()
+    tp2 = extract_base_port(tpr)
+    tc2 = str(trigger.get('Χρώμα','')).strip()
+    cc2 = get_case_colors(tc2)
+    st.markdown(f"**Port:** `{tpr}` → **`{tp2}`** | **Color:** `{tc2}` → **{cc2}** | **Compat cols:** {compat_cols_found}")
+
+    st.markdown("### Guardrail Funnel")
+    st.dataframe(pd.DataFrame(diag, columns=["Step","Left","Note"]), use_container_width=True, hide_index=True)
+
+    st.markdown("### Per-Slot Breakdown")
+    st.dataframe(pd.DataFrame(slot_diag, columns=["Slot","Role","Logic","After Hierarchy","After Attributes"]), use_container_width=True, hide_index=True)
+
+    st.markdown("### Slot Filter Details")
+    for sn, notes in sorted(slot_notes.items()):
+        if notes:
+            st.markdown(f"**Slot {sn} — {' | '.join(notes[:2])}**")
+            for n in notes: st.text(n)
+
+    st.markdown("### 📋 Trigger")
+    for col in ['Material','Title','Level 1','Level 2','Hierarchy','Κατασκευαστής','Μοντέλο',
+                'Θύρα USB','Χρώμα','Λειτουργικό σύστημα','Extra Χαρακτηριστικά','LIST PRICE']:
+        st.text(f"{col}: {trigger.get(col,'N/A')}")
+
+    if not recs.empty:
+        st.markdown("### 🏆 Top 3 Candidates per Slot")
+        top3 = full_candidates[full_candidates['Item_Rank'] <= 3].copy()
+        top3_cols = ['Assigned_Slot', 'Item_Rank', 'Title', 'Final_Score', 'Sales_Tiebreaker', 'Smart_Boost', 'Avail_Boost', 'Frequency', 'History_Score']
+        avail_top3 = [c for c in top3_cols if c in top3.columns]
+        st.dataframe(top3[avail_top3].sort_values(['Assigned_Slot', 'Item_Rank']), use_container_width=True, hide_index=True)
+
+        st.markdown("### Score Breakdown (Final 10 Winners)")
+        dc=['Title','Hierarchy','Assigned_Slot','Slot_Role','Item_Rank','History_Score','Frequency','Avail_Boost','Smart_Boost','Sales_Tiebreaker','Final_Score','Draft_Score']
+        st.dataframe(recs[[c for c in dc if c in recs.columns]], use_container_width=True)
