@@ -48,7 +48,7 @@ st.markdown("""
 
     /* 3. Push the main content down so it doesn't hide under our new header */
     .appview-container .main .block-container { 
-        padding-top: 130px !important; 
+        padding-top: 170px !important; 
     }
     
     /* 4. The Fixed Header Wrapper - WIDTH BUG FIXED */
@@ -64,14 +64,14 @@ st.markdown("""
     
     /* The Thin Dark Orange Bar */
     .poc-top-bar {
-        background-color: #cc4a00;
+        background-color: #BF3C00;
         height: 24px;
         width: 100%;
     }
     
     /* The Thick Bright Orange Bar with Text */
     .poc-main-bar {
-        background-color: #ff5e00; 
+        background-color: #FE5900; 
         height: 60px;
         width: 100%;
         display: flex;
