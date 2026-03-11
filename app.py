@@ -6,7 +6,7 @@ import re
 from difflib import SequenceMatcher
 
 st.set_page_config(page_title="Smart Recommender POC", layout="wide")
-st.info("🟢 **Engine v5.5** — Ecosystem Wall")
+st.info("🟢 **Engine v5.6** — Adjust HISTORY_BOOST and HISTORY_FREQ_MIN values")
 
 # ─────────────────────────────────────────────────────────────
 # CONFIG
@@ -23,8 +23,8 @@ ACTIVE_CLUSTER = "Smartphones"
 # A brand match acts like 15 extra sales. Availability acts like 2 extra sales.
 SMART_BOOST      = 15 
 AVAIL_BOOST      = 2
-HISTORY_BOOST    = 100000 
-HISTORY_FREQ_MIN = 3
+HISTORY_BOOST    = 50 
+HISTORY_FREQ_MIN = 5
 
 TECH_CATS = {"IT", "Telephony", "TV"}
 APPL_CATS = {"MDA", "SDA", "Air Condition", "Personal Care"}
