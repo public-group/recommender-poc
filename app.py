@@ -6,8 +6,7 @@ import re
 from difflib import SequenceMatcher
 
 st.set_page_config(page_title="Smart Recommender POC", layout="wide")
-st.info("🟢 **Engine v5.6** — Adjust HISTORY_BOOST and HISTORY_FREQ_MIN values")
-
+st.info("🟢 **Engine v6.0** — Dynamic Ecosystem Walls & Sales Volume Overrides")
 # ─────────────────────────────────────────────────────────────
 # CONFIG
 # ─────────────────────────────────────────────────────────────
@@ -22,8 +21,9 @@ ACTIVE_CLUSTER = "Smartphones"
 # 🟢 THE VIRTUAL SALES BUMP: 
 # A brand match acts like 15 extra sales. Availability acts like 2 extra sales.
 SMART_BOOST      = 15 
+ECOSYSTEM_BOOST  = 100000  # 🟢 NEW: Massive lock-in for Watches & Earbuds
 AVAIL_BOOST      = 2
-HISTORY_BOOST    = 50 
+HISTORY_BOOST    = 100000 
 HISTORY_FREQ_MIN = 5
 
 TECH_CATS = {"IT", "Telephony", "TV"}
@@ -181,12 +181,23 @@ st.title("📱 Smartphone Recommendation Tool")
 # TRIGGER
 # ─────────────────────────────────────────────────────────────
 phones = df_products[(df_products['Level 2']=='Mobiles')&(df_products['Hierarchy']=='Smartphones')]
+
 if phones.empty:
     phones = df_products[df_products['Level 2']=='Mobiles']
     st.sidebar.warning("⚠ Fallback to all Mobiles")
+
+if phones.empty:
+    st.error("🚨 CRITICAL: No phones found at all! Check your Google Sheet.")
+    st.stop()
+
 sel = st.sidebar.selectbox("Select a Smartphone:", phones['Title'].unique())
-trigger = phones[phones['Title']==sel].iloc[0]
-st.subheader(f"Building the perfect loadout for: {sel}")
+
+if sel:
+    trigger = phones[phones['Title']==sel].iloc[0]
+    st.subheader(f"Building the perfect loadout for: {sel}")
+else:
+    st.warning("Please select a phone from the sidebar.")
+    st.stop()
 
 # ─────────────────────────────────────────────────────────────
 # ─────────────────────────────────────────────────────────────
@@ -259,8 +270,6 @@ def run_engine(trigger, df_products, df_history, df_slots):
         c = c[~c['Κατασκευαστής'].fillna('').str.strip().str.upper().isin(ANDROID_OEMS)]
     elif tb in ANDROID_OEMS:
         # Ban Apple accessories from Android triggers
-        c = c[c['Κατασκευαστής'].fillna('').str.strip().str.upper() == "APPLE"]
-        # (Wait, actually we want to drop Apple! Let's do that right:)
         c = c[c['Κατασκευαστής'].fillna('').str.strip().str.upper() != "APPLE"]
     diag.append(("4b. U4: ecosystem wall", len(c), f"Removed {b4eco-len(c)} rival OEM items"))
 
@@ -436,6 +445,9 @@ def run_engine(trigger, df_products, df_history, df_slots):
             if not sc.empty:
                 sc.loc[sc['Κατασκευαστής'].fillna('').str.strip().str.upper()==tb,'Final_Score']+=SMART_BOOST
 
+# ───────────────────────────────────────
+        # SMARTWATCH: OS compat + MASSIVE ecosystem boost
+        # ───────────────────────────────────────
         elif lk == "SMARTWATCH":
             if not sc.empty and has_data(sc, CC):
                 b4=len(sc)
@@ -448,30 +460,44 @@ def run_engine(trigger, df_products, df_history, df_slots):
                 notes.append(f"OS compat: {b4}→{len(f)}")
                 if not f.empty: sc=f
                 else: notes.append(f"  ⚠ kept all (sample: {sample(sc,CC,3)})")
-            sc.loc[sc['Κατασκευαστής'].fillna('').str.strip().str.upper()==tb,'Final_Score']+=SMART_BOOST
+            
+# 🟢 FIX: Hardware Lock-in using the dynamic price tier!
+            hw_boost = ECOSYSTEM_BOOST if tprice >= 700 else SMART_BOOST
+            sc.loc[sc['Κατασκευαστής'].fillna('').str.strip().str.upper()==tb,'Final_Score'] += hw_boost
 
 # ───────────────────────────────────────
-        # EARBUDS: connection type + brand boost
+        # EARBUDS: connection type + DYNAMIC ecosystem boost
         # ───────────────────────────────────────
         elif lk == "EARBUDS":
+            
+            # 🟢 NEW: Dynamic Hardware Lock-in! 
+            # Premium phones (>= €700) get the massive 100,000 boost. 
+            # Mid/Low tier phones (< €700) only get the standard 15-point brand bump.
+            hw_boost = ECOSYSTEM_BOOST if tprice >= 700 else SMART_BOOST
+
             if "3.5mm jack" in tex:
-                # Check column OR title for 3.5mm
-                keep_35 = sc['Τύπος σύνδεσης'].fillna('').str.contains("3.5mm|Jack", case=False) | sc['Title'].fillna('').str.contains("3.5mm|Jack", case=False)
-                sc.loc[keep_35, 'Final_Score'] += SMART_BOOST
-                notes.append("3.5mm boost applied")
-                
-                sc.loc[sc['Κατασκευαστής'].fillna('').str.strip().str.upper()==tb,'Final_Score']+=SMART_BOOST
+                if has_data(sc, 'Τύπος σύνδεσης'):
+                    sc.loc[sc['Τύπος σύνδεσης'].fillna('').str.contains("3.5mm|Jack", case=False),'Final_Score'] += SMART_BOOST
+                    notes.append("3.5mm boost applied")
+                sc.loc[sc['Κατασκευαστής'].fillna('').str.strip().str.upper()==tb,'Final_Score'] += hw_boost
             else:
-                b4=len(sc)
-                port_str = tport if tport else "USB-C"
-                search_str = f"Bluetooth|Ασύρματη|{port_str}"
+                if has_data(sc, 'Τύπος σύνδεσης'):
+                    b4=len(sc)
+                    port_str = tport if tport else "USB-C"
+                    search_str = f"Bluetooth|Ασύρματη|{port_str}"
+                    keep_bt = (
+                        sc['Τύπος σύνδεσης'].fillna('').str.contains(search_str, case=False, regex=True) |
+                        sc['Hierarchy'].fillna('').str.contains("Bluetooth", case=False) |
+                        sc['Title'].fillna('').str.contains(search_str, case=False, regex=True)
+                    )
+                    f=sc[keep_bt]
+                    notes.append(f"BT/Wireless/{port_str}: {b4}→{len(f)}")
+                    if not f.empty: sc=f
+                    else: notes.append(f"  ⚠ kept all")
+                else:
+                    notes.append("Connection filter: SKIPPED (col empty)")
                 
-                # 🟢 FIX: Check Connection Column, Hierarchy, AND Title to prevent dropping blank data!
-                keep_bt = (
-                    sc['Τύπος σύνδεσης'].fillna('').str.contains(search_str, case=False, regex=True) |
-                    sc['Hierarchy'].fillna('').str.contains("Bluetooth", case=False) |
-                    sc['Title'].fillna('').str.contains(search_str, case=False, regex=True)
-                )
+                sc.loc[sc['Κατασκευαστής'].fillna('').str.strip().str.upper()==tb,'Final_Score'] += hw_boost
                 
                 f = sc[keep_bt]
                 notes.append(f"BT/Wireless/{port_str} (Safe Match): {b4}→{len(f)}")
