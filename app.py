@@ -223,14 +223,22 @@ if sel:
 
     # Create the HTML/CSS for the sidebar card
     sidebar_card_html = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
     <style>
+    body {{
+        margin: 0;
+        padding: 0;
+        background-color: transparent;
+        font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+    }}
     .sb-card {{
         border: 1px solid #eaeaea;
         border-radius: 12px;
         overflow: hidden;
         background: #fff;
-        font-family: -apple-system, BlinkMacSystemFont, sans-serif;
-        margin-top: 15px;
+        margin-top: 5px; /* Reduced margin */
     }}
     .sb-img-container {{
         padding: 20px;
@@ -318,7 +326,8 @@ if sel:
         background: #e65500;
     }}
     </style>
-
+    </head>
+    <body>
     <div class="sb-card">
         <div class="sb-img-container">
             <img class="sb-img" src="{card_img}" alt="Phone Image">
@@ -349,9 +358,13 @@ if sel:
             </div>
         </div>
     </div>
+    </body>
+    </html>
     """
     
-    st.sidebar.markdown(sidebar_card_html, unsafe_allow_html=True)
+    # 🟢 FIX: Use components.html instead of markdown, wrapped in the sidebar context
+    with st.sidebar:
+        components.html(sidebar_card_html, height=500, scrolling=False)
 
 else:
     st.warning("Please select a phone from the sidebar.")
