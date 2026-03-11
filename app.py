@@ -12,7 +12,18 @@ st.info("🟢 **Engine v5.3** — Sales tiebreaker + regex")
 # CONFIG
 # ─────────────────────────────────────────────────────────────
 SHEET_ID = "1PeLckGFNH-l9GrEvSs3ZQ0N0mXrEYwzA_JwO1wTzJWo"
-SMART_BOOST, AVAIL_BOOST, HISTORY_BOOST, HISTORY_FREQ_MIN = 100, 50, 2000, 3
+
+CLUSTER_CONFIG = {
+    "Smartphones": {"allow_siblings": False, "hierarchy_cap": 2},
+    "Kids Books":  {"allow_siblings": True,  "hierarchy_cap": 10},
+}
+ACTIVE_CLUSTER = "Smartphones"
+
+# 🟢 MATH INVERSION: Boosts are now tiny decimals, History remains a hard override
+SMART_BOOST      = 0.001 
+AVAIL_BOOST      = 0.0005
+HISTORY_BOOST    = 100 
+HISTORY_FREQ_MIN = 3
 TECH_CATS = {"IT", "Telephony", "TV"}
 APPL_CATS = {"MDA", "SDA", "Air Condition", "Personal Care"}
 COMPAT_COLS = ["Συμβατό με", "Συμβατή συσκευή"]
@@ -202,9 +213,9 @@ def run_engine(trigger, df_products, df_history, df_slots):
     c = df_products[df_products['Material']!=tm].copy()
     diag.append(("0. Start", len(c), ""))
 
-    # 🟢 THE SALES TIEBREAKER SETUP (Fixed Multiplier)
+# 🟢 THE SALES SCORE (Primary Driver)
     if 'Sum of Sales' in c.columns:
-        c['Sales_Tiebreaker'] = pd.to_numeric(c['Sum of Sales'], errors='coerce').fillna(0) * 0.0001
+        c['Sales_Tiebreaker'] = pd.to_numeric(c['Sum of Sales'], errors='coerce').fillna(0)
     else:
         c['Sales_Tiebreaker'] = 0
 
@@ -293,17 +304,33 @@ def run_engine(trigger, df_products, df_history, df_slots):
                 b4=len(sc); sc=sc[sc['Χρώμα'].fillna('').str.strip().str.lower().isin(ccols)]
                 notes.append(f"Color {ccols[:3]}: {b4}→{len(sc)}")
 
+# ───────────────────────────────────────
+        # ALT CASE: Strict model match + Book/Wallet OR Different Colored Back Cover
+        # ───────────────────────────────────────
         elif lk == "ALT_CASE":
             if strict_tmod:
-                b4=len(sc); m=sc[sc[CC].fillna('').str.contains(strict_tmod, case=False, regex=True)]
-                notes.append(f"Strict Model '{tmod}': {b4}→{len(m)}")
-                if not m.empty: sc=m
-                else: notes.append(f"  ⚠ kept all")
+                b4=len(sc); sc=sc[sc[CC].fillna('').str.contains(strict_tmod, case=False, regex=True)]
+                notes.append(f"Strict Model '{tmod}': {b4}→{len(sc)}")
+
             if not sc.empty:
-                b4=len(sc)
-                f=sc[sc['Τύπος Θήκης'].fillna('').str.contains("Book Cover|Wallet|360 Full Cover|Folio|Flip", case=False)]
-                notes.append(f"Book/Wallet/Folio: {b4}→{len(f)}")
-                if not f.empty: sc=f
+                b4 = len(sc)
+                
+                # Condition 1: It is a Book/Wallet/360 case
+                is_book = sc['Τύπος Θήκης'].fillna('').str.contains("Book Cover|Wallet|360 Full Cover|Folio|Flip", case=False)
+                
+                # Condition 2: It is a Back Cover, but a DIFFERENT color than the phone (and not clear)
+                if tcol:
+                    is_back = sc['Τύπος Θήκης'].fillna('').str.contains("Back Cover", case=False)
+                    # ~ means "NOT" in pandas. We keep it if the color is NOT in the phone's color list (ccols)
+                    is_diff_color = is_back & ~sc['Χρώμα'].fillna('').str.strip().str.lower().isin(ccols)
+                    
+                    # Keep if it matches EITHER condition
+                    sc = sc[is_book | is_diff_color]
+                    notes.append(f"Book OR Diff Color: {b4}→{len(sc)}")
+                else:
+                    # If the phone has no color data, just stick to Book Covers to be safe
+                    sc = sc[is_book]
+                    notes.append(f"Strict Book Cover (no phone color): {b4}→{len(sc)}")
 
         elif lk == "SCREEN_GLASS":
             if strict_tmod:
