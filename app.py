@@ -196,15 +196,30 @@ if sel:
     trigger = phones[phones['Title']==sel].iloc[0]
     st.subheader(f"Building the perfect loadout for: {sel}")
     
-    # Extract data for the visual card (safely handling missing fields)
+    # Extract EXACT data from dataframe
     card_title = safe(str(trigger.get('Title', sel)))
     card_sku = safe(str(trigger.get('Material', 'N/A')))
     card_img = safe(str(trigger.get('Thumbnails', '')).strip())
-    # Fallback image if the dataframe doesn't have one
     if not card_img or card_img == 'nan':
         card_img = "https://via.placeholder.com/150?text=No+Image"
         
     card_avail = safe(str(trigger.get('AVAILABILITY', 'Άμεσα Διαθέσιμο')))
+    
+    # Determine the color theme based on the exact availability text
+    if card_avail in ["Κατόπιν Παραγγελίας", "Αναμένεται Σύντομα"]:
+        avail_theme = "avail-blue"
+    else:
+        avail_theme = "avail-green"
+    
+    # Format the exact price from LIST PRICE
+    try:
+        raw_price = trigger.get('LIST PRICE', 0)
+        t_price = parse_euro_price(raw_price)
+    except:
+        t_price = 0.0
+        
+    p_int = f"{int(t_price)}"
+    p_dec = f"{t_price:.2f}".split('.')[1]
 
     # Create the HTML/CSS for the sidebar card
     sidebar_card_html = f"""
@@ -232,19 +247,6 @@ if sel:
         padding: 15px;
         border-top: 1px solid #eaeaea;
     }}
-    .sb-badges {{
-        display: flex;
-        gap: 6px;
-        margin-bottom: 8px;
-    }}
-    .sb-badge-promo {{
-        background: #cdd5eb;
-        color: #3b4e76;
-        font-size: 10px;
-        padding: 4px 6px;
-        border-radius: 4px;
-        font-weight: 600;
-    }}
     .sb-title {{
         font-size: 14px;
         font-weight: 700;
@@ -257,24 +259,63 @@ if sel:
         color: #666;
         margin-bottom: 10px;
     }}
-    .sb-energy {{
-        display: inline-block;
-        background: #4caf50;
-        color: #fff;
-        padding: 2px 8px;
-        font-size: 11px;
-        font-weight: 700;
-        border-radius: 4px 12px 12px 4px; /* Hexagon-ish illusion */
-        margin-bottom: 10px;
-    }}
-    .sb-avail {{
-        display: inline-block;
-        background: #e1f5fe;
-        color: #0288d1;
-        font-size: 11px;
+    
+    /* 🟢 DYNAMIC AVAILABILITY BADGES */
+    .sb-avail-badge {{
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 12px;
         padding: 4px 8px;
-        border-radius: 4px;
-        font-weight: 600;
+        border-radius: 6px;
+        font-weight: 700;
+        margin-bottom: 15px;
+    }}
+    .avail-green {{
+        background-color: #e5f3f0;
+        color: #00897b;
+    }}
+    .avail-blue {{
+        background-color: #e6f0f6;
+        color: #2385aa;
+    }}
+
+    .sb-bottom-row {{
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        border-top: 1px solid #eaeaea;
+        padding-top: 15px;
+    }}
+    .sb-price-wrap {{
+        color: #ff5e00;
+        font-weight: 800;
+        font-size: 24px;
+        display: flex;
+        align-items: flex-start;
+        line-height: 1;
+    }}
+    .sb-price-dec {{
+        font-size: 13px;
+        font-weight: 700;
+        margin-top: 2px;
+    }}
+    .sb-btn {{
+        background: #ff5e00;
+        color: #fff;
+        border: none;
+        border-radius: 8px;
+        padding: 10px 16px;
+        font-size: 14px;
+        font-weight: 700;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        transition: background 0.2s;
+    }}
+    .sb-btn:hover {{
+        background: #e65500;
     }}
     </style>
 
@@ -283,14 +324,29 @@ if sel:
             <img class="sb-img" src="{card_img}" alt="Phone Image">
         </div>
         <div class="sb-details">
-            <div class="sb-badges">
-                <span class="sb-badge-promo">-300€ με Πρόγραμμα</span>
-                <span class="sb-badge-promo">+1</span>
-            </div>
             <div class="sb-title">{card_title}</div>
             <div class="sb-sku">ΚΩΔΙΚΟΣ: {card_sku}</div>
-            <div class="sb-energy">B</div><br>
-            <div class="sb-avail">✓ {card_avail}</div>
+            
+            <div class="sb-avail-badge {avail_theme}">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="20 6 9 17 4 12"></polyline>
+                </svg>
+                {card_avail}
+            </div>
+            
+            <div class="sb-bottom-row">
+                <div class="sb-price-wrap">
+                    {p_int}<span class="sb-price-dec">,{p_dec}€</span>
+                </div>
+                <button class="sb-btn">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="9" cy="21" r="1"></circle>
+                        <circle cx="20" cy="21" r="1"></circle>
+                        <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path>
+                    </svg>
+                    Προσθήκη
+                </button>
+            </div>
         </div>
     </div>
     """
