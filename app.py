@@ -9,7 +9,7 @@ st.set_page_config(page_title="Smart Recommender POC", layout="wide")
 st.info("🟢 **Engine v7.0** — Enhance UI ")
 
 # ─────────────────────────────────────────────────────────────
-# GLOBAL BRAND STYLING (Public.gr Replica)
+# CUSTOM TOP HEADER & GLOBAL STYLING
 # ─────────────────────────────────────────────────────────────
 st.markdown("""
 <style>
@@ -19,89 +19,64 @@ st.markdown("""
     }
     [data-testid="stSidebar"] {
         border-right: 1px solid #eaeaea !important;
+        padding-top: 75px !important; /* Push sidebar down below header */
     }
 
     /* 2. Hide the default Streamlit header */
     header[data-testid="stHeader"] { 
         display: none !important; 
     }
-    
-    /* Push the Streamlit content down so it doesn't hide behind our custom fixed header */
-    .appview-container .main .block-container { 
-        padding-top: 130px !important; 
-    }
 
-    /* 3. Build the Custom Fixed Orange Header */
-    .public-header-wrapper {
+    /* 3. Push the main content down so it doesn't hide under our new header */
+    .appview-container .main .block-container { 
+        padding-top: 100px !important; 
+    }
+    
+    /* 4. The Fixed Dual-Orange Header */
+    .poc-header-wrapper {
         position: fixed;
         top: 0;
         left: 0;
         width: 100vw;
         z-index: 999999;
-        font-family: -apple-system, BlinkMacSystemFont, sans-serif;
     }
-    .public-top-bar {
-        background-color: #d94b00; /* Darker orange for the top thin bar */
-        height: 32px;
+    
+    /* The Thin Dark Orange Bar */
+    .poc-top-bar {
+        background-color: #cc4a00; /* Darker orange */
+        height: 12px;
         width: 100%;
-        display: flex;
-        justify-content: flex-end;
-        align-items: center;
-        padding: 0 40px;
-        color: #ffffff;
-        font-size: 12px;
-        font-weight: 500;
-        letter-spacing: 0.3px;
     }
-    .public-main-bar {
+    
+    /* The Thick Bright Orange Bar with Text */
+    .poc-main-bar {
         background-color: #ff5e00; /* Bright brand orange */
-        height: 72px;
+        height: 60px;
         width: 100%;
         display: flex;
         align-items: center;
         padding: 0 40px;
-        box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+        box-shadow: 0 2px 5px rgba(0,0,0,0.15);
     }
-    .public-logo {
+    
+    /* The PoC Title Text */
+    .poc-title {
         color: #ffffff;
-        font-weight: 900;
-        font-size: 34px;
-        letter-spacing: -1.5px;
-        margin-right: 50px;
-        cursor: pointer;
-    }
-    .public-search-bar {
-        background-color: #ffffff;
-        height: 44px;
-        border-radius: 12px;
-        flex-grow: 1;
-        max-width: 600px;
-        display: flex;
-        align-items: center;
-        padding-left: 15px;
-        color: #888;
-        font-size: 15px;
-        cursor: text;
-    }
-    .public-search-icon {
-        margin-right: 10px;
-        font-size: 18px;
+        font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+        font-size: 22px;
+        font-weight: 700;
+        letter-spacing: -0.5px;
     }
 </style>
 
-<div class="public-header-wrapper">
-    <div class="public-top-bar">
-        <span>📞 210 8181333 &nbsp;&nbsp;&nbsp;&nbsp; 💼 Το Wallet μου &nbsp;&nbsp;&nbsp;&nbsp; 📍 Εξέλιξη παραγγελίας</span>
-    </div>
-    <div class="public-main-bar">
-        <div class="public-logo">Public</div>
-        <div class="public-search-bar">
-            <span class="public-search-icon">🔍</span>
-            Τι ψάχνεις σήμερα;
-        </div>
+<div class="poc-header-wrapper">
+    <div class="poc-top-bar"></div>
+    <div class="poc-main-bar">
+        <div class="poc-title">Recommendation PoC</div>
     </div>
 </div>
 """, unsafe_allow_html=True)
+
 
 # ─────────────────────────────────────────────────────────────
 # CONFIG
