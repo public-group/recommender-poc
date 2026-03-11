@@ -6,7 +6,7 @@ import re
 from difflib import SequenceMatcher
 
 st.set_page_config(page_title="Smart Recommender POC", layout="wide")
-st.info("🟢 **Engine v6.0** — Dynamic Ecosystem Walls & Sales Volume Overrides")
+st.info("🟢 **Engine v7.0** — Enhance UI ")
 
 # 🟢 GLOBAL BRAND STYLING (Matching Public's UI)
 st.markdown("""
