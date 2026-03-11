@@ -123,7 +123,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        Όλα ΑΤΟΚΑ και χωρίς κάρτα
+        🟢 Engine v7.1 — Enhanced UI
     </div>
 </div>
 """, unsafe_allow_html=True)
