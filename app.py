@@ -64,11 +64,11 @@ st.title("📱 Smartphone Recommendation Tool")
 
 # ─────────────────────────────────────────────────────────────
 # 1. SELECT THE TRIGGER
-# Gap 8: Spec says Trigger = Level 2 == 'Mobiles' AND Hierarchy == 'Smart phones'
+# Gap 8: Spec says Trigger = Level 2 == 'Mobiles' AND Hierarchy == 'Smartphones'
 # ─────────────────────────────────────────────────────────────
 phones = df_products[
     (df_products['Level 2'] == 'Mobiles') &
-    (df_products['Hierarchy'] == 'Smart phones')
+    (df_products['Hierarchy'] == 'Smartphones')
 ]
 selected_phone_name = st.sidebar.selectbox("Select a Smartphone:", phones['Title'].unique())
 trigger = phones[phones['Title'] == selected_phone_name].iloc[0]
