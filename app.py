@@ -56,11 +56,11 @@ st.title("📱 Smartphone Recommendation Tool")
 # ─────────────────────────────────────────────────────────────
 phones = df_products[
     (df_products['Level 2'] == 'Mobiles') &
-    (df_products['Hierarchy'] == 'Smart phones')
+    (df_products['Hierarchy'] == 'Smartphones')
 ]
 if phones.empty:
     phones = df_products[df_products['Level 2'] == 'Mobiles']
-    st.sidebar.warning("⚠ 'Smart phones' hierarchy not found — using all Mobiles")
+    st.sidebar.warning("⚠ 'Smartphones' hierarchy not found — using all Mobiles")
 
 selected_phone_name = st.sidebar.selectbox("Select a Smartphone:", phones['Title'].unique())
 trigger = phones[phones['Title'] == selected_phone_name].iloc[0]
@@ -241,12 +241,12 @@ def calculate_recommendations(trigger, df_products, df_history, df_slots):
             if "γρήγορη φόρτιση" in trig_extras:
                 sc = sc[sc['Ισχύς (Watt)'].fillna('').str.contains("21 - 60|61 - 100", case=False)]
             if "ασύρματη φόρτιση" in trig_extras:
-                sc = sc[sc['Τύπος3'].fillna('').str.contains("Φορτιστής Πρίζας|Ασύρματος Φορτιστής|Σετ Φόρτισης", case=False)]
-                sc.loc[sc['Τύπος3'].fillna('').str.contains("Ασύρματος Φορτιστής", case=False), 'Final_Score'] += SMART_BOOST
+                sc = sc[sc['Τύπος'].fillna('').str.contains("Φορτιστής Πρίζας|Ασύρματος Φορτιστής|Σετ Φόρτισης", case=False)]
+                sc.loc[sc['Τύπος'].fillna('').str.contains("Ασύρματος Φορτιστής", case=False), 'Final_Score'] += SMART_BOOST
                 if trig_brand == "APPLE":
                     sc.loc[sc['Title'].fillna('').str.contains("MagSafe", case=False), 'Final_Score'] += SMART_BOOST
             else:
-                sc = sc[sc['Τύπος3'].fillna('').str.contains("Φορτιστής Πρίζας|Σετ Φόρτισης", case=False)]
+                sc = sc[sc['Τύπος'].fillna('').str.contains("Φορτιστής Πρίζας|Σετ Φόρτισης", case=False)]
 
         elif slot_num == 4:
             if "3.5mm jack" in trig_extras:
@@ -273,11 +273,11 @@ def calculate_recommendations(trigger, df_products, df_history, df_slots):
 
         elif slot_num == 6:
             if "με pen" in trig_extras:
-                sc = sc[sc['Τύπος3'].fillna('').str.contains("Γραφίδα", case=False)]
+                sc = sc[sc['Τύπος'].fillna('').str.contains("Γραφίδα", case=False)]
             elif trig_brand == "APPLE":
-                sc = sc[sc['Τύπος3'].fillna('').str.contains("AirTag", case=False)]
+                sc = sc[sc['Τύπος'].fillna('').str.contains("AirTag", case=False)]
             else:
-                sc = sc[sc['Τύπος3'].fillna('').str.contains(
+                sc = sc[sc['Τύπος'].fillna('').str.contains(
                     "Λουράκι Λαιμού|Λουράκι Καρπού|Αξεσουάρ Smartphone|Αξεσουάρ Κάμερας|Αξεσουάρ Καθαρισμού", case=False
                 )]
 
