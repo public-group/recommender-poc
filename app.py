@@ -677,7 +677,6 @@ st.markdown("""
 
 # The actual expander
 with st.expander("⚙️ System Diagnostics & Engine Math"):
-with st.expander("⚙️ System Diagnostics & Engine Math"):
     tpr = str(trigger.get('Θύρα USB','')).strip()
     tp2 = extract_base_port(tpr)
     tc2 = str(trigger.get('Χρώμα','')).strip()
