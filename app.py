@@ -22,22 +22,34 @@ st.markdown("""
         padding-top: 75px !important; /* Push sidebar down below header */
     }
 
-    /* 2. Hide the default Streamlit header */
+    /* 2. FIX THE SIDEBAR TOGGLE BUTTON */
+    /* This forces Streamlit's open/close button to sit ON TOP of our orange header */
+    [data-testid="collapsedControl"] {
+        z-index: 1000000 !important; 
+        top: 15px !important; 
+    }
+    [data-testid="collapsedControl"] svg {
+        fill: #ffffff !important; /* Makes the expand arrow white */
+        color: #ffffff !important;
+    }
+
+    /* 3. Hide the default Streamlit header */
     header[data-testid="stHeader"] { 
         display: none !important; 
     }
 
-    /* 3. Push the main content down so it doesn't hide under our new header */
+    /* 4. Push the main content down so it doesn't hide under our new header */
     .appview-container .main .block-container { 
         padding-top: 100px !important; 
     }
     
-    /* 4. The Fixed Dual-Orange Header */
+    /* 5. The Fixed Dual-Orange Header (Fixed Width) */
     .poc-header-wrapper {
         position: fixed;
         top: 0;
         left: 0;
-        width: 100vw;
+        right: 0;
+        width: 100%; /* Fixes the horizontal line stretching */
         z-index: 999999;
     }
     
@@ -67,6 +79,27 @@ st.markdown("""
         font-weight: 700;
         letter-spacing: -0.5px;
     }
+
+    /* 6. RESTORE THE VERTICAL ORANGE LINE FOR TITLES */
+    .public-header {
+        font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+        font-size: 24px;
+        font-weight: 700;
+        color: #111111;
+        margin-top: 10px;
+        margin-bottom: 20px;
+        display: flex;
+        align-items: center;
+    }
+    .public-header::before {
+        content: '';
+        display: inline-block;
+        width: 4px;
+        height: 24px;
+        background-color: #ff5e00;
+        margin-right: 10px;
+        border-radius: 2px;
+    }
 </style>
 
 <div class="poc-header-wrapper">
@@ -76,7 +109,6 @@ st.markdown("""
     </div>
 </div>
 """, unsafe_allow_html=True)
-
 
 # ─────────────────────────────────────────────────────────────
 # CONFIG
