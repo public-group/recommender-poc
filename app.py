@@ -309,12 +309,12 @@ def calculate_recommendations(trigger, df_products, df_history, df_slots):
 
             # Wireless Upsell
             if "ασύρματη φόρτιση" in trig_extras:
-                sc = sc[sc['Τύπος3'].fillna('').str.contains(
+                sc = sc[sc['Τύπος'].fillna('').str.contains(
                     "Φορτιστής Πρίζας|Ασύρματος Φορτιστής|Σετ Φόρτισης", case=False
                 )]
                 # BOOST: Wireless charger synergy
                 sc.loc[
-                    sc['Τύπος3'].fillna('').str.contains("Ασύρματος Φορτιστής", case=False),
+                    sc['Τύπος'].fillna('').str.contains("Ασύρματος Φορτιστής", case=False),
                     'Final_Score'
                 ] += SMART_BOOST
                 # BOOST: Apple MagSafe
@@ -324,7 +324,7 @@ def calculate_recommendations(trigger, df_products, df_history, df_slots):
                         'Final_Score'
                     ] += SMART_BOOST
             else:
-                sc = sc[sc['Τύπος3'].fillna('').str.contains(
+                sc = sc[sc['Τύπος'].fillna('').str.contains(
                     "Φορτιστής Πρίζας|Σετ Φόρτισης", case=False
                 )]
 
