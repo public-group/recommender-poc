@@ -48,7 +48,7 @@ st.markdown("""
 
 /* 3. Push the main content down so it doesn't hide under our new header */
     .appview-container .main .block-container { 
-        padding-top: 170px !important; /* 🟢 FIX: Increased from 130px to 170px */
+        padding-top: 300px !important; /* 🟢 FIX: Increased from 130px to 170px */
     }
     
     /* 4. The Fixed Header Wrapper - WIDTH BUG FIXED */
