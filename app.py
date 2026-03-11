@@ -193,8 +193,21 @@ def run_engine(trigger, df_products, df_history, df_slots):
     tprice=parse_euro_price(trigger.get('LIST PRICE',0))
     ccols= get_case_colors(tcol)
 
+    # 🟢 THE "PRO MAX" FIX: Strict Regex Pattern using Negative Lookahead
+    strict_tmod = ""
+    if tmod:
+        # Matches the model ONLY if it is not immediately followed by Max, Plus, Ultra, +, or Pro
+        strict_tmod = rf"{re.escape(tmod)}(?!\s*(Max|Plus|\+|Ultra|Pro))"
+
     c = df_products[df_products['Material']!=tm].copy()
     diag.append(("0. Start", len(c), ""))
+
+    # 🟢 THE SALES TIEBREAKER SETUP
+    if 'Sum of Sales' in c.columns:
+        # Scale it down so it acts as a tiebreaker, not a rule-breaker
+        c['Sales_Tiebreaker'] = pd.to_numeric(c['Sum of Sales'], errors='coerce').fillna(0) * 0.01
+    else:
+        c['Sales_Tiebreaker'] = 0
 
     # U2a: title dedup
     c = c[c['Title']!=tt]; diag.append(("1. U2a: title dedup", len(c), ""))
@@ -240,9 +253,15 @@ def run_engine(trigger, df_products, df_history, df_slots):
 
     c['Avail_Boost']=0; c.loc[c['AVAILABILITY']=='Άμεσα Διαθέσιμο','Avail_Boost']=AVAIL_BOOST
     c['Smart_Boost']=0
-    c.loc[c['Μοντέλο']==trigger.get('Μοντέλο',''),'Smart_Boost']+=SMART_BOOST
+    
+    # Apply strict regex matching to the Smart Boost as well
+    if strict_tmod:
+        c.loc[c['Μοντέλο'].fillna('').str.contains(strict_tmod, case=False, regex=True), 'Smart_Boost'] += SMART_BOOST
+        
     c.loc[c['Κατασκευαστής'].fillna('').str.strip().str.upper()==tb,'Smart_Boost']+=SMART_BOOST
-    c['Final_Score']=c['History_Score']+c['Frequency']+c['Avail_Boost']+c['Smart_Boost']
+    
+    # 🟢 FINAL SCORE NOW INCLUDES THE SALES TIEBREAKER
+    c['Final_Score'] = c['History_Score'] + c['Frequency'] + c['Avail_Boost'] + c['Smart_Boost'] + c['Sales_Tiebreaker']
 
     b4u5=len(c)
     nhm=c['History_Score']==0
@@ -263,12 +282,12 @@ def run_engine(trigger, df_products, df_history, df_slots):
         notes = [f"Logic: {lk}"]
 
         # ───────────────────────────────────────
-        # PRIMARY CASE: model match + Back Cover + color
+        # PRIMARY CASE: Strict model match + Back Cover + color
         # ───────────────────────────────────────
         if lk == "PRIMARY_CASE":
-            if tmod:
-                b4=len(sc); m=sc[sc[CC].fillna('').str.contains(tmod, case=False, regex=False)]
-                notes.append(f"Model '{tmod}': {b4}→{len(m)}")
+            if strict_tmod:
+                b4=len(sc); m=sc[sc[CC].fillna('').str.contains(strict_tmod, case=False, regex=True)]
+                notes.append(f"Strict Model '{tmod}': {b4}→{len(m)}")
                 if not m.empty: sc=m
                 else: notes.append(f"  ⚠ kept all (sample: {sample(sc,CC,3)})")
             if not sc.empty:
@@ -280,12 +299,12 @@ def run_engine(trigger, df_products, df_history, df_slots):
                 notes.append(f"Color {ccols[:3]}: {b4}→{len(sc)}")
 
         # ───────────────────────────────────────
-        # ALT CASE: model match + Book/Wallet/Folio
+        # ALT CASE: Strict model match + Book/Wallet/Folio
         # ───────────────────────────────────────
         elif lk == "ALT_CASE":
-            if tmod:
-                b4=len(sc); m=sc[sc[CC].fillna('').str.contains(tmod, case=False, regex=False)]
-                notes.append(f"Model '{tmod}': {b4}→{len(m)}")
+            if strict_tmod:
+                b4=len(sc); m=sc[sc[CC].fillna('').str.contains(strict_tmod, case=False, regex=True)]
+                notes.append(f"Strict Model '{tmod}': {b4}→{len(m)}")
                 if not m.empty: sc=m
                 else: notes.append(f"  ⚠ kept all")
             if not sc.empty:
@@ -295,16 +314,14 @@ def run_engine(trigger, df_products, df_history, df_slots):
                 if not f.empty: sc=f
 
         # ───────────────────────────────────────
-        # SCREEN GLASS: model match (via _Compatible)
-        # Hierarchy already limits to screen protectors
+        # SCREEN GLASS: Strict model match (via _Compatible)
         # ───────────────────────────────────────
         elif lk == "SCREEN_GLASS":
-            if tmod:
-                b4=len(sc); m=sc[sc[CC].fillna('').str.contains(tmod, case=False, regex=False)]
-                notes.append(f"Model '{tmod}': {b4}→{len(m)}")
+            if strict_tmod:
+                b4=len(sc); m=sc[sc[CC].fillna('').str.contains(strict_tmod, case=False, regex=True)]
+                notes.append(f"Strict Model '{tmod}': {b4}→{len(m)}")
                 if not m.empty: sc=m
                 else: notes.append(f"  ⚠ kept all (sample: {sample(sc,CC,3)})")
-            # Optional type filter — data shows most are "Προστατευτικό οθόνης"
             if not sc.empty and has_data(sc, 'Τύπος προϊόντος'):
                 b4=len(sc)
                 f=sc[sc['Τύπος προϊόντος'].fillna('').str.contains("Προστατευτικό οθόνης|Προστατευτικό Οθόνης|Screen Protector", case=False)]
@@ -312,14 +329,12 @@ def run_engine(trigger, df_products, df_history, df_slots):
                 if not f.empty: sc=f
 
         # ───────────────────────────────────────
-        # CAMERA_GLASS (Spec Slot 7, Logic 1):
-        # FORCE model match, FILTER Προστατευτικό καμερών
-        # Fallback: Extra Charging Cable matching phone's port
+        # CAMERA_GLASS: Strict model match
         # ───────────────────────────────────────
         elif lk == "CAMERA_GLASS":
-            if tmod:
-                b4=len(sc); m=sc[sc[CC].fillna('').str.contains(tmod, case=False, regex=False)]
-                notes.append(f"Model '{tmod}': {b4}→{len(m)}")
+            if strict_tmod:
+                b4=len(sc); m=sc[sc[CC].fillna('').str.contains(strict_tmod, case=False, regex=True)]
+                notes.append(f"Strict Model '{tmod}': {b4}→{len(m)}")
                 if not m.empty: sc=m
                 else: notes.append(f"  ⚠ kept all")
             if not sc.empty and has_data(sc, 'Τύπος προϊόντος'):
@@ -327,29 +342,28 @@ def run_engine(trigger, df_products, df_history, df_slots):
                 f=sc[sc['Τύπος προϊόντος'].fillna('').str.contains("Προστατευτικό καμερών|Camera", case=False)]
                 notes.append(f"Camera type: {b4}→{len(f)}")
                 if not f.empty: sc=f
-            # Spec fallback: if no camera protector, try charging cable matching port
             if sc.empty and tport:
                 fb_h = ['CABLE-CHARGER', 'APPLE ORIGINAL IPHONE CABLE-ADAPTORS', 'ΚΑΛΩΔΙΑ ΔΕΔΟΜΕΝΩΝ', 'MOBILE CABLE-ADAPTORS', 'IPHONE CABLE-ADAPTORS']
                 fb = c[c['Hierarchy'].isin(fb_h)].copy()
-                if tmod:
-                    fb_model = fb[fb[CC].fillna('').str.contains(tmod, case=False, regex=False)]
+                if strict_tmod:
+                    fb_model = fb[fb[CC].fillna('').str.contains(strict_tmod, case=False, regex=True)]
                     if not fb_model.empty: fb = fb_model
                 fb_port = fb[fb[CC].fillna('').str.lower().str.contains(tport.lower(), regex=False) | fb['Title'].fillna('').str.lower().str.contains(tport.lower(), regex=False)]
                 notes.append(f"Cable fallback ({tport}): {len(fb_port)}")
                 if not fb_port.empty: sc = fb_port
 
         # ───────────────────────────────────────
-        # WALL CHARGER: compat (model/universal/port) + watt + type
-        # Data: Συμβατή συσκευή has "USB Type-C", "Universal", model lists
-        # Τύπος3 has "Φορτιστής Πρίζας" (113), "Ασύρματος" (30) etc.
+        # WALL CHARGER: Compat + Strict model match
         # ───────────────────────────────────────
         elif lk == "WALL_CHARGER":
             if not sc.empty:
                 b4=len(sc)
                 cv = sc[CC].fillna('').str.lower()
                 keep = cv.str.contains("universal", regex=False) | (cv=='')
-                if tmod: keep = keep | cv.str.contains(tmod.lower(), regex=False)
-                if tport: keep = keep | cv.str.contains(tport.lower(), regex=False) | cv.str.contains("usb-c", regex=False)
+                if strict_tmod: 
+                    keep = keep | cv.str.contains(strict_tmod, case=False, regex=True)
+                if tport: 
+                    keep = keep | cv.str.contains(tport.lower(), regex=False) | cv.str.contains("usb-c", regex=False)
                 m=sc[keep]
                 notes.append(f"Compat (model/universal/port): {b4}→{len(m)}")
                 if not m.empty: sc=m
@@ -375,12 +389,8 @@ def run_engine(trigger, df_products, df_history, df_slots):
                     notes.append(f"Wall charger types: {b4}→{len(f)}")
                     if not f.empty: sc=f
 
-        # ───────────────────────────────────────
-        # POWERBANK (Spec Slot 5, Logic 4):
-        # FILTER port, BOOST speed, wireless, MagSafe, brand
-        # ───────────────────────────────────────
+        # (Powerbank, Smartwatch, Earbuds, Holder, Cross-Sell logic remains unchanged)
         elif lk == "POWERBANK":
-            # Port match via compat or Τύπος σύνδεσης
             if tport and not sc.empty:
                 cv = sc[CC].fillna('').str.lower()
                 ts = sc['Τύπος σύνδεσης'].fillna('').str.lower() if 'Τύπος σύνδεσης' in sc.columns else pd.Series('', index=sc.index)
@@ -400,10 +410,6 @@ def run_engine(trigger, df_products, df_history, df_slots):
             if not sc.empty:
                 sc.loc[sc['Κατασκευαστής'].fillna('').str.strip().str.upper()==tb,'Final_Score']+=SMART_BOOST
 
-        # ───────────────────────────────────────
-        # SMARTWATCH: OS compat + brand boost
-        # Data: Συμβατό με has "Google Android, Apple iOS", "iOS 26.0..."
-        # ───────────────────────────────────────
         elif lk == "SMARTWATCH":
             if not sc.empty and has_data(sc, CC):
                 b4=len(sc)
@@ -418,10 +424,6 @@ def run_engine(trigger, df_products, df_history, df_slots):
                 else: notes.append(f"  ⚠ kept all (sample: {sample(sc,CC,3)})")
             sc.loc[sc['Κατασκευαστής'].fillna('').str.strip().str.upper()==tb,'Final_Score']+=SMART_BOOST
 
-        # ───────────────────────────────────────
-        # EARBUDS: connection type + brand boost
-        # Data: Τύπος σύνδεσης has "3.5mm Jack"(45), "USB-C"(38), "Bluetooth"(5), "Jack 3.5mm"(5)
-        # ───────────────────────────────────────
         elif lk == "EARBUDS":
             if "3.5mm jack" in tex:
                 if has_data(sc, 'Τύπος σύνδεσης'):
@@ -431,7 +433,6 @@ def run_engine(trigger, df_products, df_history, df_slots):
             else:
                 if has_data(sc, 'Τύπος σύνδεσης'):
                     b4=len(sc)
-                    # Match Bluetooth, USB-C, Type-C, Ασύρματη
                     f=sc[sc['Τύπος σύνδεσης'].fillna('').str.contains("Bluetooth|USB-C|Type-C|Ασύρματη", case=False)]
                     notes.append(f"BT/USB-C/Wireless: {b4}→{len(f)}")
                     if not f.empty: sc=f
@@ -440,22 +441,11 @@ def run_engine(trigger, df_products, df_history, df_slots):
                     notes.append("Connection filter: SKIPPED (col empty)")
                 sc.loc[sc['Κατασκευαστής'].fillna('').str.strip().str.upper()==tb,'Final_Score']+=SMART_BOOST
 
-        # ───────────────────────────────────────
-        # HOLDER (Spec Slot 9):
-        # IF Apple + wireless charging → BOOST Μαγνητική/Magsafe
-        # (from spec Logic 4: BOOST Slot 9 Βάσεις where Τρόπος τοποθέτησης = Μαγνητική)
-        # ───────────────────────────────────────
         elif lk == "HOLDER":
             if tb=="APPLE" and "ασύρματη φόρτιση" in tex:
                 sc.loc[sc['Τρόπος τοποθέτησης'].fillna('').str.contains("Μαγνητική|Magsafe", case=False),'Final_Score']+=SMART_BOOST
             notes.append(f"No hard filter, {len(sc)} remain")
 
-        # ───────────────────────────────────────
-        # CROSS_SELL (Spec Slot 6, Logic 6):
-        # IF Pen → Γραφίδα Αφής
-        # ELIF APPLE → Apple AirTag
-        # ELSE → Λουράκι, Αξεσουάρ, Καθαρισμού
-        # ───────────────────────────────────────
         elif lk == "CROSS_SELL":
             b4=len(sc)
             if "με pen" in tex:
@@ -463,7 +453,6 @@ def run_engine(trigger, df_products, df_history, df_slots):
                 notes.append(f"Stylus: {b4}→{len(f)}")
                 if not f.empty: sc=f
             elif tb=="APPLE":
-                # Search Τύπος3, Title, and Hierarchy
                 f=sc[
                     sc['Τύπος3'].fillna('').str.contains("AirTag|Air Tag|Smart Tag", case=False) |
                     sc['Title'].fillna('').str.contains("AirTag", case=False) |
@@ -472,7 +461,6 @@ def run_engine(trigger, df_products, df_history, df_slots):
                 notes.append(f"AirTag (Τύπος3/Title/Hierarchy): {b4}→{len(f)}")
                 if not f.empty: sc=f
                 else:
-                    # Fallback: Apple accessories
                     f2=sc[sc['Τύπος3'].fillna('').str.contains("Λουράκι|Αξεσουάρ|Μπρελόκ", case=False)]
                     notes.append(f"Apple acc fallback: {b4}→{len(f2)}")
                     if not f2.empty: sc=f2
@@ -513,6 +501,7 @@ def run_engine(trigger, df_products, df_history, df_slots):
 
     diag.append(("6. Final", len(sel), f"Hierarchy cap=2"))
     return (pd.DataFrame(sel) if sel else pd.DataFrame()), diag, slot_diag, slot_notes
+
 
 
 # ─────────────────────────────────────────────────────────────
