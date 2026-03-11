@@ -570,6 +570,7 @@ def run_engine(trigger, df_products, df_history, df_slots):
     diag.append(("6. Final", len(sel), f"Hierarchy cap=2"))
     return (pd.DataFrame(sel) if sel else pd.DataFrame()), diag, slot_diag, slot_notes, full
 
+
 # ─────────────────────────────────────────────────────────────
 # RUN & VISUALIZATION
 # ─────────────────────────────────────────────────────────────
@@ -596,34 +597,36 @@ if not recs.empty:
             <button class="cb">&#128722;</button>
         </div>"""
 
-    # Base CSS shared by both Desktop and Mobile
+    # Base CSS tightly matched to the original screenshot
     css="""
     *{margin:0;padding:0;box-sizing:border-box}
     body{font-family:-apple-system,BlinkMacSystemFont,sans-serif;background:transparent}
-    .pc{background:#fff;border:1px solid #eaeaea;border-radius:16px;padding:25px 15px;display:flex;flex-direction:column;align-items:center;box-shadow:0 2px 8px rgba(0,0,0,.03);position:relative; flex-shrink:0;}
-    .sb{position:absolute;top:10px;left:10px;background:#ff5e00;color:#fff;font-size:10px;font-weight:700;padding:4px 8px;border-radius:6px}
-    .pc img{height:140px;width:auto;object-fit:contain;margin-bottom:20px}
-    .ti{font-size:14px;color:#333;text-align:center;height:40px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;margin-bottom:8px; line-height:1.4;}
-    .sr{font-size:11px;color:#888;margin-bottom:12px;text-align:center}
-    .rv{font-size:12px;margin-bottom:20px}
-    .sc{color:#ff5e00;font-weight:700}.st{color:#ff5e00;letter-spacing:-2px}.ct{color:#1a73e8}
-    .op{font-size:12px;color:#888;text-decoration:line-through;margin-bottom:2px}
-    .np{font-size:20px;font-weight:700;color:#ff5e00;margin-bottom:20px}.dm{font-size:14px}
-    .cb{background:#ff5e00;color:#fff;border:none;border-radius:10px;width:45px;height:40px;font-size:18px;cursor:pointer; transition: background 0.2s;}
-    .cb:hover{background:#e65500}
+    
+    .desktop-wrapper { background-color: #f4f4f5; border-radius: 16px; padding: 25px; margin: 10px 0; }
+    .desktop-header { font-size: 22px; font-weight: 700; margin-bottom: 25px; color: #111; display:flex; align-items:center; }
+    .desktop-header span { color: #ff5e00; margin-right: 10px; font-size: 26px; line-height: 1; font-weight: 900; }
+    
+    .car { display:flex; overflow-x:auto; gap:15px; padding-bottom:15px; scrollbar-width:thin; }
+    .car::-webkit-scrollbar { height: 8px; }
+    .car::-webkit-scrollbar-thumb { background: #ccc; border-radius: 4px; }
+    
+    .pc { background:#fff; border:1px solid #eaeaea; border-radius:12px; padding:15px 12px; display:flex; flex-direction:column; align-items:center; box-shadow:0 2px 5px rgba(0,0,0,.04); position:relative; flex-shrink:0; width:195px; min-width:195px; }
+    .sb { position:absolute; top:8px; left:8px; background:#ff5e00; color:#fff; font-size:10px; font-weight:700; padding:3px 6px; border-radius:6px; z-index:10; }
+    .pc img { height:110px; width:auto; object-fit:contain; margin-bottom:15px; margin-top:10px; }
+    .ti { font-size:13px; color:#333; text-align:center; height:36px; overflow:hidden; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; margin-bottom:6px; line-height:1.3; padding:0 5px; }
+    .sr { font-size:10px; color:#888; margin-bottom:8px; text-align:center; height:12px; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; width:100%; }
+    .rv { font-size:11px; margin-bottom:15px }
+    .sc { color:#ff5e00; font-weight:700 }
+    .st { color:#ff5e00; letter-spacing:-2px }
+    .ct { color:#1a73e8 }
+    .op { font-size:11px; color:#888; text-decoration:line-through; margin-bottom:2px }
+    .np { font-size:18px; font-weight:700; color:#ff5e00; margin-bottom:15px }
+    .dm { font-size:12px }
+    .cb { background:#ff5e00; color:#fff; border:none; border-radius:8px; width:40px; height:35px; font-size:16px; cursor:pointer; transition: background 0.2s; }
+    .cb:hover { background:#e65500 }
     """
 
-    # DESKTOP HTML
-    dp=f"""<!DOCTYPE html><html><head><meta charset="utf-8"><style>
-    {css}
-    .desktop-wrapper {{ background-color: #f5f5f7; border-radius: 20px; padding: 35px; }}
-    .desktop-header {{ font-size: 24px; font-weight: 700; margin-bottom: 30px; color: #111; display:flex; align-items:center; }}
-    .desktop-header span {{ color: #ff5e00; margin-right: 12px; font-size: 28px; line-height: 1; }}
-    .car {{ display:flex; overflow-x:auto; gap:20px; padding-bottom:20px; scrollbar-width:thin; }}
-    .car::-webkit-scrollbar {{ height: 8px; }}
-    .car::-webkit-scrollbar-thumb {{ background: #ccc; border-radius: 4px; }}
-    .car .pc {{ width:240px; min-width:240px; }}
-    </style></head>
+    dp=f"""<!DOCTYPE html><html><head><meta charset="utf-8"><style>{css}</style></head>
     <body>
     <div class="desktop-wrapper">
         <div class="desktop-header"><span>|</span>Μαζί με αυτό, οι περισσότεροι αγοράζουν</div>
@@ -631,53 +634,49 @@ if not recs.empty:
     </div>
     </body></html>"""
 
-# MOBILE HTML
-    mp=f"""<!DOCTYPE html><html><head><meta charset="utf-8"><style>
-    {css}
-    /* Padding left pushes content in, 0 right allows smooth cut-off bleed */
-    .mobile-wrapper {{ background-color: #f5f5f7; border-radius: 24px; padding: 35px 0 35px 25px; }}
-    .mobile-header {{ text-align:center; font-weight:700; font-size:22px; margin-bottom:30px; line-height:1.3; color:#111; padding-right:25px; }}
-    .mobile-header-line {{ width: 35px; height: 4px; background-color: #ff5e00; margin: 0 auto 15px; border-radius: 2px; }}
-    .mc {{ display:flex; overflow-x:auto; gap:15px; padding-bottom:20px; scrollbar-width:none; padding-right:25px; }}
-    .mc::-webkit-scrollbar {{ display:none; }}
-    
-    /* 🟢 FIX: Increased width to 260px so exactly 1.5 cards fit in the viewport */
-    .mc .pc {{ width:260px; min-width:260px; padding: 25px 15px; border-radius: 20px; }}
-    .mc .pc img {{ height: 160px; margin-bottom: 20px; }}
-    .mc .ti {{ font-size: 15px; height: 42px; }}
-    .mc .np {{ font-size: 22px; }}
-    .mc .cb {{ width: 50px; height: 45px; font-size: 20px; border-radius: 12px; }}
-    </style></head>
-    <body>
-    <div class="mobile-wrapper">
-        <div class="mobile-header">
-            <div class="mobile-header-line"></div>
-            Μαζί με αυτό, οι<br>περισσότεροι αγοράζουν
-        </div>
-        <div class="mc">{ch}</div>
-    </div>
-    </body></html>"""
-
-    # Render Layout
-    col_d, col_sp, col_m = st.columns([2.5, 0.2, 1.3])
-    with col_d:
-        st.write("##### 💻 Web View")
-        # Height increased to 580 to comfortably fit the new title inside the grey box
-        components.html(dp, height=580, scrolling=False)
-    with col_m:
-        st.write("##### 📱 Mobile View")
-        # Height increased to allow the full shadow and padding to breathe
-        components.html(mp, height=580, scrolling=False)
+    # Render Layout (Web Only, Full Width)
+    components.html(dp, height=480, scrolling=False)
 
 else:
     st.error("❌ No recommendations. Check diagnostics below.")
+
 
 # ─────────────────────────────────────────────────────────────
 # DIAGNOSTICS (HIDDEN AT BOTTOM)
 # ─────────────────────────────────────────────────────────────
 st.markdown("---")
 
-# 🟢 FIX: Wrap the entire diagnostics block in an expander
+# 🟢 FIX: CSS Injection to make the Streamlit expander look like the custom frontend mockup
+st.markdown("""
+<style>
+/* Expander container (White background, soft border, rounded corners) */
+[data-testid="stExpander"] {
+    background-color: #ffffff;
+    border: 1px solid #eaeaea;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.02);
+}
+/* Expander header padding (Making it tall and spacious) */
+[data-testid="stExpander"] summary {
+    padding: 24px 25px !important;
+}
+/* Expander text styling (Bold, larger font) */
+[data-testid="stExpander"] summary p {
+    font-size: 18px !important;
+    font-weight: 700 !important;
+    color: #111111 !important;
+}
+/* Make the arrow slightly larger */
+[data-testid="stExpander"] summary svg {
+    width: 24px;
+    height: 24px;
+    color: #111111;
+}
+</style>
+""", unsafe_allow_html=True)
+
+# The actual expander
+with st.expander("⚙️ System Diagnostics & Engine Math"):
 with st.expander("⚙️ System Diagnostics & Engine Math"):
     tpr = str(trigger.get('Θύρα USB','')).strip()
     tp2 = extract_base_port(tpr)
