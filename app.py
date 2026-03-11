@@ -6,7 +6,7 @@ import re
 from difflib import SequenceMatcher
 
 st.set_page_config(page_title="Smart Recommender POC", layout="wide")
-st.info("🟢 **Engine v5.3** — Sales tiebreaker + regex")
+st.info("🟢 **Engine v5.5** — Ecosystem Wall")
 
 # ─────────────────────────────────────────────────────────────
 # CONFIG
