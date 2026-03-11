@@ -602,13 +602,13 @@ if not recs.empty:
     *{margin:0;padding:0;box-sizing:border-box}
     body{font-family:-apple-system,BlinkMacSystemFont,sans-serif;background:transparent}
     
-    .desktop-wrapper { background-color: #f4f4f5; border-radius: 16px; padding: 25px; margin: 10px 0; }
-    .desktop-header { font-size: 22px; font-weight: 700; margin-bottom: 25px; color: #111; display:flex; align-items:center; }
+    .desktop-wrapper { background-color: #f8f9fa; border-radius: 16px; padding: 30px; margin: 10px 0; position: relative; }
+    .desktop-header { font-size: 24px; font-weight: 700; margin-bottom: 25px; color: #111; display:flex; align-items:center; }
     .desktop-header span { color: #ff5e00; margin-right: 10px; font-size: 26px; line-height: 1; font-weight: 900; }
     
-    .car { display:flex; overflow-x:auto; gap:15px; padding-bottom:15px; scrollbar-width:thin; }
-    .car::-webkit-scrollbar { height: 8px; }
-    .car::-webkit-scrollbar-thumb { background: #ccc; border-radius: 4px; }
+    /* Hide the scrollbar but keep it scrollable */
+    .car { display:flex; overflow-x:auto; gap:15px; padding-bottom:10px; scrollbar-width:none; scroll-behavior: smooth; }
+    .car::-webkit-scrollbar { display: none; }
     
     .pc { background:#fff; border:1px solid #eaeaea; border-radius:12px; padding:15px 12px; display:flex; flex-direction:column; align-items:center; box-shadow:0 2px 5px rgba(0,0,0,.04); position:relative; flex-shrink:0; width:195px; min-width:195px; }
     .sb { position:absolute; top:8px; left:8px; background:#ff5e00; color:#fff; font-size:10px; font-weight:700; padding:3px 6px; border-radius:6px; z-index:10; }
@@ -624,18 +624,64 @@ if not recs.empty:
     .dm { font-size:12px }
     .cb { background:#ff5e00; color:#fff; border:none; border-radius:8px; width:40px; height:35px; font-size:16px; cursor:pointer; transition: background 0.2s; }
     .cb:hover { background:#e65500 }
+    
+    /* 🟢 NEW: The Floating Arrow Button CSS */
+    .arrow-btn {
+        position: absolute;
+        right: -15px; /* Hangs slightly off the edge */
+        top: 50%;
+        transform: translateY(-50%);
+        width: 44px;
+        height: 44px;
+        background-color: #fff;
+        border: 1px solid #eaeaea;
+        border-radius: 50%;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        z-index: 100;
+        transition: transform 0.2s, box-shadow 0.2s;
+    }
+    .arrow-btn:hover {
+        transform: translateY(-50%) scale(1.05);
+        box-shadow: 0 6px 14px rgba(0,0,0,0.15);
+    }
+    /* Simple CSS caret for the arrow */
+    .arrow-btn::after {
+        content: '';
+        width: 10px;
+        height: 10px;
+        border-top: 2px solid #555;
+        border-right: 2px solid #555;
+        transform: rotate(45deg);
+        margin-left: -4px; /* Centers it visually */
+    }
     """
 
     dp=f"""<!DOCTYPE html><html><head><meta charset="utf-8"><style>{css}</style></head>
     <body>
     <div class="desktop-wrapper">
         <div class="desktop-header"><span>|</span>Μαζί με αυτό, οι περισσότεροι αγοράζουν</div>
-        <div class="car">{ch}</div>
+        
+        <div class="car" id="scrollContainer">{ch}</div>
+        
+        <div class="arrow-btn" onclick="scrollCarousel()"></div>
+        
     </div>
+
+    <script>
+        function scrollCarousel() {{
+            const container = document.getElementById('scrollContainer');
+            // Scrolls right by exactly two card widths + gap (195 + 195 + 15)
+            container.scrollBy({{ left: 405, behavior: 'smooth' }});
+        }}
+    </script>
     </body></html>"""
 
     # Render Layout (Web Only, Full Width)
-    components.html(dp, height=480, scrolling=False)
+    components.html(dp, height=520, scrolling=False)
 
 else:
     st.error("❌ No recommendations. Check diagnostics below.")
@@ -646,31 +692,61 @@ else:
 # ─────────────────────────────────────────────────────────────
 st.markdown("---")
 
-# 🟢 FIX: CSS Injection to make the Streamlit expander look like the custom frontend mockup
+# 🟢 FIX: Ultimate CSS Hack to mimic your Angular <cdk-accordion-item> and ic-chevron-down
 st.markdown("""
 <style>
-/* Expander container (White background, soft border, rounded corners) */
+/* 1. The Main Box (Matches the exact border and radius of your screenshot) */
 [data-testid="stExpander"] {
-    background-color: #ffffff;
-    border: 1px solid #eaeaea;
-    border-radius: 12px;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.02);
+    background-color: #ffffff !important;
+    border: 1px solid #d9d9d9 !important;
+    border-radius: 12px !important;
+    box-shadow: none !important;
+    margin-top: 20px;
 }
-/* Expander header padding (Making it tall and spacious) */
+
+/* 2. The Header Area (Matches .pbc-accordion-item-header) */
 [data-testid="stExpander"] summary {
-    padding: 24px 25px !important;
+    padding: 24px 30px !important;
+    display: flex !important;
+    align-items: center !important;
 }
-/* Expander text styling (Bold, larger font) */
+[data-testid="stExpander"] summary:hover {
+    background-color: transparent !important;
+}
+
+/* 3. The Typography (Matches .pbc-accordion-item-title) */
 [data-testid="stExpander"] summary p {
     font-size: 18px !important;
     font-weight: 700 !important;
-    color: #111111 !important;
+    color: #000000 !important;
+    flex-grow: 1; /* Pushes the arrow to the far right */
 }
-/* Make the arrow slightly larger */
+
+/* 4. The Icon Hack (Killing Streamlit's default SVG and replacing it with your chevron) */
 [data-testid="stExpander"] summary svg {
-    width: 24px;
-    height: 24px;
-    color: #111111;
+    display: none !important;
+}
+[data-testid="stExpander"] summary::after {
+    content: '';
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    border-right: 2px solid #111;
+    border-bottom: 2px solid #111;
+    transform: rotate(45deg);
+    transition: transform 0.2s ease;
+    margin-top: -4px; /* Optical centering */
+}
+
+/* When the accordion is open, flip the arrow up */
+[data-testid="stExpander"][open] summary::after {
+    transform: rotate(225deg);
+    margin-top: 6px;
+}
+
+/* 5. The Body Content (Matches your pbc-accordion-item-body padding) */
+[data-testid="stExpanderDetails"] {
+    padding: 10px 30px 30px 30px !important;
 }
 </style>
 """, unsafe_allow_html=True)
