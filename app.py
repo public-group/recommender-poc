@@ -46,9 +46,9 @@ st.markdown("""
         fill: transparent !important;
     }
 
-    /* 3. Push the main content down so it doesn't hide under our new header */
+/* 3. Push the main content down so it doesn't hide under our new header */
     .appview-container .main .block-container { 
-        padding-top: 270px !important; 
+        padding-top: 170px !important; /* 🟢 FIX: Increased from 130px to 170px */
     }
     
     /* 4. The Fixed Header Wrapper - WIDTH BUG FIXED */
@@ -136,7 +136,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v7.1 — Enhanced UI
+        🟢 Engine v7.2 — Enhanced UI
     </div>
 </div>
 """, unsafe_allow_html=True)
