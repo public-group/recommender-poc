@@ -631,7 +631,7 @@ if not recs.empty:
     </div>
     </body></html>"""
 
-    # MOBILE HTML
+# MOBILE HTML
     mp=f"""<!DOCTYPE html><html><head><meta charset="utf-8"><style>
     {css}
     /* Padding left pushes content in, 0 right allows smooth cut-off bleed */
@@ -640,11 +640,13 @@ if not recs.empty:
     .mobile-header-line {{ width: 35px; height: 4px; background-color: #ff5e00; margin: 0 auto 15px; border-radius: 2px; }}
     .mc {{ display:flex; overflow-x:auto; gap:15px; padding-bottom:20px; scrollbar-width:none; padding-right:25px; }}
     .mc::-webkit-scrollbar {{ display:none; }}
-    /* 170px guarantees 1 full card and a clear cut-off on the second card */
-    .mc .pc {{ width:170px; min-width:170px; padding: 20px 12px; }}
-    .mc .pc img {{ height: 120px; margin-bottom: 15px; }}
-    .mc .ti {{ font-size: 13px; height: 36px; }}
-    .mc .np {{ font-size: 18px; }}
+    
+    /* 🟢 FIX: Increased width to 260px so exactly 1.5 cards fit in the viewport */
+    .mc .pc {{ width:260px; min-width:260px; padding: 25px 15px; border-radius: 20px; }}
+    .mc .pc img {{ height: 160px; margin-bottom: 20px; }}
+    .mc .ti {{ font-size: 15px; height: 42px; }}
+    .mc .np {{ font-size: 22px; }}
+    .mc .cb {{ width: 50px; height: 45px; font-size: 20px; border-radius: 12px; }}
     </style></head>
     <body>
     <div class="mobile-wrapper">
@@ -669,3 +671,44 @@ if not recs.empty:
 
 else:
     st.error("❌ No recommendations. Check diagnostics below.")
+
+# ─────────────────────────────────────────────────────────────
+# DIAGNOSTICS (HIDDEN AT BOTTOM)
+# ─────────────────────────────────────────────────────────────
+st.markdown("---")
+
+# 🟢 FIX: Wrap the entire diagnostics block in an expander
+with st.expander("⚙️ System Diagnostics & Engine Math"):
+    tpr = str(trigger.get('Θύρα USB','')).strip()
+    tp2 = extract_base_port(tpr)
+    tc2 = str(trigger.get('Χρώμα','')).strip()
+    cc2 = get_case_colors(tc2)
+    st.markdown(f"**Port:** `{tpr}` → **`{tp2}`** | **Color:** `{tc2}` → **{cc2}** | **Compat cols:** {compat_cols_found}")
+
+    st.markdown("### Guardrail Funnel")
+    st.dataframe(pd.DataFrame(diag, columns=["Step","Left","Note"]), use_container_width=True, hide_index=True)
+
+    st.markdown("### Per-Slot Breakdown")
+    st.dataframe(pd.DataFrame(slot_diag, columns=["Slot","Role","Logic","After Hierarchy","After Attributes"]), use_container_width=True, hide_index=True)
+
+    st.markdown("### Slot Filter Details")
+    for sn, notes in sorted(slot_notes.items()):
+        if notes:
+            st.markdown(f"**Slot {sn} — {' | '.join(notes[:2])}**")
+            for n in notes: st.text(n)
+
+    st.markdown("### 📋 Trigger")
+    for col in ['Material','Title','Level 1','Level 2','Hierarchy','Κατασκευαστής','Μοντέλο',
+                'Θύρα USB','Χρώμα','Λειτουργικό σύστημα','Extra Χαρακτηριστικά','LIST PRICE']:
+        st.text(f"{col}: {trigger.get(col,'N/A')}")
+
+    if not recs.empty:
+        st.markdown("### 🏆 Top 3 Candidates per Slot")
+        top3 = full_candidates[full_candidates['Item_Rank'] <= 3].copy()
+        top3_cols = ['Assigned_Slot', 'Item_Rank', 'Title', 'Final_Score', 'Sales_Tiebreaker', 'Smart_Boost', 'Avail_Boost', 'Frequency', 'History_Score']
+        avail_top3 = [c for c in top3_cols if c in top3.columns]
+        st.dataframe(top3[avail_top3].sort_values(['Assigned_Slot', 'Item_Rank']), use_container_width=True, hide_index=True)
+
+        st.markdown("### Score Breakdown (Final 10 Winners)")
+        dc=['Title','Hierarchy','Assigned_Slot','Slot_Role','Item_Rank','History_Score','Frequency','Avail_Boost','Smart_Boost','Sales_Tiebreaker','Final_Score','Draft_Score']
+        st.dataframe(recs[[c for c in dc if c in recs.columns]], use_container_width=True)
