@@ -7,7 +7,7 @@ from difflib import SequenceMatcher
 
 st.set_page_config(page_title="Smart Recommender POC", layout="wide")
 
-st.info("🟢 **Engine v4.1** — Dual compatibility columns, port fix, color mapping")
+st.info("🟢 **Engine v4.2** — Defensive filtering: empty columns skipped, not fatal")
 
 # ─────────────────────────────────────────────────────────────
 # CONFIG
@@ -190,6 +190,41 @@ def col_sample(df, col, n=5):
         return "[ALL EMPTY]"
     return vals.head(n).tolist()
 
+def col_has_data(df, col, min_pct=0.05):
+    """Check if a column has meaningful data in at least min_pct of rows."""
+    if col not in df.columns:
+        return False
+    vals = df[col].fillna('').astype(str).str.strip()
+    populated = (vals != '').sum()
+    return (populated / len(df)) >= min_pct if len(df) > 0 else False
+
+def soft_filter(sc, col, pattern, notes, label, case=False):
+    """Apply filter only if column has data. Returns filtered df.
+    If column is empty, skip and log it."""
+    if not col_has_data(sc, col):
+        notes.append(f"{label}: SKIPPED ({col} empty for this slice)")
+        return sc
+    before = len(sc)
+    filtered = sc[sc[col].fillna('').str.contains(pattern, case=case, regex=True)]
+    notes.append(f"{label}: {before}→{len(filtered)}")
+    if len(filtered) == 0:
+        notes.append(f"  Sample {col}: {col_sample(sc, col, 5)}")
+        return sc  # Return unfiltered rather than empty — downgrade to no-filter
+    return filtered
+
+def soft_filter_strict(sc, col, pattern, notes, label, case=False):
+    """Apply filter strictly — if column has data, filter. If empty, skip.
+    Unlike soft_filter, returns empty if filter matches nothing."""
+    if not col_has_data(sc, col):
+        notes.append(f"{label}: SKIPPED ({col} empty)")
+        return sc
+    before = len(sc)
+    filtered = sc[sc[col].fillna('').str.contains(pattern, case=case, regex=True)]
+    notes.append(f"{label}: {before}→{len(filtered)}")
+    if len(filtered) == 0:
+        notes.append(f"  Sample {col}: {col_sample(sc, col, 5)}")
+    return filtered
+
 
 # ─────────────────────────────────────────────────────────────
 # THE ENGINE
@@ -305,98 +340,126 @@ def calculate_recommendations(trigger, df_products, df_history, df_slots):
         after_h = len(sc)
         notes = []
 
-        # ── ATTRIBUTE LOGIC ──
+        # ── ATTRIBUTE LOGIC (defensive: empty columns = skip filter) ──
 
         if slot_num in [1, 2, 7, 10]:
-            # Step 1: Model match
+            # Step 1: Model match via compatibility column
             if trig_model:
                 before_model = len(sc)
-                sc = sc[sc[COL_COMPAT_MERGED].fillna('').str.contains(trig_model, case=False, regex=False)]
-                notes.append(f"Model '{trig_model}': {before_model}→{len(sc)}")
-                if len(sc) == 0:
-                    notes.append(f"  Sample {COL_COMPAT_MERGED}: {col_sample(c[c['Hierarchy'].isin(allowed_h)], COL_COMPAT_MERGED, 5)}")
+                matched = sc[sc[COL_COMPAT_MERGED].fillna('').str.contains(trig_model, case=False, regex=False)]
+                notes.append(f"Model '{trig_model}': {before_model}→{len(matched)}")
+                if len(matched) > 0:
+                    sc = matched
+                else:
+                    notes.append(f"  ⚠ Model match failed — keeping all {len(sc)} (Sample _Compatible: {col_sample(sc, COL_COMPAT_MERGED, 3)})")
 
             # Step 2: Sub-type filter
             if slot_num == 1 and not sc.empty:
-                before_type = len(sc)
-                sc = sc[sc['Τύπος Θήκης'].fillna('').str.contains("Back Cover", case=False)]
-                notes.append(f"Back Cover: {before_type}→{len(sc)}")
+                sc = soft_filter(sc, 'Τύπος Θήκης', "Back Cover", notes, "Back Cover")
                 if not sc.empty and trig_color:
                     before_color = len(sc)
                     sc = sc[sc['Χρώμα'].fillna('').str.strip().str.lower().isin(case_colors)]
                     notes.append(f"Color {case_colors[:3]}: {before_color}→{len(sc)}")
 
             elif slot_num == 2 and not sc.empty:
-                before = len(sc)
-                sc = sc[sc['Τύπος προϊόντος'].fillna('').str.contains("Προστατευτικό οθόνης", case=False)]
-                notes.append(f"Screen Protector: {before}→{len(sc)}")
+                # Try strict filter first; if column empty, hierarchy already limits to screen protectors
+                sc = soft_filter(sc, 'Τύπος προϊόντος', "Προστατευτικό οθόνης|Tempered Glass|Screen Protector|Glass", notes, "Screen Protector type")
 
             elif slot_num == 7:
                 if not sc.empty:
-                    before = len(sc)
-                    sc = sc[sc['Τύπος προϊόντος'].fillna('').str.contains("Προστατευτικό καμερών", case=False)]
-                    notes.append(f"Camera Protector: {before}→{len(sc)}")
+                    sc = soft_filter(sc, 'Τύπος προϊόντος', "Προστατευτικό καμερών|Camera|Κάμερα", notes, "Camera Protector type")
                 if sc.empty and trig_port:
                     fb_h = ['CABLE-CHARGER', 'APPLE ORIGINAL IPHONE CABLE-ADAPTORS']
                     sc = c[c['Hierarchy'].isin(fb_h)].copy()
-                    sc = sc[sc[COL_COMPAT_MERGED].fillna('').str.contains(trig_port, case=False, regex=False)]
-                    notes.append(f"Fallback cable ({trig_port}): {len(sc)}")
+                    if trig_model:
+                        fb_model = sc[sc[COL_COMPAT_MERGED].fillna('').str.contains(trig_model, case=False, regex=False)]
+                        if not fb_model.empty:
+                            sc = fb_model
+                    sc = soft_filter(sc, COL_COMPAT_MERGED, trig_port, notes, f"Fallback cable ({trig_port})")
 
             elif slot_num == 10 and not sc.empty:
-                before = len(sc)
-                sc = sc[sc['Τύπος Θήκης'].fillna('').str.contains("Book Cover|Wallet|360 Full Cover", case=False)]
-                notes.append(f"Book/Wallet: {before}→{len(sc)}")
+                sc = soft_filter(sc, 'Τύπος Θήκης', "Book Cover|Wallet|360 Full Cover|Folio|Flip", notes, "Book/Wallet/Folio type")
 
         elif slot_num == 3:
-            if trig_port:
+            # Chargers: _Compatible often has model names ("Universal", "iPhone 15 Pro") NOT port types
+            # Strategy: try model match OR "Universal", then port match, then type filter
+            if not sc.empty:
                 before = len(sc)
-                sc = sc[sc[COL_COMPAT_MERGED].fillna('').str.contains(trig_port, case=False, regex=False)]
-                notes.append(f"Port '{trig_port}': {before}→{len(sc)}")
-                if len(sc) == 0:
-                    notes.append(f"  Sample {COL_COMPAT_MERGED}: {col_sample(c[c['Hierarchy'].isin(allowed_h)], COL_COMPAT_MERGED, 5)}")
+                # Match on model name in compat, OR "Universal" items
+                compat_vals = sc[COL_COMPAT_MERGED].fillna('').str.lower()
+                if trig_model:
+                    model_or_universal = compat_vals.str.contains(trig_model.lower(), regex=False) | compat_vals.str.contains("universal", regex=False)
+                else:
+                    model_or_universal = compat_vals.str.contains("universal", regex=False)
+                # Also keep items where compat has the port type (some chargers do use it)
+                if trig_port:
+                    model_or_universal = model_or_universal | compat_vals.str.contains(trig_port.lower(), regex=False)
+                # Also keep items with empty compat (they're likely universal)
+                model_or_universal = model_or_universal | (compat_vals == '')
+                matched = sc[model_or_universal]
+                notes.append(f"Compat (model/universal/port/empty): {before}→{len(matched)}")
+                if len(matched) > 0:
+                    sc = matched
+
             if "γρήγορη φόρτιση" in trig_extras and not sc.empty:
-                before = len(sc)
-                sc = sc[sc['Ισχύς (Watt)'].fillna('').str.contains("21 - 60|61 - 100", case=False)]
-                notes.append(f"Fast charge: {before}→{len(sc)}")
+                sc = soft_filter(sc, 'Ισχύς (Watt)', "21 - 60|61 - 100", notes, "Fast charge watt")
+
             if not sc.empty:
                 if "ασύρματη φόρτιση" in trig_extras:
-                    before = len(sc)
-                    sc = sc[sc['Τύπος3'].fillna('').str.contains("Φορτιστής Πρίζας|Ασύρματος Φορτιστής|Σετ Φόρτισης", case=False)]
-                    notes.append(f"Wireless filter: {before}→{len(sc)}")
+                    sc = soft_filter(sc, 'Τύπος3', "Φορτιστής Πρίζας|Ασύρματος Φορτιστής|Σετ Φόρτισης", notes, "Wireless charger type")
                     sc.loc[sc['Τύπος3'].fillna('').str.contains("Ασύρματος Φορτιστής", case=False), 'Final_Score'] += SMART_BOOST
                     if trig_brand == "APPLE":
                         sc.loc[sc['Title'].fillna('').str.contains("MagSafe", case=False), 'Final_Score'] += SMART_BOOST
                 else:
-                    before = len(sc)
-                    sc = sc[sc['Τύπος3'].fillna('').str.contains("Φορτιστής Πρίζας|Σετ Φόρτισης", case=False)]
-                    notes.append(f"Wall charger filter: {before}→{len(sc)}")
+                    sc = soft_filter(sc, 'Τύπος3', "Φορτιστής Πρίζας|Σετ Φόρτισης", notes, "Wall charger type")
 
         elif slot_num == 4:
+            # Audio: Τύπος σύνδεσης may be empty — if so, keep all and just boost
             if "3.5mm jack" in trig_extras:
-                sc.loc[sc['Τύπος σύνδεσης'].fillna('').str.contains("Jack 3.5mm", case=False), 'Final_Score'] += SMART_BOOST
+                if col_has_data(sc, 'Τύπος σύνδεσης'):
+                    sc.loc[sc['Τύπος σύνδεσης'].fillna('').str.contains("Jack 3.5mm", case=False), 'Final_Score'] += SMART_BOOST
+                    notes.append(f"3.5mm boost applied")
+                else:
+                    notes.append("3.5mm boost: SKIPPED (Τύπος σύνδεσης empty)")
                 sc.loc[sc['Κατασκευαστής'].fillna('').str.strip().str.upper() == trig_brand, 'Final_Score'] += SMART_BOOST
-                notes.append(f"3.5mm boost applied, {len(sc)} remain")
+                notes.append(f"Brand boost applied, {len(sc)} remain")
             else:
-                before = len(sc)
-                sc = sc[sc['Τύπος σύνδεσης'].fillna('').str.contains(f"Bluetooth|{trig_port}", case=False)]
-                notes.append(f"BT/Port '{trig_port}': {before}→{len(sc)}")
-                if len(sc) == 0:
-                    notes.append(f"  Sample Τύπος σύνδεσης: {col_sample(c[c['Hierarchy'].isin(allowed_h)], 'Τύπος σύνδεσης', 5)}")
+                # Try to filter by BT/port, but if column is empty, keep all and boost brand
+                if col_has_data(sc, 'Τύπος σύνδεσης'):
+                    before = len(sc)
+                    filtered = sc[sc['Τύπος σύνδεσης'].fillna('').str.contains(f"Bluetooth|{trig_port}", case=False)]
+                    notes.append(f"BT/Port '{trig_port}': {before}→{len(filtered)}")
+                    if len(filtered) > 0:
+                        sc = filtered
+                    else:
+                        notes.append(f"  ⚠ No matches — keeping all {len(sc)}")
+                else:
+                    notes.append(f"Connection type filter: SKIPPED (column empty), {len(sc)} remain")
                 sc.loc[sc['Κατασκευαστής'].fillna('').str.strip().str.upper() == trig_brand, 'Final_Score'] += SMART_BOOST
 
         elif slot_num == 5:
+            # Powerbank: Τύπος θύρας may be empty
             if trig_port:
-                before = len(sc)
-                sc = sc[sc['Τύπος θύρας'].fillna('').str.contains(trig_port, case=False, regex=False)]
-                notes.append(f"Port '{trig_port}': {before}→{len(sc)}")
-                if len(sc) == 0:
-                    notes.append(f"  Sample Τύπος θύρας: {col_sample(c[c['Hierarchy'].isin(allowed_h)], 'Τύπος θύρας', 5)}")
+                if col_has_data(sc, 'Τύπος θύρας'):
+                    before = len(sc)
+                    filtered = sc[sc['Τύπος θύρας'].fillna('').str.contains(trig_port, case=False, regex=False)]
+                    notes.append(f"Port '{trig_port}': {before}→{len(filtered)}")
+                    if len(filtered) > 0:
+                        sc = filtered
+                    else:
+                        notes.append(f"  ⚠ No matches — keeping all {len(sc)}")
+                else:
+                    notes.append(f"Port filter: SKIPPED (Τύπος θύρας empty), {len(sc)} remain")
             if "γρήγορη φόρτιση" in trig_extras and not sc.empty:
-                sc.loc[
-                    sc['Ταχύτητα φόρτισης'].fillna('').str.contains("Ταχεία|Υπερταχεία", case=False) |
-                    sc['Ισχύς (Watt)'].fillna('').str.contains("20|30|40|50|60", case=False),
-                    'Final_Score'
-                ] += SMART_BOOST
+                if col_has_data(sc, 'Ταχύτητα φόρτισης') or col_has_data(sc, 'Ισχύς (Watt)'):
+                    sc.loc[
+                        sc['Ταχύτητα φόρτισης'].fillna('').str.contains("Ταχεία|Υπερταχεία", case=False) |
+                        sc['Ισχύς (Watt)'].fillna('').str.contains("20|30|40|50|60", case=False),
+                        'Final_Score'
+                    ] += SMART_BOOST
+                    notes.append("Fast charge boost applied")
+                else:
+                    notes.append("Fast charge boost: SKIPPED (columns empty)")
             if "ασύρματη φόρτιση" in trig_extras and not sc.empty:
                 sc.loc[sc['Extra Χαρακτηριστικά'].fillna('').str.contains("Ασύρματη φόρτιση", case=False), 'Final_Score'] += SMART_BOOST
                 if trig_brand == "APPLE":
@@ -407,30 +470,62 @@ def calculate_recommendations(trigger, df_products, df_history, df_slots):
         elif slot_num == 6:
             before = len(sc)
             if "με pen" in trig_extras:
-                sc = sc[sc['Τύπος3'].fillna('').str.contains("Γραφίδα", case=False)]
-                notes.append(f"Stylus: {before}→{len(sc)}")
+                sc = soft_filter(sc, 'Τύπος3', "Γραφίδα", notes, "Stylus")
             elif trig_brand == "APPLE":
-                sc = sc[sc['Τύπος3'].fillna('').str.contains("AirTag", case=False)]
-                notes.append(f"AirTag: {before}→{len(sc)}")
-                if len(sc) == 0:
-                    notes.append(f"  Sample Τύπος3: {col_sample(c[c['Hierarchy'].isin(allowed_h)], 'Τύπος3', 5)}")
+                # Try Τύπος3 first, but also search Title and Hierarchy for AirTag
+                if col_has_data(sc, 'Τύπος3'):
+                    filtered = sc[sc['Τύπος3'].fillna('').str.contains("AirTag|Air Tag", case=False)]
+                    if not filtered.empty:
+                        sc = filtered
+                        notes.append(f"AirTag (Τύπος3): {before}→{len(sc)}")
+                    else:
+                        # Fallback: search in Title or Hierarchy
+                        filtered2 = sc[
+                            sc['Title'].fillna('').str.contains("AirTag|Air Tag", case=False) |
+                            sc['Hierarchy'].fillna('').str.contains("AIRTAG", case=False)
+                        ]
+                        if not filtered2.empty:
+                            sc = filtered2
+                            notes.append(f"AirTag (Title/Hierarchy fallback): {before}→{len(sc)}")
+                        else:
+                            notes.append(f"AirTag: {before}→0 (Sample Τύπος3: {col_sample(sc, 'Τύπος3', 5)})")
+                            sc = sc.head(0)  # Empty
+                else:
+                    # Column empty — try Title/Hierarchy
+                    filtered2 = sc[
+                        sc['Title'].fillna('').str.contains("AirTag|Air Tag", case=False) |
+                        sc['Hierarchy'].fillna('').str.contains("AIRTAG", case=False)
+                    ]
+                    if not filtered2.empty:
+                        sc = filtered2
+                    notes.append(f"AirTag (Τύπος3 empty, Title/Hierarchy): {before}→{len(sc)}")
             else:
-                sc = sc[sc['Τύπος3'].fillna('').str.contains(
-                    "Λουράκι Λαιμού|Λουράκι Καρπού|Αξεσουάρ Smartphone|Αξεσουάρ Κάμερας|Αξεσουάρ Καθαρισμού", case=False
-                )]
-                notes.append(f"Misc acc: {before}→{len(sc)}")
+                sc = soft_filter(sc, 'Τύπος3',
+                    "Λουράκι Λαιμού|Λουράκι Καρπού|Αξεσουάρ Smartphone|Αξεσουάρ Κάμερας|Αξεσουάρ Καθαρισμού",
+                    notes, "Misc accessories")
 
         elif slot_num == 8:
             before = len(sc)
             if "ios" in trig_os or trig_brand == "APPLE":
-                # Try flexible matching: "iOS" or "Apple iOS" or "Apple"
-                sc = sc[sc[COL_COMPAT_MERGED].fillna('').str.contains("iOS|Apple", case=False)]
-                notes.append(f"iOS compat: {before}→{len(sc)}")
+                if col_has_data(sc, COL_COMPAT_MERGED):
+                    filtered = sc[sc[COL_COMPAT_MERGED].fillna('').str.contains("iOS|Apple", case=False)]
+                    if not filtered.empty:
+                        sc = filtered
+                        notes.append(f"iOS compat: {before}→{len(sc)}")
+                    else:
+                        notes.append(f"iOS compat: no matches (Sample: {col_sample(sc, COL_COMPAT_MERGED, 3)}), keeping all {len(sc)}")
+                else:
+                    notes.append(f"OS compat: SKIPPED (column empty), {len(sc)} remain")
             elif "android" in trig_os or trig_brand in ["SAMSUNG", "XIAOMI", "MOTOROLA"]:
-                sc = sc[sc[COL_COMPAT_MERGED].fillna('').str.contains("Android", case=False)]
-                notes.append(f"Android compat: {before}→{len(sc)}")
-            if len(sc) == 0:
-                notes.append(f"  Sample {COL_COMPAT_MERGED}: {col_sample(c[c['Hierarchy'].isin(allowed_h)], COL_COMPAT_MERGED, 5)}")
+                if col_has_data(sc, COL_COMPAT_MERGED):
+                    filtered = sc[sc[COL_COMPAT_MERGED].fillna('').str.contains("Android", case=False)]
+                    if not filtered.empty:
+                        sc = filtered
+                        notes.append(f"Android compat: {before}→{len(sc)}")
+                    else:
+                        notes.append(f"Android compat: no matches, keeping all {len(sc)}")
+                else:
+                    notes.append(f"OS compat: SKIPPED (column empty), {len(sc)} remain")
             sc.loc[sc['Κατασκευαστής'].fillna('').str.strip().str.upper() == trig_brand, 'Final_Score'] += SMART_BOOST
 
         elif slot_num == 9:
