@@ -852,18 +852,18 @@ def run_engine(trigger, df_products, df_history, df_slots):
 # Unpack the 5 variables from the engine
 recs, diag, slot_diag, slot_notes, full_candidates = run_engine(trigger, df_products, df_history, df_slots)
 
-# 🟢 NEW: AI-Style Marketing Copy for each Slot Logic Key
+# 🟢 NEW: AI-Style Marketing Copy for each Slot Logic Key (Optimized & Short)
 MARKETING_COPY = {
-    "PRIMARY_CASE": "Η ιδανική εφαρμογή για να προστατέψεις το νέο σου smartphone με στυλ.",
-    "SCREEN_GLASS": "Ενίσχυσε την αντοχή της οθόνης σου χωρίς να χάσεις καθόλου σε ευκρίνεια.",
-    "WALL_CHARGER": "Αξιοποίησε τις δυνατότητες γρήγορης φόρτισης της νέας σου συσκευής.",
-    "EARBUDS": "Απογείωσε την ακουστική εμπειρία με άμεση, απόλυτα ασύρματη συνδεσιμότητα.",
-    "POWERBANK": "Μείνε πάντα on-the-go και συνδεδεμένος, ακόμα και στις πιο απαιτητικές μέρες.",
-    "CROSS_SELL": "Ένα smart gadget που ξεκλειδώνει νέες δυνατότητες στο οικοσύστημά σου.",
-    "CAMERA_GLASS": "Θωράκισε τους φακούς σου για επαγγελματικές λήψεις δίχως άγχος.",
-    "SMARTWATCH": "Ο τέλειος σύντροφος για να ελέγχεις τις ειδοποιήσεις χωρίς να πιάνεις το κινητό.",
-    "HOLDER": "Ασφαλής και σταθερή τοποθέτηση για άνετη πλοήγηση κατά την οδήγηση.",
-    "ALT_CASE": "Premium αισθητική και προστασία που λειτουργεί και ως πρακτικό πορτοφόλι."
+    "PRIMARY_CASE": "Απόλυτη προστασία & τέλεια εφαρμογή.",
+    "SCREEN_GLASS": "Αόρατη ασπίδα για την οθόνη σου.",
+    "WALL_CHARGER": "Γρήγορη και απόλυτα ασφαλής φόρτιση.",
+    "EARBUDS": "Κορυφαία, ασύρματη ακουστική εμπειρία.",
+    "POWERBANK": "Ενέργεια on-the-go για να μη μένεις ποτέ.",
+    "CROSS_SELL": "Smart gadget για το οικοσύστημά σου.",
+    "CAMERA_GLASS": "Θωράκιση φακών για τέλειες λήψεις.",
+    "SMARTWATCH": "Ο απόλυτος σύντροφος για τον καρπό σου.",
+    "HOLDER": "Σταθερή τοποθέτηση για το αυτοκίνητο.",
+    "ALT_CASE": "Premium προστασία και πρακτικότητα."
 }
 
 if not recs.empty:
