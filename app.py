@@ -852,6 +852,20 @@ def run_engine(trigger, df_products, df_history, df_slots):
 # Unpack the 5 variables from the engine
 recs, diag, slot_diag, slot_notes, full_candidates = run_engine(trigger, df_products, df_history, df_slots)
 
+# 🟢 NEW: AI-Style Marketing Copy for each Slot Logic Key
+MARKETING_COPY = {
+    "PRIMARY_CASE": "Η ιδανική εφαρμογή για να προστατέψεις το νέο σου smartphone με στυλ.",
+    "SCREEN_GLASS": "Ενίσχυσε την αντοχή της οθόνης σου χωρίς να χάσεις καθόλου σε ευκρίνεια.",
+    "WALL_CHARGER": "Αξιοποίησε τις δυνατότητες γρήγορης φόρτισης της νέας σου συσκευής.",
+    "EARBUDS": "Απογείωσε την ακουστική εμπειρία με άμεση, απόλυτα ασύρματη συνδεσιμότητα.",
+    "POWERBANK": "Μείνε πάντα on-the-go και συνδεδεμένος, ακόμα και στις πιο απαιτητικές μέρες.",
+    "CROSS_SELL": "Ένα smart gadget που ξεκλειδώνει νέες δυνατότητες στο οικοσύστημά σου.",
+    "CAMERA_GLASS": "Θωράκισε τους φακούς σου για επαγγελματικές λήψεις δίχως άγχος.",
+    "SMARTWATCH": "Ο τέλειος σύντροφος για να ελέγχεις τις ειδοποιήσεις χωρίς να πιάνεις το κινητό.",
+    "HOLDER": "Ασφαλής και σταθερή τοποθέτηση για άνετη πλοήγηση κατά την οδήγηση.",
+    "ALT_CASE": "Premium αισθητική και προστασία που λειτουργεί και ως πρακτικό πορτοφόλι."
+}
+
 if not recs.empty:
     rts = recs.head(10)
     ch = ""
@@ -859,14 +873,18 @@ if not recs.empty:
         iu=safe(str(r.get('Thumbnails','')).strip())
         rp=parse_euro_price(r.get('LIST PRICE',0))
         np=f"{rp:.2f}".replace('.',','); op=f"{(rp*1.25):.2f}".replace('.',',')
-        ti=safe(str(r.get('Title',''))); sl=safe(str(r.get('Slot_Role',''))); sn=int(r.get('Assigned_Slot',0))
+        ti=safe(str(r.get('Title',''))); sn=int(r.get('Assigned_Slot',0))
         
-        # 🟢 FIX: Replaced the emoji button with the clean SVG cart icon
+        # Determine the marketing text based on the slot's logic key
+        raw_role = str(r.get('Slot_Role',''))
+        lk = detect_logic_key(raw_role)
+        marketing_text = MARKETING_COPY.get(lk, "Ιδανική προσθήκη για να ολοκληρώσεις την αγορά σου.")
+        
         ch+=f"""<div class="pc">
             <div class="sb">Slot {sn}</div>
             <img src="{iu}" alt="product">
             <div class="ti" title="{ti}">{ti}</div>
-            <div class="sr">{sl}</div>
+            <div class="sr">{marketing_text}</div>
             <div class="rv"><span class="sc">4.8</span> <span class="st">&#9733;&#9733;&#9733;&#9733;&#9733;</span> <span class="ct">(305)</span></div>
             <div class="op">&#928;.&#923;.&#932;. : {op}&#8364;</div>
             <div class="np">{np.split(',')[0]}<span class="dm">,{np.split(',')[1]}&#8364;</span></div>
@@ -896,7 +914,23 @@ if not recs.empty:
     .sb { position:absolute; top:8px; left:8px; background:#ff5e00; color:#fff; font-size:10px; font-weight:700; padding:3px 6px; border-radius:6px; z-index:10; }
     .pc img { height:110px; width:auto; object-fit:contain; margin-bottom:15px; margin-top:10px; }
     .ti { font-size:13px; color:#333; text-align:center; height:36px; overflow:hidden; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; margin-bottom:6px; line-height:1.3; padding:0 5px; }
-    .sr { font-size:10px; color:#888; margin-bottom:8px; text-align:center; height:12px; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; width:100%; }
+    
+    /* 🟢 UPDATED: Marketing Text Subtitle CSS */
+    .sr { 
+        font-size: 10px; 
+        color: #777; 
+        margin-bottom: 12px; 
+        text-align: center; 
+        height: 28px; /* Room for 2 lines */
+        overflow: hidden; 
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        line-height: 1.35;
+        width: 100%; 
+        padding: 0 4px;
+    }
+    
     .rv { font-size:11px; margin-bottom:15px }
     .sc { color:#ff5e00; font-weight:700 }
     .st { color:#ff5e00; letter-spacing:-2px }
@@ -904,8 +938,6 @@ if not recs.empty:
     .op { font-size:11px; color:#888; text-decoration:line-through; margin-bottom:2px }
     .np { font-size:18px; font-weight:700; color:#ff5e00; margin-bottom:15px }
     .dm { font-size:12px }
-    
-    /* 🟢 FIX: Added flexbox to perfectly center the SVG icon inside the button */
     .cb { background:#ff5e00; color:#fff; border:none; border-radius:8px; width:40px; height:35px; cursor:pointer; transition: background 0.2s; display: flex; justify-content: center; align-items: center; }
     .cb:hover { background:#e65500 }
     
@@ -932,32 +964,18 @@ if not recs.empty:
         box-shadow: 0 6px 14px rgba(0,0,0,0.15);
     }
     
-    /* Positioning and Initial States */
-    .nav-left { 
-        left: 10px; 
-        opacity: 0; /* Hidden by default */
-        pointer-events: none; 
-    }
-    .nav-right { 
-        right: 10px; 
-    }
+    .nav-left { left: 10px; opacity: 0; pointer-events: none; }
+    .nav-right { right: 10px; }
     
-    /* Chevrons */
     .nav-left::after {
-        content: '';
-        width: 10px; height: 10px;
-        border-top: 2px solid #555;
-        border-left: 2px solid #555;
-        transform: rotate(-45deg);
-        margin-left: 4px;
+        content: ''; width: 10px; height: 10px;
+        border-top: 2px solid #555; border-left: 2px solid #555;
+        transform: rotate(-45deg); margin-left: 4px;
     }
     .nav-right::after {
-        content: '';
-        width: 10px; height: 10px;
-        border-top: 2px solid #555;
-        border-right: 2px solid #555;
-        transform: rotate(45deg);
-        margin-right: 4px;
+        content: ''; width: 10px; height: 10px;
+        border-top: 2px solid #555; border-right: 2px solid #555;
+        transform: rotate(45deg); margin-right: 4px;
     }
     """
 
@@ -965,11 +983,8 @@ if not recs.empty:
     <body>
     <div class="desktop-wrapper">
         <div class="desktop-header"><span>|</span>Μαζί με αυτό, οι περισσότεροι αγοράζουν</div>
-        
         <div class="nav-btn nav-left" id="btnLeft" onclick="scrollL()"></div>
-        
         <div class="car" id="scrollContainer">{ch}</div>
-        
         <div class="nav-btn nav-right" id="btnRight" onclick="scrollR()"></div>
     </div>
 
@@ -977,47 +992,29 @@ if not recs.empty:
         const container = document.getElementById('scrollContainer');
         const btnLeft = document.getElementById('btnLeft');
         const btnRight = document.getElementById('btnRight');
-        
-        // Scroll exactly two card widths + gap (195 + 195 + 15)
         const scrollAmount = 405; 
 
-        function scrollL() {{
-            container.scrollBy({{ left: -scrollAmount, behavior: 'smooth' }});
-        }}
-        
-        function scrollR() {{
-            container.scrollBy({{ left: scrollAmount, behavior: 'smooth' }});
-        }}
+        function scrollL() {{ container.scrollBy({{ left: -scrollAmount, behavior: 'smooth' }}); }}
+        function scrollR() {{ container.scrollBy({{ left: scrollAmount, behavior: 'smooth' }}); }}
 
-        // Listen for scrolling to show/hide arrows
         container.addEventListener('scroll', () => {{
-            
-            // Left Arrow Logic
             if (container.scrollLeft > 5) {{
-                btnLeft.style.opacity = '1';
-                btnLeft.style.pointerEvents = 'auto';
+                btnLeft.style.opacity = '1'; btnLeft.style.pointerEvents = 'auto';
             }} else {{
-                btnLeft.style.opacity = '0';
-                btnLeft.style.pointerEvents = 'none';
+                btnLeft.style.opacity = '0'; btnLeft.style.pointerEvents = 'none';
             }}
-
-            // Right Arrow Logic (Adding a 2px buffer for rounding errors)
             if (container.scrollLeft + container.clientWidth >= container.scrollWidth - 2) {{
-                btnRight.style.opacity = '0';
-                btnRight.style.pointerEvents = 'none';
+                btnRight.style.opacity = '0'; btnRight.style.pointerEvents = 'none';
             }} else {{
-                btnRight.style.opacity = '1';
-                btnRight.style.pointerEvents = 'auto';
+                btnRight.style.opacity = '1'; btnRight.style.pointerEvents = 'auto';
             }}
         }});
-        
-        // Trigger once on load in case there are too few items to scroll at all
         container.dispatchEvent(new Event('scroll'));
     </script>
     </body></html>"""
 
     # Render Layout
-    components.html(dp, height=520, scrolling=False)
+    components.html(dp, height=540, scrolling=False)
 
 else:
     st.error("❌ No recommendations. Check diagnostics below.")
