@@ -406,23 +406,36 @@ def run_engine(trigger, df_products, df_history, df_slots):
                 else: notes.append(f"  ⚠ kept all (sample: {sample(sc,CC,3)})")
             sc.loc[sc['Κατασκευαστής'].fillna('').str.strip().str.upper()==tb,'Final_Score']+=SMART_BOOST
 
+# ───────────────────────────────────────
+        # EARBUDS: connection type + brand boost
+        # ───────────────────────────────────────
         elif lk == "EARBUDS":
             if "3.5mm jack" in tex:
-                if has_data(sc, 'Τύπος σύνδεσης'):
-                    sc.loc[sc['Τύπος σύνδεσης'].fillna('').str.contains("3.5mm|Jack", case=False),'Final_Score']+=SMART_BOOST
-                    notes.append("3.5mm boost applied")
+                # Check column OR title for 3.5mm
+                keep_35 = sc['Τύπος σύνδεσης'].fillna('').str.contains("3.5mm|Jack", case=False) | sc['Title'].fillna('').str.contains("3.5mm|Jack", case=False)
+                sc.loc[keep_35, 'Final_Score'] += SMART_BOOST
+                notes.append("3.5mm boost applied")
+                
                 sc.loc[sc['Κατασκευαστής'].fillna('').str.strip().str.upper()==tb,'Final_Score']+=SMART_BOOST
             else:
-                if has_data(sc, 'Τύπος σύνδεσης'):
-                    b4=len(sc)
-                    port_str = tport if tport else "USB-C"
-                    search_str = f"Bluetooth|Ασύρματη|{port_str}"
-                    f=sc[sc['Τύπος σύνδεσης'].fillna('').str.contains(search_str, case=False, regex=True)]
-                    notes.append(f"BT/Wireless/{port_str}: {b4}→{len(f)}")
-                    if not f.empty: sc=f
-                    else: notes.append(f"  ⚠ kept all")
-                else:
-                    notes.append("Connection filter: SKIPPED (col empty)")
+                b4=len(sc)
+                port_str = tport if tport else "USB-C"
+                search_str = f"Bluetooth|Ασύρματη|{port_str}"
+                
+                # 🟢 FIX: Check Connection Column, Hierarchy, AND Title to prevent dropping blank data!
+                keep_bt = (
+                    sc['Τύπος σύνδεσης'].fillna('').str.contains(search_str, case=False, regex=True) |
+                    sc['Hierarchy'].fillna('').str.contains("Bluetooth", case=False) |
+                    sc['Title'].fillna('').str.contains(search_str, case=False, regex=True)
+                )
+                
+                f = sc[keep_bt]
+                notes.append(f"BT/Wireless/{port_str} (Safe Match): {b4}→{len(f)}")
+                
+                if not f.empty: sc=f
+                else: notes.append(f"  ⚠ kept all")
+                
+                # Brand Boost
                 sc.loc[sc['Κατασκευαστής'].fillna('').str.strip().str.upper()==tb,'Final_Score']+=SMART_BOOST
 
         elif lk == "HOLDER":
