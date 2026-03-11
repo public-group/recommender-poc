@@ -570,18 +570,12 @@ def run_engine(trigger, df_products, df_history, df_slots):
     diag.append(("6. Final", len(sel), f"Hierarchy cap=2"))
     return (pd.DataFrame(sel) if sel else pd.DataFrame()), diag, slot_diag, slot_notes, full
 
-
 # ─────────────────────────────────────────────────────────────
-# RUN
+# RUN & VISUALIZATION
 # ─────────────────────────────────────────────────────────────
-st.markdown("### <span style='color:#ff5e00; font-weight:bold;'>|</span> Μαζί με αυτό, οι περισσότεροι αγοράζουν", unsafe_allow_html=True)
-
-# 🟢 NEW: Unpacking 5 variables now instead of 4
+# Unpack the 5 variables from the engine
 recs, diag, slot_diag, slot_notes, full_candidates = run_engine(trigger, df_products, df_history, df_slots)
 
-# ─────────────────────────────────────────────────────────────
-# VISUALIZATION (MOVED UP)
-# ─────────────────────────────────────────────────────────────
 if not recs.empty:
     rts = recs.head(10)
     ch = ""
@@ -590,87 +584,88 @@ if not recs.empty:
         rp=parse_euro_price(r.get('LIST PRICE',0))
         np=f"{rp:.2f}".replace('.',','); op=f"{(rp*1.25):.2f}".replace('.',',')
         ti=safe(str(r.get('Title',''))); sl=safe(str(r.get('Slot_Role',''))); sn=int(r.get('Assigned_Slot',0))
-        ch+=f"""<div class="pc"><div class="sb">Slot {sn}</div><img src="{iu}" alt="p">
-        <div class="ti" title="{ti}">{ti}</div><div class="sr">{sl}</div>
-        <div class="rv"><span class="sc">4.8</span> <span class="st">&#9733;&#9733;&#9733;&#9733;&#9733;</span> <span class="ct">(305)</span></div>
-        <div class="op">&#928;.&#923;.&#932;. : {op}&#8364;</div>
-        <div class="np">{np.split(',')[0]}<span class="dm">,{np.split(',')[1]}&#8364;</span></div>
-        <button class="cb">&#128722;</button></div>"""
+        
+        ch+=f"""<div class="pc">
+            <div class="sb">Slot {sn}</div>
+            <img src="{iu}" alt="product">
+            <div class="ti" title="{ti}">{ti}</div>
+            <div class="sr">{sl}</div>
+            <div class="rv"><span class="sc">4.8</span> <span class="st">&#9733;&#9733;&#9733;&#9733;&#9733;</span> <span class="ct">(305)</span></div>
+            <div class="op">&#928;.&#923;.&#932;. : {op}&#8364;</div>
+            <div class="np">{np.split(',')[0]}<span class="dm">,{np.split(',')[1]}&#8364;</span></div>
+            <button class="cb">&#128722;</button>
+        </div>"""
 
-    css="""*{margin:0;padding:0;box-sizing:border-box}body{font-family:-apple-system,BlinkMacSystemFont,sans-serif;background:transparent}
-    .pc{background:#fff;border:1px solid #f0f0f0;border-radius:12px;padding:15px;display:flex;flex-direction:column;align-items:center;box-shadow:0 4px 6px rgba(0,0,0,.05);flex-shrink:0;position:relative}
-    .sb{position:absolute;top:8px;left:8px;background:#ff5e00;color:#fff;font-size:10px;font-weight:700;padding:2px 8px;border-radius:6px}
-    .pc img{height:120px;object-fit:contain;margin-bottom:15px}
-    .ti{font-size:13px;color:#333;text-align:center;height:36px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;margin-bottom:10px}
-    .sr{font-size:10px;color:#888;margin-bottom:8px;text-align:center}.rv{font-size:11px;margin-bottom:15px}
+    # Base CSS shared by both Desktop and Mobile
+    css="""
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{font-family:-apple-system,BlinkMacSystemFont,sans-serif;background:transparent}
+    .pc{background:#fff;border:1px solid #eaeaea;border-radius:16px;padding:25px 15px;display:flex;flex-direction:column;align-items:center;box-shadow:0 2px 8px rgba(0,0,0,.03);position:relative; flex-shrink:0;}
+    .sb{position:absolute;top:10px;left:10px;background:#ff5e00;color:#fff;font-size:10px;font-weight:700;padding:4px 8px;border-radius:6px}
+    .pc img{height:140px;width:auto;object-fit:contain;margin-bottom:20px}
+    .ti{font-size:14px;color:#333;text-align:center;height:40px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;margin-bottom:8px; line-height:1.4;}
+    .sr{font-size:11px;color:#888;margin-bottom:12px;text-align:center}
+    .rv{font-size:12px;margin-bottom:20px}
     .sc{color:#ff5e00;font-weight:700}.st{color:#ff5e00;letter-spacing:-2px}.ct{color:#1a73e8}
-    .op{font-size:11px;color:#888;text-decoration:line-through;margin-bottom:2px}
-    .np{font-size:18px;font-weight:700;color:#ff5e00;margin-bottom:15px}.dm{font-size:12px}
-    .cb{background:#ff5e00;color:#fff;border:none;border-radius:8px;width:40px;height:35px;font-size:16px;cursor:pointer}.cb:hover{background:#e65500}"""
+    .op{font-size:12px;color:#888;text-decoration:line-through;margin-bottom:2px}
+    .np{font-size:20px;font-weight:700;color:#ff5e00;margin-bottom:20px}.dm{font-size:14px}
+    .cb{background:#ff5e00;color:#fff;border:none;border-radius:10px;width:45px;height:40px;font-size:18px;cursor:pointer; transition: background 0.2s;}
+    .cb:hover{background:#e65500}
+    """
 
-    dp=f"""<!DOCTYPE html><html><head><meta charset="utf-8"><style>{css}
-    .car{{display:flex;overflow-x:auto;gap:15px;padding:10px 5px 15px;scrollbar-width:thin}}.car .pc{{width:200px;min-width:200px}}</style></head>
-    <body><div class="car">{ch}</div></body></html>"""
+    # DESKTOP HTML
+    dp=f"""<!DOCTYPE html><html><head><meta charset="utf-8"><style>
+    {css}
+    .desktop-wrapper {{ background-color: #f5f5f7; border-radius: 20px; padding: 35px; }}
+    .desktop-header {{ font-size: 24px; font-weight: 700; margin-bottom: 30px; color: #111; display:flex; align-items:center; }}
+    .desktop-header span {{ color: #ff5e00; margin-right: 12px; font-size: 28px; line-height: 1; }}
+    .car {{ display:flex; overflow-x:auto; gap:20px; padding-bottom:20px; scrollbar-width:thin; }}
+    .car::-webkit-scrollbar {{ height: 8px; }}
+    .car::-webkit-scrollbar-thumb {{ background: #ccc; border-radius: 4px; }}
+    .car .pc {{ width:240px; min-width:240px; }}
+    </style></head>
+    <body>
+    <div class="desktop-wrapper">
+        <div class="desktop-header"><span>|</span>Μαζί με αυτό, οι περισσότεροι αγοράζουν</div>
+        <div class="car">{ch}</div>
+    </div>
+    </body></html>"""
 
-    mp=f"""<!DOCTYPE html><html><head><meta charset="utf-8"><style>{css}
-    .mk{{border:12px solid #333;border-radius:36px;padding:15px 10px;background:#fafafa;height:470px;overflow:hidden}}
-    .mh{{text-align:center;font-weight:700;font-size:18px;margin-bottom:15px;line-height:1.2}}
-    .mc{{display:flex;overflow-x:auto;gap:10px;padding-bottom:15px;scrollbar-width:none}}.mc::-webkit-scrollbar{{display:none}}
-    .mc .pc{{width:calc(50% - 5px);min-width:calc(50% - 5px);padding:10px}}.mc .pc img{{height:90px}}.mc .ti{{font-size:11px;height:30px}}
-    .mc .sr{{font-size:9px}}.mc .rv{{font-size:10px}}.mc .op{{font-size:10px}}.mc .np{{font-size:16px}}.mc .dm{{font-size:11px}}.mc .cb{{width:36px;height:32px;font-size:14px}}.mc .sb{{font-size:9px;padding:2px 6px}}
-    </style></head><body><div class="mk"><div class="mh"><span style="color:#ff5e00">&#8212;</span><br>
-    &#924;&#945;&#950;&#943; &#956;&#949; &#945;&#965;&#964;&#972;, &#959;&#953;<br>&#960;&#949;&#961;&#953;&#963;&#963;&#972;&#964;&#949;&#961;&#959;&#953; &#945;&#947;&#959;&#961;&#940;&#950;&#959;&#965;&#957;</div>
-    <div class="mc">{ch}</div></div></body></html>"""
+    # MOBILE HTML
+    mp=f"""<!DOCTYPE html><html><head><meta charset="utf-8"><style>
+    {css}
+    /* Padding left pushes content in, 0 right allows smooth cut-off bleed */
+    .mobile-wrapper {{ background-color: #f5f5f7; border-radius: 24px; padding: 35px 0 35px 25px; }}
+    .mobile-header {{ text-align:center; font-weight:700; font-size:22px; margin-bottom:30px; line-height:1.3; color:#111; padding-right:25px; }}
+    .mobile-header-line {{ width: 35px; height: 4px; background-color: #ff5e00; margin: 0 auto 15px; border-radius: 2px; }}
+    .mc {{ display:flex; overflow-x:auto; gap:15px; padding-bottom:20px; scrollbar-width:none; padding-right:25px; }}
+    .mc::-webkit-scrollbar {{ display:none; }}
+    /* 170px guarantees 1 full card and a clear cut-off on the second card */
+    .mc .pc {{ width:170px; min-width:170px; padding: 20px 12px; }}
+    .mc .pc img {{ height: 120px; margin-bottom: 15px; }}
+    .mc .ti {{ font-size: 13px; height: 36px; }}
+    .mc .np {{ font-size: 18px; }}
+    </style></head>
+    <body>
+    <div class="mobile-wrapper">
+        <div class="mobile-header">
+            <div class="mobile-header-line"></div>
+            Μαζί με αυτό, οι<br>περισσότεροι αγοράζουν
+        </div>
+        <div class="mc">{ch}</div>
+    </div>
+    </body></html>"""
 
-    cd, _, cm = st.columns([2.5, 0.2, 1.3])
-    with cd:
+    # Render Layout
+    col_d, col_sp, col_m = st.columns([2.5, 0.2, 1.3])
+    with col_d:
         st.write("##### 💻 Web View")
-        # 🟢 FIX: Height increased to 450, scrolling set to False to kill the vertical bar
-        components.html(dp, height=450, scrolling=False)
-    with cm:
+        # Height increased to 580 to comfortably fit the new title inside the grey box
+        components.html(dp, height=580, scrolling=False)
+    with col_m:
         st.write("##### 📱 Mobile View")
-        components.html(mp, height=520, scrolling=False)
+        # Height increased to allow the full shadow and padding to breathe
+        components.html(mp, height=580, scrolling=False)
+
 else:
     st.error("❌ No recommendations. Check diagnostics below.")
-
-
-# ─────────────────────────────────────────────────────────────
-# DIAGNOSTICS (HIDDEN AT BOTTOM)
-# ─────────────────────────────────────────────────────────────
-st.markdown("---")
-
-# 🟢 FIX: Wrap the entire diagnostics block in an expander
-with st.expander("⚙️ System Diagnostics & Engine Math"):
-    tpr = str(trigger.get('Θύρα USB','')).strip()
-    tp2 = extract_base_port(tpr)
-    tc2 = str(trigger.get('Χρώμα','')).strip()
-    cc2 = get_case_colors(tc2)
-    st.markdown(f"**Port:** `{tpr}` → **`{tp2}`** | **Color:** `{tc2}` → **{cc2}** | **Compat cols:** {compat_cols_found}")
-
-    st.markdown("### Guardrail Funnel")
-    st.dataframe(pd.DataFrame(diag, columns=["Step","Left","Note"]), use_container_width=True, hide_index=True)
-
-    st.markdown("### Per-Slot Breakdown")
-    st.dataframe(pd.DataFrame(slot_diag, columns=["Slot","Role","Logic","After Hierarchy","After Attributes"]), use_container_width=True, hide_index=True)
-
-    st.markdown("### Slot Filter Details")
-    for sn, notes in sorted(slot_notes.items()):
-        if notes:
-            st.markdown(f"**Slot {sn} — {' | '.join(notes[:2])}**")
-            for n in notes: st.text(n)
-
-    st.markdown("### 📋 Trigger")
-    for col in ['Material','Title','Level 1','Level 2','Hierarchy','Κατασκευαστής','Μοντέλο',
-                'Θύρα USB','Χρώμα','Λειτουργικό σύστημα','Extra Χαρακτηριστικά','LIST PRICE']:
-        st.text(f"{col}: {trigger.get(col,'N/A')}")
-
-    if not recs.empty:
-        st.markdown("### 🏆 Top 3 Candidates per Slot")
-        top3 = full_candidates[full_candidates['Item_Rank'] <= 3].copy()
-        top3_cols = ['Assigned_Slot', 'Item_Rank', 'Title', 'Final_Score', 'Sales_Tiebreaker', 'Smart_Boost', 'Avail_Boost', 'Frequency', 'History_Score']
-        avail_top3 = [c for c in top3_cols if c in top3.columns]
-        st.dataframe(top3[avail_top3].sort_values(['Assigned_Slot', 'Item_Rank']), use_container_width=True, hide_index=True)
-
-        st.markdown("### Score Breakdown (Final 10 Winners)")
-        dc=['Title','Hierarchy','Assigned_Slot','Slot_Role','Item_Rank','History_Score','Frequency','Avail_Boost','Smart_Boost','Sales_Tiebreaker','Final_Score','Draft_Score']
-        st.dataframe(recs[[c for c in dc if c in recs.columns]], use_container_width=True)
