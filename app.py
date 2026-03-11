@@ -6,7 +6,7 @@ import re
 from difflib import SequenceMatcher
 
 st.set_page_config(page_title="Smart Recommender POC", layout="wide")
-st.info("🟢 **Engine v5.0** — Role-based logic (decoupled from slot numbers)")
+st.info("🟢 **Engine v5.1** — Role-based logic aligned to spec (camera fallback, cross-sell fix)")
 
 # ─────────────────────────────────────────────────────────────
 # CONFIG
@@ -24,18 +24,29 @@ CC = "_Compatible"  # Merged compat column
 # We map role keywords to logic functions so slot numbers don't matter.
 # ─────────────────────────────────────────────────────────────
 def detect_logic_key(role: str) -> str:
-    """Map a slot role string to a logic key."""
+    """Map a slot role string to a logic key based on spec:
+    Spec Slot 1  → PRIMARY_CASE   (Back Cover + color)
+    Spec Slot 2  → SCREEN_GLASS   (Screen Protector type)
+    Spec Slot 3  → WALL_CHARGER   (Port + Speed + Wireless + MagSafe)
+    Spec Slot 4  → EARBUDS        (Connection type + Brand)
+    Spec Slot 5  → POWERBANK      (Port + Speed + Wireless + Brand)
+    Spec Slot 6  → CROSS_SELL     (Pen/AirTag/Accessories)
+    Spec Slot 7  → CAMERA_GLASS   (Camera Protector + cable fallback)
+    Spec Slot 8  → SMARTWATCH     (OS compat + Brand)
+    Spec Slot 9  → HOLDER         (MagSafe boost)
+    Spec Slot 10 → ALT_CASE       (Book Cover/Wallet)
+    """
     r = role.lower()
-    if "primary case" in r:       return "PRIMARY_CASE"
-    if "alt case" in r:           return "ALT_CASE"
-    if "screen" in r:             return "SCREEN_GLASS"
-    if "camera" in r or "privacy" in r: return "CAMERA_PRIVACY"
-    if "wall charger" in r or "energy" in r and "charger" in r: return "WALL_CHARGER"
-    if "power bank" in r or "car" in r and "energy" in r:       return "POWERBANK_CAR"
-    if "smartwatch" in r or "extension" in r:                    return "SMARTWATCH"
-    if "sound" in r or "earbud" in r or "audio" in r:           return "EARBUDS"
-    if "drive" in r or "holder" in r:                            return "HOLDER"
-    if "finder" in r or "tracker" in r or "misc" in r:          return "TRACKER_MISC"
+    if "primary case" in r:                          return "PRIMARY_CASE"
+    if "alt case" in r:                              return "ALT_CASE"
+    if "screen" in r and "glass" in r:               return "SCREEN_GLASS"
+    if "camera" in r or "privacy" in r:              return "CAMERA_GLASS"
+    if ("wall" in r and "charger" in r) or ("energy" in r and "charger" in r):  return "WALL_CHARGER"
+    if "power bank" in r or ("energy" in r and ("car" in r or "bank" in r)):    return "POWERBANK"
+    if "smartwatch" in r or "extension" in r or "wearable" in r:                return "SMARTWATCH"
+    if "sound" in r or "earbud" in r or "audio" in r:                           return "EARBUDS"
+    if "drive" in r or "holder" in r or "commute" in r:                         return "HOLDER"
+    if "finder" in r or "tracker" in r or "misc" in r or "lifestyle" in r:      return "CROSS_SELL"
     return "UNKNOWN"
 
 # ─────────────────────────────────────────────────────────────
@@ -276,9 +287,11 @@ def run_engine(trigger, df_products, df_history, df_slots):
                 if not f.empty: sc=f
 
         # ───────────────────────────────────────
-        # CAMERA/PRIVACY: model match + camera protector type
+        # CAMERA_GLASS (Spec Slot 7, Logic 1):
+        # FORCE model match, FILTER Προστατευτικό καμερών
+        # Fallback: Extra Charging Cable matching phone's port
         # ───────────────────────────────────────
-        elif lk == "CAMERA_PRIVACY":
+        elif lk == "CAMERA_GLASS":
             if tmod:
                 b4=len(sc); m=sc[sc[CC].fillna('').str.contains(tmod, case=False, regex=False)]
                 notes.append(f"Model '{tmod}': {b4}→{len(m)}")
@@ -289,6 +302,16 @@ def run_engine(trigger, df_products, df_history, df_slots):
                 f=sc[sc['Τύπος προϊόντος'].fillna('').str.contains("Προστατευτικό καμερών|Camera", case=False)]
                 notes.append(f"Camera type: {b4}→{len(f)}")
                 if not f.empty: sc=f
+            # Spec fallback: if no camera protector, try charging cable matching port
+            if sc.empty and tport:
+                fb_h = ['CABLE-CHARGER', 'APPLE ORIGINAL IPHONE CABLE-ADAPTORS', 'ΚΑΛΩΔΙΑ ΔΕΔΟΜΕΝΩΝ', 'MOBILE CABLE-ADAPTORS', 'IPHONE CABLE-ADAPTORS']
+                fb = c[c['Hierarchy'].isin(fb_h)].copy()
+                if tmod:
+                    fb_model = fb[fb[CC].fillna('').str.contains(tmod, case=False, regex=False)]
+                    if not fb_model.empty: fb = fb_model
+                fb_port = fb[fb[CC].fillna('').str.lower().str.contains(tport.lower(), regex=False) | fb['Title'].fillna('').str.lower().str.contains(tport.lower(), regex=False)]
+                notes.append(f"Cable fallback ({tport}): {len(fb_port)}")
+                if not fb_port.empty: sc = fb_port
 
         # ───────────────────────────────────────
         # WALL CHARGER: compat (model/universal/port) + watt + type
@@ -328,10 +351,10 @@ def run_engine(trigger, df_products, df_history, df_slots):
                     if not f.empty: sc=f
 
         # ───────────────────────────────────────
-        # POWERBANK / CAR CHARGER
-        # Data: Τύπος θύρας empty, Τύπος σύνδεσης has some data
+        # POWERBANK (Spec Slot 5, Logic 4):
+        # FILTER port, BOOST speed, wireless, MagSafe, brand
         # ───────────────────────────────────────
-        elif lk == "POWERBANK_CAR":
+        elif lk == "POWERBANK":
             # Port match via compat or Τύπος σύνδεσης
             if tport and not sc.empty:
                 cv = sc[CC].fillna('').str.lower()
@@ -393,8 +416,9 @@ def run_engine(trigger, df_products, df_history, df_slots):
                 sc.loc[sc['Κατασκευαστής'].fillna('').str.strip().str.upper()==tb,'Final_Score']+=SMART_BOOST
 
         # ───────────────────────────────────────
-        # HOLDER: MagSafe boost for Apple
-        # Data: Τρόπος τοποθέτησης has "Μαγνητική"(33), "Magsafe"(2)
+        # HOLDER (Spec Slot 9):
+        # IF Apple + wireless charging → BOOST Μαγνητική/Magsafe
+        # (from spec Logic 4: BOOST Slot 9 Βάσεις where Τρόπος τοποθέτησης = Μαγνητική)
         # ───────────────────────────────────────
         elif lk == "HOLDER":
             if tb=="APPLE" and "ασύρματη φόρτιση" in tex:
@@ -402,10 +426,12 @@ def run_engine(trigger, df_products, df_history, df_slots):
             notes.append(f"No hard filter, {len(sc)} remain")
 
         # ───────────────────────────────────────
-        # TRACKER/MISC: AirTag for Apple, else accessories
-        # Data: Τύπος3 has "Apple AirTag"(4), "Smart Tag"(5), "Λουράκι Λαιμού"(25)
+        # CROSS_SELL (Spec Slot 6, Logic 6):
+        # IF Pen → Γραφίδα Αφής
+        # ELIF APPLE → Apple AirTag
+        # ELSE → Λουράκι, Αξεσουάρ, Καθαρισμού
         # ───────────────────────────────────────
-        elif lk == "TRACKER_MISC":
+        elif lk == "CROSS_SELL":
             b4=len(sc)
             if "με pen" in tex:
                 f=sc[sc['Τύπος3'].fillna('').str.contains("Γραφίδα", case=False)]
