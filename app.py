@@ -25,28 +25,53 @@ CC = "_Compatible"  # Merged compat column
 # ─────────────────────────────────────────────────────────────
 def detect_logic_key(role: str) -> str:
     """Map a slot role string to a logic key based on spec:
-    Spec Slot 1  → PRIMARY_CASE   (Back Cover + color)
-    Spec Slot 2  → SCREEN_GLASS   (Screen Protector type)
-    Spec Slot 3  → WALL_CHARGER   (Port + Speed + Wireless + MagSafe)
-    Spec Slot 4  → EARBUDS        (Connection type + Brand)
-    Spec Slot 5  → POWERBANK      (Port + Speed + Wireless + Brand)
-    Spec Slot 6  → CROSS_SELL     (Pen/AirTag/Accessories)
-    Spec Slot 7  → CAMERA_GLASS   (Camera Protector + cable fallback)
-    Spec Slot 8  → SMARTWATCH     (OS compat + Brand)
-    Spec Slot 9  → HOLDER         (MagSafe boost)
-    Spec Slot 10 → ALT_CASE       (Book Cover/Wallet)
+    Spec Slot 1  → PRIMARY_CASE   (The Perfect Fit / Back Cover)
+    Spec Slot 2  → SCREEN_GLASS   (The Screen Shield / Screen Protector)
+    Spec Slot 3  → WALL_CHARGER   (The Power Source / Wall/Wireless Charger)
+    Spec Slot 4  → EARBUDS        (The Audio Pivot / Handsfree/Earbuds)
+    Spec Slot 5  → POWERBANK      (The Backup Power / Powerbank)
+    Spec Slot 6  → CROSS_SELL     (The Lifestyle/Tech Feature / Misc Accessory)
+    Spec Slot 7  → CAMERA_GLASS   (The Camera Shield / Camera Protector)
+    Spec Slot 8  → SMARTWATCH     (The Wearable / Smartwatch)
+    Spec Slot 9  → HOLDER         (The Commute / Car Holder)
+    Spec Slot 10 → ALT_CASE       (The Alternative Case / Book Cover / Wallet)
     """
     r = role.lower()
-    if "primary case" in r:                          return "PRIMARY_CASE"
-    if "alt case" in r:                              return "ALT_CASE"
-    if "screen" in r and "glass" in r:               return "SCREEN_GLASS"
-    if "camera" in r or "privacy" in r:              return "CAMERA_GLASS"
-    if ("wall" in r and "charger" in r) or ("energy" in r and "charger" in r):  return "WALL_CHARGER"
-    if "power bank" in r or ("energy" in r and ("car" in r or "bank" in r)):    return "POWERBANK"
-    if "smartwatch" in r or "extension" in r or "wearable" in r:                return "SMARTWATCH"
-    if "sound" in r or "earbud" in r or "audio" in r:                           return "EARBUDS"
-    if "drive" in r or "holder" in r or "commute" in r:                         return "HOLDER"
-    if "finder" in r or "tracker" in r or "misc" in r or "lifestyle" in r:      return "CROSS_SELL"
+    
+    if "perfect fit" in r or "back cover" in r or "primary case" in r:
+        return "PRIMARY_CASE"
+    
+    if "alternative" in r or "alt case" in r or "book cover" in r or "wallet" in r:
+        return "ALT_CASE"
+    
+    if "screen" in r or "shield" in r:
+        # Avoid catching 'Camera Shield' by ensuring 'camera' isn't in it
+        if "camera" not in r:
+            return "SCREEN_GLASS"
+            
+    if "camera" in r:
+        return "CAMERA_GLASS"
+        
+    if "power source" in r or "wall" in r or "charger" in r:
+        # Make sure we don't accidentally catch a car charger if you separate them later
+        if "car" not in r:
+            return "WALL_CHARGER"
+            
+    if "backup power" in r or "powerbank" in r or "power bank" in r:
+        return "POWERBANK"
+        
+    if "wearable" in r or "smartwatch" in r:
+        return "SMARTWATCH"
+        
+    if "audio" in r or "earbud" in r or "handsfree" in r:
+        return "EARBUDS"
+        
+    if "commute" in r or "holder" in r or "drive" in r:
+        return "HOLDER"
+        
+    if "lifestyle" in r or "misc" in r or "cross" in r:
+        return "CROSS_SELL"
+        
     return "UNKNOWN"
 
 # ─────────────────────────────────────────────────────────────
