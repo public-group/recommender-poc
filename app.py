@@ -612,12 +612,17 @@ def run_engine(trigger, df_products, df_history, df_slots):
         afh = len(sc)
         notes = [f"Logic: {lk}"]
 
-        if lk == "PRIMARY_CASE":
+if lk == "PRIMARY_CASE":
             if strict_tmod:
-                b4=len(sc); m=sc[sc[CC].fillna('').str.contains(strict_tmod, case=False, regex=True)]
+                b4 = len(sc)
+                cv = sc[CC].fillna('').str.lower()
+                # 🟢 FIX: STRICT MATCH ONLY. Includes exact model or explicitly 'universal'.
+                m = sc[cv.str.contains(strict_tmod, case=False, regex=True) | cv.str.contains("universal", regex=False)]
                 notes.append(f"Strict Model '{tmod}': {b4}→{len(m)}")
-                if not m.empty: sc=m
-                else: notes.append(f"  ⚠ kept all (sample: {sample(sc,CC,3)})")
+                sc = m  # If empty, it stays empty! No more random iPhone cases.
+            else:
+                sc = sc.head(0) # Empty dataframe if no model is defined
+
             if not sc.empty:
                 b4=len(sc); f=sc[sc['Τύπος Θήκης'].fillna('').str.contains("Back Cover", case=False)]
                 notes.append(f"Back Cover: {b4}→{len(f)}")
@@ -627,56 +632,66 @@ def run_engine(trigger, df_products, df_history, df_slots):
                 notes.append(f"Color {ccols[:3]}: {b4}→{len(sc)}")
 
 # ───────────────────────────────────────
-        # ALT CASE: Strict model match + Book/Wallet OR Different Colored Back Cover
-        # ───────────────────────────────────────
         elif lk == "ALT_CASE":
             if strict_tmod:
-                b4=len(sc); sc=sc[sc[CC].fillna('').str.contains(strict_tmod, case=False, regex=True)]
+                b4 = len(sc)
+                cv = sc[CC].fillna('').str.lower()
+                # 🟢 FIX: STRICT MATCH ONLY.
+                sc = sc[cv.str.contains(strict_tmod, case=False, regex=True) | cv.str.contains("universal", regex=False)]
                 notes.append(f"Strict Model '{tmod}': {b4}→{len(sc)}")
+            else:
+                sc = sc.head(0)
 
             if not sc.empty:
                 b4 = len(sc)
-                
-                # Condition 1: It is a Book/Wallet/360 case
                 is_book = sc['Τύπος Θήκης'].fillna('').str.contains("Book Cover|Wallet|360 Full Cover|Folio|Flip", case=False)
                 
-                # Condition 2: It is a Back Cover, but a DIFFERENT color than the phone (and not clear)
                 if tcol:
                     is_back = sc['Τύπος Θήκης'].fillna('').str.contains("Back Cover", case=False)
-                    # ~ means "NOT" in pandas. We keep it if the color is NOT in the phone's color list (ccols)
                     is_diff_color = is_back & ~sc['Χρώμα'].fillna('').str.strip().str.lower().isin(ccols)
-                    
-                    # Keep if it matches EITHER condition
                     sc = sc[is_book | is_diff_color]
                     notes.append(f"Book OR Diff Color: {b4}→{len(sc)}")
                 else:
-                    # If the phone has no color data, just stick to Book Covers to be safe
                     sc = sc[is_book]
                     notes.append(f"Strict Book Cover (no phone color): {b4}→{len(sc)}")
 
+# ───────────────────────────────────────
         elif lk == "SCREEN_GLASS":
             if strict_tmod:
-                b4=len(sc); m=sc[sc[CC].fillna('').str.contains(strict_tmod, case=False, regex=True)]
+                b4 = len(sc)
+                cv = sc[CC].fillna('').str.lower()
+                # 🟢 FIX: STRICT MATCH ONLY.
+                m = sc[cv.str.contains(strict_tmod, case=False, regex=True) | cv.str.contains("universal", regex=False)]
                 notes.append(f"Strict Model '{tmod}': {b4}→{len(m)}")
-                if not m.empty: sc=m
-                else: notes.append(f"  ⚠ kept all (sample: {sample(sc,CC,3)})")
+                sc = m
+            else:
+                sc = sc.head(0)
+
             if not sc.empty and has_data(sc, 'Τύπος προϊόντος'):
                 b4=len(sc)
                 f=sc[sc['Τύπος προϊόντος'].fillna('').str.contains("Προστατευτικό οθόνης|Προστατευτικό Οθόνης|Screen Protector", case=False)]
                 notes.append(f"Screen Protector type: {b4}→{len(f)}")
                 if not f.empty: sc=f
 
+# ───────────────────────────────────────
         elif lk == "CAMERA_GLASS":
             if strict_tmod:
-                b4=len(sc); m=sc[sc[CC].fillna('').str.contains(strict_tmod, case=False, regex=True)]
+                b4 = len(sc)
+                cv = sc[CC].fillna('').str.lower()
+                # 🟢 FIX: STRICT MATCH ONLY.
+                m = sc[cv.str.contains(strict_tmod, case=False, regex=True) | cv.str.contains("universal", regex=False)]
                 notes.append(f"Strict Model '{tmod}': {b4}→{len(m)}")
-                if not m.empty: sc=m
-                else: notes.append(f"  ⚠ kept all")
+                sc = m
+            else:
+                sc = sc.head(0)
+
             if not sc.empty and has_data(sc, 'Τύπος προϊόντος'):
                 b4=len(sc)
                 f=sc[sc['Τύπος προϊόντος'].fillna('').str.contains("Προστατευτικό καμερών|Camera", case=False)]
                 notes.append(f"Camera type: {b4}→{len(f)}")
                 if not f.empty: sc=f
+            
+            # Safe Fallback to Cable if no camera glass exists
             if sc.empty and tport:
                 fb_h = ['CABLE-CHARGER', 'APPLE ORIGINAL IPHONE CABLE-ADAPTORS', 'ΚΑΛΩΔΙΑ ΔΕΔΟΜΕΝΩΝ', 'MOBILE CABLE-ADAPTORS', 'IPHONE CABLE-ADAPTORS']
                 fb = c[c['Hierarchy'].isin(fb_h)].copy()
@@ -686,6 +701,9 @@ def run_engine(trigger, df_products, df_history, df_slots):
                 fb_port = fb[fb[CC].fillna('').str.lower().str.contains(tport.lower(), regex=False) | fb['Title'].fillna('').str.lower().str.contains(tport.lower(), regex=False)]
                 notes.append(f"Cable fallback ({tport}): {len(fb_port)}")
                 if not fb_port.empty: sc = fb_port
+
+# ───────────────────────────────────────
+        elif lk == "WALL_CHARGER":
 
         elif lk == "WALL_CHARGER":
             if not sc.empty:
