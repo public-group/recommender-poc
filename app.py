@@ -136,7 +136,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v7.3 — Strict Fit Filtering
+        🟢 Engine v7.4 — Rival Brand & Strict Fit Filtering
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -529,10 +529,32 @@ def run_engine(trigger, df_products, df_history, df_slots):
     tprice=parse_euro_price(trigger.get('LIST PRICE',0))
     ccols= get_case_colors(tcol)
 
-    # Strict Regex Pattern for Pro Max fix
+# 🟢 FIX: Strict Regex Pattern using alphanumeric boundaries
     strict_tmod = ""
     if tmod:
-        strict_tmod = rf"{re.escape(tmod)}(?!\s*(Max|Plus|\+|Ultra|Pro))"
+        # Ensures "A40" doesn't match "A405" or "A40s"
+        strict_tmod = rf"(?<![a-zA-Z0-9]){re.escape(tmod)}(?![a-zA-Z0-9])(?!\s*(Max|Plus|\+|Ultra|Pro))"
+
+    # 🟢 NEW: RIVAL BRAND FILTER FOR STRICT FIT (Cases/Glass)
+    # If the phone is Oppo, we ban cases that mention Samsung, Apple, Xiaomi, etc.
+    brand_kws = {
+        "SAMSUNG": ["samsung", "galaxy"],
+        "APPLE": ["apple", "iphone", "ipad"],
+        "XIAOMI": ["xiaomi", "redmi", "poco"],
+        "OPPO": ["oppo"],
+        "MOTOROLA": ["motorola", "moto"],
+        "HUAWEI": ["huawei"],
+        "HONOR": ["honor"],
+        "REALME": ["realme"],
+        "ONEPLUS": ["oneplus"],
+        "VIVO": ["vivo"],
+        "NOTHING": ["nothing", "cmf"]
+    }
+    rival_kws = []
+    for k, v in brand_kws.items():
+        if k != tb:
+            rival_kws.extend(v)
+    rival_regex = r"\b(" + "|".join(rival_kws) + r")\b" if rival_kws else ""
 
     c = df_products[df_products['Material']!=tm].copy()
     diag.append(("0. Start", len(c), ""))
@@ -624,11 +646,17 @@ def run_engine(trigger, df_products, df_history, df_slots):
         afh = len(sc)
         notes = [f"Logic: {lk}"]
 
-        if lk == "PRIMARY_CASE":
+if lk == "PRIMARY_CASE":
             if strict_tmod:
                 b4 = len(sc)
                 cv = sc[CC].fillna('').str.lower()
                 m = sc[cv.str.contains(strict_tmod, case=False, regex=True)]
+                
+                # 🟢 NEW: Drop if it contains a rival brand name (e.g. Galaxy)
+                if rival_regex and not m.empty:
+                    m = m[~m[CC].fillna('').str.lower().str.contains(rival_regex, regex=True)]
+                    m = m[~m['Title'].fillna('').str.lower().str.contains(rival_regex, regex=True)]
+                    
                 notes.append(f"Strict Model '{tmod}': {b4}→{len(m)}")
                 sc = m  
             else:
@@ -650,8 +678,14 @@ def run_engine(trigger, df_products, df_history, df_slots):
             if strict_tmod:
                 b4 = len(sc)
                 cv = sc[CC].fillna('').str.lower()
-                sc = sc[cv.str.contains(strict_tmod, case=False, regex=True)]
-                notes.append(f"Strict Model '{tmod}': {b4}→{len(sc)}")
+                m = sc[cv.str.contains(strict_tmod, case=False, regex=True)]
+                
+                if rival_regex and not m.empty:
+                    m = m[~m[CC].fillna('').str.lower().str.contains(rival_regex, regex=True)]
+                    m = m[~m['Title'].fillna('').str.lower().str.contains(rival_regex, regex=True)]
+                    
+                notes.append(f"Strict Model '{tmod}': {b4}→{len(m)}")
+                sc = m
             else:
                 sc = sc.head(0)
 
@@ -673,6 +707,11 @@ def run_engine(trigger, df_products, df_history, df_slots):
                 b4 = len(sc)
                 cv = sc[CC].fillna('').str.lower()
                 m = sc[cv.str.contains(strict_tmod, case=False, regex=True)]
+                
+                if rival_regex and not m.empty:
+                    m = m[~m[CC].fillna('').str.lower().str.contains(rival_regex, regex=True)]
+                    m = m[~m['Title'].fillna('').str.lower().str.contains(rival_regex, regex=True)]
+                    
                 notes.append(f"Strict Model '{tmod}': {b4}→{len(m)}")
                 sc = m
             else:
@@ -689,6 +728,11 @@ def run_engine(trigger, df_products, df_history, df_slots):
                 b4 = len(sc)
                 cv = sc[CC].fillna('').str.lower()
                 m = sc[cv.str.contains(strict_tmod, case=False, regex=True)]
+                
+                if rival_regex and not m.empty:
+                    m = m[~m[CC].fillna('').str.lower().str.contains(rival_regex, regex=True)]
+                    m = m[~m['Title'].fillna('').str.lower().str.contains(rival_regex, regex=True)]
+                    
                 notes.append(f"Strict Model '{tmod}': {b4}→{len(m)}")
                 sc = m
             else:
@@ -703,12 +747,11 @@ def run_engine(trigger, df_products, df_history, df_slots):
             if sc.empty and tport:
                 fb_h = ['CABLE-CHARGER', 'APPLE ORIGINAL IPHONE CABLE-ADAPTORS', 'ΚΑΛΩΔΙΑ ΔΕΔΟΜΕΝΩΝ', 'MOBILE CABLE-ADAPTORS', 'IPHONE CABLE-ADAPTORS']
                 fb = c[c['Hierarchy'].isin(fb_h)].copy()
-                if strict_tmod:
-                    fb_model = fb[fb[CC].fillna('').str.contains(strict_tmod, case=False, regex=True)]
-                    if not fb_model.empty: fb = fb_model
                 fb_port = fb[fb[CC].fillna('').str.lower().str.contains(tport.lower(), regex=False) | fb['Title'].fillna('').str.lower().str.contains(tport.lower(), regex=False)]
                 notes.append(f"Cable fallback ({tport}): {len(fb_port)}")
                 if not fb_port.empty: sc = fb_port
+
+        elif lk == "WALL_CHARGER":
 
         elif lk == "WALL_CHARGER":
             if not sc.empty:
