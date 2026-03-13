@@ -136,7 +136,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v7.2 — Enhanced UI
+        🟢 Engine v7.3 — Strict Fit Filtering
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -625,29 +625,35 @@ def run_engine(trigger, df_products, df_history, df_slots):
         afh = len(sc)
         notes = [f"Logic: {lk}"]
 
-        if lk == "PRIMARY_CASE":
+     if lk == "PRIMARY_CASE":
             if strict_tmod:
                 b4 = len(sc)
                 cv = sc[CC].fillna('').str.lower()
-                m = sc[cv.str.contains(strict_tmod, case=False, regex=True) | cv.str.contains("universal", regex=False)]
+                # 🟢 FIX: Removed "universal". MUST match exact model.
+                m = sc[cv.str.contains(strict_tmod, case=False, regex=True)]
                 notes.append(f"Strict Model '{tmod}': {b4}→{len(m)}")
                 sc = m  
             else:
                 sc = sc.head(0) 
 
             if not sc.empty:
-                b4=len(sc); f=sc[sc['Τύπος Θήκης'].fillna('').str.contains("Back Cover", case=False)]
+                b4=len(sc)
+                f=sc[sc['Τύπος Θήκης'].fillna('').str.contains("Back Cover", case=False)]
                 notes.append(f"Back Cover: {b4}→{len(f)}")
-                if not f.empty: sc=f
+                sc = f  # 🟢 FIX: Strictly enforce type. If empty, it stays empty.
+                
             if not sc.empty and tcol:
-                b4=len(sc); sc=sc[sc['Χρώμα'].fillna('').str.strip().str.lower().isin(ccols)]
-                notes.append(f"Color {ccols[:3]}: {b4}→{len(sc)}")
+                b4=len(sc)
+                sc_color=sc[sc['Χρώμα'].fillna('').str.strip().str.lower().isin(ccols)]
+                notes.append(f"Color {ccols[:3]}: {b4}→{len(sc_color)}")
+                if not sc_color.empty: sc = sc_color # Color is a preference, so we keep fallback
 
         elif lk == "ALT_CASE":
             if strict_tmod:
                 b4 = len(sc)
                 cv = sc[CC].fillna('').str.lower()
-                sc = sc[cv.str.contains(strict_tmod, case=False, regex=True) | cv.str.contains("universal", regex=False)]
+                # 🟢 FIX: Removed "universal". MUST match exact model.
+                sc = sc[cv.str.contains(strict_tmod, case=False, regex=True)]
                 notes.append(f"Strict Model '{tmod}': {b4}→{len(sc)}")
             else:
                 sc = sc.head(0)
@@ -669,7 +675,8 @@ def run_engine(trigger, df_products, df_history, df_slots):
             if strict_tmod:
                 b4 = len(sc)
                 cv = sc[CC].fillna('').str.lower()
-                m = sc[cv.str.contains(strict_tmod, case=False, regex=True) | cv.str.contains("universal", regex=False)]
+                # 🟢 FIX: Removed "universal". MUST match exact model.
+                m = sc[cv.str.contains(strict_tmod, case=False, regex=True)]
                 notes.append(f"Strict Model '{tmod}': {b4}→{len(m)}")
                 sc = m
             else:
@@ -679,13 +686,14 @@ def run_engine(trigger, df_products, df_history, df_slots):
                 b4=len(sc)
                 f=sc[sc['Τύπος προϊόντος'].fillna('').str.contains("Προστατευτικό οθόνης|Προστατευτικό Οθόνης|Screen Protector", case=False)]
                 notes.append(f"Screen Protector type: {b4}→{len(f)}")
-                if not f.empty: sc=f
+                sc = f # 🟢 FIX: Strictly enforce type.
 
         elif lk == "CAMERA_GLASS":
             if strict_tmod:
                 b4 = len(sc)
                 cv = sc[CC].fillna('').str.lower()
-                m = sc[cv.str.contains(strict_tmod, case=False, regex=True) | cv.str.contains("universal", regex=False)]
+                # 🟢 FIX: Removed "universal". MUST match exact model.
+                m = sc[cv.str.contains(strict_tmod, case=False, regex=True)]
                 notes.append(f"Strict Model '{tmod}': {b4}→{len(m)}")
                 sc = m
             else:
@@ -695,7 +703,7 @@ def run_engine(trigger, df_products, df_history, df_slots):
                 b4=len(sc)
                 f=sc[sc['Τύπος προϊόντος'].fillna('').str.contains("Προστατευτικό καμερών|Camera", case=False)]
                 notes.append(f"Camera type: {b4}→{len(f)}")
-                if not f.empty: sc=f
+                sc = f # 🟢 FIX: Strictly enforce type.
             
             if sc.empty and tport:
                 fb_h = ['CABLE-CHARGER', 'APPLE ORIGINAL IPHONE CABLE-ADAPTORS', 'ΚΑΛΩΔΙΑ ΔΕΔΟΜΕΝΩΝ', 'MOBILE CABLE-ADAPTORS', 'IPHONE CABLE-ADAPTORS']
@@ -705,7 +713,10 @@ def run_engine(trigger, df_products, df_history, df_slots):
                     if not fb_model.empty: fb = fb_model
                 fb_port = fb[fb[CC].fillna('').str.lower().str.contains(tport.lower(), regex=False) | fb['Title'].fillna('').str.lower().str.contains(tport.lower(), regex=False)]
                 notes.append(f"Cable fallback ({tport}): {len(fb_port)}")
-                if not fb_port.empty: sc = fb_port
+                if not fb_port.empty: sc = fb_port 
+        
+
+        
 
         elif lk == "WALL_CHARGER":
             if not sc.empty:
