@@ -529,14 +529,12 @@ def run_engine(trigger, df_products, df_history, df_slots):
     tprice=parse_euro_price(trigger.get('LIST PRICE',0))
     ccols= get_case_colors(tcol)
 
-# 🟢 FIX: Strict Regex Pattern using alphanumeric boundaries
+    # 🟢 FIX: Strict Regex Pattern using alphanumeric boundaries
     strict_tmod = ""
     if tmod:
-        # Ensures "A40" doesn't match "A405" or "A40s"
         strict_tmod = rf"(?<![a-zA-Z0-9]){re.escape(tmod)}(?![a-zA-Z0-9])(?!\s*(Max|Plus|\+|Ultra|Pro))"
 
     # 🟢 NEW: RIVAL BRAND FILTER FOR STRICT FIT (Cases/Glass)
-    # If the phone is Oppo, we ban cases that mention Samsung, Apple, Xiaomi, etc.
     brand_kws = {
         "SAMSUNG": ["samsung", "galaxy"],
         "APPLE": ["apple", "iphone", "ipad"],
@@ -646,7 +644,7 @@ def run_engine(trigger, df_products, df_history, df_slots):
         afh = len(sc)
         notes = [f"Logic: {lk}"]
 
-if lk == "PRIMARY_CASE":
+        if lk == "PRIMARY_CASE":
             if strict_tmod:
                 b4 = len(sc)
                 cv = sc[CC].fillna('').str.lower()
@@ -747,11 +745,12 @@ if lk == "PRIMARY_CASE":
             if sc.empty and tport:
                 fb_h = ['CABLE-CHARGER', 'APPLE ORIGINAL IPHONE CABLE-ADAPTORS', 'ΚΑΛΩΔΙΑ ΔΕΔΟΜΕΝΩΝ', 'MOBILE CABLE-ADAPTORS', 'IPHONE CABLE-ADAPTORS']
                 fb = c[c['Hierarchy'].isin(fb_h)].copy()
+                if strict_tmod:
+                    fb_model = fb[fb[CC].fillna('').str.contains(strict_tmod, case=False, regex=True)]
+                    if not fb_model.empty: fb = fb_model
                 fb_port = fb[fb[CC].fillna('').str.lower().str.contains(tport.lower(), regex=False) | fb['Title'].fillna('').str.lower().str.contains(tport.lower(), regex=False)]
                 notes.append(f"Cable fallback ({tport}): {len(fb_port)}")
                 if not fb_port.empty: sc = fb_port
-
-        elif lk == "WALL_CHARGER":
 
         elif lk == "WALL_CHARGER":
             if not sc.empty:
@@ -907,38 +906,6 @@ if lk == "PRIMARY_CASE":
 
     full = pd.concat(all_slot, ignore_index=True).sort_values('Draft_Score').reset_index(drop=True)
 
-    sel, hc, seen = [], {}, set()
-    for _, r in full.iterrows():
-        h, mat = r['Hierarchy'], r['Material']
-        if mat in seen: continue
-        if hc.get(h,0)>=2: continue
-        sel.append(r); hc[h]=hc.get(h,0)+1; seen.add(mat)
-        if len(sel)>=10: break
-
-    diag.append(("6. Final", len(sel), f"Hierarchy cap=2"))
-    return (pd.DataFrame(sel) if sel else pd.DataFrame()), diag, slot_diag, slot_notes, full
-
-    # 🟢 NEW RETURN: Returning `full` so the UI can read the top 3
-    if not all_slot:
-        return pd.DataFrame(), diag, slot_diag, slot_notes, pd.DataFrame()
-
-    full = pd.concat(all_slot, ignore_index=True).sort_values('Draft_Score').reset_index(drop=True)
-
-    # S1: Hierarchy cap
-    sel, hc, seen = [], {}, set()
-    for _, r in full.iterrows():
-        h, mat = r['Hierarchy'], r['Material']
-        if mat in seen: continue
-        if hc.get(h,0)>=2: continue
-        sel.append(r); hc[h]=hc.get(h,0)+1; seen.add(mat)
-        if len(sel)>=10: break
-
-    diag.append(("6. Final", len(sel), f"Hierarchy cap=2"))
-    return (pd.DataFrame(sel) if sel else pd.DataFrame()), diag, slot_diag, slot_notes, full  
-
-    full = pd.concat(all_slot, ignore_index=True).sort_values('Draft_Score').reset_index(drop=True)
-
-    # S1: Hierarchy cap
     sel, hc, seen = [], {}, set()
     for _, r in full.iterrows():
         h, mat = r['Hierarchy'], r['Material']
