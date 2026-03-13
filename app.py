@@ -509,7 +509,6 @@ else:
     st.stop()
 
 # ─────────────────────────────────────────────────────────────
-# ─────────────────────────────────────────────────────────────
 # ENGINE
 # ─────────────────────────────────────────────────────────────
 def run_engine(trigger, df_products, df_history, df_slots):
@@ -538,7 +537,7 @@ def run_engine(trigger, df_products, df_history, df_slots):
     c = df_products[df_products['Material']!=tm].copy()
     diag.append(("0. Start", len(c), ""))
 
-# 🟢 THE SALES SCORE (Primary Driver)
+    # 🟢 THE SALES SCORE (Primary Driver)
     if 'Sum of Sales' in c.columns:
         c['Sales_Tiebreaker'] = pd.to_numeric(c['Sum of Sales'], errors='coerce').fillna(0)
     else:
@@ -566,7 +565,7 @@ def run_engine(trigger, df_products, df_history, df_slots):
         diag.append(("3. U1: siblings", len(c), f"Checked {ns}, removed {len(dupes)}"))
     else: diag.append(("3. U1: siblings", len(c), "No siblings"))
 
-# U3: macro wall
+    # U3: macro wall
     b4=len(c)
     if tl1 in TECH_CATS: c=c[~c['Level 1'].isin(APPL_CATS)]
     elif tl1 in APPL_CATS: c=c[~c['Level 1'].isin(TECH_CATS)]
@@ -614,7 +613,7 @@ def run_engine(trigger, df_products, df_history, df_slots):
         c=c.drop(ok2[~ok2].index)
     diag.append(("5. U5: price ceiling", len(c), f"Removed {b4u5-len(c)} (ceil: €{max(tprice*0.40,45):.0f})"))
 
-  # ── SLOT ASSIGNMENT ──
+    # ── SLOT ASSIGNMENT ──
     all_slot = []
     for _, sr in df_slots.iterrows():
         sn = sr['Slot_Number']
@@ -625,11 +624,10 @@ def run_engine(trigger, df_products, df_history, df_slots):
         afh = len(sc)
         notes = [f"Logic: {lk}"]
 
-     if lk == "PRIMARY_CASE":
+        if lk == "PRIMARY_CASE":
             if strict_tmod:
                 b4 = len(sc)
                 cv = sc[CC].fillna('').str.lower()
-                # 🟢 FIX: Removed "universal". MUST match exact model.
                 m = sc[cv.str.contains(strict_tmod, case=False, regex=True)]
                 notes.append(f"Strict Model '{tmod}': {b4}→{len(m)}")
                 sc = m  
@@ -640,19 +638,18 @@ def run_engine(trigger, df_products, df_history, df_slots):
                 b4=len(sc)
                 f=sc[sc['Τύπος Θήκης'].fillna('').str.contains("Back Cover", case=False)]
                 notes.append(f"Back Cover: {b4}→{len(f)}")
-                sc = f  # 🟢 FIX: Strictly enforce type. If empty, it stays empty.
+                sc = f  
                 
             if not sc.empty and tcol:
                 b4=len(sc)
                 sc_color=sc[sc['Χρώμα'].fillna('').str.strip().str.lower().isin(ccols)]
                 notes.append(f"Color {ccols[:3]}: {b4}→{len(sc_color)}")
-                if not sc_color.empty: sc = sc_color # Color is a preference, so we keep fallback
+                if not sc_color.empty: sc = sc_color 
 
         elif lk == "ALT_CASE":
             if strict_tmod:
                 b4 = len(sc)
                 cv = sc[CC].fillna('').str.lower()
-                # 🟢 FIX: Removed "universal". MUST match exact model.
                 sc = sc[cv.str.contains(strict_tmod, case=False, regex=True)]
                 notes.append(f"Strict Model '{tmod}': {b4}→{len(sc)}")
             else:
@@ -675,7 +672,6 @@ def run_engine(trigger, df_products, df_history, df_slots):
             if strict_tmod:
                 b4 = len(sc)
                 cv = sc[CC].fillna('').str.lower()
-                # 🟢 FIX: Removed "universal". MUST match exact model.
                 m = sc[cv.str.contains(strict_tmod, case=False, regex=True)]
                 notes.append(f"Strict Model '{tmod}': {b4}→{len(m)}")
                 sc = m
@@ -686,13 +682,12 @@ def run_engine(trigger, df_products, df_history, df_slots):
                 b4=len(sc)
                 f=sc[sc['Τύπος προϊόντος'].fillna('').str.contains("Προστατευτικό οθόνης|Προστατευτικό Οθόνης|Screen Protector", case=False)]
                 notes.append(f"Screen Protector type: {b4}→{len(f)}")
-                sc = f # 🟢 FIX: Strictly enforce type.
+                sc = f 
 
         elif lk == "CAMERA_GLASS":
             if strict_tmod:
                 b4 = len(sc)
                 cv = sc[CC].fillna('').str.lower()
-                # 🟢 FIX: Removed "universal". MUST match exact model.
                 m = sc[cv.str.contains(strict_tmod, case=False, regex=True)]
                 notes.append(f"Strict Model '{tmod}': {b4}→{len(m)}")
                 sc = m
@@ -703,7 +698,7 @@ def run_engine(trigger, df_products, df_history, df_slots):
                 b4=len(sc)
                 f=sc[sc['Τύπος προϊόντος'].fillna('').str.contains("Προστατευτικό καμερών|Camera", case=False)]
                 notes.append(f"Camera type: {b4}→{len(f)}")
-                sc = f # 🟢 FIX: Strictly enforce type.
+                sc = f 
             
             if sc.empty and tport:
                 fb_h = ['CABLE-CHARGER', 'APPLE ORIGINAL IPHONE CABLE-ADAPTORS', 'ΚΑΛΩΔΙΑ ΔΕΔΟΜΕΝΩΝ', 'MOBILE CABLE-ADAPTORS', 'IPHONE CABLE-ADAPTORS']
@@ -713,10 +708,7 @@ def run_engine(trigger, df_products, df_history, df_slots):
                     if not fb_model.empty: fb = fb_model
                 fb_port = fb[fb[CC].fillna('').str.lower().str.contains(tport.lower(), regex=False) | fb['Title'].fillna('').str.lower().str.contains(tport.lower(), regex=False)]
                 notes.append(f"Cable fallback ({tport}): {len(fb_port)}")
-                if not fb_port.empty: sc = fb_port 
-        
-
-        
+                if not fb_port.empty: sc = fb_port
 
         elif lk == "WALL_CHARGER":
             if not sc.empty:
@@ -866,6 +858,22 @@ def run_engine(trigger, df_products, df_history, df_slots):
             sc['Item_Rank']=range(1,len(sc)+1)
             sc['Draft_Score']=sc['Item_Rank']*100+sn
             all_slot.append(sc)
+
+    if not all_slot:
+        return pd.DataFrame(), diag, slot_diag, slot_notes, pd.DataFrame()
+
+    full = pd.concat(all_slot, ignore_index=True).sort_values('Draft_Score').reset_index(drop=True)
+
+    sel, hc, seen = [], {}, set()
+    for _, r in full.iterrows():
+        h, mat = r['Hierarchy'], r['Material']
+        if mat in seen: continue
+        if hc.get(h,0)>=2: continue
+        sel.append(r); hc[h]=hc.get(h,0)+1; seen.add(mat)
+        if len(sel)>=10: break
+
+    diag.append(("6. Final", len(sel), f"Hierarchy cap=2"))
+    return (pd.DataFrame(sel) if sel else pd.DataFrame()), diag, slot_diag, slot_notes, full
 
     # 🟢 NEW RETURN: Returning `full` so the UI can read the top 3
     if not all_slot:
