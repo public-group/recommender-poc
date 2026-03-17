@@ -423,10 +423,23 @@ def sample(df, col, n=5):
 @st.cache_data
 def load_data():
     base = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet="
+    
+    # Load Products (Smartphones)
     dp = pd.read_csv(base+"Products"); dp.columns = dp.columns.str.strip()
+    
+    # Load History
     dh = pd.read_csv(base+"History");  dh.columns = dh.columns.str.strip()
+    
+    # Load Slot Matrix
     ds = pd.read_csv(base+"Slot_Matrix"); ds.columns = ds.columns.str.strip()
-    # Merge compat columns
+    
+    # 🟢 NEW: Load Books sheet (contains Books + Toys + Stationery)
+    try:
+        db = pd.read_csv(base+"Books"); db.columns = db.columns.str.strip()
+    except:
+        db = pd.DataFrame()  # Empty if sheet doesn't exist
+    
+    # Merge compat columns for Products
     parts = [dp[c].fillna('').astype(str).str.strip() for c in COMPAT_COLS if c in dp.columns]
     found = [c for c in COMPAT_COLS if c in dp.columns]
     if parts:
@@ -438,9 +451,14 @@ def load_data():
         dp[CC] = dp[CC].str.strip(';').str.replace(';;',';')
     else:
         dp[CC] = ''
-    return dp, dh, ds, found
+    
+    # Add empty compat column to Books if needed
+    if not db.empty and CC not in db.columns:
+        db[CC] = ''
+    
+    return dp, dh, ds, found, db
 
-df_products, df_history, df_slots, compat_cols_found = load_data()
+df_products, df_history, df_slots, compat_cols_found, df_books = load_data()
 
 # ─────────────────────────────────────────────────────────────
 # CLUSTER SELECTION
@@ -463,25 +481,35 @@ if active_cluster == "Smartphones":
     trigger = phones[phones['Title']==sel].iloc[0] if sel else None
 
 elif active_cluster == "Kids Books":
+    # 🟢 FIX: Use df_books instead of df_products
+    if df_books.empty:
+        st.error("🚨 CRITICAL: Books sheet not found! Check your Google Sheet.")
+        st.stop()
+    
     # Filter for Kids Books
-    kids_books = df_products[
-        (df_products['Level 1'] == 'Books') & 
-        (df_products['Level 2'].isin(KIDS_BOOKS_LEVEL2))
+    kids_books = df_books[
+        (df_books['Level 1'] == 'Books') & 
+        (df_books['Level 2'].isin(KIDS_BOOKS_LEVEL2))
     ]
+    
     if kids_books.empty:
         # Fallback: try any books
-        kids_books = df_products[df_products['Level 1'] == 'Books']
+        kids_books = df_books[df_books['Level 1'] == 'Books']
         st.sidebar.warning("⚠ Fallback to all Books")
+    
     if kids_books.empty:
         st.error("🚨 CRITICAL: No kids books found! Check your Google Sheet.")
         st.stop()
     
     # Add series filter if available
     if 'Σειρά βιβλίου' in kids_books.columns:
-        series_options = ['All'] + sorted(kids_books['Σειρά βιβλίου'].dropna().unique().tolist())
-        selected_series = st.sidebar.selectbox("Filter by Series (optional):", series_options)
-        if selected_series != 'All':
-            kids_books = kids_books[kids_books['Σειρά βιβλίου'] == selected_series]
+        series_list = kids_books['Σειρά βιβλίου'].dropna().astype(str)
+        series_list = series_list[series_list != '0'].unique().tolist()
+        if series_list:
+            series_options = ['All'] + sorted(series_list)
+            selected_series = st.sidebar.selectbox("Filter by Series (optional):", series_options)
+            if selected_series != 'All':
+                kids_books = kids_books[kids_books['Σειρά βιβλίου'] == selected_series]
     
     sel = st.sidebar.selectbox("Select a Kids Book:", kids_books['Title'].unique())
     trigger = kids_books[kids_books['Title']==sel].iloc[0] if sel else None
@@ -1317,7 +1345,8 @@ def run_engine(trigger, df_products, df_history, df_slots):
 if active_cluster == "Smartphones":
     recs, diag, slot_diag, slot_notes, full_candidates = run_engine(trigger, df_products, df_history, df_slots)
 else:  # Kids Books
-    recs, diag, slot_notes, full_candidates = run_books_engine(trigger, df_products, df_history)
+    # 🟢 FIX: Use df_books for the books engine
+    recs, diag, slot_notes, full_candidates = run_books_engine(trigger, df_books, df_history)
     slot_diag = []  # Not used for books
 
 # Marketing Copy
