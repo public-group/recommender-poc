@@ -197,8 +197,12 @@ def age_to_numeric(age_str: str) -> float:
 
 def is_valid_series(series_val) -> bool:
     """Check if series value is valid (not empty, nan, or '0')"""
+    if series_val is None:
+        return False
+    if pd.isna(series_val):  # Handle pandas NaN
+        return False
     s = str(series_val).strip()
-    return s and s != 'nan' and s != '0' and s != 'NaN'
+    return s and s.lower() != 'nan' and s != '0' and s != 'NaN' and s != ''
 
 def normalize_ip_name(name: str) -> str:
     """Normalize IP name for matching"""
@@ -310,8 +314,31 @@ def load_data():
     
     try:
         db = pd.read_csv(base+"Books"); db.columns = db.columns.str.strip()
-    except:
+        
+        # 🟢 FIX: Normalize column names - handle potential encoding issues
+        # Map common variations to standard names
+        column_mapping = {}
+        for col in db.columns:
+            col_lower = col.lower()
+            # Series column
+            if 'σειρά βιβλίου' in col_lower or 'σειρα βιβλιου' in col_lower or 'book series' in col_lower:
+                column_mapping[col] = 'Σειρά βιβλίου'
+            # Age column
+            elif col_lower == 'ηλικία' or col_lower == 'ηλικια' or col_lower == 'age':
+                column_mapping[col] = 'Ηλικία'
+            # Cover column  
+            elif 'εξώφυλλο' in col_lower or 'εξωφυλλο' in col_lower:
+                column_mapping[col] = 'Εξώφυλλο'
+            # Dimensions
+            elif 'διαστάσεις' in col_lower or 'διαστασεις' in col_lower:
+                column_mapping[col] = 'Διαστάσεις'
+        
+        if column_mapping:
+            db = db.rename(columns=column_mapping)
+            
+    except Exception as e:
         db = pd.DataFrame()
+        st.sidebar.error(f"Error loading Books: {e}")
     
     # Compat columns for Products
     parts = [dp[c].fillna('').astype(str).str.strip() for c in COMPAT_COLS if c in dp.columns]
@@ -332,6 +359,24 @@ def load_data():
     return dp, dh, ds, found, db
 
 df_products, df_history, df_slots, compat_cols_found, df_books = load_data()
+
+# 🔍 DEBUG: Show what columns were loaded from Books sheet
+if not df_books.empty:
+    with st.sidebar.expander("🔍 Debug: Books Columns", expanded=False):
+        st.write(f"Total columns: {len(df_books.columns)}")
+        st.write("All columns:", list(df_books.columns))
+        
+        # Check for series column
+        series_found = False
+        for col in df_books.columns:
+            if 'σειρά' in col.lower() or 'series' in col.lower() or 'βιβλίου' in col.lower():
+                st.success(f"✓ Series column: '{col}'")
+                sample = df_books[col].dropna().head(5).tolist()
+                st.write(f"Sample values: {sample}")
+                series_found = True
+        
+        if not series_found:
+            st.error("✗ No series column found!")
 
 # ─────────────────────────────────────────────────────────────
 # CLUSTER SELECTION
@@ -383,6 +428,30 @@ elif active_cluster == "Kids Books":
     
     sel = st.sidebar.selectbox("Select a Kids Book:", kids_books['Title'].unique())
     trigger = kids_books[kids_books['Title']==sel].iloc[0] if sel else None
+    
+    # 🔍 DEBUG: Show trigger's series value
+    if trigger is not None:
+        with st.sidebar.expander("🔍 Debug: Selected Book", expanded=False):
+            st.write(f"**Material:** {trigger.get('Material', 'N/A')}")
+            st.write(f"**Title:** {trigger.get('Title', 'N/A')}")
+            
+            # Find and show series value
+            series_val = None
+            series_col_name = None
+            for col in trigger.index:
+                if 'σειρά' in col.lower() or 'series' in col.lower() or 'βιβλίου' in col.lower():
+                    series_val = trigger.get(col)
+                    series_col_name = col
+                    break
+            
+            if series_col_name:
+                st.write(f"**Series Column:** '{series_col_name}'")
+                st.write(f"**Series Value:** {series_val!r}")
+                st.write(f"**Type:** {type(series_val).__name__}")
+                st.write(f"**Is Valid:** {is_valid_series(series_val)}")
+            else:
+                st.error("No series column in trigger!")
+                st.write("Available columns:", list(trigger.index))
 
 if trigger is None:
     st.warning("Please select an item from the sidebar.")
@@ -471,10 +540,20 @@ def run_books_engine(trigger, df_all, df_history):
     all_recs = []
     used_materials = set()
     
-    # Trigger attributes
+    # Trigger attributes - with robust extraction
     tm = trigger['Material']
     tt = str(trigger.get('Title', ''))
-    t_series = str(trigger.get('Σειρά βιβλίου', '')).strip()
+    
+    # 🟢 FIX: More robust series extraction
+    t_series_raw = trigger.get('Σειρά βιβλίου', None)
+    if t_series_raw is None:
+        # Try alternate column names
+        for col in trigger.index:
+            if 'σειρά' in col.lower() or 'series' in col.lower():
+                t_series_raw = trigger.get(col, None)
+                break
+    t_series = str(t_series_raw).strip() if t_series_raw is not None and not pd.isna(t_series_raw) else ''
+    
     t_age = str(trigger.get('Ηλικία', '')).strip()
     t_rec_age = str(trigger.get('Προτεινόμενη Ηλικία', '')).strip()
     t_cover = str(trigger.get('Εξώφυλλο', '')).strip()
@@ -502,9 +581,22 @@ def run_books_engine(trigger, df_all, df_history):
     if has_series:
         # Get all books from same series
         books_only = df_all[df_all['Level 1'] == 'Books'].copy()
-        series_books = books_only[
-            books_only['Σειρά βιβλίου'].fillna('').astype(str).str.strip() == t_series
-        ].copy()
+        
+        # 🟢 FIX: Find series column name dynamically
+        series_col = 'Σειρά βιβλίου'
+        if series_col not in books_only.columns:
+            for col in books_only.columns:
+                if 'σειρά' in col.lower() or 'series' in col.lower():
+                    series_col = col
+                    break
+        
+        if series_col in books_only.columns:
+            series_books = books_only[
+                books_only[series_col].fillna('').astype(str).str.strip() == t_series
+            ].copy()
+        else:
+            series_books = pd.DataFrame()
+            series_notes.append(f"⚠ Series column not found!")
         
         series_notes.append(f"Found {len(series_books)} books in series '{t_series}'")
         
