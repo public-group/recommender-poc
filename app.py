@@ -551,7 +551,7 @@ st.sidebar.markdown(f"""
     [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] button {{
         background: #ffffff !important;
         border-radius: 12px !important;
-        min-height: 120px !important;
+        min-height: 105px !important;
         font-size: 11px !important;
         font-weight: 600 !important;
         color: #333 !important;
