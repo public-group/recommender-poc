@@ -136,7 +136,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v8.2 — Precision Data Typing & Schema Alignment
+        🟢 Engine v8.3 — Strict Schema Enforcement & NaN Eradication
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -292,29 +292,32 @@ def sample(df, col, n=5):
 def load_data():
     base = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet="
     
-    # 🟢 FIX: Ορίζουμε αυστηρά ως κείμενο ΜΟΝΟ τις "επικίνδυνες" στήλες.
-    # Όλες οι άλλες (Hierarchy ID, Ημερομηνίες) θα διαβαστούν σωστά από την Python.
-    text_cols = {
-        'Material': str, 
-        'Τίτλος πρωτοτύπου': str, 
-        'Σειρά βιβλίου': str, 
-        'Λεπτομέρειες εικονογράφησης': str, 
-        'Εκδοτική Σειρά': str,
-        'Brand': str,
-        'Ήρωες Παιχνιδιών': str,
-        'Φύλο': str
-    }
+    # 1. Διαβάζουμε ΠΡΩΤΑ τα πάντα ως κείμενο για να μην καταστρέψει η Python τα strings
+    dp = pd.read_csv(base+"Products", dtype=str)
+    dh = pd.read_csv(base+"History", dtype=str)
+    ds = pd.read_csv(base+"Slot_Matrix", dtype=str)
+    db = pd.read_csv(base+"Books", dtype=str)
     
-    dp = pd.read_csv(base+"Products", dtype=text_cols); dp.columns = dp.columns.str.strip()
-    dh = pd.read_csv(base+"History", dtype=text_cols);  dh.columns = dh.columns.str.strip()
-    ds = pd.read_csv(base+"Slot_Matrix", dtype=text_cols); ds.columns = ds.columns.str.strip()
+    # 2. Καθαρίζουμε τα ονόματα των στηλών από τυχόν κρυφά κενά
+    dp.columns = dp.columns.str.strip()
+    dh.columns = dh.columns.str.strip()
+    ds.columns = ds.columns.str.strip()
+    db.columns = db.columns.str.strip()
     
-    # Διαβάζουμε τα Βιβλία και μετατρέπουμε αυτόματα την Ημερομηνία!
-    db = pd.read_csv(base+"Books", dtype=text_cols); db.columns = db.columns.str.strip()
+    # 3. Εφαρμόζουμε το ΑΥΣΤΗΡΟ SCHEMA σου
+    if 'Hierarchy ID' in db.columns:
+        db['Hierarchy ID'] = pd.to_numeric(db['Hierarchy ID'], errors='coerce')
+        
     if 'Ημερ/νία έκδοσης' in db.columns:
         db['Ημερ/νία έκδοσης'] = pd.to_datetime(db['Ημερ/νία έκδοσης'], format='%d/%m/%Y', errors='coerce')
-    
-    # Merge compat columns for Products (Smartphones)
+
+    # 4. Εξαφανίζουμε τη λέξη 'nan' (Not a Number) που γεμίζει άσχημα τα Diagnostics
+    for df in [dp, dh, ds, db]:
+        for col in df.columns:
+            if df[col].dtype == object:
+                df[col] = df[col].fillna('').astype(str).replace('nan', '')
+
+    # 5. Merge compat columns for Products (Smartphones)
     parts = [dp[c].fillna('').astype(str).str.strip() for c in COMPAT_COLS if c in dp.columns]
     found = [c for c in COMPAT_COLS if c in dp.columns]
     if parts:
