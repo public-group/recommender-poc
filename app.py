@@ -142,9 +142,15 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ─────────────────────────────────────────────────────────────
-# CONFIG
+# CONFIG (ΒΑΛΕ ΕΔΩ ΤΑ GID ΤΩΝ ΚΑΡΤΕΛΩΝ ΣΟΥ)
 # ─────────────────────────────────────────────────────────────
 SHEET_ID = "1PeLckGFNH-l9GrEvSs3ZQ0N0mXrEYwzA_JwO1wTzJWo"
+
+# 🟢 Βάλε εδώ τον αριθμό που γράφει στο τέλος του URL (gid=...) όταν ανοίγεις την κάθε καρτέλα
+GID_PRODUCTS = "382370119"          # <--- Άλλαξε το με το δικό σου αν δεν είναι 0
+GID_HISTORY  = "0"  # <--- Άλλαξε το με το δικό σου
+GID_SLOTS    = "257079724"  # <--- Άλλαξε το με το δικό σου
+GID_BOOKS    = "1307177082"  # <--- Άλλαξε το με το δικό σου
 
 CLUSTER_CONFIG = {
     "Smartphones": {"allow_siblings": False, "hierarchy_cap": 2},
@@ -155,7 +161,7 @@ ACTIVE_CLUSTER = "Smartphones"
 # 🟢 THE VIRTUAL SALES BUMP: 
 # A brand match acts like 15 extra sales. Availability acts like 2 extra sales.
 SMART_BOOST      = 15 
-ECOSYSTEM_BOOST  = 100000  # 🟢 NEW: Massive lock-in for Watches & Earbuds
+ECOSYSTEM_BOOST  = 100000  # Massive lock-in for Watches & Earbuds
 AVAIL_BOOST      = 2
 HISTORY_BOOST    = 100000 
 HISTORY_FREQ_MIN = 5
