@@ -71,7 +71,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v10.8 — Clean Tile Buttons
+        🟢 Engine v10.9 — SVG Icons via CSS
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -505,56 +505,104 @@ if 'active_cluster' not in st.session_state:
 
 active_cluster = st.session_state.active_cluster
 
-# Dynamic CSS for active state border
+# Dynamic CSS for active state border AND SVG icons
 smartphones_border = "2px solid #ff5e00" if active_cluster == "Smartphones" else "1px solid #eaeaea"
 books_border = "2px solid #ff5e00" if active_cluster == "Kids Books" else "1px solid #eaeaea"
 
 st.sidebar.markdown(f"""
 <style>
-    /* Tile button styling */
+    /* Tile button base styling */
+    [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] button {{
+        background: #ffffff !important;
+        border-radius: 12px !important;
+        min-height: 95px !important;
+        font-size: 11px !important;
+        font-weight: 600 !important;
+        color: #333 !important;
+        white-space: pre-line !important;
+        line-height: 1.3 !important;
+        padding-top: 45px !important;
+    }}
+    
+    /* Smartphones button */
     [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] > div:first-child button {{
-        background: #ffffff !important;
         border: {smartphones_border} !important;
-        border-radius: 12px !important;
-        min-height: 95px !important;
-        font-size: 11px !important;
-        font-weight: 600 !important;
-        color: #333 !important;
-        white-space: pre-line !important;
-        line-height: 1.3 !important;
     }}
     
+    /* Kids Books button */
     [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] > div:last-child button {{
-        background: #ffffff !important;
         border: {books_border} !important;
-        border-radius: 12px !important;
-        min-height: 95px !important;
-        font-size: 11px !important;
-        font-weight: 600 !important;
-        color: #333 !important;
-        white-space: pre-line !important;
-        line-height: 1.3 !important;
     }}
     
+    /* Hover effect */
     [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] button:hover {{
         border-color: #ff5e00 !important;
         box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08) !important;
     }}
+    
+    /* Hide the emoji text, show only the label */
+    [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] button p {{
+        font-size: 11px !important;
+        margin-top: 5px !important;
+    }}
 </style>
 """, unsafe_allow_html=True)
 
-# Create tile buttons - clean labels without checkmarks
+# Create tile buttons with text labels (icons added via HTML below)
 col1, col2 = st.sidebar.columns(2)
 
 with col1:
-    if st.button("📱\n\nΤηλεφωνία,\nTablets &\nWearables", key="btn_smartphones", use_container_width=True):
+    if st.button("Τηλεφωνία,\nTablets &\nWearables", key="btn_smartphones", use_container_width=True):
         st.session_state.active_cluster = "Smartphones"
         st.rerun()
 
 with col2:
-    if st.button("📚\n\nΠαιδικά\nΒιβλία", key="btn_kids_books", use_container_width=True):
+    if st.button("Παιδικά\nΒιβλία", key="btn_kids_books", use_container_width=True):
         st.session_state.active_cluster = "Kids Books"
         st.rerun()
+
+# Inject SVG icons on top of buttons using absolute positioning
+st.sidebar.markdown("""
+<style>
+    /* Position icons above button text */
+    [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] > div:first-child button::before {
+        content: '';
+        display: block;
+        width: 28px;
+        height: 28px;
+        margin: 0 auto 8px auto;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='5' y='2' width='14' height='20' rx='2' ry='2'%3E%3C/rect%3E%3Cline x1='12' y1='18' x2='12.01' y2='18'%3E%3C/line%3E%3C/svg%3E");
+        background-size: contain;
+        background-repeat: no-repeat;
+        background-position: center;
+        position: absolute;
+        top: 15px;
+        left: 50%;
+        transform: translateX(-50%);
+    }
+    
+    [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] > div:last-child button::before {
+        content: '';
+        display: block;
+        width: 28px;
+        height: 28px;
+        margin: 0 auto 8px auto;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 19.5A2.5 2.5 0 0 1 6.5 17H20'%3E%3C/path%3E%3Cpath d='M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z'%3E%3C/path%3E%3C/svg%3E");
+        background-size: contain;
+        background-repeat: no-repeat;
+        background-position: center;
+        position: absolute;
+        top: 15px;
+        left: 50%;
+        transform: translateX(-50%);
+    }
+    
+    /* Make buttons relative for absolute positioning of icons */
+    [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] button {
+        position: relative !important;
+    }
+</style>
+""", unsafe_allow_html=True)
 
 # Divider
 st.sidebar.markdown('<hr class="section-divider">', unsafe_allow_html=True)
