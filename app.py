@@ -35,7 +35,7 @@ st.markdown("""
     header[data-testid="stHeader"] span { color: #ffffff !important; }
     header[data-testid="stHeader"] svg { fill: #ffffff !important; color: #ffffff !important; }
     header[data-testid="stHeader"] svg rect { fill: transparent !important; }
-    .appview-container .main .block-container { padding-top: 300px !important; }
+    .appview-container .main .block-container { padding-top: 100px !important; }
     .poc-header-wrapper {
         position: fixed; top: 0; left: 0; right: 0;
         z-index: 999999; display: flex; flex-direction: column;
