@@ -70,7 +70,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v10.0 — Loads from GitHub Excel File
+        🟢 Engine v10.1 — Fixed str.contains na=False
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -310,7 +310,7 @@ def safe(v): return html_lib.escape(str(v))
 # ─────────────────────────────────────────────────────────────
 # DATA LOADING - From local file in repo
 # ─────────────────────────────────────────────────────────────
-EXCEL_FILE = "Recommendations GitHub.xlsx"  # File in same folder as app.py
+EXCEL_FILE = "Recommendations.xlsx"  # File in same folder as app.py
 
 @st.cache_data(ttl=600)  # Cache for 10 minutes
 def load_all_data():
@@ -1037,7 +1037,7 @@ def run_engine(trigger, df_products, df_history, df_slots):
     c['Smart_Boost']=0
     
     if strict_tmod:
-        c.loc[c['Μοντέλο'].fillna('').str.contains(strict_tmod, case=False, regex=True), 'Smart_Boost'] += SMART_BOOST
+        c.loc[c['Μοντέλο'].fillna('').astype(str).str.contains(strict_tmod, case=False, regex=True, na=False), 'Smart_Boost'] += SMART_BOOST
     c.loc[c['Κατασκευαστής'].fillna('').str.strip().str.upper()==tb,'Smart_Boost']+=SMART_BOOST
     
     c['Final_Score'] = c['History_Score'] + c['Frequency'] + c['Avail_Boost'] + c['Smart_Boost'] + c['Sales_Tiebreaker']
@@ -1062,23 +1062,23 @@ def run_engine(trigger, df_products, df_history, df_slots):
         if lk == "PRIMARY_CASE":
             if strict_tmod:
                 b4 = len(sc)
-                cv = sc[CC].fillna('').str.lower()
-                m = sc[cv.str.contains(strict_tmod, case=False, regex=True)]
+                cv = sc[CC].fillna('').astype(str).str.lower()
+                m = sc[cv.str.contains(strict_tmod, case=False, regex=True, na=False)]
                 if rival_regex and not m.empty:
-                    m = m[~m[CC].fillna('').str.lower().str.contains(rival_regex, regex=True)]
-                    m = m[~m['Title'].fillna('').str.lower().str.contains(rival_regex, regex=True)]
+                    m = m[~m[CC].fillna('').astype(str).str.lower().str.contains(rival_regex, regex=True, na=False)]
+                    m = m[~m['Title'].fillna('').astype(str).str.lower().str.contains(rival_regex, regex=True, na=False)]
                 notes.append(f"Model '{tmod}': {b4}→{len(m)}")
                 sc = m  
             else:
                 sc = sc.head(0) 
             if not sc.empty:
                 b4=len(sc)
-                f=sc[sc['Τύπος Θήκης'].fillna('').str.contains("Back Cover", case=False)]
+                f=sc[sc['Τύπος Θήκης'].fillna('').astype(str).str.contains("Back Cover", case=False, na=False)]
                 notes.append(f"Back Cover: {b4}→{len(f)}")
                 sc = f  
             if not sc.empty and tcol:
                 b4=len(sc)
-                sc_color=sc[sc['Χρώμα'].fillna('').str.strip().str.lower().isin(ccols)]
+                sc_color=sc[sc['Χρώμα'].fillna('').astype(str).str.strip().str.lower().isin(ccols)]
                 notes.append(f"Color: {b4}→{len(sc_color)}")
                 if not sc_color.empty: sc = sc_color
 
