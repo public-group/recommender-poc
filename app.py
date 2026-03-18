@@ -71,7 +71,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v10.7 — Fixed Clickable Tiles
+        🟢 Engine v10.8 — Clean Tile Buttons
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -311,7 +311,7 @@ def safe(v): return html_lib.escape(str(v))
 # ─────────────────────────────────────────────────────────────
 # DATA LOADING - From local file in repo
 # ─────────────────────────────────────────────────────────────
-EXCEL_FILE = "Recommendations GitHub.xlsx"  # File in same folder as app.py
+EXCEL_FILE = "Recommendations.xlsx"  # File in same folder as app.py
 
 @st.cache_data(ttl=600)  # Cache for 10 minutes
 def load_all_data():
@@ -505,24 +505,54 @@ if 'active_cluster' not in st.session_state:
 
 active_cluster = st.session_state.active_cluster
 
-# Create tile buttons with simple approach
+# Dynamic CSS for active state border
+smartphones_border = "2px solid #ff5e00" if active_cluster == "Smartphones" else "1px solid #eaeaea"
+books_border = "2px solid #ff5e00" if active_cluster == "Kids Books" else "1px solid #eaeaea"
+
+st.sidebar.markdown(f"""
+<style>
+    /* Tile button styling */
+    [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] > div:first-child button {{
+        background: #ffffff !important;
+        border: {smartphones_border} !important;
+        border-radius: 12px !important;
+        min-height: 95px !important;
+        font-size: 11px !important;
+        font-weight: 600 !important;
+        color: #333 !important;
+        white-space: pre-line !important;
+        line-height: 1.3 !important;
+    }}
+    
+    [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] > div:last-child button {{
+        background: #ffffff !important;
+        border: {books_border} !important;
+        border-radius: 12px !important;
+        min-height: 95px !important;
+        font-size: 11px !important;
+        font-weight: 600 !important;
+        color: #333 !important;
+        white-space: pre-line !important;
+        line-height: 1.3 !important;
+    }}
+    
+    [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] button:hover {{
+        border-color: #ff5e00 !important;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08) !important;
+    }}
+</style>
+""", unsafe_allow_html=True)
+
+# Create tile buttons - clean labels without checkmarks
 col1, col2 = st.sidebar.columns(2)
 
 with col1:
-    # Smartphones button with visual indicator
-    btn_label_phones = "📱\n\nΤηλεφωνία,\nTablets &\nWearables"
-    if active_cluster == "Smartphones":
-        btn_label_phones = "✓ 📱\n\nΤηλεφωνία,\nTablets &\nWearables"
-    if st.button(btn_label_phones, key="btn_smartphones", use_container_width=True):
+    if st.button("📱\n\nΤηλεφωνία,\nTablets &\nWearables", key="btn_smartphones", use_container_width=True):
         st.session_state.active_cluster = "Smartphones"
         st.rerun()
 
 with col2:
-    # Kids Books button with visual indicator
-    btn_label_books = "📚\n\nΠαιδικά\nΒιβλία"
-    if active_cluster == "Kids Books":
-        btn_label_books = "✓ 📚\n\nΠαιδικά\nΒιβλία"
-    if st.button(btn_label_books, key="btn_kids_books", use_container_width=True):
+    if st.button("📚\n\nΠαιδικά\nΒιβλία", key="btn_kids_books", use_container_width=True):
         st.session_state.active_cluster = "Kids Books"
         st.rerun()
 
