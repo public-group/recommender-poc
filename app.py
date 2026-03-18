@@ -71,7 +71,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v10.3 — Series by Popularity + Fixed Error Display
+        🟢 Engine v10.4 — New Sidebar UI
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -311,7 +311,7 @@ def safe(v): return html_lib.escape(str(v))
 # ─────────────────────────────────────────────────────────────
 # DATA LOADING - From local file in repo
 # ─────────────────────────────────────────────────────────────
-EXCEL_FILE = "Recommendations GitHub.xlsx"  # File in same folder as app.py
+EXCEL_FILE = "Recommendations.xlsx"  # File in same folder as app.py
 
 @st.cache_data(ttl=600)  # Cache for 10 minutes
 def load_all_data():
@@ -380,43 +380,137 @@ except Exception as e:
     st.code(traceback.format_exc())
     st.stop()
 
-# 🟢 CLEAR CACHE BUTTON
-st.sidebar.markdown("---")
-if st.sidebar.button("🔄 Clear Cache & Reload"):
-    st.cache_data.clear()
-    st.rerun()
-
-# Show data source info
-st.sidebar.markdown("### 📊 Data Source")
-st.sidebar.success(f"✅ Loaded from `{EXCEL_FILE}`")
-
-# 🔍 DEBUG: Show data stats
-with st.sidebar.expander("🔍 Debug: Data Stats", expanded=False):
-    st.write(f"**Sheets loaded:** {', '.join(sheets_loaded)}")
-    st.write(f"**Products:** {len(df_products):,} rows")
-    st.write(f"**History:** {len(df_history):,} rows")
-    st.write(f"**Slot_Matrix:** {len(df_slots):,} rows")
-    st.write(f"**Books:** {len(df_books):,} rows")
+# 🟢 SIDEBAR STYLING
+st.sidebar.markdown("""
+<style>
+    /* Sidebar header */
+    .sidebar-title {
+        font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+        font-size: 18px;
+        font-weight: 700;
+        color: #111;
+        margin-bottom: 15px;
+        padding-bottom: 12px;
+        border-bottom: 2px solid #ff5e00;
+    }
     
-    if not df_books.empty:
-        # Check for series column
-        series_col_found = None
-        for col in df_books.columns:
-            if 'σειρά' in col.lower() and 'βιβλίου' in col.lower():
-                series_col_found = col
-                break
-        
-        if series_col_found:
-            series_data = df_books[series_col_found]
-            valid = series_data.dropna().astype(str)
-            valid = valid[(valid != '') & (valid != '0') & (valid.str.lower() != 'nan') & (valid.str.lower() != 'n/a')]
-            st.write(f"  Valid series: {len(valid):,}")
+    /* Style the cluster buttons to look like tiles */
+    [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] button {
+        background: #ffffff !important;
+        border: 2px solid #eaeaea !important;
+        border-radius: 12px !important;
+        padding: 18px 8px !important;
+        min-height: 90px !important;
+        font-family: -apple-system, BlinkMacSystemFont, sans-serif !important;
+        font-size: 12px !important;
+        font-weight: 600 !important;
+        color: #333 !important;
+        transition: all 0.2s ease !important;
+        white-space: pre-line !important;
+        line-height: 1.4 !important;
+    }
+    
+    [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] button:hover {
+        border-color: #ff5e00 !important;
+        background: #fff8f5 !important;
+        box-shadow: 0 4px 12px rgba(255, 94, 0, 0.15) !important;
+    }
+    
+    [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] button:active,
+    [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] button:focus {
+        border-color: #ff5e00 !important;
+        background: #fff8f5 !important;
+        box-shadow: 0 4px 12px rgba(255, 94, 0, 0.2) !important;
+    }
+    
+    /* Section headers */
+    .sidebar-section {
+        font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+        font-size: 12px;
+        font-weight: 700;
+        color: #888;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        margin: 20px 0 8px 0;
+    }
+    
+    /* Style selectboxes */
+    [data-testid="stSidebar"] .stSelectbox > div > div {
+        border-radius: 10px !important;
+        border-color: #ddd !important;
+    }
+    
+    [data-testid="stSidebar"] .stSelectbox > div > div:hover {
+        border-color: #ff5e00 !important;
+    }
+    
+    /* Style text input */
+    [data-testid="stSidebar"] .stTextInput > div > div {
+        border-radius: 10px !important;
+    }
+    
+    /* Style the refresh button at bottom */
+    [data-testid="stSidebar"] > div > div:last-child button {
+        background: #f5f5f5 !important;
+        border: 1px solid #ddd !important;
+        color: #666 !important;
+        font-size: 12px !important;
+        padding: 8px !important;
+    }
+    
+    [data-testid="stSidebar"] > div > div:last-child button:hover {
+        background: #eee !important;
+        border-color: #ccc !important;
+    }
+    
+    /* Hide streamlit branding in sidebar */
+    [data-testid="stSidebar"] [data-testid="stMarkdownContainer"] > div:empty {
+        display: none;
+    }
+</style>
+""", unsafe_allow_html=True)
 
-# ─────────────────────────────────────────────────────────────
-# CLUSTER SELECTION
-# ─────────────────────────────────────────────────────────────
-st.sidebar.markdown("### 📦 Select Cluster")
-active_cluster = st.sidebar.radio("", ["Smartphones", "Kids Books"], horizontal=True)
+# Sidebar title
+st.sidebar.markdown('<div class="sidebar-title">Επιλογή Κατηγορίας</div>', unsafe_allow_html=True)
+
+# Use session state for cluster selection
+if 'active_cluster' not in st.session_state:
+    st.session_state.active_cluster = "Smartphones"
+
+# Create clickable tiles using columns
+col1, col2 = st.sidebar.columns(2)
+
+with col1:
+    if st.button("📱\nSmartphones", key="btn_smartphones", use_container_width=True):
+        st.session_state.active_cluster = "Smartphones"
+        st.rerun()
+
+with col2:
+    if st.button("📚\nΠαιδικά\nΒιβλία", key="btn_kids_books", use_container_width=True):
+        st.session_state.active_cluster = "Kids Books"
+        st.rerun()
+
+# Style the active button
+active_cluster = st.session_state.active_cluster
+
+# Show which is selected with a nice badge
+cluster_display = "📱 Smartphones" if active_cluster == "Smartphones" else "📚 Παιδικά Βιβλία"
+st.sidebar.markdown(f"""
+<div style="
+    background: linear-gradient(135deg, #ff5e00 0%, #ff8c42 100%);
+    color: white;
+    padding: 10px 14px;
+    border-radius: 8px;
+    margin: 12px 0 20px 0;
+    font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    text-align: center;
+    box-shadow: 0 3px 10px rgba(255, 94, 0, 0.25);
+">
+    ✓ {cluster_display}
+</div>
+""", unsafe_allow_html=True)
 
 # ─────────────────────────────────────────────────────────────
 # TRIGGER SELECTION
@@ -437,11 +531,12 @@ if active_cluster == "Smartphones":
     phones = df_products[(df_products['Level 2']=='Mobiles')&(df_products['Hierarchy']=='Smartphones')]
     if phones.empty:
         phones = df_products[df_products['Level 2']=='Mobiles']
-        st.sidebar.warning("⚠ Fallback to all Mobiles")
     if phones.empty:
         st.error("🚨 No phones found in Products data!")
         st.stop()
-    sel = st.sidebar.selectbox("Select a Smartphone:", phones['Title'].unique())
+    
+    st.sidebar.markdown('<p class="sidebar-section">Επιλέξτε Smartphone</p>', unsafe_allow_html=True)
+    sel = st.sidebar.selectbox("", phones['Title'].unique(), label_visibility="collapsed")
     trigger = phones[phones['Title']==sel].iloc[0] if sel else None
 
 elif active_cluster == "Kids Books":
@@ -456,7 +551,6 @@ elif active_cluster == "Kids Books":
     
     if kids_books.empty:
         kids_books = df_books[df_books['Level 1'] == 'Books']
-        st.sidebar.warning("⚠ Fallback to all Books")
     
     if kids_books.empty:
         st.error("🚨 No kids books found!")
@@ -477,34 +571,37 @@ elif active_cluster == "Kids Books":
             # Create ordered list of (display_name, actual_name) tuples
             series_items = [(f"{name} ({count})", name) for name, count in top_series.items()]
             
+            st.sidebar.markdown('<p class="sidebar-section">Φιλτράρισμα ανά Σειρά</p>', unsafe_allow_html=True)
+            
             # Add search box for series
-            series_search = st.sidebar.text_input("🔍 Search series:", placeholder="e.g. Harry Potter")
+            series_search = st.sidebar.text_input("🔍 Αναζήτηση σειράς:", placeholder="π.χ. Harry Potter", label_visibility="collapsed")
             
             if series_search:
                 # Filter ALL series by search term (not just top 200)
                 matching = [(f"{name} ({count})", name) for name, count in series_counts.items() 
                            if series_search.lower() in name.lower()][:100]
-                series_options = ['All'] + [m[0] for m in matching]
+                series_options = ['Όλες οι σειρές'] + [m[0] for m in matching]
                 series_display = {m[0]: m[1] for m in matching}
             else:
                 # Show top 200 by popularity
-                series_options = ['All'] + [item[0] for item in series_items]
+                series_options = ['Όλες οι σειρές'] + [item[0] for item in series_items]
                 series_display = {item[0]: item[1] for item in series_items}
             
             selected_series_display = st.sidebar.selectbox(
-                f"Filter by Series ({len(series_counts):,} series):", 
+                "", 
                 series_options,
-                help=f"Top {len(series_options)-1} by popularity. Use search to find others."
+                label_visibility="collapsed"
             )
             
-            if selected_series_display != 'All':
+            if selected_series_display != 'Όλες οι σειρές':
                 # Get actual series name (without count)
                 actual_series = series_display.get(selected_series_display, selected_series_display)
                 kids_books = kids_books[kids_books['Σειρά βιβλίου'] == actual_series]
     
-    sel = st.sidebar.selectbox("Select a Kids Book:", kids_books['Title'].unique())
+    st.sidebar.markdown('<p class="sidebar-section">Επιλέξτε Βιβλίο</p>', unsafe_allow_html=True)
+    sel = st.sidebar.selectbox("", kids_books['Title'].unique(), label_visibility="collapsed")
     
-    # 🟢 FIX: When selecting a book, prefer the row that has a valid series
+    # When selecting a book, prefer the row that has a valid series
     if sel:
         matching_books = kids_books[kids_books['Title'] == sel].copy()
         
@@ -516,20 +613,6 @@ elif active_cluster == "Kids Books":
             matching_books = matching_books.sort_values('_has_series', ascending=False)
         
         trigger = matching_books.iloc[0]
-        
-        # Debug: Show selection info
-        with st.sidebar.expander("🔍 Debug: Selected Book", expanded=False):
-            st.write(f"**Duplicates found:** {len(matching_books)}")
-            st.write(f"**Selected Material:** {trigger.get('Material')}")
-            series_val = trigger.get('Σειρά βιβλίου')
-            st.write(f"**Series Value:** {series_val!r}")
-            st.write(f"**Type:** {type(series_val).__name__}")
-            st.write(f"**Is Valid:** {is_valid_series(series_val)}")
-            
-            if len(matching_books) > 1:
-                st.write("**All duplicates:**")
-                for i, (_, row) in enumerate(matching_books.head(5).iterrows()):
-                    st.write(f"  {i+1}. Material {row['Material']}: Series = {row['Σειρά βιβλίου']!r}")
     else:
         trigger = None
 
@@ -606,6 +689,12 @@ body {{ margin:0; padding:0; background:transparent; font-family:-apple-system,B
 
 with st.sidebar:
     components.html(sidebar_card_html, height=500, scrolling=False)
+    
+    # Footer with clear cache
+    st.markdown("---")
+    if st.button("🔄 Ανανέωση Δεδομένων", use_container_width=True):
+        st.cache_data.clear()
+        st.rerun()
 
 
 # ─────────────────────────────────────────────────────────────
