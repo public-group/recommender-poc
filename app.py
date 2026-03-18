@@ -511,8 +511,13 @@ st.sidebar.markdown('<div class="sidebar-header">Κατηγορίες</div>', un
 if 'active_cluster' not in st.session_state:
     st.session_state.active_cluster = "Smartphones"
 
-# Create clickable tiles using Streamlit columns and buttons
-# Using components.html for custom styled tiles with SVG icons
+active_cluster = st.session_state.active_cluster
+
+# Compute active classes
+smartphones_active = "active" if active_cluster == "Smartphones" else ""
+books_active = "active" if active_cluster == "Kids Books" else ""
+
+# Create clickable tiles using custom HTML with SVG icons
 tile_html = f"""
 <style>
     .pub-tile-grid {{
@@ -565,7 +570,7 @@ tile_html = f"""
     }}
 </style>
 <div class="pub-tile-grid">
-    <div class="pub-tile {"active" if active_cluster == "Smartphones" else ""}" onclick="window.parent.document.querySelector('[data-testid=\\'stSidebar\\'] button[kind=\\'secondary\\']').click();">
+    <div class="pub-tile {smartphones_active}" onclick="window.parent.document.querySelector('[data-testid=\\'stSidebar\\'] button[kind=\\'secondary\\']').click();">
         <div class="pub-tile-icon">
             <svg viewBox="0 0 24 24" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
                 <rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect>
@@ -574,7 +579,7 @@ tile_html = f"""
         </div>
         <div class="pub-tile-name">Τηλεφωνία, Tablets & Wearables</div>
     </div>
-    <div class="pub-tile {"active" if active_cluster == "Kids Books" else ""}" onclick="window.parent.document.querySelectorAll('[data-testid=\\'stSidebar\\'] button[kind=\\'secondary\\']')[1].click();">
+    <div class="pub-tile {books_active}" onclick="window.parent.document.querySelectorAll('[data-testid=\\'stSidebar\\'] button[kind=\\'secondary\\']')[1].click();">
         <div class="pub-tile-icon">
             <svg viewBox="0 0 24 24" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
@@ -598,8 +603,6 @@ with col2:
     if st.button("book", key="btn_kids_books", use_container_width=True):
         st.session_state.active_cluster = "Kids Books"
         st.rerun()
-
-active_cluster = st.session_state.active_cluster
 
 # Divider
 st.sidebar.markdown('<hr class="section-divider">', unsafe_allow_html=True)
