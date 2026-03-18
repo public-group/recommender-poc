@@ -20,7 +20,11 @@ st.markdown("""
     }
     [data-testid="stSidebar"] {
         border-right: 1px solid #eaeaea !important;
-        padding-top: 50px !important;
+        padding-top: 0 !important;
+        top: 120px !important;
+    }
+    [data-testid="stSidebar"] > div:first-child {
+        padding-top: 0 !important;
     }
     header[data-testid="stHeader"] { 
         background: transparent !important;
@@ -71,7 +75,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v11.1 — Clean X Button in Header
+        🟢 Engine v11.3 — Fixed Arts Cross-Sell & Title Wrap
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -148,7 +152,8 @@ TOY_HIERARCHIES_ACTUAL = {
 STATIONERY_HIERARCHIES_ACTUAL = {
     "notebooks": ["ΣΗΜΕΙΩΜΑΤΑΡΙΑ", "ΤΕΤΡΑΔΙΑ"],
     "water_bottles": ["ΘΕΡΜΟΣ - ΠΑΓΟΥΡΙΑ", "ΠΑΓΟΥΡΙΑ"],
-    "arts_crafts": ["ΜΑΡΚΑΔΟΡΟΙ", "ΜΑΡΚΑΔΟΡΟΙ ΣΧΕΔΙΟΥ-ΕΙΔΙΚΩΝ ΧΡΗΣΕΩΝ", "ΜΠΛΟΚ-ΧΑΡΤΙΑ", "ΧΡΩΜΑΤΙΣΤΑ ΜΟΛΥΒΙΑ"],
+    "arts_crafts": ["ΧΡΩΜΑΤΙΣΤΑ ΜΟΛΥΒΙΑ", "ΜΠΛΟΚ-ΧΑΡΤΙΑ", "ΚΑΣΕΤΙΝΕΣ"],  # Removed markers - not ideal for kids books
+    "markers_only": ["ΜΑΡΚΑΔΟΡΟΙ", "ΜΑΡΚΑΔΟΡΟΙ ΣΧΕΔΙΟΥ-ΕΙΔΙΚΩΝ ΧΡΗΣΕΩΝ"],  # Separate category if needed
     "reading": ["READING ACCESSORIES"],
     "writing": ["ΜΟΛΥΒΙΑ", "ΣΤΥΛΟ ΔΙΑΡΚΕΙΑΣ", "ΣΤΥΛΟ GEL"],
     "keychains": ["ΜΠΡΕΛΟΚ", "ΜΑΓΝΗΤΑΚΙΑ"],
@@ -311,7 +316,7 @@ def safe(v): return html_lib.escape(str(v))
 # ─────────────────────────────────────────────────────────────
 # DATA LOADING - From local file in repo
 # ─────────────────────────────────────────────────────────────
-EXCEL_FILE = "Recommendations GitHub.xlsx"  # File in same folder as app.py
+EXCEL_FILE = "Recommendations.xlsx"  # File in same folder as app.py
 
 @st.cache_data(ttl=600)  # Cache for 10 minutes
 def load_all_data():
@@ -403,7 +408,7 @@ st.sidebar.markdown("""
         background-color: #ff5e00;
         color: white;
         padding: 18px 20px;
-        margin: -1rem -1rem 15px -1rem;
+        margin: 0 -1rem 15px -1rem;
         font-family: -apple-system, BlinkMacSystemFont, sans-serif;
         font-size: 18px;
         font-weight: 700;
@@ -1434,10 +1439,10 @@ if not recs.empty:
     .desktop-header span{color:#ff5e00;margin-right:10px;font-size:26px;line-height:1;font-weight:900}
     .car{display:flex;overflow-x:auto;gap:15px;padding-bottom:10px;scrollbar-width:none;scroll-behavior:smooth}
     .car::-webkit-scrollbar{display:none}
-    .pc{background:#fff;border:1px solid #eaeaea;border-radius:12px;padding:15px 12px;display:flex;flex-direction:column;align-items:center;box-shadow:0 2px 5px rgba(0,0,0,.04);position:relative;flex-shrink:0;width:195px;min-width:195px}
+    .pc{background:#fff;border:1px solid #eaeaea;border-radius:12px;padding:15px 12px;display:flex;flex-direction:column;align-items:center;box-shadow:0 2px 5px rgba(0,0,0,.04);position:relative;flex-shrink:0;width:180px;min-width:180px;max-width:180px}
     .sb{position:absolute;top:8px;left:8px;background:#ff5e00;color:#fff;font-size:10px;font-weight:700;padding:3px 6px;border-radius:6px;z-index:10}
     .pc img{height:110px;width:auto;object-fit:contain;margin-bottom:15px;margin-top:10px}
-    .ti{font-size:13px;color:#333;text-align:center;height:36px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;margin-bottom:6px;line-height:1.3;padding:0 5px}
+    .ti{font-size:13px;color:#333;text-align:center;height:36px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;margin-bottom:6px;line-height:1.3;padding:0 5px;word-wrap:break-word;word-break:break-word;max-width:100%}
     .sr{font-size:10px;color:#777;margin-bottom:12px;text-align:center;height:28px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;line-height:1.35;width:100%;padding:0 4px}
     .rv{font-size:11px;margin-bottom:15px}
     .sc{color:#ff5e00;font-weight:700}
