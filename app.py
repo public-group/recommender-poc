@@ -13,54 +13,121 @@ st.set_page_config(page_title="Smart Recommender POC", layout="wide")
 # ─────────────────────────────────────────────────────────────
 st.markdown("""
 <style>
+    /* 1. Force the entire app and sidebar to be clean white, killing the grey */
     .stApp, .main, [data-testid="stSidebar"] {
         background-color: #ffffff !important;
     }
     [data-testid="stSidebar"] {
         border-right: 1px solid #eaeaea !important;
-        padding-top: 110px !important;
+        padding-top: 110px !important; /* Pushed further down to clear the yellow banner */
     }
+
+/* 2. FIX THE SIDEBAR TOGGLE & TOP RIGHT ICONS */
     header[data-testid="stHeader"] { 
         background: transparent !important;
         box-shadow: none !important;
         z-index: 1000001 !important; 
-        top: 24px !important;
+        top: 24px !important; /* Pushes the toolbar down into the bright orange bar */
     }
-    header[data-testid="stHeader"] span { color: #ffffff !important; }
-    header[data-testid="stHeader"] svg { fill: #ffffff !important; color: #ffffff !important; }
-    header[data-testid="stHeader"] svg rect { fill: transparent !important; }
-    .appview-container .main .block-container { padding-top: 300px !important; }
+    
+    /* Target the text (like "Share") */
+    header[data-testid="stHeader"] span {
+        color: #ffffff !important;
+    }
+    
+    /* Target the icons (Paths, Circles, etc) */
+    header[data-testid="stHeader"] svg {
+        fill: #ffffff !important;
+        color: #ffffff !important;
+    }
+    
+    /* 🟢 FIX: Prevent the 3-dots transparent bounding box from turning into a solid white square */
+    header[data-testid="stHeader"] svg rect {
+        fill: transparent !important;
+    }
+
+/* 3. Push the main content down so it doesn't hide under our new header */
+    .appview-container .main .block-container { 
+        padding-top: 300px !important; /* 🟢 FIX: Increased from 130px to 170px */
+    }
+    
+    /* 4. The Fixed Header Wrapper - WIDTH BUG FIXED */
     .poc-header-wrapper {
-        position: fixed; top: 0; left: 0; right: 0;
-        z-index: 999999; display: flex; flex-direction: column;
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0; /* FIX: Using right:0 instead of width:100% prevents the horizontal scrollbar gap */
+        z-index: 999999;
+        display: flex;
+        flex-direction: column;
     }
-    .poc-top-bar { background-color: #BF3C00; height: 24px; width: 100%; }
+    
+    /* The Thin Dark Orange Bar */
+    .poc-top-bar {
+        background-color: #BF3C00;
+        height: 24px;
+        width: 100%;
+    }
+    
+    /* The Thick Bright Orange Bar with Text */
     .poc-main-bar {
-        background-color: #FE5900; height: 60px; width: 100%;
-        display: flex; align-items: center; padding: 0 40px 0 75px; 
+        background-color: #FE5900; 
+        height: 60px;
+        width: 100%;
+        display: flex;
+        align-items: center;
+        padding: 0 40px 0 75px; 
     }
+    
+    /* The PoC Title Text */
     .poc-title {
-        color: #ffffff; font-family: -apple-system, BlinkMacSystemFont, sans-serif;
-        font-size: 22px; font-weight: 700; letter-spacing: -0.5px;
-    }
-    .poc-promo-banner {
-        background-color: #ffeb85; height: 36px; width: 100%;
-        display: flex; align-items: center; justify-content: center;
+        color: #ffffff;
         font-family: -apple-system, BlinkMacSystemFont, sans-serif;
-        font-size: 14px; font-weight: 600; color: #000000;
+        font-size: 22px;
+        font-weight: 700;
+        letter-spacing: -0.5px;
+    }
+
+    /* 🟢 NEW: The Yellow Promo Banner */
+    .poc-promo-banner {
+        background-color: #ffeb85;
+        height: 36px;
+        width: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+        font-size: 14px;
+        font-weight: 600;
+        color: #000000;
         box-shadow: 0 2px 4px rgba(0,0,0,0.08);
     }
+
+/* 5. The Vertical Orange Line for Titles */
     .public-header {
         font-family: -apple-system, BlinkMacSystemFont, sans-serif;
-        font-size: 24px; font-weight: 700; color: #111111;
-        margin-top: 80px !important; margin-bottom: 20px;
-        display: flex; align-items: center;
+        font-size: 24px;
+        font-weight: 700;
+        color: #111111;
+        margin-top: 80px !important; /* 🟢 FIX: Increased to push the title safely below the header */
+        margin-bottom: 20px;
+        display: flex;
+        align-items: center;
     }
     .public-header::before {
-        content: ''; display: inline-block; width: 4px; height: 24px;
-        background-color: #ff5e00; margin-right: 10px; border-radius: 2px;
+        content: '';
+        display: inline-block;
+        width: 4px;
+        height: 24px;
+        background-color: #ff5e00;
+        margin-right: 10px;
+        border-radius: 2px;
     }
-    [data-testid="stAlert"] { display: none !important; }
+    
+    /* Ensure any default streamlit alerts/infos are hidden if they try to render */
+    [data-testid="stAlert"] {
+        display: none !important;
+    }
 </style>
 
 <div class="poc-header-wrapper">
@@ -69,7 +136,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v9.0 — Fixed Series Logic & Cross-Sell
+        🟢 Engine v7.4 — Rival Brand & Strict Fit Filtering
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -79,185 +146,87 @@ st.markdown("""
 # ─────────────────────────────────────────────────────────────
 SHEET_ID = "1PeLckGFNH-l9GrEvSs3ZQ0N0mXrEYwzA_JwO1wTzJWo"
 
-# Scoring constants
+CLUSTER_CONFIG = {
+    "Smartphones": {"allow_siblings": False, "hierarchy_cap": 2},
+    "Kids Books":  {"allow_siblings": True,  "hierarchy_cap": 10},
+}
+ACTIVE_CLUSTER = "Smartphones"
+
+# 🟢 THE VIRTUAL SALES BUMP: 
+# A brand match acts like 15 extra sales. Availability acts like 2 extra sales.
 SMART_BOOST      = 15 
-ECOSYSTEM_BOOST  = 100000
+ECOSYSTEM_BOOST  = 100000  # 🟢 NEW: Massive lock-in for Watches & Earbuds
 AVAIL_BOOST      = 2
 HISTORY_BOOST    = 100000 
 HISTORY_FREQ_MIN = 5
-SERIES_BOOST     = 50000
 
 TECH_CATS = {"IT", "Telephony", "TV"}
 APPL_CATS = {"MDA", "SDA", "Air Condition", "Personal Care"}
 COMPAT_COLS = ["Συμβατό με", "Συμβατή συσκευή"]
 CC = "_Compatible"
+
+# 🟢 THE WALLED GARDEN LIST
 ANDROID_OEMS = {"SAMSUNG", "XIAOMI", "HUAWEI", "MOTOROLA", "HONOR", "POCO", "REALME", "ONEPLUS", "NOTHING"}
 
 # ─────────────────────────────────────────────────────────────
-# 🟢 KIDS BOOKS CONFIGURATION (Based on actual data)
+# ROLE → LOGIC KEY MAPPING
+# The Slot_Matrix defines roles like "The Bodyguard (Primary Case)".
+# We map role keywords to logic functions so slot numbers don't matter.
 # ─────────────────────────────────────────────────────────────
-KIDS_BOOKS_LEVEL2 = {"Greek Kids Books", "International Kids Books"}
-
-# Age Bracket Definitions
-AGE_BRACKETS = {
-    "BRACKET_1": {
-        "trigger": ["0+ μηνών", "0+ ετών", "3+ μηνών", "5+ μηνών"],
-        "allowed": ["0+ μηνών", "0+ ετών", "3+ μηνών", "5+ μηνών", "6+ μηνών"]
-    },
-    "BRACKET_2": {
-        "trigger": ["6+ μηνών", "9+ μηνών"],
-        "allowed": ["6+ μηνών", "9+ μηνών", "12+ μηνών", "1+ ετών"]
-    },
-    "BRACKET_3": {
-        "trigger": ["12+ μηνών", "1+ ετών", "1.5+ ετών"],
-        "allowed": ["9+ μηνών", "12+ μηνών", "1+ ετών", "1.5+ ετών", "24+ μηνών", "2+ ετών"]
-    },
-    "BRACKET_4": {
-        "trigger": ["24+ μηνών", "2+ ετών"],
-        "allowed": ["1.5+ ετών", "24+ μηνών", "2+ ετών", "3+ ετών"]
-    },
-    "BRACKET_5": {
-        "trigger": ["3+ ετών", "4+ ετών", "5+ ετών", "6+ ετών", "3-6 ετών"],
-        "allowed": ["3+ ετών", "4+ ετών", "5+ ετών", "6+ ετών", "7+ ετών", "8+ ετών", "3-6 ετών"]
-    },
-    "BRACKET_6": {
-        "trigger": ["7+ ετών", "8+ ετών", "9+ ετών", "10+ ετών", "11+ ετών", "12+ ετών", "6 - 9", "9 - 12"],
-        "allowed": ["6+ ετών", "7+ ετών", "8+ ετών", "9+ ετών", "10+ ετών", "11+ ετών", "12+ ετών", "13+ ετών", "6 - 9", "9 - 12"]
-    },
-    "BRACKET_7": {
-        "trigger": ["13+ ετών", "14+ ετών", "15+ ετών", "16+ ετών", "17+ ετών", "18+ ετών"],
-        "allowed": ["10+ ετών", "11+ ετών", "12+ ετών", "13+ ετών", "14+ ετών", "15+ ετών", "16+ ετών", "17+ ετών", "18+ ετών"]
-    }
-}
-
-# 🟢 ACTUAL TOY HIERARCHIES FROM YOUR DATA
-TOY_HIERARCHIES_ACTUAL = {
-    "plush": ["ΛΟΥΤΡΙΝΑ"],
-    "dolls": ["ΚΟΥΚΛΕΣ"],
-    "action_figures": ["ACTION FIGURES", "ΣΥΛΛΕΚΤΙΚΕΣ ΦΙΓΟΥΡΕΣ"],
-    "board_puzzles": ["ΟΙΚΟΓΕΝΕΙΑΚΑ ΕΠΙΤΡΑΠΕΖΙΑ", "ΠΑΙΔΙΚΑ PUZZLES", "CARD GAMES", "ΠΑΙΔΙΚΑ ΕΠΙΤΡΑΠΕΖΙΑ", "ΕΝΗΛΙΚΩΝ 1000+"],
-    "building": ["ΚΑΤΑΣΚΕΥΕΣ", "ΜΙΚΡΟΚΟΣΜΟΣ"],
-    "toddler": ["ΒΡΕΦΙΚΑ ΠΑΙΧΝΙΔΙΑ ΔΡΑΣΤΗΡΙΟΤΗΤΩΝ", "ΦΙΓΟΥΡΕΣ & PLAYSET"],
-    "vehicles": ["ΔΙΑΦΟΡΑ ΑΥΤΟΚΙΝΗΤΑ"],
-    "creative": ["ΖΩΓΡΑΦΙΚΗ"],
-}
-
-# 🟢 ACTUAL STATIONERY HIERARCHIES FROM YOUR DATA
-STATIONERY_HIERARCHIES_ACTUAL = {
-    "notebooks": ["ΣΗΜΕΙΩΜΑΤΑΡΙΑ", "ΤΕΤΡΑΔΙΑ"],
-    "water_bottles": ["ΘΕΡΜΟΣ - ΠΑΓΟΥΡΙΑ", "ΠΑΓΟΥΡΙΑ"],
-    "arts_crafts": ["ΜΑΡΚΑΔΟΡΟΙ", "ΜΑΡΚΑΔΟΡΟΙ ΣΧΕΔΙΟΥ-ΕΙΔΙΚΩΝ ΧΡΗΣΕΩΝ", "ΜΠΛΟΚ-ΧΑΡΤΙΑ", "ΧΡΩΜΑΤΙΣΤΑ ΜΟΛΥΒΙΑ"],
-    "reading": ["READING ACCESSORIES"],
-    "writing": ["ΜΟΛΥΒΙΑ", "ΣΤΥΛΟ ΔΙΑΡΚΕΙΑΣ", "ΣΤΥΛΟ GEL"],
-    "keychains": ["ΜΠΡΕΛΟΚ", "ΜΑΓΝΗΤΑΚΙΑ"],
-    "cups": ["ΚΟΥΠΕΣ &  ΠΟΤΗΡΙΑ"],
-}
-
-# 🟢 BOOKS SLOT MATRIX (Similar to Smartphones structure)
-BOOKS_SLOT_MATRIX = [
-    {"slot": 1, "role": "Series Book 1", "type": "SERIES", "max": 1},
-    {"slot": 2, "role": "Series Book 2", "type": "SERIES", "max": 1},
-    {"slot": 3, "role": "Series Book 3", "type": "SERIES", "max": 1},
-    {"slot": 4, "role": "Cross-Sell: Toy (IP Match)", "type": "CROSSSELL_TOY", "max": 1},
-    {"slot": 5, "role": "Cross-Sell: Creative/Arts", "type": "CROSSSELL_CREATIVE", "max": 1},
-    {"slot": 6, "role": "Cross-Sell: Puzzle/Game", "type": "CROSSSELL_PUZZLE", "max": 1},
-    {"slot": 7, "role": "Cross-Sell: Lifestyle", "type": "CROSSSELL_LIFESTYLE", "max": 1},
-    {"slot": 8, "role": "Category Discovery 1", "type": "DISCOVERY", "max": 1},
-    {"slot": 9, "role": "Category Discovery 2", "type": "DISCOVERY", "max": 1},
-    {"slot": 10, "role": "Category Discovery 3", "type": "DISCOVERY", "max": 1},
-]
-
-# ─────────────────────────────────────────────────────────────
-# HELPER FUNCTIONS
-# ─────────────────────────────────────────────────────────────
-def get_age_bracket(age_str: str) -> str:
-    age = str(age_str).strip()
-    for bracket_name, bracket_data in AGE_BRACKETS.items():
-        if age in bracket_data["trigger"]:
-            return bracket_name
-    return "BRACKET_5"
-
-def get_allowed_ages(trigger_age: str) -> list:
-    bracket = get_age_bracket(trigger_age)
-    return AGE_BRACKETS.get(bracket, AGE_BRACKETS["BRACKET_5"])["allowed"]
-
-def age_to_numeric(age_str: str) -> float:
-    age = str(age_str).strip().lower()
-    if "μηνών" in age:
-        match = re.search(r'(\d+)', age)
-        if match: return float(match.group(1)) / 12
-    if "ετών" in age:
-        match = re.search(r'(\d+\.?\d*)', age)
-        if match: return float(match.group(1))
-    # Handle ranges like "3-6 ετών"
-    if "-" in age:
-        match = re.search(r'(\d+)', age)
-        if match: return float(match.group(1))
-    return 5.0
-
-def is_valid_series(series_val) -> bool:
-    """Check if series value is valid (not empty, nan, or '0')"""
-    if series_val is None:
-        return False
-    if pd.isna(series_val):  # Handle pandas NaN
-        return False
-    s = str(series_val).strip()
-    return s and s.lower() != 'nan' and s != '0' and s != 'NaN' and s != ''
-
-def normalize_ip_name(name: str) -> str:
-    """Normalize IP name for matching"""
-    return str(name).strip().lower().replace('-', ' ').replace('_', ' ')
-
-def ip_matches(series_name: str, brand: str, heroes: str) -> bool:
-    """Check if book series matches toy brand or heroes"""
-    if not is_valid_series(series_name):
-        return False
-    series_norm = normalize_ip_name(series_name)
-    brand_norm = normalize_ip_name(brand)
-    heroes_norm = normalize_ip_name(heroes)
-    
-    # Direct match
-    if series_norm in brand_norm or brand_norm in series_norm:
-        return True
-    if series_norm in heroes_norm or heroes_norm in series_norm:
-        return True
-    
-    # Common mappings
-    mappings = {
-        'harry potter': ['harry potter'],
-        'peppa pig': ['peppa pig', 'peppa'],
-        'bluey': ['bluey'],
-        'spiderman': ['spiderman', 'spider-man', 'spider man', 'spidey'],
-        'frozen': ['frozen', 'elsa', 'anna'],
-        'disney': ['disney', 'mickey', 'minnie'],
-        'barbie': ['barbie'],
-        'marvel': ['marvel', 'avengers', 'hulk', 'iron man', 'captain america'],
-        'μικροί κύριοι': ['μικροί κύριοι', 'mr. men', 'little miss'],
-    }
-    
-    for key, variants in mappings.items():
-        if any(v in series_norm for v in variants):
-            if any(v in brand_norm or v in heroes_norm for v in variants):
-                return True
-    
-    return False
-
 def detect_logic_key(role: str) -> str:
+    """Map a slot role string to a logic key based on spec:
+    Spec Slot 1  → PRIMARY_CASE   (The Perfect Fit / Back Cover)
+    Spec Slot 2  → SCREEN_GLASS   (The Screen Shield / Screen Protector)
+    Spec Slot 3  → WALL_CHARGER   (The Power Source / Wall/Wireless Charger)
+    Spec Slot 4  → EARBUDS        (The Audio Pivot / Handsfree/Earbuds)
+    Spec Slot 5  → POWERBANK      (The Backup Power / Powerbank)
+    Spec Slot 6  → CROSS_SELL     (The Lifestyle/Tech Feature / Misc Accessory)
+    Spec Slot 7  → CAMERA_GLASS   (The Camera Shield / Camera Protector)
+    Spec Slot 8  → SMARTWATCH     (The Wearable / Smartwatch)
+    Spec Slot 9  → HOLDER         (The Commute / Car Holder)
+    Spec Slot 10 → ALT_CASE       (The Alternative Case / Book Cover / Wallet)
+    """
     r = role.lower()
-    if "perfect fit" in r or "back cover" in r or "primary case" in r: return "PRIMARY_CASE"
-    if "alternative" in r or "alt case" in r or "book cover" in r or "wallet" in r: return "ALT_CASE"
+    
+    if "perfect fit" in r or "back cover" in r or "primary case" in r:
+        return "PRIMARY_CASE"
+    
+    if "alternative" in r or "alt case" in r or "book cover" in r or "wallet" in r:
+        return "ALT_CASE"
+    
     if "screen" in r or "shield" in r:
-        if "camera" not in r: return "SCREEN_GLASS"
-    if "camera" in r: return "CAMERA_GLASS"
+        # Avoid catching 'Camera Shield' by ensuring 'camera' isn't in it
+        if "camera" not in r:
+            return "SCREEN_GLASS"
+            
+    if "camera" in r:
+        return "CAMERA_GLASS"
+        
     if "power source" in r or "wall" in r or "charger" in r:
-        if "car" not in r: return "WALL_CHARGER"
-    if "backup power" in r or "powerbank" in r: return "POWERBANK"
-    if "wearable" in r or "smartwatch" in r: return "SMARTWATCH"
-    if "audio" in r or "earbud" in r or "handsfree" in r: return "EARBUDS"
-    if "commute" in r or "holder" in r: return "HOLDER"
-    if "lifestyle" in r or "misc" in r or "cross" in r: return "CROSS_SELL"
+        # Make sure we don't accidentally catch a car charger if you separate them later
+        if "car" not in r:
+            return "WALL_CHARGER"
+            
+    if "backup power" in r or "powerbank" in r or "power bank" in r:
+        return "POWERBANK"
+        
+    if "wearable" in r or "smartwatch" in r:
+        return "SMARTWATCH"
+        
+    if "audio" in r or "earbud" in r or "handsfree" in r:
+        return "EARBUDS"
+        
+    if "commute" in r or "holder" in r or "drive" in r:
+        return "HOLDER"
+        
+    if "lifestyle" in r or "misc" in r or "cross" in r:
+        return "CROSS_SELL"
+        
     return "UNKNOWN"
 
+# ─────────────────────────────────────────────────────────────
+# PORT & COLOR HELPERS
+# ─────────────────────────────────────────────────────────────
 def extract_base_port(raw):
     s = str(raw).strip().lower()
     if not s or s == 'nan': return ''
@@ -265,26 +234,33 @@ def extract_base_port(raw):
     if 'lightning' in s: return 'Lightning'
     if 'micro usb' in s or 'micro-usb' in s: return 'Micro USB'
     if 'usb' in s: return 'USB'
-    return str(raw).strip()
+    return re.sub(r'\s*\d+\.?\d*\s*(gen\s*\d+)?', '', str(raw).strip(), flags=re.IGNORECASE).strip() or str(raw).strip()
 
 COLOR_MAP = {
     'black titanium': ['μαύρο', 'black', 'διάφανο'],
     'natural titanium': ['διάφανο', 'μπεζ', 'natural'],
     'white titanium': ['λευκό', 'white', 'διάφανο'],
     'blue titanium': ['μπλε', 'blue', 'διάφανο'],
+    'deep purple': ['μωβ', 'purple', 'διάφανο'],
     'space black': ['μαύρο', 'black', 'διάφανο'],
     'silver': ['ασημί', 'silver', 'διάφανο'],
     'gold': ['χρυσό', 'gold', 'διάφανο'],
     'starlight': ['λευκό', 'μπεζ', 'διάφανο'],
     'midnight': ['μαύρο', 'black', 'διάφανο'],
+    'red': ['κόκκινο', 'red', 'διάφανο'],
+    'pink': ['ροζ', 'pink', 'διάφανο'],
+    'green': ['πράσινο', 'green', 'διάφανο'],
+    'blue': ['μπλε', 'blue', 'διάφανο'],
 }
-
 def get_case_colors(c):
     k = c.strip().lower()
     for mk, mv in COLOR_MAP.items():
         if mk in k or k in mk: return mv
     return [k, 'διάφανο']
 
+# ─────────────────────────────────────────────────────────────
+# GENERAL HELPERS
+# ─────────────────────────────────────────────────────────────
 def parse_euro_price(v):
     s = str(v).replace('€','').strip()
     if ',' in s and '.' in s: s = s.replace('.','')
@@ -300,6 +276,14 @@ def price_ok(tp, np, l1):
 
 def title_sim(a, b): return SequenceMatcher(None, a.lower(), b.lower()).ratio() * 100
 def safe(v): return html_lib.escape(str(v))
+def has_data(df, col, pct=0.05):
+    if col not in df.columns: return False
+    v = df[col].fillna('').astype(str).str.strip()
+    return ((v!='').sum()/len(df)) >= pct if len(df)>0 else False
+def sample(df, col, n=5):
+    if col not in df.columns: return f"[NO COL '{col}']"
+    v = df[col].dropna().astype(str).str.strip(); v = v[v!='']
+    return v.head(n).tolist() if not v.empty else "[EMPTY]"
 
 # ─────────────────────────────────────────────────────────────
 # DATA
@@ -307,40 +291,14 @@ def safe(v): return html_lib.escape(str(v))
 @st.cache_data
 def load_data():
     base = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet="
-    
     dp = pd.read_csv(base+"Products"); dp.columns = dp.columns.str.strip()
     dh = pd.read_csv(base+"History");  dh.columns = dh.columns.str.strip()
     ds = pd.read_csv(base+"Slot_Matrix"); ds.columns = ds.columns.str.strip()
     
-    try:
-        db = pd.read_csv(base+"Books"); db.columns = db.columns.str.strip()
-        
-        # 🟢 FIX: Normalize column names - handle potential encoding issues
-        # Map common variations to standard names
-        column_mapping = {}
-        for col in db.columns:
-            col_lower = col.lower()
-            # Series column
-            if 'σειρά βιβλίου' in col_lower or 'σειρα βιβλιου' in col_lower or 'book series' in col_lower:
-                column_mapping[col] = 'Σειρά βιβλίου'
-            # Age column
-            elif col_lower == 'ηλικία' or col_lower == 'ηλικια' or col_lower == 'age':
-                column_mapping[col] = 'Ηλικία'
-            # Cover column  
-            elif 'εξώφυλλο' in col_lower or 'εξωφυλλο' in col_lower:
-                column_mapping[col] = 'Εξώφυλλο'
-            # Dimensions
-            elif 'διαστάσεις' in col_lower or 'διαστασεις' in col_lower:
-                column_mapping[col] = 'Διαστάσεις'
-        
-        if column_mapping:
-            db = db.rename(columns=column_mapping)
-            
-    except Exception as e:
-        db = pd.DataFrame()
-        st.sidebar.error(f"Error loading Books: {e}")
+    # 🟢 NEW: Fetch the Books sheet
+    db = pd.read_csv(base+"Books"); db.columns = db.columns.str.strip()
     
-    # Compat columns for Products
+    # Merge compat columns for Products (Smartphones)
     parts = [dp[c].fillna('').astype(str).str.strip() for c in COMPAT_COLS if c in dp.columns]
     found = [c for c in COMPAT_COLS if c in dp.columns]
     if parts:
@@ -352,558 +310,217 @@ def load_data():
         dp[CC] = dp[CC].str.strip(';').str.replace(';;',';')
     else:
         dp[CC] = ''
-    
-    if not db.empty and CC not in db.columns:
-        db[CC] = ''
-    
-    return dp, dh, ds, found, db
-
-df_products, df_history, df_slots, compat_cols_found, df_books = load_data()
-
-# 🔍 DEBUG: Show what columns were loaded from Books sheet
-if not df_books.empty:
-    with st.sidebar.expander("🔍 Debug: Books Columns", expanded=False):
-        st.write(f"Total columns: {len(df_books.columns)}")
-        st.write("All columns:", list(df_books.columns))
         
-        # Check for series column
-        series_found = False
-        for col in df_books.columns:
-            if 'σειρά' in col.lower() or 'series' in col.lower() or 'βιβλίου' in col.lower():
-                st.success(f"✓ Series column: '{col}'")
-                sample = df_books[col].dropna().head(5).tolist()
-                st.write(f"Sample values: {sample}")
-                series_found = True
+    return dp, dh, ds, db, found
+
+# 🟢 Unpack 5 variables now
+df_products, df_history, df_slots, df_books, compat_cols_found = load_data()
+
+# ─────────────────────────────────────────────────────────────
+# TRIGGER
+# ─────────────────────────────────────────────────────────────
+phones = df_products[(df_products['Level 2']=='Mobiles')&(df_products['Hierarchy']=='Smartphones')]
+
+if phones.empty:
+    phones = df_products[df_products['Level 2']=='Mobiles']
+    st.sidebar.warning("⚠ Fallback to all Mobiles")
+
+if phones.empty:
+    st.error("🚨 CRITICAL: No phones found at all! Check your Google Sheet.")
+    st.stop()
+
+sel = st.sidebar.selectbox("Select a Smartphone:", phones['Title'].unique())
+
+if sel:
+    trigger = phones[phones['Title']==sel].iloc[0]
+    
+    # Use the custom CSS class to create the branded header
+    st.markdown('<div class="public-header">Επιλογές για εσένα</div>', unsafe_allow_html=True)
+    
+    # Add a subtle text below it indicating what phone they are shopping for
+    st.markdown(f"<p style='color: #555; font-size: 14px; margin-top: -15px; margin-bottom: 25px;'>Συμβατά αξεσουάρ για το <b>{sel}</b></p>", unsafe_allow_html=True)
+    
+    # Extract EXACT data from dataframe
+    card_title = safe(str(trigger.get('Title', sel)))
+    card_sku = safe(str(trigger.get('Material', 'N/A')))
+    card_img = safe(str(trigger.get('Thumbnails', '')).strip())
+    if not card_img or card_img == 'nan':
+        card_img = "https://via.placeholder.com/150?text=No+Image"
         
-        if not series_found:
-            st.error("✗ No series column found!")
+    card_avail = safe(str(trigger.get('AVAILABILITY', 'Άμεσα Διαθέσιμο')))
+    
+    # Determine the color theme based on the exact availability text
+    if card_avail in ["Κατόπιν Παραγγελίας", "Αναμένεται Σύντομα"]:
+        avail_theme = "avail-blue"
+    else:
+        avail_theme = "avail-green"
+    
+    # Format the exact price from LIST PRICE
+    try:
+        raw_price = trigger.get('LIST PRICE', 0)
+        t_price = parse_euro_price(raw_price)
+    except:
+        t_price = 0.0
+        
+    p_int = f"{int(t_price)}"
+    p_dec = f"{t_price:.2f}".split('.')[1]
 
-# ─────────────────────────────────────────────────────────────
-# CLUSTER SELECTION
-# ─────────────────────────────────────────────────────────────
-st.sidebar.markdown("### 📦 Select Cluster")
-active_cluster = st.sidebar.radio("", ["Smartphones", "Kids Books"], horizontal=True)
+    # Create the HTML/CSS for the sidebar card
+    sidebar_card_html = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+    <style>
+    body {{
+        margin: 0;
+        padding: 0;
+        background-color: transparent;
+        font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+    }}
+    .sb-card {{
+        border: 1px solid #eaeaea;
+        border-radius: 12px;
+        overflow: hidden;
+        background: #fff;
+        margin-top: 5px; /* Reduced margin */
+    }}
+    .sb-img-container {{
+        padding: 20px;
+        text-align: center;
+        background: #fff;
+    }}
+    .sb-img {{
+        max-width: 100%;
+        max-height: 220px;
+        object-fit: contain;
+    }}
+    .sb-details {{
+        background: #f8f9fa;
+        padding: 15px;
+        border-top: 1px solid #eaeaea;
+    }}
+    .sb-title {{
+        font-size: 14px;
+        font-weight: 700;
+        color: #222;
+        margin-bottom: 6px;
+        line-height: 1.3;
+    }}
+    .sb-sku {{
+        font-size: 10px;
+        color: #666;
+        margin-bottom: 10px;
+    }}
+    
+    /* 🟢 DYNAMIC AVAILABILITY BADGES */
+    .sb-avail-badge {{
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 12px;
+        padding: 4px 8px;
+        border-radius: 6px;
+        font-weight: 700;
+        margin-bottom: 15px;
+    }}
+    .avail-green {{
+        background-color: #e5f3f0;
+        color: #00897b;
+    }}
+    .avail-blue {{
+        background-color: #e6f0f6;
+        color: #2385aa;
+    }}
 
-# ─────────────────────────────────────────────────────────────
-# TRIGGER SELECTION
-# ─────────────────────────────────────────────────────────────
-if active_cluster == "Smartphones":
-    phones = df_products[(df_products['Level 2']=='Mobiles')&(df_products['Hierarchy']=='Smartphones')]
-    if phones.empty:
-        phones = df_products[df_products['Level 2']=='Mobiles']
-        st.sidebar.warning("⚠ Fallback to all Mobiles")
-    if phones.empty:
-        st.error("🚨 No phones found!")
-        st.stop()
-    sel = st.sidebar.selectbox("Select a Smartphone:", phones['Title'].unique())
-    trigger = phones[phones['Title']==sel].iloc[0] if sel else None
-
-elif active_cluster == "Kids Books":
-    if df_books.empty:
-        st.error("🚨 Books sheet not found!")
-        st.stop()
-    
-    kids_books = df_books[
-        (df_books['Level 1'] == 'Books') & 
-        (df_books['Level 2'].isin(KIDS_BOOKS_LEVEL2))
-    ]
-    
-    if kids_books.empty:
-        kids_books = df_books[df_books['Level 1'] == 'Books']
-        st.sidebar.warning("⚠ Fallback to all Books")
-    
-    if kids_books.empty:
-        st.error("🚨 No kids books found!")
-        st.stop()
-    
-    # Series filter
-    if 'Σειρά βιβλίου' in kids_books.columns:
-        series_list = kids_books['Σειρά βιβλίου'].dropna().astype(str)
-        series_list = series_list[(series_list != '0') & (series_list != '')].unique().tolist()
-        if series_list:
-            series_options = ['All'] + sorted(series_list)[:50]  # Limit to 50 for performance
-            selected_series = st.sidebar.selectbox("Filter by Series (optional):", series_options)
-            if selected_series != 'All':
-                kids_books = kids_books[kids_books['Σειρά βιβλίου'] == selected_series]
-    
-    sel = st.sidebar.selectbox("Select a Kids Book:", kids_books['Title'].unique())
-    trigger = kids_books[kids_books['Title']==sel].iloc[0] if sel else None
-    
-    # 🔍 DEBUG: Show trigger's series value
-    if trigger is not None:
-        with st.sidebar.expander("🔍 Debug: Selected Book", expanded=False):
-            st.write(f"**Material:** {trigger.get('Material', 'N/A')}")
-            st.write(f"**Title:** {trigger.get('Title', 'N/A')}")
+    .sb-bottom-row {{
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        border-top: 1px solid #eaeaea;
+        padding-top: 15px;
+    }}
+    .sb-price-wrap {{
+        color: #ff5e00;
+        font-weight: 800;
+        font-size: 24px;
+        display: flex;
+        align-items: flex-start;
+        line-height: 1;
+    }}
+    .sb-price-dec {{
+        font-size: 13px;
+        font-weight: 700;
+        margin-top: 2px;
+    }}
+    .sb-btn {{
+        background: #ff5e00;
+        color: #fff;
+        border: none;
+        border-radius: 8px;
+        padding: 10px 16px;
+        font-size: 14px;
+        font-weight: 700;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        transition: background 0.2s;
+    }}
+    .sb-btn:hover {{
+        background: #e65500;
+    }}
+    </style>
+    </head>
+    <body>
+    <div class="sb-card">
+        <div class="sb-img-container">
+            <img class="sb-img" src="{card_img}" alt="Phone Image">
+        </div>
+        <div class="sb-details">
+            <div class="sb-title">{card_title}</div>
+            <div class="sb-sku">ΚΩΔΙΚΟΣ: {card_sku}</div>
             
-            # Find and show series value
-            series_val = None
-            series_col_name = None
-            for col in trigger.index:
-                if 'σειρά' in col.lower() or 'series' in col.lower() or 'βιβλίου' in col.lower():
-                    series_val = trigger.get(col)
-                    series_col_name = col
-                    break
+            <div class="sb-avail-badge {avail_theme}">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="20 6 9 17 4 12"></polyline>
+                </svg>
+                {card_avail}
+            </div>
             
-            if series_col_name:
-                st.write(f"**Series Column:** '{series_col_name}'")
-                st.write(f"**Series Value:** {series_val!r}")
-                st.write(f"**Type:** {type(series_val).__name__}")
-                st.write(f"**Is Valid:** {is_valid_series(series_val)}")
-            else:
-                st.error("No series column in trigger!")
-                st.write("Available columns:", list(trigger.index))
+            <div class="sb-bottom-row">
+                <div class="sb-price-wrap">
+                    {p_int}<span class="sb-price-dec">,{p_dec}€</span>
+                </div>
+                <button class="sb-btn">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="9" cy="21" r="1"></circle>
+                        <circle cx="20" cy="21" r="1"></circle>
+                        <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path>
+                    </svg>
+                    Προσθήκη
+                </button>
+            </div>
+        </div>
+    </div>
+    </body>
+    </html>
+    """
+    
+    # 🟢 FIX: Use components.html instead of markdown, wrapped in the sidebar context
+    with st.sidebar:
+        components.html(sidebar_card_html, height=500, scrolling=False)
 
-if trigger is None:
-    st.warning("Please select an item from the sidebar.")
+else:
+    st.warning("Please select a phone from the sidebar.")
     st.stop()
 
 # ─────────────────────────────────────────────────────────────
-# DISPLAY HEADER
-# ─────────────────────────────────────────────────────────────
-if active_cluster == "Smartphones":
-    st.markdown('<div class="public-header">Επιλογές για εσένα</div>', unsafe_allow_html=True)
-    st.markdown(f"<p style='color: #555; font-size: 14px; margin-top: -15px; margin-bottom: 25px;'>Συμβατά αξεσουάρ για το <b>{sel}</b></p>", unsafe_allow_html=True)
-else:
-    st.markdown('<div class="public-header">Διάλεξε κι άλλα!</div>', unsafe_allow_html=True)
-    st.markdown(f"<p style='color: #555; font-size: 14px; margin-top: -15px; margin-bottom: 25px;'>Προτάσεις με βάση το <b>{sel}</b></p>", unsafe_allow_html=True)
-
-# Sidebar Card
-card_title = safe(str(trigger.get('Title', sel)))
-card_sku = safe(str(trigger.get('Material', 'N/A')))
-card_img = safe(str(trigger.get('Thumbnails', '')).strip())
-if not card_img or card_img == 'nan':
-    card_img = "https://via.placeholder.com/150?text=No+Image"
-card_avail = safe(str(trigger.get('AVAILABILITY', 'Άμεσα Διαθέσιμο')))
-avail_theme = "avail-blue" if card_avail in ["Κατόπιν Παραγγελίας", "Αναμένεται Σύντομα", "Διαθέσιμο με παραγγελία"] else "avail-green"
-
-try:
-    t_price = parse_euro_price(trigger.get('LIST PRICE', 0))
-except:
-    t_price = 0.0
-p_int = f"{int(t_price)}"
-p_dec = f"{t_price:.2f}".split('.')[1]
-
-sidebar_card_html = f"""
-<!DOCTYPE html><html><head><style>
-body {{ margin:0; padding:0; background:transparent; font-family:-apple-system,BlinkMacSystemFont,sans-serif; }}
-.sb-card {{ border:1px solid #eaeaea; border-radius:12px; overflow:hidden; background:#fff; margin-top:5px; }}
-.sb-img-container {{ padding:20px; text-align:center; background:#fff; }}
-.sb-img {{ max-width:100%; max-height:220px; object-fit:contain; }}
-.sb-details {{ background:#f8f9fa; padding:15px; border-top:1px solid #eaeaea; }}
-.sb-title {{ font-size:14px; font-weight:700; color:#222; margin-bottom:6px; line-height:1.3; }}
-.sb-sku {{ font-size:10px; color:#666; margin-bottom:10px; }}
-.sb-avail-badge {{ display:inline-flex; align-items:center; gap:6px; font-size:12px; padding:4px 8px; border-radius:6px; font-weight:700; margin-bottom:15px; }}
-.avail-green {{ background-color:#e5f3f0; color:#00897b; }}
-.avail-blue {{ background-color:#e6f0f6; color:#2385aa; }}
-.sb-bottom-row {{ display:flex; justify-content:space-between; align-items:center; border-top:1px solid #eaeaea; padding-top:15px; }}
-.sb-price-wrap {{ color:#ff5e00; font-weight:800; font-size:24px; display:flex; align-items:flex-start; line-height:1; }}
-.sb-price-dec {{ font-size:13px; font-weight:700; margin-top:2px; }}
-.sb-btn {{ background:#ff5e00; color:#fff; border:none; border-radius:8px; padding:10px 16px; font-size:14px; font-weight:700; cursor:pointer; display:flex; align-items:center; gap:6px; }}
-</style></head><body>
-<div class="sb-card">
-    <div class="sb-img-container"><img class="sb-img" src="{card_img}" alt="Product"></div>
-    <div class="sb-details">
-        <div class="sb-title">{card_title}</div>
-        <div class="sb-sku">ΚΩΔΙΚΟΣ: {card_sku}</div>
-        <div class="sb-avail-badge {avail_theme}">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"></polyline></svg>
-            {card_avail}
-        </div>
-        <div class="sb-bottom-row">
-            <div class="sb-price-wrap">{p_int}<span class="sb-price-dec">,{p_dec}€</span></div>
-            <button class="sb-btn">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <circle cx="9" cy="21" r="1"></circle><circle cx="20" cy="21" r="1"></circle>
-                    <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path>
-                </svg>
-                Προσθήκη
-            </button>
-        </div>
-    </div>
-</div>
-</body></html>
-"""
-
-with st.sidebar:
-    components.html(sidebar_card_html, height=500, scrolling=False)
-
-
-# ─────────────────────────────────────────────────────────────
-# 🟢 KIDS BOOKS ENGINE (FIXED)
-# ─────────────────────────────────────────────────────────────
-def run_books_engine(trigger, df_all, df_history):
-    """
-    Kids Books Recommendation Engine with FIXED Series Logic
-    """
-    diag = []
-    slot_notes = {}
-    all_recs = []
-    used_materials = set()
-    
-    # Trigger attributes - with robust extraction
-    tm = trigger['Material']
-    tt = str(trigger.get('Title', ''))
-    
-    # 🟢 FIX: More robust series extraction
-    t_series_raw = trigger.get('Σειρά βιβλίου', None)
-    if t_series_raw is None:
-        # Try alternate column names
-        for col in trigger.index:
-            if 'σειρά' in col.lower() or 'series' in col.lower():
-                t_series_raw = trigger.get(col, None)
-                break
-    t_series = str(t_series_raw).strip() if t_series_raw is not None and not pd.isna(t_series_raw) else ''
-    
-    t_age = str(trigger.get('Ηλικία', '')).strip()
-    t_rec_age = str(trigger.get('Προτεινόμενη Ηλικία', '')).strip()
-    t_cover = str(trigger.get('Εξώφυλλο', '')).strip()
-    t_dims = str(trigger.get('Διαστάσεις', '')).strip()
-    t_illus = str(trigger.get('Λεπτομέρειες εικονογράφησης', '')).strip()
-    t_pub_series = str(trigger.get('Εκδοτική Σειρά', '')).strip()
-    t_orig_title = str(trigger.get('Τίτλος πρωτοτύπου', '')).strip()
-    t_hierarchy = str(trigger.get('Hierarchy', '')).strip()
-    t_level2 = str(trigger.get('Level 2', '')).strip()
-    t_brand = str(trigger.get('Brand', '')).strip()
-    t_price = parse_euro_price(trigger.get('LIST PRICE', 0))
-    
-    effective_age = t_age if t_age and t_age != 'nan' and t_age != '0' else t_rec_age
-    allowed_ages = get_allowed_ages(effective_age)
-    has_series = is_valid_series(t_series)
-    
-    diag.append(("0. Trigger", "", f"Series: '{t_series}' (valid: {has_series}), Age: '{effective_age}'"))
-    
-    # ══════════════════════════════════════════════════════════
-    # PRIORITY 1: SERIES ENGINE (Slots 1-3, or more if available)
-    # ══════════════════════════════════════════════════════════
-    series_notes = ["=== PRIORITY 1: SERIES ENGINE ==="]
-    series_count = 0
-    
-    if has_series:
-        # Get all books from same series
-        books_only = df_all[df_all['Level 1'] == 'Books'].copy()
-        
-        # 🟢 FIX: Find series column name dynamically
-        series_col = 'Σειρά βιβλίου'
-        if series_col not in books_only.columns:
-            for col in books_only.columns:
-                if 'σειρά' in col.lower() or 'series' in col.lower():
-                    series_col = col
-                    break
-        
-        if series_col in books_only.columns:
-            series_books = books_only[
-                books_only[series_col].fillna('').astype(str).str.strip() == t_series
-            ].copy()
-        else:
-            series_books = pd.DataFrame()
-            series_notes.append(f"⚠ Series column not found!")
-        
-        series_notes.append(f"Found {len(series_books)} books in series '{t_series}'")
-        
-        # Exclude trigger itself
-        series_books = series_books[series_books['Material'] != tm]
-        series_notes.append(f"After excluding trigger: {len(series_books)}")
-        
-        # Exclude same original title (different editions of same book)
-        if t_orig_title and t_orig_title != 'nan' and t_orig_title != '0':
-            before = len(series_books)
-            series_books = series_books[
-                series_books['Τίτλος πρωτοτύπου'].fillna('').astype(str).str.strip() != t_orig_title
-            ]
-            series_notes.append(f"Excluded same original title: {before}→{len(series_books)}")
-        
-        # Language filter (Greek with Greek, English with English)
-        if t_level2:
-            before = len(series_books)
-            series_books = series_books[series_books['Level 2'] == t_level2]
-            series_notes.append(f"Level 2 match ({t_level2}): {before}→{len(series_books)}")
-        
-        # FORMAT LOCK: Match cover type
-        if t_cover and t_cover != 'nan' and t_cover != '0' and not series_books.empty:
-            before = len(series_books)
-            cover_match = series_books[series_books['Εξώφυλλο'].fillna('').astype(str).str.strip() == t_cover]
-            if not cover_match.empty:
-                series_books = cover_match
-                series_notes.append(f"Cover match ({t_cover}): {before}→{len(series_books)}")
-        
-        # FORMAT LOCK: Match dimensions (same print run)
-        if t_dims and t_dims != 'nan' and t_dims != 'NaN' and not series_books.empty:
-            before = len(series_books)
-            dims_match = series_books[series_books['Διαστάσεις'].fillna('').astype(str).str.strip() == t_dims]
-            if not dims_match.empty:
-                series_books = dims_match
-                series_notes.append(f"Dimensions match: {before}→{len(series_books)}")
-        
-        # Score series books
-        if not series_books.empty:
-            series_books['Final_Score'] = SERIES_BOOST
-            if 'AVAILABILITY' in series_books.columns:
-                series_books.loc[series_books['AVAILABILITY'] == 'Άμεσα Διαθέσιμο', 'Final_Score'] += AVAIL_BOOST
-            
-            # Sort by availability first, then by any other criteria
-            series_books = series_books.sort_values('Final_Score', ascending=False)
-            
-            # Take up to 7 series books (leaving 3 slots for cross-sell)
-            max_series = min(7, len(series_books))
-            for idx, (_, row) in enumerate(series_books.head(max_series).iterrows()):
-                if row['Material'] not in used_materials:
-                    row_copy = row.copy()
-                    row_copy['Assigned_Slot'] = series_count + 1
-                    row_copy['Slot_Role'] = f'Series Book'
-                    row_copy['Item_Rank'] = 1
-                    all_recs.append(row_copy)
-                    used_materials.add(row['Material'])
-                    series_count += 1
-            
-            series_notes.append(f"✓ Added {series_count} series books to slots 1-{series_count}")
-    else:
-        series_notes.append("No valid series found on trigger - skipping series engine")
-    
-    slot_notes[1] = series_notes
-    diag.append(("1. Series Engine", series_count, f"Filled {series_count} slots"))
-    
-    # ══════════════════════════════════════════════════════════
-    # PRIORITY 2: CROSS-SELL (Toys & Stationery)
-    # ══════════════════════════════════════════════════════════
-    crosssell_notes = ["=== PRIORITY 2: CROSS-SELL ==="]
-    crosssell_count = 0
-    max_crosssell = min(4, 10 - series_count)  # Fill remaining slots up to 4
-    
-    if max_crosssell > 0:
-        # Get Toys and Stationery
-        toys = df_all[df_all['Level 1'] == 'Toys'].copy()
-        stationery = df_all[df_all['Level 1'] == 'Stationery'].copy()
-        
-        crosssell_notes.append(f"Toys pool: {len(toys)}, Stationery pool: {len(stationery)}")
-        
-        # Age filter for toys
-        if 'Προτεινόμενη Ηλικία' in toys.columns and effective_age:
-            toys = toys[
-                toys['Προτεινόμενη Ηλικία'].fillna('').astype(str).str.strip().isin(allowed_ages) |
-                (toys['Προτεινόμενη Ηλικία'].fillna('') == '') |
-                (toys['Προτεινόμενη Ηλικία'].fillna('').astype(str) == '0')
-            ]
-            crosssell_notes.append(f"Toys after age filter: {len(toys)}")
-        
-        # Initialize scores
-        toys['Final_Score'] = 0
-        stationery['Final_Score'] = 0
-        
-        # Availability boost
-        if 'AVAILABILITY' in toys.columns:
-            toys.loc[toys['AVAILABILITY'] == 'Άμεσα Διαθέσιμο', 'Final_Score'] += AVAIL_BOOST
-        if 'AVAILABILITY' in stationery.columns:
-            stationery.loc[stationery['AVAILABILITY'] == 'Άμεσα Διαθέσιμο', 'Final_Score'] += AVAIL_BOOST
-        
-        # IP MATCHING: Boost toys that match book series
-        if has_series:
-            for idx in toys.index:
-                toy_brand = str(toys.loc[idx, 'Brand']) if 'Brand' in toys.columns else ''
-                toy_heroes = str(toys.loc[idx, 'Ήρωες Παιχνιδιών']) if 'Ήρωες Παιχνιδιών' in toys.columns else ''
-                toy_title = str(toys.loc[idx, 'Title']) if 'Title' in toys.columns else ''
-                
-                if ip_matches(t_series, toy_brand, toy_heroes) or normalize_ip_name(t_series) in normalize_ip_name(toy_title):
-                    toys.loc[idx, 'Final_Score'] += SMART_BOOST * 5
-            
-            ip_matched = toys[toys['Final_Score'] >= SMART_BOOST * 5]
-            crosssell_notes.append(f"IP matched toys for '{t_series}': {len(ip_matched)}")
-        
-        # ─── CROSS-SELL SLOT 1: IP-matched Toy or Plush ───
-        if crosssell_count < max_crosssell:
-            item1_notes = ["Item 1: IP Toy / Plush"]
-            
-            # Priority 1: IP-matched toys
-            ip_toys = toys[toys['Final_Score'] >= SMART_BOOST * 5].copy()
-            if not ip_toys.empty:
-                ip_toys = ip_toys.sort_values('Final_Score', ascending=False)
-                best = ip_toys.iloc[0]
-                if best['Material'] not in used_materials:
-                    row_copy = best.copy()
-                    row_copy['Assigned_Slot'] = series_count + crosssell_count + 1
-                    row_copy['Slot_Role'] = 'Cross-Sell: IP Toy'
-                    row_copy['Item_Rank'] = 1
-                    all_recs.append(row_copy)
-                    used_materials.add(best['Material'])
-                    crosssell_count += 1
-                    item1_notes.append(f"✓ IP match: {best['Title'][:40]}...")
-            
-            # Fallback: Plush
-            if crosssell_count == 0:
-                plush = toys[toys['Hierarchy'].isin(TOY_HIERARCHIES_ACTUAL['plush'])]
-                if not plush.empty:
-                    plush = plush.sort_values('Final_Score', ascending=False)
-                    best = plush.iloc[0]
-                    if best['Material'] not in used_materials:
-                        row_copy = best.copy()
-                        row_copy['Assigned_Slot'] = series_count + crosssell_count + 1
-                        row_copy['Slot_Role'] = 'Cross-Sell: Plush'
-                        row_copy['Item_Rank'] = 1
-                        all_recs.append(row_copy)
-                        used_materials.add(best['Material'])
-                        crosssell_count += 1
-                        item1_notes.append(f"✓ Plush fallback: {best['Title'][:40]}...")
-            
-            crosssell_notes.extend(item1_notes)
-        
-        # ─── CROSS-SELL SLOT 2: Creative / Arts ───
-        if crosssell_count < max_crosssell:
-            item2_notes = ["Item 2: Creative / Arts"]
-            
-            # Stationery arts supplies
-            arts = stationery[stationery['Hierarchy'].isin(STATIONERY_HIERARCHIES_ACTUAL['arts_crafts'])]
-            if not arts.empty:
-                arts = arts.sort_values('Final_Score', ascending=False)
-                for _, row in arts.iterrows():
-                    if row['Material'] not in used_materials:
-                        row_copy = row.copy()
-                        row_copy['Assigned_Slot'] = series_count + crosssell_count + 1
-                        row_copy['Slot_Role'] = 'Cross-Sell: Arts'
-                        row_copy['Item_Rank'] = 1
-                        all_recs.append(row_copy)
-                        used_materials.add(row['Material'])
-                        crosssell_count += 1
-                        item2_notes.append(f"✓ Arts: {row['Title'][:40]}...")
-                        break
-            
-            # Fallback: Creative toys
-            if len([n for n in item2_notes if '✓' in n]) == 0:
-                creative = toys[toys['Hierarchy'].isin(TOY_HIERARCHIES_ACTUAL['creative'] + TOY_HIERARCHIES_ACTUAL['building'])]
-                if not creative.empty:
-                    creative = creative.sort_values('Final_Score', ascending=False)
-                    for _, row in creative.iterrows():
-                        if row['Material'] not in used_materials:
-                            row_copy = row.copy()
-                            row_copy['Assigned_Slot'] = series_count + crosssell_count + 1
-                            row_copy['Slot_Role'] = 'Cross-Sell: Creative Toy'
-                            row_copy['Item_Rank'] = 1
-                            all_recs.append(row_copy)
-                            used_materials.add(row['Material'])
-                            crosssell_count += 1
-                            item2_notes.append(f"✓ Creative toy: {row['Title'][:40]}...")
-                            break
-            
-            crosssell_notes.extend(item2_notes)
-        
-        # ─── CROSS-SELL SLOT 3: Puzzle / Board Game ───
-        if crosssell_count < max_crosssell:
-            item3_notes = ["Item 3: Puzzle / Board Game"]
-            
-            puzzles = toys[toys['Hierarchy'].isin(TOY_HIERARCHIES_ACTUAL['board_puzzles'])]
-            if not puzzles.empty:
-                puzzles = puzzles.sort_values('Final_Score', ascending=False)
-                for _, row in puzzles.iterrows():
-                    if row['Material'] not in used_materials:
-                        row_copy = row.copy()
-                        row_copy['Assigned_Slot'] = series_count + crosssell_count + 1
-                        row_copy['Slot_Role'] = 'Cross-Sell: Puzzle'
-                        row_copy['Item_Rank'] = 1
-                        all_recs.append(row_copy)
-                        used_materials.add(row['Material'])
-                        crosssell_count += 1
-                        item3_notes.append(f"✓ Puzzle: {row['Title'][:40]}...")
-                        break
-            
-            crosssell_notes.extend(item3_notes)
-        
-        # ─── CROSS-SELL SLOT 4: Lifestyle (Water bottle / Notebook) ───
-        if crosssell_count < max_crosssell:
-            item4_notes = ["Item 4: Lifestyle"]
-            
-            lifestyle = stationery[stationery['Hierarchy'].isin(
-                STATIONERY_HIERARCHIES_ACTUAL['water_bottles'] + 
-                STATIONERY_HIERARCHIES_ACTUAL['notebooks']
-            )]
-            if not lifestyle.empty:
-                lifestyle = lifestyle.sort_values('Final_Score', ascending=False)
-                for _, row in lifestyle.iterrows():
-                    if row['Material'] not in used_materials:
-                        row_copy = row.copy()
-                        row_copy['Assigned_Slot'] = series_count + crosssell_count + 1
-                        row_copy['Slot_Role'] = 'Cross-Sell: Lifestyle'
-                        row_copy['Item_Rank'] = 1
-                        all_recs.append(row_copy)
-                        used_materials.add(row['Material'])
-                        crosssell_count += 1
-                        item4_notes.append(f"✓ Lifestyle: {row['Title'][:40]}...")
-                        break
-            
-            crosssell_notes.extend(item4_notes)
-    
-    slot_notes[2] = crosssell_notes
-    diag.append(("2. Cross-Sell", crosssell_count, f"Filled {crosssell_count} slots"))
-    
-    # ══════════════════════════════════════════════════════════
-    # PRIORITY 3: CATEGORY DISCOVERY (Fill remaining slots)
-    # ══════════════════════════════════════════════════════════
-    discovery_notes = ["=== PRIORITY 3: CATEGORY DISCOVERY ==="]
-    total_filled = series_count + crosssell_count
-    remaining = 10 - total_filled
-    discovery_count = 0
-    
-    if remaining > 0:
-        # Get books from same hierarchy
-        books_only = df_all[df_all['Level 1'] == 'Books'].copy()
-        discovery_pool = books_only[books_only['Hierarchy'] == t_hierarchy].copy()
-        
-        discovery_notes.append(f"Same hierarchy ({t_hierarchy}): {len(discovery_pool)}")
-        
-        # Exclude trigger and already recommended
-        discovery_pool = discovery_pool[~discovery_pool['Material'].isin(used_materials)]
-        discovery_pool = discovery_pool[discovery_pool['Material'] != tm]
-        
-        # Language filter
-        if t_level2:
-            discovery_pool = discovery_pool[discovery_pool['Level 2'] == t_level2]
-        
-        # Age filter
-        if 'Ηλικία' in discovery_pool.columns and allowed_ages:
-            discovery_pool = discovery_pool[
-                discovery_pool['Ηλικία'].fillna('').astype(str).str.strip().isin(allowed_ages) |
-                (discovery_pool['Ηλικία'].fillna('') == '') |
-                (discovery_pool['Ηλικία'].fillna('').astype(str) == '0')
-            ]
-        
-        discovery_notes.append(f"After filters: {len(discovery_pool)}")
-        
-        # Score and sort
-        discovery_pool['Final_Score'] = 0
-        if 'AVAILABILITY' in discovery_pool.columns:
-            discovery_pool.loc[discovery_pool['AVAILABILITY'] == 'Άμεσα Διαθέσιμο', 'Final_Score'] += AVAIL_BOOST
-        
-        discovery_pool = discovery_pool.sort_values('Final_Score', ascending=False)
-        
-        for _, row in discovery_pool.head(remaining).iterrows():
-            if row['Material'] not in used_materials:
-                row_copy = row.copy()
-                row_copy['Assigned_Slot'] = total_filled + discovery_count + 1
-                row_copy['Slot_Role'] = 'Category Discovery'
-                row_copy['Item_Rank'] = 1
-                all_recs.append(row_copy)
-                used_materials.add(row['Material'])
-                discovery_count += 1
-        
-        discovery_notes.append(f"✓ Added {discovery_count} discovery books")
-    
-    slot_notes[3] = discovery_notes
-    diag.append(("3. Discovery", discovery_count, f"Filled {discovery_count} slots"))
-    diag.append(("TOTAL", series_count + crosssell_count + discovery_count, f"out of 10"))
-    
-    # Build final dataframe
-    if all_recs:
-        recs_df = pd.DataFrame(all_recs)
-        recs_df['Draft_Score'] = recs_df['Assigned_Slot']
-        recs_df = recs_df.sort_values('Assigned_Slot').reset_index(drop=True)
-        return recs_df, diag, slot_notes, recs_df
-    else:
-        return pd.DataFrame(), diag, slot_notes, pd.DataFrame()
-
-
-# ─────────────────────────────────────────────────────────────
-# SMARTPHONES ENGINE (Original - keeping full logic)
+# ENGINE
 # ─────────────────────────────────────────────────────────────
 def run_engine(trigger, df_products, df_history, df_slots):
     diag, slot_diag, slot_notes = [], [], {}
 
+    # Trigger attrs
     tm   = trigger['Material']
     tt   = str(trigger.get('Title',''))
     tb   = str(trigger.get('Κατασκευαστής','')).strip().upper()
@@ -918,61 +535,79 @@ def run_engine(trigger, df_products, df_history, df_slots):
     tprice=parse_euro_price(trigger.get('LIST PRICE',0))
     ccols= get_case_colors(tcol)
 
+    # 🟢 FIX: Strict Regex Pattern using alphanumeric boundaries
     strict_tmod = ""
     if tmod:
         strict_tmod = rf"(?<![a-zA-Z0-9]){re.escape(tmod)}(?![a-zA-Z0-9])(?!\s*(Max|Plus|\+|Ultra|Pro))"
 
+    # 🟢 NEW: RIVAL BRAND FILTER FOR STRICT FIT (Cases/Glass)
     brand_kws = {
-        "SAMSUNG": ["samsung", "galaxy"], "APPLE": ["apple", "iphone", "ipad"],
-        "XIAOMI": ["xiaomi", "redmi", "poco"], "OPPO": ["oppo"],
-        "MOTOROLA": ["motorola", "moto"], "HUAWEI": ["huawei"],
-        "HONOR": ["honor"], "REALME": ["realme"], "ONEPLUS": ["oneplus"],
-        "VIVO": ["vivo"], "NOTHING": ["nothing", "cmf"]
+        "SAMSUNG": ["samsung", "galaxy"],
+        "APPLE": ["apple", "iphone", "ipad"],
+        "XIAOMI": ["xiaomi", "redmi", "poco"],
+        "OPPO": ["oppo"],
+        "MOTOROLA": ["motorola", "moto"],
+        "HUAWEI": ["huawei"],
+        "HONOR": ["honor"],
+        "REALME": ["realme"],
+        "ONEPLUS": ["oneplus"],
+        "VIVO": ["vivo"],
+        "NOTHING": ["nothing", "cmf"]
     }
     rival_kws = []
     for k, v in brand_kws.items():
-        if k != tb: rival_kws.extend(v)
+        if k != tb:
+            rival_kws.extend(v)
     rival_regex = r"\b(" + "|".join(rival_kws) + r")\b" if rival_kws else ""
 
     c = df_products[df_products['Material']!=tm].copy()
     diag.append(("0. Start", len(c), ""))
 
+    # 🟢 THE SALES SCORE (Primary Driver)
     if 'Sum of Sales' in c.columns:
         c['Sales_Tiebreaker'] = pd.to_numeric(c['Sum of Sales'], errors='coerce').fillna(0)
     else:
         c['Sales_Tiebreaker'] = 0
 
-    c = c[c['Title']!=tt]; diag.append(("1. Title dedup", len(c), ""))
+    # U2a: title dedup
+    c = c[c['Title']!=tt]; diag.append(("1. U2a: title dedup", len(c), ""))
 
+    # U2b: stock
     if 'CW Stock Units' in c.columns:
         st_col = pd.to_numeric(c['CW Stock Units'], errors='coerce')
         pct = (st_col>0).sum()/len(c) if len(c)>0 else 0
         if pct >= 0.10:
             c['CW Stock Units']=st_col.fillna(0); c=c[c['CW Stock Units']>0]
-            diag.append(("2. Stock filter", len(c), f"Applied ({pct:.0%})"))
-        else: diag.append(("2. Stock filter", len(c), f"⚠ SKIPPED ({pct:.0%})"))
-    else: diag.append(("2. Stock filter", len(c), "⚠ SKIPPED (no col)"))
+            diag.append(("2. U2b: stock", len(c), f"Applied ({pct:.0%})"))
+        else: diag.append(("2. U2b: stock", len(c), f"⚠ SKIPPED ({pct:.0%})"))
+    else: diag.append(("2. U2b: stock", len(c), "⚠ SKIPPED (no col)"))
 
+    # U1: siblings
     mask = (c['Hierarchy']==thier) & (c['Κατασκευαστής'].fillna('').str.strip().str.upper()==tb)
     ns = mask.sum()
     if ns > 0:
         sims = c.loc[mask,'Title'].apply(lambda t: title_sim(tt,str(t)))
         dupes = sims[sims>=70].index; c=c.drop(dupes)
-        diag.append(("3. Siblings", len(c), f"Checked {ns}, removed {len(dupes)}"))
-    else: diag.append(("3. Siblings", len(c), "No siblings"))
+        diag.append(("3. U1: siblings", len(c), f"Checked {ns}, removed {len(dupes)}"))
+    else: diag.append(("3. U1: siblings", len(c), "No siblings"))
 
+    # U3: macro wall
     b4=len(c)
     if tl1 in TECH_CATS: c=c[~c['Level 1'].isin(APPL_CATS)]
     elif tl1 in APPL_CATS: c=c[~c['Level 1'].isin(TECH_CATS)]
-    diag.append(("4a. Macro wall", len(c), f"Removed {b4-len(c)}"))
+    diag.append(("4a. U3: macro wall", len(c), f"Removed {b4-len(c)}"))
 
+    # 🟢 U4: ECOSYSTEM WALLED GARDEN
     b4eco = len(c)
     if tb == "APPLE":
+        # Ban Android brands from Apple triggers
         c = c[~c['Κατασκευαστής'].fillna('').str.strip().str.upper().isin(ANDROID_OEMS)]
     elif tb in ANDROID_OEMS:
+        # Ban Apple accessories from Android triggers
         c = c[c['Κατασκευαστής'].fillna('').str.strip().str.upper() != "APPLE"]
-    diag.append(("4b. Ecosystem wall", len(c), f"Removed {b4eco-len(c)}"))
+    diag.append(("4b. U4: ecosystem wall", len(c), f"Removed {b4eco-len(c)} rival OEM items"))
 
+    # Scoring
     tcust = df_history[df_history['Material']==tm]['customerEmail'].unique()
     bw = df_history[(df_history['customerEmail'].isin(tcust))&(df_history['Material']!=tm)]
     fdf = bw['Material'].value_counts().reset_index(); fdf.columns=['NID','Frequency']
@@ -991,8 +626,10 @@ def run_engine(trigger, df_products, df_history, df_slots):
     
     if strict_tmod:
         c.loc[c['Μοντέλο'].fillna('').str.contains(strict_tmod, case=False, regex=True), 'Smart_Boost'] += SMART_BOOST
+        
     c.loc[c['Κατασκευαστής'].fillna('').str.strip().str.upper()==tb,'Smart_Boost']+=SMART_BOOST
     
+    # Final Score includes tiebreaker
     c['Final_Score'] = c['History_Score'] + c['Frequency'] + c['Avail_Boost'] + c['Smart_Boost'] + c['Sales_Tiebreaker']
 
     b4u5=len(c)
@@ -1000,8 +637,9 @@ def run_engine(trigger, df_products, df_history, df_slots):
     if nhm.any():
         ok2=c.loc[nhm].apply(lambda r: price_ok(tprice,r['Next_Price'],tl1), axis=1)
         c=c.drop(ok2[~ok2].index)
-    diag.append(("5. Price ceiling", len(c), f"Removed {b4u5-len(c)}"))
+    diag.append(("5. U5: price ceiling", len(c), f"Removed {b4u5-len(c)} (ceil: €{max(tprice*0.40,45):.0f})"))
 
+    # ── SLOT ASSIGNMENT ──
     all_slot = []
     for _, sr in df_slots.iterrows():
         sn = sr['Slot_Number']
@@ -1017,24 +655,247 @@ def run_engine(trigger, df_products, df_history, df_slots):
                 b4 = len(sc)
                 cv = sc[CC].fillna('').str.lower()
                 m = sc[cv.str.contains(strict_tmod, case=False, regex=True)]
+                
+                # 🟢 NEW: Drop if it contains a rival brand name (e.g. Galaxy)
                 if rival_regex and not m.empty:
                     m = m[~m[CC].fillna('').str.lower().str.contains(rival_regex, regex=True)]
                     m = m[~m['Title'].fillna('').str.lower().str.contains(rival_regex, regex=True)]
-                notes.append(f"Model '{tmod}': {b4}→{len(m)}")
+                    
+                notes.append(f"Strict Model '{tmod}': {b4}→{len(m)}")
                 sc = m  
             else:
                 sc = sc.head(0) 
+
             if not sc.empty:
                 b4=len(sc)
                 f=sc[sc['Τύπος Θήκης'].fillna('').str.contains("Back Cover", case=False)]
                 notes.append(f"Back Cover: {b4}→{len(f)}")
                 sc = f  
+                
             if not sc.empty and tcol:
                 b4=len(sc)
                 sc_color=sc[sc['Χρώμα'].fillna('').str.strip().str.lower().isin(ccols)]
-                notes.append(f"Color: {b4}→{len(sc_color)}")
-                if not sc_color.empty: sc = sc_color
+                notes.append(f"Color {ccols[:3]}: {b4}→{len(sc_color)}")
+                if not sc_color.empty: sc = sc_color 
 
+        elif lk == "ALT_CASE":
+            if strict_tmod:
+                b4 = len(sc)
+                cv = sc[CC].fillna('').str.lower()
+                m = sc[cv.str.contains(strict_tmod, case=False, regex=True)]
+                
+                if rival_regex and not m.empty:
+                    m = m[~m[CC].fillna('').str.lower().str.contains(rival_regex, regex=True)]
+                    m = m[~m['Title'].fillna('').str.lower().str.contains(rival_regex, regex=True)]
+                    
+                notes.append(f"Strict Model '{tmod}': {b4}→{len(m)}")
+                sc = m
+            else:
+                sc = sc.head(0)
+
+            if not sc.empty:
+                b4 = len(sc)
+                is_book = sc['Τύπος Θήκης'].fillna('').str.contains("Book Cover|Wallet|360 Full Cover|Folio|Flip", case=False)
+                
+                if tcol:
+                    is_back = sc['Τύπος Θήκης'].fillna('').str.contains("Back Cover", case=False)
+                    is_diff_color = is_back & ~sc['Χρώμα'].fillna('').str.strip().str.lower().isin(ccols)
+                    sc = sc[is_book | is_diff_color]
+                    notes.append(f"Book OR Diff Color: {b4}→{len(sc)}")
+                else:
+                    sc = sc[is_book]
+                    notes.append(f"Strict Book Cover (no phone color): {b4}→{len(sc)}")
+
+        elif lk == "SCREEN_GLASS":
+            if strict_tmod:
+                b4 = len(sc)
+                cv = sc[CC].fillna('').str.lower()
+                m = sc[cv.str.contains(strict_tmod, case=False, regex=True)]
+                
+                if rival_regex and not m.empty:
+                    m = m[~m[CC].fillna('').str.lower().str.contains(rival_regex, regex=True)]
+                    m = m[~m['Title'].fillna('').str.lower().str.contains(rival_regex, regex=True)]
+                    
+                notes.append(f"Strict Model '{tmod}': {b4}→{len(m)}")
+                sc = m
+            else:
+                sc = sc.head(0)
+
+            if not sc.empty and has_data(sc, 'Τύπος προϊόντος'):
+                b4=len(sc)
+                f=sc[sc['Τύπος προϊόντος'].fillna('').str.contains("Προστατευτικό οθόνης|Προστατευτικό Οθόνης|Screen Protector", case=False)]
+                notes.append(f"Screen Protector type: {b4}→{len(f)}")
+                sc = f 
+
+        elif lk == "CAMERA_GLASS":
+            if strict_tmod:
+                b4 = len(sc)
+                cv = sc[CC].fillna('').str.lower()
+                m = sc[cv.str.contains(strict_tmod, case=False, regex=True)]
+                
+                if rival_regex and not m.empty:
+                    m = m[~m[CC].fillna('').str.lower().str.contains(rival_regex, regex=True)]
+                    m = m[~m['Title'].fillna('').str.lower().str.contains(rival_regex, regex=True)]
+                    
+                notes.append(f"Strict Model '{tmod}': {b4}→{len(m)}")
+                sc = m
+            else:
+                sc = sc.head(0)
+
+            if not sc.empty and has_data(sc, 'Τύπος προϊόντος'):
+                b4=len(sc)
+                f=sc[sc['Τύπος προϊόντος'].fillna('').str.contains("Προστατευτικό καμερών|Camera", case=False)]
+                notes.append(f"Camera type: {b4}→{len(f)}")
+                sc = f 
+            
+            if sc.empty and tport:
+                fb_h = ['CABLE-CHARGER', 'APPLE ORIGINAL IPHONE CABLE-ADAPTORS', 'ΚΑΛΩΔΙΑ ΔΕΔΟΜΕΝΩΝ', 'MOBILE CABLE-ADAPTORS', 'IPHONE CABLE-ADAPTORS']
+                fb = c[c['Hierarchy'].isin(fb_h)].copy()
+                if strict_tmod:
+                    fb_model = fb[fb[CC].fillna('').str.contains(strict_tmod, case=False, regex=True)]
+                    if not fb_model.empty: fb = fb_model
+                fb_port = fb[fb[CC].fillna('').str.lower().str.contains(tport.lower(), regex=False) | fb['Title'].fillna('').str.lower().str.contains(tport.lower(), regex=False)]
+                notes.append(f"Cable fallback ({tport}): {len(fb_port)}")
+                if not fb_port.empty: sc = fb_port
+
+        elif lk == "WALL_CHARGER":
+            if not sc.empty:
+                b4=len(sc)
+                cv = sc[CC].fillna('').str.lower()
+                keep = cv.str.contains("universal", regex=False) | (cv=='')
+                if strict_tmod: 
+                    keep = keep | cv.str.contains(strict_tmod, case=False, regex=True)
+                if tport: 
+                    keep = keep | cv.str.contains(tport.lower(), regex=False) | cv.str.contains("usb-c", regex=False)
+                m=sc[keep]
+                notes.append(f"Compat (model/universal/port): {b4}→{len(m)}")
+                if not m.empty: sc=m
+
+            if "γρήγορη φόρτιση" in tex and not sc.empty and has_data(sc, 'Ισχύς (Watt)'):
+                b4=len(sc)
+                f=sc[sc['Ισχύς (Watt)'].fillna('').str.contains("21 - 60|61 - 100|101", case=False)]
+                notes.append(f"Fast charge watt: {b4}→{len(f)}")
+                if not f.empty: sc=f
+
+            if not sc.empty and has_data(sc, 'Τύπος3'):
+                if "ασύρματη φόρτιση" in tex:
+                    b4=len(sc)
+                    f=sc[sc['Τύπος3'].fillna('').str.contains("Φορτιστής Πρίζας|Ασύρματος Φορτιστής|Σετ Φόρτισης", case=False)]
+                    notes.append(f"Wireless charger types: {b4}→{len(f)}")
+                    if not f.empty: sc=f
+                    sc.loc[sc['Τύπος3'].fillna('').str.contains("Ασύρματος", case=False),'Final_Score']+=SMART_BOOST
+                    if tb=="APPLE":
+                        sc.loc[sc['Title'].fillna('').str.contains("MagSafe", case=False),'Final_Score']+=SMART_BOOST
+                else:
+                    b4=len(sc)
+                    f=sc[sc['Τύπος3'].fillna('').str.contains("Φορτιστής Πρίζας|Σετ Φόρτισης", case=False)]
+                    notes.append(f"Wall charger types: {b4}→{len(f)}")
+                    if not f.empty: sc=f
+
+        elif lk == "POWERBANK":
+            if tport and not sc.empty:
+                cv = sc[CC].fillna('').str.lower()
+                ts = sc['Τύπος σύνδεσης'].fillna('').str.lower() if 'Τύπος σύνδεσης' in sc.columns else pd.Series('', index=sc.index)
+                keep = cv.str.contains(tport.lower(), regex=False) | cv.str.contains("usb-c", regex=False) | cv.str.contains("universal", regex=False) | (cv=='')
+                keep = keep | ts.str.contains(tport.lower(), regex=False) | ts.str.contains("usb-c", regex=False) | ts.str.contains("usb type-c", regex=False)
+                b4=len(sc); m=sc[keep]
+                notes.append(f"Port compat: {b4}→{len(m)}")
+                if not m.empty: sc=m
+
+            if "γρήγορη φόρτιση" in tex and not sc.empty and has_data(sc, 'Ισχύς (Watt)'):
+                sc.loc[sc['Ισχύς (Watt)'].fillna('').str.contains("21 - 60|61 - 100|101|30|40|50", case=False),'Final_Score']+=SMART_BOOST
+                notes.append("Fast charge boost")
+            if "ασύρματη φόρτιση" in tex and not sc.empty:
+                sc.loc[sc['Extra Χαρακτηριστικά'].fillna('').str.contains("Ασύρματη φόρτιση", case=False),'Final_Score']+=SMART_BOOST
+                if tb=="APPLE":
+                    sc.loc[sc['Extra Χαρακτηριστικά'].fillna('').str.contains("Magsafe", case=False),'Final_Score']+=SMART_BOOST
+            if not sc.empty:
+                sc.loc[sc['Κατασκευαστής'].fillna('').str.strip().str.upper()==tb,'Final_Score']+=SMART_BOOST
+
+        elif lk == "SMARTWATCH":
+            if not sc.empty and has_data(sc, CC):
+                b4=len(sc)
+                if "ios" in tos or tb=="APPLE":
+                    f=sc[sc[CC].fillna('').str.contains("iOS|Apple", case=False)]
+                elif "android" in tos or tb in ["SAMSUNG","XIAOMI","MOTOROLA"]:
+                    f=sc[sc[CC].fillna('').str.contains("Android", case=False)]
+                else:
+                    f=sc
+                notes.append(f"OS compat: {b4}→{len(f)}")
+                if not f.empty: sc=f
+                else: notes.append(f"  ⚠ kept all (sample: {sample(sc,CC,3)})")
+            
+            hw_boost = ECOSYSTEM_BOOST if tprice >= 700 else SMART_BOOST
+            sc.loc[sc['Κατασκευαστής'].fillna('').str.strip().str.upper()==tb,'Final_Score'] += hw_boost
+
+        elif lk == "EARBUDS":
+            hw_boost = ECOSYSTEM_BOOST if tprice >= 700 else SMART_BOOST
+
+            if "3.5mm jack" in tex:
+                if has_data(sc, 'Τύπος σύνδεσης'):
+                    sc.loc[sc['Τύπος σύνδεσης'].fillna('').str.contains("3.5mm|Jack", case=False),'Final_Score'] += SMART_BOOST
+                    notes.append("3.5mm boost applied")
+                sc.loc[sc['Κατασκευαστής'].fillna('').str.strip().str.upper()==tb,'Final_Score'] += hw_boost
+            else:
+                if has_data(sc, 'Τύπος σύνδεσης'):
+                    b4=len(sc)
+                    port_str = tport if tport else "USB-C"
+                    search_str = f"Bluetooth|Ασύρματη|{port_str}"
+                    keep_bt = (
+                        sc['Τύπος σύνδεσης'].fillna('').str.contains(search_str, case=False, regex=True) |
+                        sc['Hierarchy'].fillna('').str.contains("Bluetooth", case=False) |
+                        sc['Title'].fillna('').str.contains(search_str, case=False, regex=True)
+                    )
+                    f=sc[keep_bt]
+                    notes.append(f"BT/Wireless/{port_str}: {b4}→{len(f)}")
+                    if not f.empty: sc=f
+                    else: notes.append(f"  ⚠ kept all")
+                else:
+                    notes.append("Connection filter: SKIPPED (col empty)")
+                
+                sc.loc[sc['Κατασκευαστής'].fillna('').str.strip().str.upper()==tb,'Final_Score'] += hw_boost
+                
+                f = sc[keep_bt]
+                notes.append(f"BT/Wireless/{port_str} (Safe Match): {b4}→{len(f)}")
+                
+                if not f.empty: sc=f
+                else: notes.append(f"  ⚠ kept all")
+                
+                sc.loc[sc['Κατασκευαστής'].fillna('').str.strip().str.upper()==tb,'Final_Score']+=SMART_BOOST
+
+        elif lk == "HOLDER":
+            if tb=="APPLE" and "ασύρματη φόρτιση" in tex:
+                sc.loc[sc['Τρόπος τοποθέτησης'].fillna('').str.contains("Μαγνητική|Magsafe", case=False),'Final_Score']+=SMART_BOOST
+            notes.append(f"No hard filter, {len(sc)} remain")
+
+        elif lk == "CROSS_SELL":
+            b4=len(sc)
+            if "με pen" in tex:
+                f=sc[sc['Τύπος3'].fillna('').str.contains("Γραφίδα", case=False)]
+                notes.append(f"Stylus: {b4}→{len(f)}")
+                if not f.empty: sc=f
+            elif tb=="APPLE":
+                f=sc[
+                    sc['Τύπος3'].fillna('').str.contains("AirTag|Air Tag|Smart Tag", case=False) |
+                    sc['Title'].fillna('').str.contains("AirTag", case=False) |
+                    sc['Hierarchy'].fillna('').str.contains("AIRTAG", case=False)
+                ]
+                notes.append(f"AirTag (Τύπος3/Title/Hierarchy): {b4}→{len(f)}")
+                if not f.empty: sc=f
+                else:
+                    f2=sc[sc['Τύπος3'].fillna('').str.contains("Λουράκι|Αξεσουάρ|Μπρελόκ", case=False)]
+                    notes.append(f"Apple acc fallback: {b4}→{len(f2)}")
+                    if not f2.empty: sc=f2
+            else:
+                f=sc[sc['Τύπος3'].fillna('').str.contains(
+                    "Λουράκι Λαιμού|Λουράκι Καρπού|Αξεσουάρ Smartphone|Αξεσουάρ Κάμερας|Αξεσουάρ Καθαρισμού|Μπρελόκ", case=False)]
+                notes.append(f"Misc acc: {b4}→{len(f)}")
+                if not f.empty: sc=f
+
+        else:
+            notes.append(f"⚠ UNKNOWN logic key '{lk}' — no filters applied")
+
+        # ── Rank ──
         afa = len(sc)
         slot_diag.append((sn, role, lk, afh, afa))
         slot_notes[sn] = notes
@@ -1059,40 +920,155 @@ def run_engine(trigger, df_products, df_history, df_slots):
         sel.append(r); hc[h]=hc.get(h,0)+1; seen.add(mat)
         if len(sel)>=10: break
 
-    diag.append(("6. Final", len(sel), "Hierarchy cap=2"))
+    diag.append(("6. Final", len(sel), f"Hierarchy cap=2"))
     return (pd.DataFrame(sel) if sel else pd.DataFrame()), diag, slot_diag, slot_notes, full
 
+# ─────────────────────────────────────────────────────────────
+# ENGINE 2: KIDS BOOKS (THE WATERFALL MODEL)
+# ─────────────────────────────────────────────────────────────
+def run_books_engine(trigger, df_books, df_products):
+    diag, slot_diag, slot_notes = [], [], {}
+    final_recs = []
+    
+    # Extract Trigger Data
+    t_orig = str(trigger.get('Τίτλος πρωτοτύπου', '')).strip()
+    t_l2 = str(trigger.get('Level 2', '')).strip()
+    t_series = str(trigger.get('Σειρά βιβλίου', '')).strip()
+    t_hier = str(trigger.get('Hierarchy', '')).strip()
+    t_age = str(trigger.get('Ηλικία', '')).strip()
+    
+    # --- LOGIC 1: CRITICAL SAFETY (Age Brackets & Dedup) ---
+    c_books = df_books.copy()
+    
+    # Ban the exact same book (Original Title Match)
+    if t_orig and t_orig != 'nan':
+        c_books = c_books[c_books['Τίτλος πρωτοτύπου'].fillna('') != t_orig]
+        
+    # Language/Origin Lock (Greek with Greek)
+    c_books = c_books[c_books['Level 2'] == t_l2]
+    
+    # Developmental Age Bracket Mappings
+    age_map = {
+        "0+ μηνών": ["0+ μηνών", "3+ μηνών", "5+ μηνών", "6+ μηνών"],
+        "6+ μηνών": ["6+ μηνών", "9+ μηνών", "12+ μηνών", "1+ ετών"],
+        "12+ μηνών": ["9+ μηνών", "12+ μηνών", "1+ ετών", "1.5+ ετών", "24+ μηνών", "2+ ετών"],
+        "24+ μηνών": ["1.5+ ετών", "24+ μηνών", "2+ ετών", "3+ ετών"],
+        "3+ ετών": ["3+ ετών", "4+ ετών", "5+ ετών", "6+ ετών", "7+ ετών", "8+ ετών"],
+        "7+ ετών": ["6+ ετών", "7+ ετών", "8+ ετών", "9+ ετών", "10+ ετών", "11+ ετών", "12+ ετών", "13+ ετών", "14+ ετών"],
+        "13+ ετών": ["10+ ετών", "11+ ετών", "12+ ετών", "13+ ετών", "14+ ετών", "15+ ετών", "16+ ετών", "18+ ετών"]
+    }
+    # Naive fallback for the POC: Just map exact or broad matches if dict fails
+    allowed_ages = age_map.get(t_age, [t_age]) 
+    c_books = c_books[c_books['Ηλικία'].fillna('').isin(allowed_ages)]
+    
+    diag.append(("1. Critical Safety", len(c_books), f"Age & L2 Lock applied"))
+
+    # --- PRIORITY 1: THE SERIES ENGINE (Logics 2) ---
+    if t_series and t_series != 'nan':
+        series_pool = c_books[c_books['Σειρά βιβλίου'].fillna('') == t_series]
+        
+        # The Format Lock (Hardcovers with Hardcovers, etc)
+        for lock_col in ['Εξώφυλλο', 'Διαστάσεις', 'Εκδοτική Σειρά']:
+            t_val = str(trigger.get(lock_col, '')).strip()
+            if t_val and t_val != 'nan':
+                series_pool = series_pool[series_pool[lock_col].fillna('').astype(str).str.strip() == t_val]
+        
+        # Sort by Date (Simplified to Sales for the POC if date parsing is messy)
+        if 'Sum of Sales' in series_pool.columns:
+            series_pool = series_pool.sort_values(by='Sum of Sales', ascending=False)
+            
+        for _, row in series_pool.head(10).iterrows():
+            row['Slot_Role'] = "Priority 1: The Series"
+            final_recs.append(row)
+            
+        slot_notes['Series'] = [f"Found {len(final_recs)} perfectly matched series books."]
+        
+    # --- PRIORITY 2: THE CROSS-SELL ECOSYSTEM (Logics 3-6) ---
+    toys_added = 0
+    if len(final_recs) < 10:
+        c_toys = df_products[df_products['Level 1'].isin(['Toys', 'Stationery'])].copy()
+        
+        # Dynamic Cross Sell Routing based on Hierarchy
+        if t_hier in ["ΖΩΓΡΑΦΙΚΗ", "ΧΕΙΡΟΤΕΧΝΙΕΣ/ΚΑΤΑΣΚΕΥΕΣ", "ΤΕΧΝΗ"]:
+            # The Artist (Logic 4A)
+            pool = c_toys[c_toys['Hierarchy'].fillna('').str.contains("ΜΑΡΚΑΔΟΡΟΙ|ΧΡΩΜΑΤΑ|ΠΛΑΣΤΕΛΙΝΗ", case=False)]
+            for _, row in pool.head(2).iterrows():
+                row['Slot_Role'] = "Priority 2: Arts & Crafts"
+                final_recs.append(row); toys_added += 1
+                
+        elif t_hier in ["ΕΦΕΥΡΕΣΕΙΣ/ΠΕΙΡΑΜΑΤΑ", "ΑΣΤΡΟΝΟΜΙΑ", "ΦΥΣΙΚΗ", "ΓΝΩΣΕΩΝ"]:
+            # The Scientist (Logic 4C / 6A)
+            pool = c_toys[c_toys['Hierarchy'].fillna('').str.contains("ΔΙΑΔΡΑΣΤΙΚΑ ΠΑΙΧΝΙΔΙΑ|3D PUZZLES|ΚΑΤΑΣΚΕΥΕΣ", case=False)]
+            for _, row in pool.head(2).iterrows():
+                row['Slot_Role'] = "Priority 2: STEM & Puzzles"
+                final_recs.append(row); toys_added += 1
+                
+        elif t_hier in ["ΠΑΙΔΙΚΑ - ΠΑΡΑΜΥΘΙΑ", "ΜΥΘΟΛΟΓΙΑ"]:
+            # The Fiction Reader (Logic 4B)
+            pool = c_toys[c_toys['Hierarchy'].fillna('').str.contains("LEGO|PLAYMOBIL", case=False)]
+            for _, row in pool.head(2).iterrows():
+                row['Slot_Role'] = "Priority 2: Universe Builder"
+                final_recs.append(row); toys_added += 1
+                
+        slot_notes['Cross_Sell'] = [f"Added {toys_added} physical ecosystem products."]
+
+    # --- PRIORITY 3: CATEGORY DISCOVERY (The Fallback) ---
+    if len(final_recs) < 10:
+        needed = 10 - len(final_recs)
+        
+        # Exclude already picked books
+        picked_ids = [r['Material'] for r in final_recs]
+        fallback_pool = c_books[~c_books['Material'].isin(picked_ids)]
+        
+        # Match exact hierarchy
+        fallback_pool = fallback_pool[fallback_pool['Hierarchy'] == t_hier]
+        
+        # Sort by Best Sellers
+        if 'Sum of Sales' in fallback_pool.columns:
+            fallback_pool['Sum of Sales'] = pd.to_numeric(fallback_pool['Sum of Sales'], errors='coerce').fillna(0)
+            fallback_pool = fallback_pool.sort_values(by='Sum of Sales', ascending=False)
+            
+        for _, row in fallback_pool.head(needed).iterrows():
+            row['Slot_Role'] = "Priority 3: Category Discovery"
+            final_recs.append(row)
+            
+        slot_notes['Fallback'] = [f"Added {needed} fallback category best-sellers."]
+
+    # Assign Slot Numbers
+    final_df = pd.DataFrame(final_recs)
+    if not final_df.empty:
+        final_df['Assigned_Slot'] = range(1, len(final_df) + 1)
+        final_df['Item_Rank'] = 1
+        final_df['Draft_Score'] = final_df['Assigned_Slot'] * 100
+        
+    return final_df, diag, slot_diag, slot_notes, final_df
 
 # ─────────────────────────────────────────────────────────────
-# RUN ENGINE
+# RUN & VISUALIZATION
 # ─────────────────────────────────────────────────────────────
-if active_cluster == "Smartphones":
+# Unpack the 5 variables from the engine
+
+# ─────────────────────────────────────────────────────────────
+# EXECUTION ROUTER
+# ─────────────────────────────────────────────────────────────
+if ACTIVE_CLUSTER == "Smartphones":
     recs, diag, slot_diag, slot_notes, full_candidates = run_engine(trigger, df_products, df_history, df_slots)
-else:
-    recs, diag, slot_notes, full_candidates = run_books_engine(trigger, df_books, df_history)
-    slot_diag = []
+elif ACTIVE_CLUSTER == "Kids Books":
+    recs, diag, slot_diag, slot_notes, full_candidates = run_books_engine(trigger, df_books, df_products)
+    
 
-# Marketing Copy
+# 🟢 NEW: AI-Style Marketing Copy for each Slot Logic Key (Optimized & Short)
 MARKETING_COPY = {
     "PRIMARY_CASE": "Απόλυτη προστασία & τέλεια εφαρμογή.",
     "SCREEN_GLASS": "Αόρατη ασπίδα για την οθόνη σου.",
     "WALL_CHARGER": "Γρήγορη και απόλυτα ασφαλής φόρτιση.",
     "EARBUDS": "Κορυφαία, ασύρματη ακουστική εμπειρία.",
-    "POWERBANK": "Ενέργεια on-the-go.",
+    "POWERBANK": "Ενέργεια on-the-go για να μη μένεις ποτέ.",
     "CROSS_SELL": "Smart gadget για το οικοσύστημά σου.",
     "CAMERA_GLASS": "Θωράκιση φακών για τέλειες λήψεις.",
-    "SMARTWATCH": "Ο απόλυτος σύντροφος.",
+    "SMARTWATCH": "Ο απόλυτος σύντροφος για τον καρπό σου.",
     "HOLDER": "Σταθερή τοποθέτηση για το αυτοκίνητο.",
-    "ALT_CASE": "Premium προστασία.",
-    # Books
-    "Series Book": "Η συνέχεια της περιπέτειας!",
-    "Cross-Sell: IP Toy": "Ο ήρωας ζωντανεύει!",
-    "Cross-Sell: Plush": "Αγκαλιά με τον αγαπημένο σου!",
-    "Cross-Sell: Arts": "Δημιούργησε & φαντάσου!",
-    "Cross-Sell: Creative Toy": "Χτίσε τον κόσμο σου!",
-    "Cross-Sell: Puzzle": "Μάθε παίζοντας!",
-    "Cross-Sell: Lifestyle": "Στιλ για κάθε μέρα!",
-    "Category Discovery": "Μια ακόμα τέλεια επιλογή!",
+    "ALT_CASE": "Premium προστασία και πρακτικότητα."
 }
 
 if not recs.empty:
@@ -1100,141 +1076,251 @@ if not recs.empty:
     ch = ""
     for _, r in rts.iterrows():
         iu=safe(str(r.get('Thumbnails','')).strip())
-        if not iu or iu == 'nan': iu = "https://via.placeholder.com/150"
         rp=parse_euro_price(r.get('LIST PRICE',0))
         np=f"{rp:.2f}".replace('.',','); op=f"{(rp*1.25):.2f}".replace('.',',')
         ti=safe(str(r.get('Title',''))); sn=int(r.get('Assigned_Slot',0))
         
+        # Determine the marketing text based on the slot's logic key
         raw_role = str(r.get('Slot_Role',''))
-        if active_cluster == "Smartphones":
-            lk = detect_logic_key(raw_role)
-            marketing_text = MARKETING_COPY.get(lk, "Ιδανική επιλογή!")
-        else:
-            marketing_text = MARKETING_COPY.get(raw_role, "Μια εξαιρετική επιλογή!")
+        lk = detect_logic_key(raw_role)
+        marketing_text = MARKETING_COPY.get(lk, "Ιδανική προσθήκη για να ολοκληρώσεις την αγορά σου.")
         
         ch+=f"""<div class="pc">
             <div class="sb">Slot {sn}</div>
             <img src="{iu}" alt="product">
             <div class="ti" title="{ti}">{ti}</div>
             <div class="sr">{marketing_text}</div>
-            <div class="rv"><span class="sc">4.8</span> <span class="st">★★★★★</span> <span class="ct">(305)</span></div>
-            <div class="op">Π.Λ.Τ. : {op}€</div>
-            <div class="np">{np.split(',')[0]}<span class="dm">,{np.split(',')[1]}€</span></div>
+            <div class="rv"><span class="sc">4.8</span> <span class="st">&#9733;&#9733;&#9733;&#9733;&#9733;</span> <span class="ct">(305)</span></div>
+            <div class="op">&#928;.&#923;.&#932;. : {op}&#8364;</div>
+            <div class="np">{np.split(',')[0]}<span class="dm">,{np.split(',')[1]}&#8364;</span></div>
             <button class="cb">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                    <circle cx="9" cy="21" r="1"></circle><circle cx="20" cy="21" r="1"></circle>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="9" cy="21" r="1"></circle>
+                    <circle cx="20" cy="21" r="1"></circle>
                     <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path>
                 </svg>
             </button>
         </div>"""
 
-    header_text = "Μαζί με αυτό αγοράζουν" if active_cluster == "Smartphones" else "Συνέχισε την περιπέτεια"
-
+    # Base CSS tightly matched to the original screenshot
     css="""
     *{margin:0;padding:0;box-sizing:border-box}
     body{font-family:-apple-system,BlinkMacSystemFont,sans-serif;background:transparent}
-    .desktop-wrapper{background-color:#f8f9fa;border-radius:16px;padding:30px;margin:10px 0;position:relative}
-    .desktop-header{font-size:24px;font-weight:700;margin-bottom:25px;color:#111;display:flex;align-items:center}
-    .desktop-header span{color:#ff5e00;margin-right:10px;font-size:26px;line-height:1;font-weight:900}
-    .car{display:flex;overflow-x:auto;gap:15px;padding-bottom:10px;scrollbar-width:none;scroll-behavior:smooth}
-    .car::-webkit-scrollbar{display:none}
-    .pc{background:#fff;border:1px solid #eaeaea;border-radius:12px;padding:15px 12px;display:flex;flex-direction:column;align-items:center;box-shadow:0 2px 5px rgba(0,0,0,.04);position:relative;flex-shrink:0;width:195px;min-width:195px}
-    .sb{position:absolute;top:8px;left:8px;background:#ff5e00;color:#fff;font-size:10px;font-weight:700;padding:3px 6px;border-radius:6px;z-index:10}
-    .pc img{height:110px;width:auto;object-fit:contain;margin-bottom:15px;margin-top:10px}
-    .ti{font-size:13px;color:#333;text-align:center;height:36px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;margin-bottom:6px;line-height:1.3;padding:0 5px}
-    .sr{font-size:10px;color:#777;margin-bottom:12px;text-align:center;height:28px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;line-height:1.35;width:100%;padding:0 4px}
-    .rv{font-size:11px;margin-bottom:15px}
-    .sc{color:#ff5e00;font-weight:700}
-    .st{color:#ff5e00;letter-spacing:-2px}
-    .ct{color:#1a73e8}
-    .op{font-size:11px;color:#888;text-decoration:line-through;margin-bottom:2px}
-    .np{font-size:18px;font-weight:700;color:#ff5e00;margin-bottom:15px}
-    .dm{font-size:12px}
-    .cb{background:#ff5e00;color:#fff;border:none;border-radius:8px;width:40px;height:35px;cursor:pointer;display:flex;justify-content:center;align-items:center}
-    .cb:hover{background:#e65500}
-    .nav-btn{position:absolute;top:55%;transform:translateY(-50%);width:44px;height:44px;background-color:#fff;border:1px solid #eaeaea;border-radius:50%;box-shadow:0 4px 10px rgba(0,0,0,0.1);display:flex;align-items:center;justify-content:center;cursor:pointer;z-index:100;transition:transform 0.2s,box-shadow 0.2s,opacity 0.3s}
-    .nav-btn:hover{transform:translateY(-50%) scale(1.05);box-shadow:0 6px 14px rgba(0,0,0,0.15)}
-    .nav-left{left:10px;opacity:0;pointer-events:none}
-    .nav-right{right:10px}
-    .nav-left::after{content:'';width:10px;height:10px;border-top:2px solid #555;border-left:2px solid #555;transform:rotate(-45deg);margin-left:4px}
-    .nav-right::after{content:'';width:10px;height:10px;border-top:2px solid #555;border-right:2px solid #555;transform:rotate(45deg);margin-right:4px}
+    
+    .desktop-wrapper { background-color: #f8f9fa; border-radius: 16px; padding: 30px; margin: 10px 0; position: relative; }
+    .desktop-header { font-size: 24px; font-weight: 700; margin-bottom: 25px; color: #111; display:flex; align-items:center; }
+    .desktop-header span { color: #ff5e00; margin-right: 10px; font-size: 26px; line-height: 1; font-weight: 900; }
+    
+    /* Hide the scrollbar but keep it scrollable */
+    .car { display:flex; overflow-x:auto; gap:15px; padding-bottom:10px; scrollbar-width:none; scroll-behavior: smooth; }
+    .car::-webkit-scrollbar { display: none; }
+    
+    .pc { background:#fff; border:1px solid #eaeaea; border-radius:12px; padding:15px 12px; display:flex; flex-direction:column; align-items:center; box-shadow:0 2px 5px rgba(0,0,0,.04); position:relative; flex-shrink:0; width:195px; min-width:195px; }
+    .sb { position:absolute; top:8px; left:8px; background:#ff5e00; color:#fff; font-size:10px; font-weight:700; padding:3px 6px; border-radius:6px; z-index:10; }
+    .pc img { height:110px; width:auto; object-fit:contain; margin-bottom:15px; margin-top:10px; }
+    .ti { font-size:13px; color:#333; text-align:center; height:36px; overflow:hidden; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; margin-bottom:6px; line-height:1.3; padding:0 5px; }
+    
+    /* 🟢 UPDATED: Marketing Text Subtitle CSS */
+    .sr { 
+        font-size: 10px; 
+        color: #777; 
+        margin-bottom: 12px; 
+        text-align: center; 
+        height: 28px; /* Room for 2 lines */
+        overflow: hidden; 
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        line-height: 1.35;
+        width: 100%; 
+        padding: 0 4px;
+    }
+    
+    .rv { font-size:11px; margin-bottom:15px }
+    .sc { color:#ff5e00; font-weight:700 }
+    .st { color:#ff5e00; letter-spacing:-2px }
+    .ct { color:#1a73e8 }
+    .op { font-size:11px; color:#888; text-decoration:line-through; margin-bottom:2px }
+    .np { font-size:18px; font-weight:700; color:#ff5e00; margin-bottom:15px }
+    .dm { font-size:12px }
+    .cb { background:#ff5e00; color:#fff; border:none; border-radius:8px; width:40px; height:35px; cursor:pointer; transition: background 0.2s; display: flex; justify-content: center; align-items: center; }
+    .cb:hover { background:#e65500 }
+    
+    /* Smart Navigation Arrows */
+    .nav-btn {
+        position: absolute;
+        top: 55%;
+        transform: translateY(-50%);
+        width: 44px;
+        height: 44px;
+        background-color: #fff;
+        border: 1px solid #eaeaea;
+        border-radius: 50%;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        z-index: 100;
+        transition: transform 0.2s, box-shadow 0.2s, opacity 0.3s;
+    }
+    .nav-btn:hover {
+        transform: translateY(-50%) scale(1.05);
+        box-shadow: 0 6px 14px rgba(0,0,0,0.15);
+    }
+    
+    .nav-left { left: 10px; opacity: 0; pointer-events: none; }
+    .nav-right { right: 10px; }
+    
+    .nav-left::after {
+        content: ''; width: 10px; height: 10px;
+        border-top: 2px solid #555; border-left: 2px solid #555;
+        transform: rotate(-45deg); margin-left: 4px;
+    }
+    .nav-right::after {
+        content: ''; width: 10px; height: 10px;
+        border-top: 2px solid #555; border-right: 2px solid #555;
+        transform: rotate(45deg); margin-right: 4px;
+    }
     """
 
     dp=f"""<!DOCTYPE html><html><head><meta charset="utf-8"><style>{css}</style></head>
     <body>
     <div class="desktop-wrapper">
-        <div class="desktop-header"><span>|</span>{header_text}</div>
+        <div class="desktop-header"><span>|</span>Μαζί με αυτό, οι περισσότεροι αγοράζουν</div>
         <div class="nav-btn nav-left" id="btnLeft" onclick="scrollL()"></div>
         <div class="car" id="scrollContainer">{ch}</div>
         <div class="nav-btn nav-right" id="btnRight" onclick="scrollR()"></div>
     </div>
+
     <script>
-        const container=document.getElementById('scrollContainer');
-        const btnLeft=document.getElementById('btnLeft');
-        const btnRight=document.getElementById('btnRight');
-        function scrollL(){{container.scrollBy({{left:-405,behavior:'smooth'}});}}
-        function scrollR(){{container.scrollBy({{left:405,behavior:'smooth'}});}}
-        container.addEventListener('scroll',()=>{{
-            btnLeft.style.opacity=container.scrollLeft>5?'1':'0';
-            btnLeft.style.pointerEvents=container.scrollLeft>5?'auto':'none';
-            btnRight.style.opacity=container.scrollLeft+container.clientWidth>=container.scrollWidth-2?'0':'1';
-            btnRight.style.pointerEvents=container.scrollLeft+container.clientWidth>=container.scrollWidth-2?'none':'auto';
+        const container = document.getElementById('scrollContainer');
+        const btnLeft = document.getElementById('btnLeft');
+        const btnRight = document.getElementById('btnRight');
+        const scrollAmount = 405; 
+
+        function scrollL() {{ container.scrollBy({{ left: -scrollAmount, behavior: 'smooth' }}); }}
+        function scrollR() {{ container.scrollBy({{ left: scrollAmount, behavior: 'smooth' }}); }}
+
+        container.addEventListener('scroll', () => {{
+            if (container.scrollLeft > 5) {{
+                btnLeft.style.opacity = '1'; btnLeft.style.pointerEvents = 'auto';
+            }} else {{
+                btnLeft.style.opacity = '0'; btnLeft.style.pointerEvents = 'none';
+            }}
+            if (container.scrollLeft + container.clientWidth >= container.scrollWidth - 2) {{
+                btnRight.style.opacity = '0'; btnRight.style.pointerEvents = 'none';
+            }} else {{
+                btnRight.style.opacity = '1'; btnRight.style.pointerEvents = 'auto';
+            }}
         }});
         container.dispatchEvent(new Event('scroll'));
     </script>
     </body></html>"""
 
+    # Render Layout
     components.html(dp, height=540, scrolling=False)
+
 else:
-    st.error("❌ No recommendations found.")
+    st.error("❌ No recommendations. Check diagnostics below.")
 
 
 # ─────────────────────────────────────────────────────────────
-# DIAGNOSTICS
+# DIAGNOSTICS (HIDDEN AT BOTTOM)
 # ─────────────────────────────────────────────────────────────
 st.markdown("---")
 
+# 🟢 FIX: Ultimate CSS Hack to mimic your Angular <cdk-accordion-item> and ic-chevron-down
 st.markdown("""
 <style>
-[data-testid="stExpander"]{background-color:#ffffff !important;border:1px solid #d9d9d9 !important;border-radius:12px !important;box-shadow:none !important;margin-top:20px}
-[data-testid="stExpander"] summary{padding:24px 30px !important;display:flex !important;align-items:center !important}
-[data-testid="stExpander"] summary p{font-size:18px !important;font-weight:700 !important;color:#000 !important;flex-grow:1}
-[data-testid="stExpander"] summary svg{display:none !important}
-[data-testid="stExpander"] summary::after{content:'';display:inline-block;width:12px;height:12px;border-right:2px solid #111;border-bottom:2px solid #111;transform:rotate(45deg);margin-top:-4px}
-[data-testid="stExpander"][open] summary::after{transform:rotate(225deg);margin-top:6px}
-[data-testid="stExpanderDetails"]{padding:10px 30px 30px 30px !important}
+/* 1. The Main Box (Matches the exact border and radius of your screenshot) */
+[data-testid="stExpander"] {
+    background-color: #ffffff !important;
+    border: 1px solid #d9d9d9 !important;
+    border-radius: 12px !important;
+    box-shadow: none !important;
+    margin-top: 20px;
+}
+
+/* 2. The Header Area (Matches .pbc-accordion-item-header) */
+[data-testid="stExpander"] summary {
+    padding: 24px 30px !important;
+    display: flex !important;
+    align-items: center !important;
+}
+[data-testid="stExpander"] summary:hover {
+    background-color: transparent !important;
+}
+
+/* 3. The Typography (Matches .pbc-accordion-item-title) */
+[data-testid="stExpander"] summary p {
+    font-size: 18px !important;
+    font-weight: 700 !important;
+    color: #000000 !important;
+    flex-grow: 1; /* Pushes the arrow to the far right */
+}
+
+/* 4. The Icon Hack (Killing Streamlit's default SVG and replacing it with your chevron) */
+[data-testid="stExpander"] summary svg {
+    display: none !important;
+}
+[data-testid="stExpander"] summary::after {
+    content: '';
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    border-right: 2px solid #111;
+    border-bottom: 2px solid #111;
+    transform: rotate(45deg);
+    transition: transform 0.2s ease;
+    margin-top: -4px; /* Optical centering */
+}
+
+/* When the accordion is open, flip the arrow up */
+[data-testid="stExpander"][open] summary::after {
+    transform: rotate(225deg);
+    margin-top: 6px;
+}
+
+/* 5. The Body Content (Matches your pbc-accordion-item-body padding) */
+[data-testid="stExpanderDetails"] {
+    padding: 10px 30px 30px 30px !important;
+}
 </style>
 """, unsafe_allow_html=True)
 
-with st.expander("⚙️ System Diagnostics"):
-    st.markdown(f"### Active Cluster: **{active_cluster}**")
-    
-    if active_cluster == "Kids Books":
-        t_series = str(trigger.get('Σειρά βιβλίου', '')).strip()
-        t_age = str(trigger.get('Ηλικία', '')).strip()
-        t_hierarchy = str(trigger.get('Hierarchy', '')).strip()
-        st.markdown(f"**Series:** `{t_series}` (Valid: {is_valid_series(t_series)}) | **Age:** `{t_age}` | **Hierarchy:** `{t_hierarchy}`")
+# The actual expander
+with st.expander("⚙️ System Diagnostics & Engine Math"):
+    tpr = str(trigger.get('Θύρα USB','')).strip()
+    tp2 = extract_base_port(tpr)
+    tc2 = str(trigger.get('Χρώμα','')).strip()
+    cc2 = get_case_colors(tc2)
+    st.markdown(f"**Port:** `{tpr}` → **`{tp2}`** | **Color:** `{tc2}` → **{cc2}** | **Compat cols:** {compat_cols_found}")
 
-    st.markdown("### Engine Funnel")
-    st.dataframe(pd.DataFrame(diag, columns=["Step","Count","Note"]), use_container_width=True, hide_index=True)
+    st.markdown("### Guardrail Funnel")
+    st.dataframe(pd.DataFrame(diag, columns=["Step","Left","Note"]), use_container_width=True, hide_index=True)
 
-    st.markdown("### Slot Details")
+    st.markdown("### Per-Slot Breakdown")
+    st.dataframe(pd.DataFrame(slot_diag, columns=["Slot","Role","Logic","After Hierarchy","After Attributes"]), use_container_width=True, hide_index=True)
+
+    st.markdown("### Slot Filter Details")
     for sn, notes in sorted(slot_notes.items()):
         if notes:
-            st.markdown(f"**Priority {sn}**")
-            for n in notes: 
-                st.text(n)
+            st.markdown(f"**Slot {sn} — {' | '.join(notes[:2])}**")
+            for n in notes: st.text(n)
 
-    st.markdown("### Trigger Attributes")
-    if active_cluster == "Kids Books":
-        cols = ['Material','Title','Level 2','Hierarchy','Σειρά βιβλίου','Ηλικία','Εξώφυλλο','Brand','LIST PRICE']
-    else:
-        cols = ['Material','Title','Level 2','Hierarchy','Κατασκευαστής','Μοντέλο','LIST PRICE']
-    for col in cols:
-        val = trigger.get(col, 'N/A')
-        st.text(f"{col}: {val}")
+    st.markdown("### 📋 Trigger")
+    for col in ['Material','Title','Level 1','Level 2','Hierarchy','Κατασκευαστής','Μοντέλο',
+                'Θύρα USB','Χρώμα','Λειτουργικό σύστημα','Extra Χαρακτηριστικά','LIST PRICE']:
+        st.text(f"{col}: {trigger.get(col,'N/A')}")
 
     if not recs.empty:
-        st.markdown("### Final Recommendations")
-        dc = ['Title','Hierarchy','Assigned_Slot','Slot_Role','Final_Score'] if 'Final_Score' in recs.columns else ['Title','Hierarchy','Assigned_Slot','Slot_Role']
-        st.dataframe(recs[[c for c in dc if c in recs.columns]], use_container_width=True, hide_index=True)
+        st.markdown("### 🏆 Top 3 Candidates per Slot")
+        top3 = full_candidates[full_candidates['Item_Rank'] <= 3].copy()
+        top3_cols = ['Assigned_Slot', 'Item_Rank', 'Title', 'Final_Score', 'Sales_Tiebreaker', 'Smart_Boost', 'Avail_Boost', 'Frequency', 'History_Score']
+        avail_top3 = [c for c in top3_cols if c in top3.columns]
+        st.dataframe(top3[avail_top3].sort_values(['Assigned_Slot', 'Item_Rank']), use_container_width=True, hide_index=True)
+
+        st.markdown("### Score Breakdown (Final 10 Winners)")
+        dc=['Title','Hierarchy','Assigned_Slot','Slot_Role','Item_Rank','History_Score','Frequency','Avail_Boost','Smart_Boost','Sales_Tiebreaker','Final_Score','Draft_Score']
+        st.dataframe(recs[[c for c in dc if c in recs.columns]], use_container_width=True)
