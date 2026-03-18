@@ -1063,7 +1063,6 @@ if ACTIVE_CLUSTER == "Smartphones":
     recs, diag, slot_diag, slot_notes, full_candidates = run_engine(trigger, df_products, df_history, df_slots)
 elif ACTIVE_CLUSTER == "Kids Books":
     recs, diag, slot_diag, slot_notes, full_candidates = run_books_engine(trigger, df_books, df_products)
-    
 
 # 🟢 NEW: AI-Style Marketing Copy for each Slot Logic Key (Optimized & Short)
 MARKETING_COPY = {
@@ -1317,7 +1316,7 @@ with st.expander("⚙️ System Diagnostics & Engine Math"):
             st.markdown(f"**Slot {sn} — {' | '.join(notes[:2])}**")
             for n in notes: st.text(n)
 
-st.markdown("### 📋 Trigger")
+    st.markdown("### 📋 Trigger")
     
     # 🟢 FIX: Δυναμική εμφάνιση των στηλών ανάλογα με το επιλεγμένο Cluster
     if ACTIVE_CLUSTER == "Smartphones":
@@ -1335,3 +1334,14 @@ st.markdown("### 📋 Trigger")
 
     for col in trigger_cols:
         st.text(f"{col}: {trigger.get(col,'N/A')}")
+
+    if not recs.empty:
+        st.markdown("### 🏆 Top 3 Candidates per Slot")
+        top3 = full_candidates[full_candidates['Item_Rank'] <= 3].copy()
+        top3_cols = ['Assigned_Slot', 'Item_Rank', 'Title', 'Final_Score', 'Sales_Tiebreaker', 'Smart_Boost', 'Avail_Boost', 'Frequency', 'History_Score']
+        avail_top3 = [c for c in top3_cols if c in top3.columns]
+        st.dataframe(top3[avail_top3].sort_values(['Assigned_Slot', 'Item_Rank']), use_container_width=True, hide_index=True)
+
+        st.markdown("### Score Breakdown (Final 10 Winners)")
+        dc=['Title','Hierarchy','Assigned_Slot','Slot_Role','Item_Rank','History_Score','Frequency','Avail_Boost','Smart_Boost','Sales_Tiebreaker','Final_Score','Draft_Score']
+        st.dataframe(recs[[c for c in dc if c in recs.columns]], use_container_width=True)
