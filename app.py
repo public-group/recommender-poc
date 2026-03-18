@@ -71,7 +71,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v10.4 — New Sidebar UI
+        🟢 Engine v10.5 — Public.gr Style Sidebar
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -380,64 +380,107 @@ except Exception as e:
     st.code(traceback.format_exc())
     st.stop()
 
-# 🟢 SIDEBAR STYLING
+# 🟢 SIDEBAR STYLING - Public.gr Style
 st.sidebar.markdown("""
 <style>
-    /* Sidebar header */
-    .sidebar-title {
+    /* Hide default Streamlit sidebar padding */
+    [data-testid="stSidebar"] > div:first-child {
+        padding-top: 0 !important;
+    }
+    
+    /* Sidebar header bar */
+    .sidebar-header {
+        background-color: #ff5e00;
+        color: white;
+        padding: 16px 20px;
+        margin: -1rem -1rem 0 -1rem;
         font-family: -apple-system, BlinkMacSystemFont, sans-serif;
         font-size: 18px;
         font-weight: 700;
-        color: #111;
-        margin-bottom: 15px;
-        padding-bottom: 12px;
-        border-bottom: 2px solid #ff5e00;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
     }
     
-    /* Style the cluster buttons to look like tiles */
-    [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] button {
-        background: #ffffff !important;
-        border: 2px solid #eaeaea !important;
-        border-radius: 12px !important;
-        padding: 18px 8px !important;
-        min-height: 90px !important;
-        font-family: -apple-system, BlinkMacSystemFont, sans-serif !important;
-        font-size: 12px !important;
-        font-weight: 600 !important;
-        color: #333 !important;
-        transition: all 0.2s ease !important;
-        white-space: pre-line !important;
-        line-height: 1.4 !important;
+    /* Tile grid container */
+    .tile-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+        padding: 15px 0;
     }
     
-    [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] button:hover {
-        border-color: #ff5e00 !important;
-        background: #fff8f5 !important;
-        box-shadow: 0 4px 12px rgba(255, 94, 0, 0.15) !important;
+    /* Individual category tile */
+    .category-tile {
+        background: #ffffff;
+        border: 1px solid #eaeaea;
+        border-radius: 12px;
+        padding: 18px 10px;
+        text-align: center;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        text-decoration: none;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        min-height: 95px;
     }
     
-    [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] button:active,
-    [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] button:focus {
-        border-color: #ff5e00 !important;
-        background: #fff8f5 !important;
-        box-shadow: 0 4px 12px rgba(255, 94, 0, 0.2) !important;
+    .category-tile:hover {
+        border-color: #ff5e00;
+        box-shadow: 0 4px 12px rgba(255, 94, 0, 0.15);
+        transform: translateY(-2px);
+    }
+    
+    .category-tile.active {
+        border-color: #ff5e00;
+        border-width: 2px;
+        background: #fff8f5;
+        box-shadow: 0 4px 12px rgba(255, 94, 0, 0.2);
+    }
+    
+    /* Tile icon */
+    .tile-icon {
+        font-size: 28px;
+        margin-bottom: 8px;
+        color: #ff5e00;
+        line-height: 1;
+    }
+    
+    /* Tile name */
+    .category-name {
+        font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+        font-size: 11px;
+        font-weight: 600;
+        color: #333;
+        line-height: 1.3;
+        text-align: center;
+    }
+    
+    /* Section divider */
+    .section-divider {
+        border: none;
+        border-top: 1px solid #eaeaea;
+        margin: 15px 0;
     }
     
     /* Section headers */
     .sidebar-section {
         font-family: -apple-system, BlinkMacSystemFont, sans-serif;
-        font-size: 12px;
+        font-size: 11px;
         font-weight: 700;
         color: #888;
         text-transform: uppercase;
         letter-spacing: 0.5px;
-        margin: 20px 0 8px 0;
+        margin: 15px 0 10px 0;
     }
     
     /* Style selectboxes */
     [data-testid="stSidebar"] .stSelectbox > div > div {
-        border-radius: 10px !important;
+        border-radius: 8px !important;
         border-color: #ddd !important;
+        font-size: 13px !important;
     }
     
     [data-testid="stSidebar"] .stSelectbox > div > div:hover {
@@ -446,71 +489,60 @@ st.sidebar.markdown("""
     
     /* Style text input */
     [data-testid="stSidebar"] .stTextInput > div > div {
-        border-radius: 10px !important;
+        border-radius: 8px !important;
+        font-size: 13px !important;
     }
     
-    /* Style the refresh button at bottom */
-    [data-testid="stSidebar"] > div > div:last-child button {
-        background: #f5f5f5 !important;
-        border: 1px solid #ddd !important;
-        color: #666 !important;
-        font-size: 12px !important;
-        padding: 8px !important;
+    [data-testid="stSidebar"] .stTextInput > div > div:focus-within {
+        border-color: #ff5e00 !important;
     }
     
-    [data-testid="stSidebar"] > div > div:last-child button:hover {
-        background: #eee !important;
-        border-color: #ccc !important;
-    }
-    
-    /* Hide streamlit branding in sidebar */
-    [data-testid="stSidebar"] [data-testid="stMarkdownContainer"] > div:empty {
-        display: none;
+    /* Hide Streamlit button styling, we'll use custom HTML */
+    [data-testid="stSidebar"] .stButton > button {
+        display: none !important;
     }
 </style>
 """, unsafe_allow_html=True)
 
-# Sidebar title
-st.sidebar.markdown('<div class="sidebar-title">Επιλογή Κατηγορίας</div>', unsafe_allow_html=True)
+# Sidebar header
+st.sidebar.markdown('<div class="sidebar-header">Κατηγορίες</div>', unsafe_allow_html=True)
 
 # Use session state for cluster selection
 if 'active_cluster' not in st.session_state:
     st.session_state.active_cluster = "Smartphones"
 
-# Create clickable tiles using columns
-col1, col2 = st.sidebar.columns(2)
+active_cluster = st.session_state.active_cluster
 
+# Create tile grid with clickable tiles
+smartphones_active = "active" if active_cluster == "Smartphones" else ""
+books_active = "active" if active_cluster == "Kids Books" else ""
+
+st.sidebar.markdown(f"""
+<div class="tile-grid">
+    <div class="category-tile {smartphones_active}" onclick="window.parent.postMessage({{'type': 'streamlit:setComponentValue', 'value': 'smartphones'}}, '*');" id="tile-smartphones">
+        <div class="tile-icon">📱</div>
+        <div class="category-name">Τηλεφωνία, Tablets & Wearables</div>
+    </div>
+    <div class="category-tile {books_active}" onclick="window.parent.postMessage({{'type': 'streamlit:setComponentValue', 'value': 'books'}}, '*');" id="tile-books">
+        <div class="tile-icon">📚</div>
+        <div class="category-name">Παιδικά Βιβλία</div>
+    </div>
+</div>
+""", unsafe_allow_html=True)
+
+# Hidden buttons for actual selection (triggered by JavaScript)
+col1, col2 = st.sidebar.columns(2)
 with col1:
-    if st.button("📱\nSmartphones", key="btn_smartphones", use_container_width=True):
+    if st.button("📱", key="btn_smartphones", use_container_width=True):
         st.session_state.active_cluster = "Smartphones"
         st.rerun()
-
 with col2:
-    if st.button("📚\nΠαιδικά\nΒιβλία", key="btn_kids_books", use_container_width=True):
+    if st.button("📚", key="btn_kids_books", use_container_width=True):
         st.session_state.active_cluster = "Kids Books"
         st.rerun()
 
-# Style the active button
-active_cluster = st.session_state.active_cluster
-
-# Show which is selected with a nice badge
-cluster_display = "📱 Smartphones" if active_cluster == "Smartphones" else "📚 Παιδικά Βιβλία"
-st.sidebar.markdown(f"""
-<div style="
-    background: linear-gradient(135deg, #ff5e00 0%, #ff8c42 100%);
-    color: white;
-    padding: 10px 14px;
-    border-radius: 8px;
-    margin: 12px 0 20px 0;
-    font-family: -apple-system, BlinkMacSystemFont, sans-serif;
-    font-size: 13px;
-    font-weight: 600;
-    text-align: center;
-    box-shadow: 0 3px 10px rgba(255, 94, 0, 0.25);
-">
-    ✓ {cluster_display}
-</div>
-""", unsafe_allow_html=True)
+# Divider
+st.sidebar.markdown('<hr class="section-divider">', unsafe_allow_html=True)
 
 # ─────────────────────────────────────────────────────────────
 # TRIGGER SELECTION
