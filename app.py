@@ -136,7 +136,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v7.4 — Rival Brand & Strict Fit Filtering
+        🟢 Engine v8.0 — Kids Books Waterfall Architecture
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -317,28 +317,41 @@ def load_data():
 df_products, df_history, df_slots, df_books, compat_cols_found = load_data()
 
 # ─────────────────────────────────────────────────────────────
-# TRIGGER
+# TRIGGER & CLUSTER SELECTION
 # ─────────────────────────────────────────────────────────────
-phones = df_products[(df_products['Level 2']=='Mobiles')&(df_products['Hierarchy']=='Smartphones')]
+st.sidebar.markdown("### ⚙️ Επιλογή Κατηγορίας")
+ACTIVE_CLUSTER = st.sidebar.radio("Κατηγορία:", ["Smartphones", "Kids Books"])
+st.sidebar.markdown("---")
 
-if phones.empty:
-    phones = df_products[df_products['Level 2']=='Mobiles']
-    st.sidebar.warning("⚠ Fallback to all Mobiles")
+if ACTIVE_CLUSTER == "Smartphones":
+    trigger_df = df_products[(df_products['Level 2']=='Mobiles') & (df_products['Hierarchy']=='Smartphones')]
+    if trigger_df.empty: trigger_df = df_products[df_products['Level 2']=='Mobiles']
+else:
+    # 🟢 KIDS BOOKS TRIGGER: Looks at the new df_books dataframe
+    trigger_df = df_books[df_books['Level 2'].isin(['Greek Kids Books', 'International Kids Books', 'ΕΛΛΗΝΙΚΑ ΠΑΙΔΙΚΑ', 'ΞΕΝΟΓΛΩΣΣΑ ΠΑΙΔΙΚΑ'])]
 
-if phones.empty:
-    st.error("🚨 CRITICAL: No phones found at all! Check your Google Sheet.")
+if trigger_df.empty:
+    st.error(f"🚨 CRITICAL: No products found for {ACTIVE_CLUSTER}! Check your Google Sheet.")
     st.stop()
 
-sel = st.sidebar.selectbox("Select a Smartphone:", phones['Title'].unique())
+sel = st.sidebar.selectbox("Επίλεξε Προϊόν:", trigger_df['Title'].unique())
 
 if sel:
-    trigger = phones[phones['Title']==sel].iloc[0]
+    trigger = trigger_df[trigger_df['Title']==sel].iloc[0]
     
     # Use the custom CSS class to create the branded header
     st.markdown('<div class="public-header">Επιλογές για εσένα</div>', unsafe_allow_html=True)
     
-    # Add a subtle text below it indicating what phone they are shopping for
-    st.markdown(f"<p style='color: #555; font-size: 14px; margin-top: -15px; margin-bottom: 25px;'>Συμβατά αξεσουάρ για το <b>{sel}</b></p>", unsafe_allow_html=True)
+    # 🟢 DYNAMIC SUBTITLE: Changes depending on if you are looking at a phone or a book
+    subtitle = "Συμβατά αξεσουάρ για το" if ACTIVE_CLUSTER == "Smartphones" else "Προτάσεις με βάση το"
+    st.markdown(f"<p style='color: #555; font-size: 14px; margin-top: -15px; margin-bottom: 25px;'>{subtitle} <b>{sel}</b></p>", unsafe_allow_html=True)
+    
+    # Extract EXACT data from dataframe
+    card_title = safe(str(trigger.get('Title', sel)))
+    card_sku = safe(str(trigger.get('Material', 'N/A')))
+    card_img = safe(str(trigger.get('Thumbnails', '')).strip())
+    if not card_img or card_img == 'nan':
+        card_img = "https://via.placeholder.com/150?text=No+Image"
     
     # Extract EXACT data from dataframe
     card_title = safe(str(trigger.get('Title', sel)))
