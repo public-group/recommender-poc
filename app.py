@@ -71,7 +71,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v10.6 — Public.gr Gray Background + SVG Icons
+        🟢 Engine v10.7 — Fixed Clickable Tiles
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -476,14 +476,6 @@ st.sidebar.markdown("""
         border-color: #ff5e00 !important;
     }
     
-    /* Hide the actual Streamlit buttons - we use custom HTML tiles */
-    [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] {
-        position: absolute;
-        left: -9999px;
-        opacity: 0;
-        pointer-events: none;
-    }
-    
     /* Refresh button at bottom */
     .refresh-btn {
         background: #ffffff !important;
@@ -513,94 +505,24 @@ if 'active_cluster' not in st.session_state:
 
 active_cluster = st.session_state.active_cluster
 
-# Compute active classes
-smartphones_active = "active" if active_cluster == "Smartphones" else ""
-books_active = "active" if active_cluster == "Kids Books" else ""
-
-# Create clickable tiles using custom HTML with SVG icons
-tile_html = f"""
-<style>
-    .pub-tile-grid {{
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 10px;
-        padding: 0;
-    }}
-    .pub-tile {{
-        background: #ffffff;
-        border: 1px solid #eaeaea;
-        border-radius: 12px;
-        padding: 20px 10px 15px 10px;
-        text-align: center;
-        cursor: pointer;
-        transition: all 0.15s ease;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        min-height: 90px;
-    }}
-    .pub-tile:hover {{
-        border-color: #ff5e00;
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
-    }}
-    .pub-tile.active {{
-        border-color: #ff5e00;
-        border-width: 2px;
-        background: #fff;
-    }}
-    .pub-tile-icon {{
-        width: 32px;
-        height: 32px;
-        margin-bottom: 10px;
-        color: #ff5e00;
-    }}
-    .pub-tile-icon svg {{
-        width: 100%;
-        height: 100%;
-        stroke: #ff5e00;
-        fill: none;
-    }}
-    .pub-tile-name {{
-        font-family: -apple-system, BlinkMacSystemFont, sans-serif;
-        font-size: 11px;
-        font-weight: 600;
-        color: #333;
-        line-height: 1.35;
-    }}
-</style>
-<div class="pub-tile-grid">
-    <div class="pub-tile {smartphones_active}" onclick="window.parent.document.querySelector('[data-testid=\\'stSidebar\\'] button[kind=\\'secondary\\']').click();">
-        <div class="pub-tile-icon">
-            <svg viewBox="0 0 24 24" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-                <rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect>
-                <line x1="12" y1="18" x2="12.01" y2="18"></line>
-            </svg>
-        </div>
-        <div class="pub-tile-name">Τηλεφωνία, Tablets & Wearables</div>
-    </div>
-    <div class="pub-tile {books_active}" onclick="window.parent.document.querySelectorAll('[data-testid=\\'stSidebar\\'] button[kind=\\'secondary\\']')[1].click();">
-        <div class="pub-tile-icon">
-            <svg viewBox="0 0 24 24" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
-                <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
-            </svg>
-        </div>
-        <div class="pub-tile-name">Παιδικά Βιβλία</div>
-    </div>
-</div>
-"""
-
-st.sidebar.markdown(tile_html, unsafe_allow_html=True)
-
-# Hidden actual buttons (triggered by tile clicks)
+# Create tile buttons with simple approach
 col1, col2 = st.sidebar.columns(2)
+
 with col1:
-    if st.button("phone", key="btn_smartphones", use_container_width=True):
+    # Smartphones button with visual indicator
+    btn_label_phones = "📱\n\nΤηλεφωνία,\nTablets &\nWearables"
+    if active_cluster == "Smartphones":
+        btn_label_phones = "✓ 📱\n\nΤηλεφωνία,\nTablets &\nWearables"
+    if st.button(btn_label_phones, key="btn_smartphones", use_container_width=True):
         st.session_state.active_cluster = "Smartphones"
         st.rerun()
+
 with col2:
-    if st.button("book", key="btn_kids_books", use_container_width=True):
+    # Kids Books button with visual indicator
+    btn_label_books = "📚\n\nΠαιδικά\nΒιβλία"
+    if active_cluster == "Kids Books":
+        btn_label_books = "✓ 📚\n\nΠαιδικά\nΒιβλία"
+    if st.button(btn_label_books, key="btn_kids_books", use_container_width=True):
         st.session_state.active_cluster = "Kids Books"
         st.rerun()
 
