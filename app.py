@@ -20,7 +20,7 @@ st.markdown("""
     }
     [data-testid="stSidebar"] {
         border-right: 1px solid #eaeaea !important;
-        padding-top: 30px !important;
+        padding-top: 50px !important;
     }
     header[data-testid="stHeader"] { 
         background: transparent !important;
