@@ -70,7 +70,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v10.1 — Fixed str.contains na=False
+        🟢 Engine v10.2 — Series Filter: Top 200 by Popularity
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -458,16 +458,45 @@ elif active_cluster == "Kids Books":
         st.error("🚨 No kids books found!")
         st.stop()
     
-    # Series filter
+    # Series filter - show most popular series (by book count)
     if 'Σειρά βιβλίου' in kids_books.columns:
-        series_list = kids_books['Σειρά βιβλίου'].dropna().astype(str)
-        series_list = series_list[(series_list != '0') & (series_list != '') & (series_list.str.lower() != 'nan')]
-        series_list = series_list.unique().tolist()
-        if series_list:
-            series_options = ['All'] + sorted(series_list)[:50]
-            selected_series = st.sidebar.selectbox("Filter by Series (optional):", series_options)
-            if selected_series != 'All':
-                kids_books = kids_books[kids_books['Σειρά βιβλίου'] == selected_series]
+        series_col = kids_books['Σειρά βιβλίου'].fillna('').astype(str)
+        series_col = series_col[(series_col != '0') & (series_col != '') & (series_col.str.lower() != 'nan') & (series_col.str.lower() != 'n/a')]
+        
+        if len(series_col) > 0:
+            # Get series sorted by popularity (most books first)
+            series_counts = series_col.value_counts()
+            
+            # Take top 200 most popular series
+            top_series = series_counts.head(200)
+            
+            # Create ordered list of (display_name, actual_name) tuples
+            series_items = [(f"{name} ({count})", name) for name, count in top_series.items()]
+            
+            # Add search box for series
+            series_search = st.sidebar.text_input("🔍 Search series:", placeholder="e.g. Harry Potter")
+            
+            if series_search:
+                # Filter ALL series by search term (not just top 200)
+                matching = [(f"{name} ({count})", name) for name, count in series_counts.items() 
+                           if series_search.lower() in name.lower()][:100]
+                series_options = ['All'] + [m[0] for m in matching]
+                series_display = {m[0]: m[1] for m in matching}
+            else:
+                # Show top 200 by popularity
+                series_options = ['All'] + [item[0] for item in series_items]
+                series_display = {item[0]: item[1] for item in series_items}
+            
+            selected_series_display = st.sidebar.selectbox(
+                f"Filter by Series ({len(series_counts):,} series):", 
+                series_options,
+                help=f"Top {len(series_options)-1} by popularity. Use search to find others."
+            )
+            
+            if selected_series_display != 'All':
+                # Get actual series name (without count)
+                actual_series = series_display.get(selected_series_display, selected_series_display)
+                kids_books = kids_books[kids_books['Σειρά βιβλίου'] == actual_series]
     
     sel = st.sidebar.selectbox("Select a Kids Book:", kids_books['Title'].unique())
     
