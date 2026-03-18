@@ -4,6 +4,7 @@ import pandas as pd
 import html as html_lib
 import re
 import io
+import traceback
 from difflib import SequenceMatcher
 
 
@@ -61,7 +62,7 @@ st.markdown("""
         content: ''; display: inline-block; width: 4px; height: 24px;
         background-color: #ff5e00; margin-right: 10px; border-radius: 2px;
     }
-    [data-testid="stAlert"] { display: none !important; }
+    /* [data-testid="stAlert"] { display: none !important; } */ /* DISABLED - was hiding errors */
 </style>
 
 <div class="poc-header-wrapper">
@@ -70,7 +71,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v10.2 — Series Filter: Top 200 by Popularity
+        🟢 Engine v10.3 — Series by Popularity + Fixed Error Display
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -315,66 +316,69 @@ EXCEL_FILE = "Recommendations.xlsx"  # File in same folder as app.py
 @st.cache_data(ttl=600)  # Cache for 10 minutes
 def load_all_data():
     """Load ALL sheets from Excel file in repo"""
-    try:
-        excel_file = pd.ExcelFile(EXCEL_FILE, engine='openpyxl')
-        available_sheets = excel_file.sheet_names
-        
-        # Load Products
-        if 'Products' in available_sheets:
-            dp = pd.read_excel(excel_file, sheet_name='Products')
-            dp.columns = dp.columns.str.strip()
+    excel_file = pd.ExcelFile(EXCEL_FILE, engine='openpyxl')
+    available_sheets = excel_file.sheet_names
+    
+    # Load Products
+    if 'Products' in available_sheets:
+        dp = pd.read_excel(excel_file, sheet_name='Products')
+        dp.columns = dp.columns.str.strip()
+    else:
+        dp = pd.DataFrame()
+    
+    # Load History
+    if 'History' in available_sheets:
+        dh = pd.read_excel(excel_file, sheet_name='History')
+        dh.columns = dh.columns.str.strip()
+    else:
+        dh = pd.DataFrame()
+    
+    # Load Slot_Matrix
+    if 'Slot_Matrix' in available_sheets:
+        ds = pd.read_excel(excel_file, sheet_name='Slot_Matrix')
+        ds.columns = ds.columns.str.strip()
+    else:
+        ds = pd.DataFrame()
+    
+    # Load Books
+    if 'Books' in available_sheets:
+        db = pd.read_excel(excel_file, sheet_name='Books')
+        db.columns = db.columns.str.strip()
+    else:
+        db = pd.DataFrame()
+    
+    # Add compat columns to Products
+    if not dp.empty:
+        parts = [dp[c].fillna('').astype(str).str.strip() for c in COMPAT_COLS if c in dp.columns]
+        if parts:
+            dp[CC] = parts[0]
+            for p in parts[1:]:
+                empty = dp[CC]==''
+                dp.loc[empty, CC] = p[empty]
+                dp.loc[~empty, CC] = dp.loc[~empty, CC] + ';' + p[~empty]
+            dp[CC] = dp[CC].str.strip(';').str.replace(';;',';')
         else:
-            dp = pd.DataFrame()
-        
-        # Load History
-        if 'History' in available_sheets:
-            dh = pd.read_excel(excel_file, sheet_name='History')
-            dh.columns = dh.columns.str.strip()
-        else:
-            dh = pd.DataFrame()
-        
-        # Load Slot_Matrix
-        if 'Slot_Matrix' in available_sheets:
-            ds = pd.read_excel(excel_file, sheet_name='Slot_Matrix')
-            ds.columns = ds.columns.str.strip()
-        else:
-            ds = pd.DataFrame()
-        
-        # Load Books
-        if 'Books' in available_sheets:
-            db = pd.read_excel(excel_file, sheet_name='Books')
-            db.columns = db.columns.str.strip()
-        else:
-            db = pd.DataFrame()
-        
-        # Add compat columns to Products
-        if not dp.empty:
-            parts = [dp[c].fillna('').astype(str).str.strip() for c in COMPAT_COLS if c in dp.columns]
-            if parts:
-                dp[CC] = parts[0]
-                for p in parts[1:]:
-                    empty = dp[CC]==''
-                    dp.loc[empty, CC] = p[empty]
-                    dp.loc[~empty, CC] = dp.loc[~empty, CC] + ';' + p[~empty]
-                dp[CC] = dp[CC].str.strip(';').str.replace(';;',';')
-            else:
-                dp[CC] = ''
-        
-        if not db.empty and CC not in db.columns:
-            db[CC] = ''
-        
-        return dp, dh, ds, db, available_sheets
-        
-    except FileNotFoundError:
-        st.error(f"🚨 File not found: `{EXCEL_FILE}`. Please add it to your GitHub repo.")
-        st.stop()
-    except ImportError:
-        st.error("🚨 openpyxl not installed. Add 'openpyxl' to requirements.txt")
-        st.stop()
+            dp[CC] = ''
+    
+    if not db.empty and CC not in db.columns:
+        db[CC] = ''
+    
+    return dp, dh, ds, db, available_sheets
 
 # Load all data from Excel file
-df_products, df_history, df_slots, df_books, sheets_loaded = load_all_data()
-compat_cols_found = [c for c in COMPAT_COLS if c in df_products.columns]
+try:
+    df_products, df_history, df_slots, df_books, sheets_loaded = load_all_data()
+    compat_cols_found = [c for c in COMPAT_COLS if c in df_products.columns]
+except FileNotFoundError:
+    st.error(f"🚨 File not found: `{EXCEL_FILE}`. Please add it to your GitHub repo.")
+    st.stop()
+except ImportError:
+    st.error("🚨 openpyxl not installed. Add 'openpyxl' to requirements.txt")
+    st.stop()
+except Exception as e:
+    st.error(f"🚨 Error loading data: {e}")
+    st.code(traceback.format_exc())
+    st.stop()
 
 # 🟢 CLEAR CACHE BUTTON
 st.sidebar.markdown("---")
