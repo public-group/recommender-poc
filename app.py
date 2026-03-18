@@ -136,7 +136,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v8.3 — Strict Schema Enforcement & NaN Eradication
+        🟢 Engine v8.4 — Raw CSV Export (Bypassing Google API Data Loss)
     </div>
 </div>
 """, unsafe_allow_html=True)
