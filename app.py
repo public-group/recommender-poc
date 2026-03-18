@@ -136,7 +136,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v8.0 — Kids Books Waterfall Architecture
+        🟢 Engine v8.2 — Precision Data Typing & Schema Alignment
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -291,12 +291,28 @@ def sample(df, col, n=5):
 @st.cache_data
 def load_data():
     base = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet="
-    dp = pd.read_csv(base+"Products"); dp.columns = dp.columns.str.strip()
-    dh = pd.read_csv(base+"History");  dh.columns = dh.columns.str.strip()
-    ds = pd.read_csv(base+"Slot_Matrix"); ds.columns = ds.columns.str.strip()
     
-    # 🟢 NEW: Fetch the Books sheet
-    db = pd.read_csv(base+"Books"); db.columns = db.columns.str.strip()
+    # 🟢 FIX: Ορίζουμε αυστηρά ως κείμενο ΜΟΝΟ τις "επικίνδυνες" στήλες.
+    # Όλες οι άλλες (Hierarchy ID, Ημερομηνίες) θα διαβαστούν σωστά από την Python.
+    text_cols = {
+        'Material': str, 
+        'Τίτλος πρωτοτύπου': str, 
+        'Σειρά βιβλίου': str, 
+        'Λεπτομέρειες εικονογράφησης': str, 
+        'Εκδοτική Σειρά': str,
+        'Brand': str,
+        'Ήρωες Παιχνιδιών': str,
+        'Φύλο': str
+    }
+    
+    dp = pd.read_csv(base+"Products", dtype=text_cols); dp.columns = dp.columns.str.strip()
+    dh = pd.read_csv(base+"History", dtype=text_cols);  dh.columns = dh.columns.str.strip()
+    ds = pd.read_csv(base+"Slot_Matrix", dtype=text_cols); ds.columns = ds.columns.str.strip()
+    
+    # Διαβάζουμε τα Βιβλία και μετατρέπουμε αυτόματα την Ημερομηνία!
+    db = pd.read_csv(base+"Books", dtype=text_cols); db.columns = db.columns.str.strip()
+    if 'Ημερ/νία έκδοσης' in db.columns:
+        db['Ημερ/νία έκδοσης'] = pd.to_datetime(db['Ημερ/νία έκδοσης'], format='%d/%m/%Y', errors='coerce')
     
     # Merge compat columns for Products (Smartphones)
     parts = [dp[c].fillna('').astype(str).str.strip() for c in COMPAT_COLS if c in dp.columns]
@@ -315,6 +331,7 @@ def load_data():
 
 # 🟢 Unpack 5 variables now
 df_products, df_history, df_slots, df_books, compat_cols_found = load_data()
+
 
 # ─────────────────────────────────────────────────────────────
 # TRIGGER & CLUSTER SELECTION
