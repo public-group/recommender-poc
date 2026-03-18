@@ -70,7 +70,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v9.3 — Excel Upload Required (Google Sheets has 20k row limit)
+        🟢 Engine v9.5 — Auto-detect Excel Sheet Name
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -366,8 +366,33 @@ def load_data_from_sheets():
 @st.cache_data
 def load_books_from_excel(file_bytes):
     """Load Books data from uploaded Excel file"""
-    df = pd.read_excel(io.BytesIO(file_bytes), sheet_name='Books')
+    try:
+        excel_file = pd.ExcelFile(io.BytesIO(file_bytes), engine='openpyxl')
+        
+        # Try to find Books sheet, otherwise use first sheet
+        if 'Books' in excel_file.sheet_names:
+            sheet_name = 'Books'
+        else:
+            sheet_name = excel_file.sheet_names[0]  # Use first sheet
+            st.sidebar.info(f"📌 Using sheet: '{sheet_name}'")
+        
+        df = pd.read_excel(excel_file, sheet_name=sheet_name)
+        df.columns = df.columns.str.strip()
+        df[CC] = ''
+        return df
+    except ImportError:
+        raise ImportError("openpyxl not installed. Add 'openpyxl' to requirements.txt OR upload a CSV file instead.")
+
+@st.cache_data
+def load_books_from_csv(file_bytes):
+    """Load Books data from uploaded CSV file"""
+    df = pd.read_csv(io.BytesIO(file_bytes), dtype=str, keep_default_na=False)
     df.columns = df.columns.str.strip()
+    # Convert numeric columns
+    if 'LIST PRICE' in df.columns:
+        df['LIST PRICE'] = pd.to_numeric(df['LIST PRICE'].str.replace('€', '').str.replace(',', '.'), errors='coerce')
+    if 'Material' in df.columns:
+        df['Material'] = pd.to_numeric(df['Material'], errors='coerce')
     df[CC] = ''
     return df
 
@@ -380,19 +405,28 @@ if st.sidebar.button("🔄 Clear Cache & Reload"):
     st.cache_data.clear()
     st.rerun()
 
-# 🟢 BOOKS DATA: Must upload Excel (Google Sheets CSV export has 20k row limit!)
+# 🟢 BOOKS DATA: Must upload file (Google Sheets CSV export has 20k row limit!)
 st.sidebar.markdown("### 📁 Books Data")
-st.sidebar.warning("⚠️ Google Sheets CSV export is limited to ~20k rows. Your Books sheet has 62k rows. **Please upload the Excel file.**")
+st.sidebar.info("📌 Google Sheets export is limited to ~20k rows. Upload your Books data file.")
 
-uploaded_file = st.sidebar.file_uploader("Upload Recommendations.xlsx", type=['xlsx'])
+uploaded_file = st.sidebar.file_uploader("Upload Books data (Excel or CSV)", type=['xlsx', 'csv'])
 if uploaded_file is not None:
-    df_books = load_books_from_excel(uploaded_file.getvalue())
-    st.sidebar.success(f"✅ Loaded {len(df_books):,} rows from Excel")
+    try:
+        if uploaded_file.name.endswith('.csv'):
+            df_books = load_books_from_csv(uploaded_file.getvalue())
+            st.sidebar.success(f"✅ Loaded {len(df_books):,} rows from CSV")
+        else:
+            df_books = load_books_from_excel(uploaded_file.getvalue())
+            st.sidebar.success(f"✅ Loaded {len(df_books):,} rows from Excel")
+    except ImportError as e:
+        st.sidebar.error(str(e))
+        st.sidebar.info("💡 **Tip:** Export your Books sheet as CSV from Excel/Google Sheets and upload that instead.")
+        df_books = df_books_sheets
 else:
     # Fallback to Google Sheets (limited data)
     df_books = df_books_sheets
     if not df_books.empty:
-        st.sidebar.error(f"⚠️ Using Google Sheets: Only {len(df_books):,} rows (truncated!)")
+        st.sidebar.warning(f"⚠️ Using Google Sheets: Only {len(df_books):,} rows (truncated!)")
 
 # 🔍 DEBUG: Show what columns were loaded from Books
 if not df_books.empty:
