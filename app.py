@@ -71,7 +71,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v11.0 — X Button in Orange Header
+        🟢 Engine v11.1 — Clean X Button in Header
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -393,6 +393,11 @@ st.sidebar.markdown("""
         background-color: #f5f5f5 !important;
     }
     
+    /* Hide the default sidebar collapse button completely */
+    [data-testid="stSidebarCollapseButton"] {
+        display: none !important;
+    }
+    
     /* Sidebar header bar - orange like Public */
     .sidebar-header {
         background-color: #ff5e00;
@@ -408,41 +413,22 @@ st.sidebar.markdown("""
         justify-content: space-between;
     }
     
-    /* Style the sidebar collapse button as X and move into header */
-    [data-testid="stSidebar"] [data-testid="stSidebarCollapseButton"] {
-        position: absolute !important;
-        top: 95px !important;
-        right: 15px !important;
-        z-index: 999999 !important;
-    }
-    
-    [data-testid="stSidebar"] [data-testid="stSidebarCollapseButton"] button {
-        background: transparent !important;
-        border: none !important;
-        color: white !important;
-        width: 32px !important;
-        height: 32px !important;
-        padding: 0 !important;
-        display: flex !important;
-        align-items: center !important;
-        justify-content: center !important;
-    }
-    
-    [data-testid="stSidebar"] [data-testid="stSidebarCollapseButton"] button:hover {
-        background: rgba(255,255,255,0.2) !important;
-        border-radius: 4px !important;
-    }
-    
-    /* Hide the default arrow icon and replace with X */
-    [data-testid="stSidebar"] [data-testid="stSidebarCollapseButton"] button svg {
-        display: none !important;
-    }
-    
-    [data-testid="stSidebar"] [data-testid="stSidebarCollapseButton"] button::before {
-        content: '✕';
-        font-size: 20px;
-        font-weight: 400;
+    /* X close button in header */
+    .sidebar-close-btn {
+        background: transparent;
+        border: none;
         color: white;
+        font-size: 22px;
+        font-weight: 300;
+        cursor: pointer;
+        padding: 5px 10px;
+        line-height: 1;
+        border-radius: 4px;
+        transition: background 0.15s ease;
+    }
+    
+    .sidebar-close-btn:hover {
+        background: rgba(255,255,255,0.2);
     }
     
     /* Style the cluster buttons to look like Public.gr tiles */
@@ -537,8 +523,13 @@ st.sidebar.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# Sidebar header - orange bar like Public.gr
-st.sidebar.markdown('<div class="sidebar-header">Κατηγορίες</div>', unsafe_allow_html=True)
+# Sidebar header - orange bar like Public.gr with X close button
+st.sidebar.markdown('''
+<div class="sidebar-header">
+    <span>Κατηγορίες</span>
+    <button class="sidebar-close-btn" onclick="window.parent.document.querySelector('[data-testid=\\'stSidebarCollapsedControl\\'] button').click();" title="Κλείσιμο">✕</button>
+</div>
+''', unsafe_allow_html=True)
 
 # Use session state for cluster selection
 if 'active_cluster' not in st.session_state:
