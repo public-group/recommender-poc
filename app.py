@@ -35,7 +35,7 @@ st.markdown("""
     header[data-testid="stHeader"] span { color: #ffffff !important; }
     header[data-testid="stHeader"] svg { fill: #ffffff !important; color: #ffffff !important; }
     header[data-testid="stHeader"] svg rect { fill: transparent !important; }
-    .appview-container .main .block-container { padding-top: 100px !important; }
+    .appview-container .main .block-container { padding-top: 300px !important; }
     .poc-header-wrapper {
         position: fixed; top: 0; left: 0; right: 0;
         z-index: 999999; display: flex; flex-direction: column;
@@ -316,7 +316,7 @@ def safe(v): return html_lib.escape(str(v))
 # ─────────────────────────────────────────────────────────────
 # DATA LOADING - From local file in repo
 # ─────────────────────────────────────────────────────────────
-EXCEL_FILE = "Recommendations GitHub.xlsx"  # File in same folder as app.py
+EXCEL_FILE = "Recommendations.xlsx"  # File in same folder as app.py
 
 @st.cache_data(ttl=600)  # Cache for 10 minutes
 def load_all_data():
@@ -558,7 +558,7 @@ st.sidebar.markdown(f"""
         color: #333 !important;
         white-space: pre-line !important;
         line-height: 1.3 !important;
-        padding-top: 25px !important;
+        padding-top: 45px !important;
     }}
     
     /* Smartphones button */
