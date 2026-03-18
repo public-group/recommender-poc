@@ -70,7 +70,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v9.2 — Fixed dtype=str for Series Column
+        🟢 Engine v9.3 — Excel Upload Required (Google Sheets has 20k row limit)
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -371,7 +371,7 @@ def load_books_from_excel(file_bytes):
     df[CC] = ''
     return df
 
-# Load base data from Google Sheets
+# Load base data from Google Sheets (Products, History, Slots only)
 df_products, df_history, df_slots, compat_cols_found, df_books_sheets = load_data_from_sheets()
 
 # 🟢 CLEAR CACHE BUTTON
@@ -380,31 +380,34 @@ if st.sidebar.button("🔄 Clear Cache & Reload"):
     st.cache_data.clear()
     st.rerun()
 
-# 🟢 OPTION TO UPLOAD EXCEL FILE FOR BOOKS DATA
-st.sidebar.markdown("### 📁 Books Data Source")
-use_excel = st.sidebar.checkbox("Upload Excel file (recommended)", value=False)
+# 🟢 BOOKS DATA: Must upload Excel (Google Sheets CSV export has 20k row limit!)
+st.sidebar.markdown("### 📁 Books Data")
+st.sidebar.warning("⚠️ Google Sheets CSV export is limited to ~20k rows. Your Books sheet has 62k rows. **Please upload the Excel file.**")
 
-if use_excel:
-    uploaded_file = st.sidebar.file_uploader("Upload Recommendations.xlsx", type=['xlsx'])
-    if uploaded_file is not None:
-        df_books = load_books_from_excel(uploaded_file.getvalue())
-        st.sidebar.success(f"✓ Loaded {len(df_books)} rows from Excel")
-    else:
-        df_books = df_books_sheets
-        st.sidebar.warning("⚠ Upload Excel file or uncheck to use Google Sheets")
+uploaded_file = st.sidebar.file_uploader("Upload Recommendations.xlsx", type=['xlsx'])
+if uploaded_file is not None:
+    df_books = load_books_from_excel(uploaded_file.getvalue())
+    st.sidebar.success(f"✅ Loaded {len(df_books):,} rows from Excel")
 else:
+    # Fallback to Google Sheets (limited data)
     df_books = df_books_sheets
+    if not df_books.empty:
+        st.sidebar.error(f"⚠️ Using Google Sheets: Only {len(df_books):,} rows (truncated!)")
 
 # 🔍 DEBUG: Show what columns were loaded from Books
 if not df_books.empty:
-    with st.sidebar.expander("🔍 Debug: Books Data", expanded=True):
-        st.write(f"**Source:** {'Excel Upload' if use_excel else 'Google Sheets'}")
-        st.write(f"**Total rows:** {len(df_books)}")
+    with st.sidebar.expander("🔍 Debug: Books Data", expanded=False):
+        st.write(f"**Rows:** {len(df_books):,}")
+        st.write(f"**Columns:** {len(df_books.columns)}")
+        
+        # Show column names
+        st.write("**Column names:**")
+        st.code(", ".join(df_books.columns[:15].tolist()))
         
         # Check for series column
         series_col_found = None
         for col in df_books.columns:
-            if 'σειρά' in col.lower() or 'βιβλίου' in col.lower():
+            if 'σειρά' in col.lower() and 'βιβλίου' in col.lower():
                 series_col_found = col
                 break
         
@@ -413,29 +416,18 @@ if not df_books.empty:
             
             # Count valid series
             series_data = df_books[series_col_found]
-            total = len(series_data)
-            non_null = series_data.notna().sum()
             valid = series_data.dropna().astype(str)
-            valid = valid[(valid != '0') & (valid != '') & (valid.str.lower() != 'nan')]
+            valid = valid[(valid != '') & (valid != '0') & (valid.str.lower() != 'nan') & (valid.str.lower() != 'n/a')]
             
-            st.write(f"**Non-null:** {non_null} / {total}")
-            st.write(f"**Valid (non-0, non-empty):** {len(valid)}")
+            st.write(f"**Valid series values:** {len(valid):,}")
             
             if len(valid) > 0:
                 st.write("**Sample series:**")
-                for s in valid.head(5).tolist():
-                    st.write(f"  - {s}")
-            else:
-                st.error("⚠ ALL series values are empty/null/0!")
-                
-            # Check specific Harry Potter
-            hp_books = df_books[df_books['Title'].str.contains('Harry Potter', case=False, na=False)]
-            if not hp_books.empty:
-                hp_series = hp_books[series_col_found].iloc[0]
-                st.write(f"**Harry Potter series value:** {hp_series!r} (type: {type(hp_series).__name__})")
+                for s in valid.unique()[:5]:
+                    st.write(f"  • {s}")
         else:
             st.error("✗ No series column found!")
-            st.write("Columns:", list(df_books.columns)[:10])
+            st.write("Available:", list(df_books.columns))
 
 # ─────────────────────────────────────────────────────────────
 # CLUSTER SELECTION
