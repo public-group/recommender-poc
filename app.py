@@ -71,7 +71,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v10.5 — Public.gr Style Sidebar
+        🟢 Engine v10.6 — Public.gr Gray Background + SVG Icons
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -311,7 +311,7 @@ def safe(v): return html_lib.escape(str(v))
 # ─────────────────────────────────────────────────────────────
 # DATA LOADING - From local file in repo
 # ─────────────────────────────────────────────────────────────
-EXCEL_FILE = "Recommendations GitHub.xlsx"  # File in same folder as app.py
+EXCEL_FILE = "Recommendations.xlsx"  # File in same folder as app.py
 
 @st.cache_data(ttl=600)  # Cache for 10 minutes
 def load_all_data():
@@ -383,86 +383,63 @@ except Exception as e:
 # 🟢 SIDEBAR STYLING - Public.gr Style
 st.sidebar.markdown("""
 <style>
-    /* Hide default Streamlit sidebar padding */
+    /* Light gray background like Public.gr menu */
     [data-testid="stSidebar"] > div:first-child {
+        background-color: #f5f5f5 !important;
         padding-top: 0 !important;
     }
     
-    /* Sidebar header bar */
+    [data-testid="stSidebar"] {
+        background-color: #f5f5f5 !important;
+    }
+    
+    /* Sidebar header bar - orange like Public */
     .sidebar-header {
         background-color: #ff5e00;
         color: white;
-        padding: 16px 20px;
-        margin: -1rem -1rem 0 -1rem;
+        padding: 18px 20px;
+        margin: -1rem -1rem 15px -1rem;
         font-family: -apple-system, BlinkMacSystemFont, sans-serif;
         font-size: 18px;
         font-weight: 700;
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
     }
     
-    /* Tile grid container */
-    .tile-grid {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 10px;
-        padding: 15px 0;
+    /* Style the cluster buttons to look like Public.gr tiles */
+    [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] button {
+        background: #ffffff !important;
+        border: 1px solid #eaeaea !important;
+        border-radius: 12px !important;
+        padding: 15px 8px !important;
+        min-height: 100px !important;
+        font-family: -apple-system, BlinkMacSystemFont, sans-serif !important;
+        font-size: 11px !important;
+        font-weight: 600 !important;
+        color: #333 !important;
+        transition: all 0.15s ease !important;
+        white-space: pre-line !important;
+        line-height: 1.3 !important;
+        box-shadow: none !important;
     }
     
-    /* Individual category tile */
-    .category-tile {
-        background: #ffffff;
-        border: 1px solid #eaeaea;
-        border-radius: 12px;
-        padding: 18px 10px;
-        text-align: center;
-        cursor: pointer;
-        transition: all 0.2s ease;
-        text-decoration: none;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        min-height: 95px;
+    [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] button:hover {
+        border-color: #ff5e00 !important;
+        background: #ffffff !important;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08) !important;
+        transform: translateY(-1px);
     }
     
-    .category-tile:hover {
-        border-color: #ff5e00;
-        box-shadow: 0 4px 12px rgba(255, 94, 0, 0.15);
-        transform: translateY(-2px);
-    }
-    
-    .category-tile.active {
-        border-color: #ff5e00;
-        border-width: 2px;
-        background: #fff8f5;
-        box-shadow: 0 4px 12px rgba(255, 94, 0, 0.2);
-    }
-    
-    /* Tile icon */
-    .tile-icon {
-        font-size: 28px;
-        margin-bottom: 8px;
-        color: #ff5e00;
-        line-height: 1;
-    }
-    
-    /* Tile name */
-    .category-name {
-        font-family: -apple-system, BlinkMacSystemFont, sans-serif;
-        font-size: 11px;
-        font-weight: 600;
-        color: #333;
-        line-height: 1.3;
-        text-align: center;
+    [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] button:focus {
+        border-color: #ff5e00 !important;
+        border-width: 2px !important;
+        background: #fff !important;
+        box-shadow: 0 4px 12px rgba(255, 94, 0, 0.15) !important;
     }
     
     /* Section divider */
     .section-divider {
         border: none;
-        border-top: 1px solid #eaeaea;
-        margin: 15px 0;
+        border-top: 1px solid #e0e0e0;
+        margin: 20px 0 15px 0;
     }
     
     /* Section headers */
@@ -478,6 +455,7 @@ st.sidebar.markdown("""
     
     /* Style selectboxes */
     [data-testid="stSidebar"] .stSelectbox > div > div {
+        background: #ffffff !important;
         border-radius: 8px !important;
         border-color: #ddd !important;
         font-size: 13px !important;
@@ -489,6 +467,7 @@ st.sidebar.markdown("""
     
     /* Style text input */
     [data-testid="stSidebar"] .stTextInput > div > div {
+        background: #ffffff !important;
         border-radius: 8px !important;
         font-size: 13px !important;
     }
@@ -497,49 +476,130 @@ st.sidebar.markdown("""
         border-color: #ff5e00 !important;
     }
     
-    /* Hide Streamlit button styling, we'll use custom HTML */
-    [data-testid="stSidebar"] .stButton > button {
-        display: none !important;
+    /* Hide the actual Streamlit buttons - we use custom HTML tiles */
+    [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] {
+        position: absolute;
+        left: -9999px;
+        opacity: 0;
+        pointer-events: none;
+    }
+    
+    /* Refresh button at bottom */
+    .refresh-btn {
+        background: #ffffff !important;
+        border: 1px solid #ddd !important;
+        border-radius: 8px !important;
+        color: #666 !important;
+        font-size: 12px !important;
+        padding: 10px !important;
+        width: 100%;
+        cursor: pointer;
+        transition: all 0.15s ease;
+    }
+    
+    .refresh-btn:hover {
+        background: #f9f9f9 !important;
+        border-color: #ccc !important;
     }
 </style>
 """, unsafe_allow_html=True)
 
-# Sidebar header
+# Sidebar header - orange bar like Public.gr
 st.sidebar.markdown('<div class="sidebar-header">Κατηγορίες</div>', unsafe_allow_html=True)
 
 # Use session state for cluster selection
 if 'active_cluster' not in st.session_state:
     st.session_state.active_cluster = "Smartphones"
 
-active_cluster = st.session_state.active_cluster
-
-# Create tile grid with clickable tiles
-smartphones_active = "active" if active_cluster == "Smartphones" else ""
-books_active = "active" if active_cluster == "Kids Books" else ""
-
-st.sidebar.markdown(f"""
-<div class="tile-grid">
-    <div class="category-tile {smartphones_active}" onclick="window.parent.postMessage({{'type': 'streamlit:setComponentValue', 'value': 'smartphones'}}, '*');" id="tile-smartphones">
-        <div class="tile-icon">📱</div>
-        <div class="category-name">Τηλεφωνία, Tablets & Wearables</div>
+# Create clickable tiles using Streamlit columns and buttons
+# Using components.html for custom styled tiles with SVG icons
+tile_html = f"""
+<style>
+    .pub-tile-grid {{
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+        padding: 0;
+    }}
+    .pub-tile {{
+        background: #ffffff;
+        border: 1px solid #eaeaea;
+        border-radius: 12px;
+        padding: 20px 10px 15px 10px;
+        text-align: center;
+        cursor: pointer;
+        transition: all 0.15s ease;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        min-height: 90px;
+    }}
+    .pub-tile:hover {{
+        border-color: #ff5e00;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+    }}
+    .pub-tile.active {{
+        border-color: #ff5e00;
+        border-width: 2px;
+        background: #fff;
+    }}
+    .pub-tile-icon {{
+        width: 32px;
+        height: 32px;
+        margin-bottom: 10px;
+        color: #ff5e00;
+    }}
+    .pub-tile-icon svg {{
+        width: 100%;
+        height: 100%;
+        stroke: #ff5e00;
+        fill: none;
+    }}
+    .pub-tile-name {{
+        font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+        font-size: 11px;
+        font-weight: 600;
+        color: #333;
+        line-height: 1.35;
+    }}
+</style>
+<div class="pub-tile-grid">
+    <div class="pub-tile {"active" if active_cluster == "Smartphones" else ""}" onclick="window.parent.document.querySelector('[data-testid=\\'stSidebar\\'] button[kind=\\'secondary\\']').click();">
+        <div class="pub-tile-icon">
+            <svg viewBox="0 0 24 24" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect>
+                <line x1="12" y1="18" x2="12.01" y2="18"></line>
+            </svg>
+        </div>
+        <div class="pub-tile-name">Τηλεφωνία, Tablets & Wearables</div>
     </div>
-    <div class="category-tile {books_active}" onclick="window.parent.postMessage({{'type': 'streamlit:setComponentValue', 'value': 'books'}}, '*');" id="tile-books">
-        <div class="tile-icon">📚</div>
-        <div class="category-name">Παιδικά Βιβλία</div>
+    <div class="pub-tile {"active" if active_cluster == "Kids Books" else ""}" onclick="window.parent.document.querySelectorAll('[data-testid=\\'stSidebar\\'] button[kind=\\'secondary\\']')[1].click();">
+        <div class="pub-tile-icon">
+            <svg viewBox="0 0 24 24" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
+                <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
+            </svg>
+        </div>
+        <div class="pub-tile-name">Παιδικά Βιβλία</div>
     </div>
 </div>
-""", unsafe_allow_html=True)
+"""
 
-# Hidden buttons for actual selection (triggered by JavaScript)
+st.sidebar.markdown(tile_html, unsafe_allow_html=True)
+
+# Hidden actual buttons (triggered by tile clicks)
 col1, col2 = st.sidebar.columns(2)
 with col1:
-    if st.button("📱", key="btn_smartphones", use_container_width=True):
+    if st.button("phone", key="btn_smartphones", use_container_width=True):
         st.session_state.active_cluster = "Smartphones"
         st.rerun()
 with col2:
-    if st.button("📚", key="btn_kids_books", use_container_width=True):
+    if st.button("book", key="btn_kids_books", use_container_width=True):
         st.session_state.active_cluster = "Kids Books"
         st.rerun()
+
+active_cluster = st.session_state.active_cluster
 
 # Divider
 st.sidebar.markdown('<hr class="section-divider">', unsafe_allow_html=True)
