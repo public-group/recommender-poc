@@ -558,7 +558,7 @@ st.sidebar.markdown(f"""
         color: #333 !important;
         white-space: pre-line !important;
         line-height: 1.3 !important;
-        padding-top: 45px !important;
+        padding-top: 25px !important;
     }}
     
     /* Smartphones button */
