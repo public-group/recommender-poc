@@ -1057,11 +1057,6 @@ def run_books_engine(trigger, df_books, df_products):
     return final_df, diag, slot_diag, slot_notes, final_df
 
 # ─────────────────────────────────────────────────────────────
-# RUN & VISUALIZATION
-# ─────────────────────────────────────────────────────────────
-# Unpack the 5 variables from the engine
-
-# ─────────────────────────────────────────────────────────────
 # EXECUTION ROUTER
 # ─────────────────────────────────────────────────────────────
 if ACTIVE_CLUSTER == "Smartphones":
