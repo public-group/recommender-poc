@@ -70,7 +70,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v9.5 — Auto-detect Excel Sheet Name
+        🟢 Engine v10.0 — Loads from GitHub Excel File
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -308,96 +308,73 @@ def safe(v): return html_lib.escape(str(v))
 # ─────────────────────────────────────────────────────────────
 # DATA
 # ─────────────────────────────────────────────────────────────
-@st.cache_data(ttl=300)  # Cache for 5 minutes only
-def load_data_from_sheets():
-    """Load data from Google Sheets"""
-    base = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet="
-    
-    dp = pd.read_csv(base+"Products"); dp.columns = dp.columns.str.strip()
-    dh = pd.read_csv(base+"History");  dh.columns = dh.columns.str.strip()
-    ds = pd.read_csv(base+"Slot_Matrix"); ds.columns = ds.columns.str.strip()
-    
-    try:
-        # 🟢 FIX: Force ALL columns to be read as strings first to prevent type inference issues
-        db = pd.read_csv(base+"Books", dtype=str, keep_default_na=False)
-        db.columns = db.columns.str.strip()
-        
-        # Convert numeric columns back to proper types
-        if 'LIST PRICE' in db.columns:
-            db['LIST PRICE'] = pd.to_numeric(db['LIST PRICE'].str.replace('€', '').str.replace(',', '.'), errors='coerce')
-        if 'Material' in db.columns:
-            db['Material'] = pd.to_numeric(db['Material'], errors='coerce')
-        
-        # Clean up "N/A" strings to proper NaN only where needed (NOT for series!)
-        # Leave Σειρά βιβλίου as string - don't convert N/A to NaN
-        
-        # Debug: Print column info to console
-        print(f"[DEBUG] Books loaded: {len(db)} rows, {len(db.columns)} cols")
-        if 'Σειρά βιβλίου' in db.columns:
-            series_col = db['Σειρά βιβλίου']
-            print(f"[DEBUG] Series column dtype: {series_col.dtype}")
-            non_empty = series_col[(series_col != '') & (series_col != 'N/A') & (series_col != '0')]
-            print(f"[DEBUG] Non-empty series values: {len(non_empty)}")
-            print(f"[DEBUG] Sample series: {non_empty.head(5).tolist()}")
-            
-    except Exception as e:
-        db = pd.DataFrame()
-        st.sidebar.error(f"Error loading Books from Sheets: {e}")
-        print(f"[ERROR] Loading Books: {e}")
-    
-    # Compat columns for Products
-    parts = [dp[c].fillna('').astype(str).str.strip() for c in COMPAT_COLS if c in dp.columns]
-    found = [c for c in COMPAT_COLS if c in dp.columns]
-    if parts:
-        dp[CC] = parts[0]
-        for p in parts[1:]:
-            empty = dp[CC]==''
-            dp.loc[empty, CC] = p[empty]
-            dp.loc[~empty, CC] = dp.loc[~empty, CC] + ';' + p[~empty]
-        dp[CC] = dp[CC].str.strip(';').str.replace(';;',';')
-    else:
-        dp[CC] = ''
-    
-    if not db.empty and CC not in db.columns:
-        db[CC] = ''
-    
-    return dp, dh, ds, found, db
+# DATA LOADING - From local file in repo
+# ─────────────────────────────────────────────────────────────
+EXCEL_FILE = "Recommendations.xlsx"  # File in same folder as app.py
 
-@st.cache_data
-def load_books_from_excel(file_bytes):
-    """Load Books data from uploaded Excel file"""
+@st.cache_data(ttl=600)  # Cache for 10 minutes
+def load_all_data():
+    """Load ALL sheets from Excel file in repo"""
     try:
-        excel_file = pd.ExcelFile(io.BytesIO(file_bytes), engine='openpyxl')
+        excel_file = pd.ExcelFile(EXCEL_FILE, engine='openpyxl')
+        available_sheets = excel_file.sheet_names
         
-        # Try to find Books sheet, otherwise use first sheet
-        if 'Books' in excel_file.sheet_names:
-            sheet_name = 'Books'
+        # Load Products
+        if 'Products' in available_sheets:
+            dp = pd.read_excel(excel_file, sheet_name='Products')
+            dp.columns = dp.columns.str.strip()
         else:
-            sheet_name = excel_file.sheet_names[0]  # Use first sheet
-            st.sidebar.info(f"📌 Using sheet: '{sheet_name}'")
+            dp = pd.DataFrame()
         
-        df = pd.read_excel(excel_file, sheet_name=sheet_name)
-        df.columns = df.columns.str.strip()
-        df[CC] = ''
-        return df
+        # Load History
+        if 'History' in available_sheets:
+            dh = pd.read_excel(excel_file, sheet_name='History')
+            dh.columns = dh.columns.str.strip()
+        else:
+            dh = pd.DataFrame()
+        
+        # Load Slot_Matrix
+        if 'Slot_Matrix' in available_sheets:
+            ds = pd.read_excel(excel_file, sheet_name='Slot_Matrix')
+            ds.columns = ds.columns.str.strip()
+        else:
+            ds = pd.DataFrame()
+        
+        # Load Books
+        if 'Books' in available_sheets:
+            db = pd.read_excel(excel_file, sheet_name='Books')
+            db.columns = db.columns.str.strip()
+        else:
+            db = pd.DataFrame()
+        
+        # Add compat columns to Products
+        if not dp.empty:
+            parts = [dp[c].fillna('').astype(str).str.strip() for c in COMPAT_COLS if c in dp.columns]
+            if parts:
+                dp[CC] = parts[0]
+                for p in parts[1:]:
+                    empty = dp[CC]==''
+                    dp.loc[empty, CC] = p[empty]
+                    dp.loc[~empty, CC] = dp.loc[~empty, CC] + ';' + p[~empty]
+                dp[CC] = dp[CC].str.strip(';').str.replace(';;',';')
+            else:
+                dp[CC] = ''
+        
+        if not db.empty and CC not in db.columns:
+            db[CC] = ''
+        
+        return dp, dh, ds, db, available_sheets
+        
+    except FileNotFoundError:
+        st.error(f"🚨 File not found: `{EXCEL_FILE}`. Please add it to your GitHub repo.")
+        st.stop()
     except ImportError:
-        raise ImportError("openpyxl not installed. Add 'openpyxl' to requirements.txt OR upload a CSV file instead.")
+        st.error("🚨 openpyxl not installed. Add 'openpyxl' to requirements.txt")
+        st.stop()
 
-@st.cache_data
-def load_books_from_csv(file_bytes):
-    """Load Books data from uploaded CSV file"""
-    df = pd.read_csv(io.BytesIO(file_bytes), dtype=str, keep_default_na=False)
-    df.columns = df.columns.str.strip()
-    # Convert numeric columns
-    if 'LIST PRICE' in df.columns:
-        df['LIST PRICE'] = pd.to_numeric(df['LIST PRICE'].str.replace('€', '').str.replace(',', '.'), errors='coerce')
-    if 'Material' in df.columns:
-        df['Material'] = pd.to_numeric(df['Material'], errors='coerce')
-    df[CC] = ''
-    return df
-
-# Load base data from Google Sheets (Products, History, Slots only)
-df_products, df_history, df_slots, compat_cols_found, df_books_sheets = load_data_from_sheets()
+# Load all data from Excel file
+df_products, df_history, df_slots, df_books, sheets_loaded = load_all_data()
+compat_cols_found = [c for c in COMPAT_COLS if c in df_products.columns]
 
 # 🟢 CLEAR CACHE BUTTON
 st.sidebar.markdown("---")
@@ -405,39 +382,19 @@ if st.sidebar.button("🔄 Clear Cache & Reload"):
     st.cache_data.clear()
     st.rerun()
 
-# 🟢 BOOKS DATA: Must upload file (Google Sheets CSV export has 20k row limit!)
-st.sidebar.markdown("### 📁 Books Data")
-st.sidebar.info("📌 Google Sheets export is limited to ~20k rows. Upload your Books data file.")
+# Show data source info
+st.sidebar.markdown("### 📊 Data Source")
+st.sidebar.success(f"✅ Loaded from `{EXCEL_FILE}`")
 
-uploaded_file = st.sidebar.file_uploader("Upload Books data (Excel or CSV)", type=['xlsx', 'csv'])
-if uploaded_file is not None:
-    try:
-        if uploaded_file.name.endswith('.csv'):
-            df_books = load_books_from_csv(uploaded_file.getvalue())
-            st.sidebar.success(f"✅ Loaded {len(df_books):,} rows from CSV")
-        else:
-            df_books = load_books_from_excel(uploaded_file.getvalue())
-            st.sidebar.success(f"✅ Loaded {len(df_books):,} rows from Excel")
-    except ImportError as e:
-        st.sidebar.error(str(e))
-        st.sidebar.info("💡 **Tip:** Export your Books sheet as CSV from Excel/Google Sheets and upload that instead.")
-        df_books = df_books_sheets
-else:
-    # Fallback to Google Sheets (limited data)
-    df_books = df_books_sheets
+# 🔍 DEBUG: Show data stats
+with st.sidebar.expander("🔍 Debug: Data Stats", expanded=False):
+    st.write(f"**Sheets loaded:** {', '.join(sheets_loaded)}")
+    st.write(f"**Products:** {len(df_products):,} rows")
+    st.write(f"**History:** {len(df_history):,} rows")
+    st.write(f"**Slot_Matrix:** {len(df_slots):,} rows")
+    st.write(f"**Books:** {len(df_books):,} rows")
+    
     if not df_books.empty:
-        st.sidebar.warning(f"⚠️ Using Google Sheets: Only {len(df_books):,} rows (truncated!)")
-
-# 🔍 DEBUG: Show what columns were loaded from Books
-if not df_books.empty:
-    with st.sidebar.expander("🔍 Debug: Books Data", expanded=False):
-        st.write(f"**Rows:** {len(df_books):,}")
-        st.write(f"**Columns:** {len(df_books.columns)}")
-        
-        # Show column names
-        st.write("**Column names:**")
-        st.code(", ".join(df_books.columns[:15].tolist()))
-        
         # Check for series column
         series_col_found = None
         for col in df_books.columns:
@@ -446,22 +403,10 @@ if not df_books.empty:
                 break
         
         if series_col_found:
-            st.success(f"✓ Series column: '{series_col_found}'")
-            
-            # Count valid series
             series_data = df_books[series_col_found]
             valid = series_data.dropna().astype(str)
             valid = valid[(valid != '') & (valid != '0') & (valid.str.lower() != 'nan') & (valid.str.lower() != 'n/a')]
-            
-            st.write(f"**Valid series values:** {len(valid):,}")
-            
-            if len(valid) > 0:
-                st.write("**Sample series:**")
-                for s in valid.unique()[:5]:
-                    st.write(f"  • {s}")
-        else:
-            st.error("✗ No series column found!")
-            st.write("Available:", list(df_books.columns))
+            st.write(f"  Valid series: {len(valid):,}")
 
 # ─────────────────────────────────────────────────────────────
 # CLUSTER SELECTION
@@ -473,12 +418,24 @@ active_cluster = st.sidebar.radio("", ["Smartphones", "Kids Books"], horizontal=
 # TRIGGER SELECTION
 # ─────────────────────────────────────────────────────────────
 if active_cluster == "Smartphones":
+    if df_products.empty:
+        st.error("🚨 Products data not loaded! Please upload the Recommendations.xlsx file.")
+        st.stop()
+    
+    # Check if required columns exist
+    required_cols = ['Level 2', 'Hierarchy', 'Title']
+    missing_cols = [c for c in required_cols if c not in df_products.columns]
+    if missing_cols:
+        st.error(f"🚨 Missing columns in Products: {missing_cols}")
+        st.write("Available columns:", list(df_products.columns))
+        st.stop()
+    
     phones = df_products[(df_products['Level 2']=='Mobiles')&(df_products['Hierarchy']=='Smartphones')]
     if phones.empty:
         phones = df_products[df_products['Level 2']=='Mobiles']
         st.sidebar.warning("⚠ Fallback to all Mobiles")
     if phones.empty:
-        st.error("🚨 No phones found!")
+        st.error("🚨 No phones found in Products data!")
         st.stop()
     sel = st.sidebar.selectbox("Select a Smartphone:", phones['Title'].unique())
     trigger = phones[phones['Title']==sel].iloc[0] if sel else None
