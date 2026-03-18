@@ -588,7 +588,7 @@ st.sidebar.markdown(f"""
 col1, col2 = st.sidebar.columns(2)
 
 with col1:
-    if st.button("Τηλεφωνία,\nTablets &\nWearables", key="btn_smartphones", use_container_width=True):
+    if st.button("Smartphones", key="btn_smartphones", use_container_width=True):
         st.session_state.active_cluster = "Smartphones"
         st.rerun()
 
