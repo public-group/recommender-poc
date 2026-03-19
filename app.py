@@ -75,7 +75,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v12.4 — Year Matching for Premium Phones
+        🟢 Engine v12.5 — Year Match Earbuds/Smartwatch Only
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -1599,8 +1599,7 @@ def run_engine(trigger, df_products, df_history, df_slots):
         c.loc[c['Κατασκευαστής'].fillna('').str.strip().str.upper()==tb, 'Smart_Boost'] += PREMIUM_BRAND_BOOST
         diag.append(("Premium brand boost", f"€{tprice:.0f} >= €{PREMIUM_PRICE_THRESHOLD}", f"+{PREMIUM_BRAND_BOOST} for {tb} accessories"))
     
-    # 🟢 NEW: Year matching for premium phones
-    # Extract year from phone model (S25 → 2025, S24 → 2024, etc.)
+    # 🟢 Year extraction functions (used for EARBUDS and SMARTWATCH slots only)
     def extract_year_from_model(model_str):
         """Extract release year from Samsung/Apple model names"""
         import re
@@ -1615,7 +1614,7 @@ def run_engine(trigger, df_products, df_history, df_slots):
         s_match = re.search(r'galaxy\s*s\s*(\d{2})', model)
         if s_match:
             num = int(s_match.group(1))
-            if 20 <= num <= 30:  # S20-S30 range
+            if 20 <= num <= 30:
                 return 2000 + num
         
         # Samsung Galaxy A series: A56 → 2025, A55 → 2024
@@ -1623,20 +1622,20 @@ def run_engine(trigger, df_products, df_history, df_slots):
         if a_match:
             num = int(a_match.group(1))
             if num >= 50:
-                return 2019 + (num - 50)  # A50 = 2019, A55 = 2024, A56 = 2025
+                return 2019 + (num - 50)
         
         # Samsung Galaxy Z Flip/Fold: Flip7 → 2025, Flip6 → 2024
         z_match = re.search(r'(flip|fold)\s*(\d)', model)
         if z_match:
             num = int(z_match.group(2))
-            return 2019 + num  # Flip1 = 2020, Flip6 = 2024, Flip7 = 2025
+            return 2019 + num
         
         # iPhone: iPhone 17 → 2025, iPhone 16 → 2024
         iphone_match = re.search(r'iphone\s*(\d{2})', model)
         if iphone_match:
             num = int(iphone_match.group(1))
             if num >= 10:
-                return 2007 + num  # iPhone 10 = 2017, iPhone 16 = 2024, iPhone 17 = 2025
+                return 2007 + num
         
         return None
     
@@ -1650,7 +1649,7 @@ def run_engine(trigger, df_products, df_history, df_slots):
         if year_match:
             return int(year_match.group(1))
         
-        # Samsung Galaxy Buds: Buds4 → 2025, Buds3 → 2024, Buds FE → 2023
+        # Samsung Galaxy Buds: Buds4 → 2025, Buds3 → 2024
         buds_match = re.search(r'buds\s*(\d|fe|pro|live)', text)
         if buds_match:
             v = buds_match.group(1)
@@ -1665,44 +1664,19 @@ def run_engine(trigger, df_products, df_history, df_slots):
         watch_match = re.search(r'(galaxy\s*)?watch\s*(\d)', text)
         if watch_match:
             num = int(watch_match.group(2))
-            return 2018 + num  # Watch 4 = 2021, Watch 6 = 2023, Watch 7 = 2024
+            return 2018 + num
         
         # Galaxy Fit: Fit 3 → 2024
         fit_match = re.search(r'(galaxy\s*)?fit\s*(\d)', text)
         if fit_match:
             num = int(fit_match.group(2))
-            return 2021 + num  # Fit 2 = 2022, Fit 3 = 2024
-        
-        # SmartTag: SmartTag2 → 2023
-        tag_match = re.search(r'smarttag\s*(\d)?', text)
-        if tag_match:
-            v = tag_match.group(1)
-            if v == '2': return 2023
-            return 2021
+            return 2021 + num
         
         return None
     
-    # Get phone release year
+    # Get phone release year (used later in slot processing)
     phone_year = extract_year_from_model(tmod) or extract_year_from_model(tt)
-    
-    # Apply year boost for premium phones
-    YEAR_MATCH_BOOST = 50000  # Same year
-    YEAR_ADJACENT_BOOST = 25000  # ±1 year
-    
-    if tprice >= PREMIUM_PRICE_THRESHOLD and phone_year:
-        c['Accessory_Year'] = c.apply(
-            lambda r: extract_year_from_accessory(str(r.get('Title', '')), str(r.get('Μοντέλο', ''))), 
-            axis=1
-        )
-        
-        # Apply year boosts
-        c.loc[c['Accessory_Year'] == phone_year, 'Smart_Boost'] += YEAR_MATCH_BOOST
-        c.loc[c['Accessory_Year'] == phone_year - 1, 'Smart_Boost'] += YEAR_ADJACENT_BOOST
-        c.loc[c['Accessory_Year'] == phone_year + 1, 'Smart_Boost'] += YEAR_ADJACENT_BOOST
-        
-        year_matched = (c['Accessory_Year'] == phone_year).sum()
-        year_adjacent = ((c['Accessory_Year'] == phone_year - 1) | (c['Accessory_Year'] == phone_year + 1)).sum()
-        diag.append(("Year matching", f"Phone year: {phone_year}", f"Matched: {year_matched}, Adjacent: {year_adjacent}"))
+    is_premium = tprice >= PREMIUM_PRICE_THRESHOLD
     
     c['Final_Score'] = c['History_Score'] + c['Frequency'] + c['Avail_Boost'] + c['Smart_Boost'] + c['Sales_Tiebreaker']
 
@@ -1755,12 +1729,40 @@ def run_engine(trigger, df_products, df_history, df_slots):
                     notes.append(f"Color: {b4}→{len(sc_color)}")
                     if not sc_color.empty: sc = sc_color
 
+        # 🟢 YEAR MATCHING: For premium phones, prefer same-year earbuds/smartwatches
+        year_match_slots = ["EARBUDS", "SMARTWATCH"]
+        
+        if lk in year_match_slots and is_premium and phone_year and not sc.empty:
+            # Calculate accessory year for each item
+            sc['Accessory_Year'] = sc.apply(
+                lambda r: extract_year_from_accessory(str(r.get('Title', '')), str(r.get('Μοντέλο', ''))), 
+                axis=1
+            )
+            
+            # Create year priority: 0=same year, 1=adjacent, 2=other
+            sc['Year_Priority'] = 2  # Default: other
+            sc.loc[sc['Accessory_Year'] == phone_year, 'Year_Priority'] = 0  # Same year = highest priority
+            sc.loc[sc['Accessory_Year'] == phone_year - 1, 'Year_Priority'] = 1  # Previous year
+            sc.loc[sc['Accessory_Year'] == phone_year + 1, 'Year_Priority'] = 1  # Next year
+            
+            # Sort by: Year_Priority (asc), then Final_Score (desc) for availability/sales tiebreaker
+            sc = sc.sort_values(['Year_Priority', 'Final_Score'], ascending=[True, False])
+            
+            same_year_count = (sc['Year_Priority'] == 0).sum()
+            adjacent_count = (sc['Year_Priority'] == 1).sum()
+            notes.append(f"Year match ({phone_year}): {same_year_count} exact, {adjacent_count} adjacent")
+
         afa = len(sc)
         slot_diag.append((sn, role, lk, afh, afa))
         slot_notes[sn] = notes
 
         if not sc.empty:
-            sc = sc.sort_values('Final_Score', ascending=False).copy()
+            # For year-matched slots, sorting was already done above - preserve it
+            # For other slots, sort by Final_Score
+            if not (lk in year_match_slots and is_premium and phone_year):
+                sc = sc.sort_values('Final_Score', ascending=False).copy()
+            else:
+                sc = sc.copy()  # Already sorted by Year_Priority, Final_Score
             sc['Assigned_Slot']=sn; sc['Slot_Role']=role
             sc['Item_Rank']=range(1,len(sc)+1)
             sc['Draft_Score']=sc['Item_Rank']*100+sn
