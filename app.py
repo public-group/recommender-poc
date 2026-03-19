@@ -75,7 +75,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v12.7 — Smart Charger/Powerbank Matching
+        🟢 Engine v12.7.1 — Fixed Import Error
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -1602,7 +1602,6 @@ def run_engine(trigger, df_products, df_history, df_slots):
     # 🟢 Year extraction functions (used for EARBUDS and SMARTWATCH slots only)
     def extract_year_from_model(model_str):
         """Extract release year from Samsung/Apple model names"""
-        import re
         model = str(model_str).lower()
         
         # Direct year in title (e.g., "2024", "2025")
@@ -1641,7 +1640,6 @@ def run_engine(trigger, df_products, df_history, df_slots):
     
     def extract_year_from_accessory(title_str, model_str=''):
         """Extract year from accessory title/model"""
-        import re
         text = f"{title_str} {model_str}".lower()
         
         # Direct year in title
@@ -1756,7 +1754,6 @@ def run_engine(trigger, df_products, df_history, df_slots):
                     # Fast charging / high wattage boost
                     if has_fast_charging or is_premium:
                         # Check wattage in title or Ισχύς column
-                        import re
                         watt_match = re.search(r'(\d+)\s*w', item_title)
                         watt_from_col = re.search(r'(\d+)', str(item_watt)) if item_watt else None
                         
