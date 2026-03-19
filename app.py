@@ -75,7 +75,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v12.11 — Price Tier Matching
+        🟢 Engine v12.12 — Fixed Ecosystem Wall (OPPO/VIVO)
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -97,7 +97,7 @@ TECH_CATS = {"IT", "Telephony", "TV"}
 APPL_CATS = {"MDA", "SDA", "Air Condition", "Personal Care"}
 COMPAT_COLS = ["Συμβατό με", "Συμβατή συσκευή"]
 CC = "_Compatible"
-ANDROID_OEMS = {"SAMSUNG", "XIAOMI", "HUAWEI", "MOTOROLA", "HONOR", "POCO", "REALME", "ONEPLUS", "NOTHING"}
+ANDROID_OEMS = {"SAMSUNG", "XIAOMI", "HUAWEI", "MOTOROLA", "HONOR", "POCO", "REALME", "ONEPLUS", "NOTHING", "OPPO", "VIVO", "TCL", "NOKIA", "ASUS", "GOOGLE"}
 
 # ─────────────────────────────────────────────────────────────
 # 🟢 KIDS BOOKS CONFIGURATION (Based on actual data)
