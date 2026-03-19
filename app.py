@@ -75,7 +75,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v11.8 — Expanded Arts Hierarchies for IP
+        🟢 Engine v11.9 — Series Discovery + Fixed Filename
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -1349,6 +1349,7 @@ def run_books_engine(trigger, df_all, df_history):
     
     # ══════════════════════════════════════════════════════════
     # PRIORITY 3: CATEGORY DISCOVERY (Fill remaining slots)
+    # Prefer same-series books with different dimensions over other IPs
     # ══════════════════════════════════════════════════════════
     discovery_notes = ["=== PRIORITY 3: CATEGORY DISCOVERY ==="]
     total_filled = series_count + crosssell_count
@@ -1356,48 +1357,108 @@ def run_books_engine(trigger, df_all, df_history):
     discovery_count = 0
     
     if remaining > 0:
-        # Get books from same hierarchy
         books_only = df_all[df_all['Level 1'] == 'Books'].copy()
-        discovery_pool = books_only[books_only['Hierarchy'] == t_hierarchy].copy()
         
-        discovery_notes.append(f"Same hierarchy ({t_hierarchy}): {len(discovery_pool)}")
+        # 🟢 PRIORITY A: Same series, different dimensions (for large series)
+        if has_series:
+            # Find series column
+            series_col = 'Σειρά βιβλίου'
+            if series_col not in books_only.columns:
+                for col in books_only.columns:
+                    if 'σειρά' in col.lower() or 'series' in col.lower():
+                        series_col = col
+                        break
+            
+            if series_col in books_only.columns:
+                # Get same-series books with DIFFERENT dimensions
+                same_series = books_only[
+                    books_only[series_col].fillna('').astype(str).str.strip() == t_series
+                ].copy()
+                
+                # Exclude already used materials
+                same_series = same_series[~same_series['Material'].isin(used_materials)]
+                same_series = same_series[same_series['Material'] != tm]
+                
+                # Language filter
+                if t_level2:
+                    same_series = same_series[same_series['Level 2'] == t_level2]
+                
+                # Exclude same original title (different editions)
+                if t_orig_title and t_orig_title != 'nan' and t_orig_title != '0':
+                    same_series = same_series[
+                        same_series['Τίτλος πρωτοτύπου'].fillna('').astype(str).str.strip() != t_orig_title
+                    ]
+                
+                # Get books with DIFFERENT dimensions (other formats/editions)
+                if t_dims and t_dims != 'nan':
+                    diff_dims = same_series[
+                        same_series['Διαστάσεις'].fillna('').astype(str).str.strip() != t_dims
+                    ]
+                    discovery_notes.append(f"Same series, different dimensions: {len(diff_dims)}")
+                    
+                    if not diff_dims.empty:
+                        # Score by availability
+                        diff_dims['Final_Score'] = 0
+                        if 'AVAILABILITY' in diff_dims.columns:
+                            diff_dims.loc[diff_dims['AVAILABILITY'] == 'Άμεσα Διαθέσιμο', 'Final_Score'] += AVAIL_BOOST
+                        
+                        diff_dims = diff_dims.sort_values('Final_Score', ascending=False)
+                        
+                        for _, row in diff_dims.head(remaining).iterrows():
+                            if row['Material'] not in used_materials and discovery_count < remaining:
+                                row_copy = row.copy()
+                                row_copy['Assigned_Slot'] = total_filled + discovery_count + 1
+                                row_copy['Slot_Role'] = 'Series Discovery'
+                                row_copy['Item_Rank'] = 1
+                                all_recs.append(row_copy)
+                                used_materials.add(row['Material'])
+                                discovery_count += 1
+                        
+                        discovery_notes.append(f"✓ Added {discovery_count} same-series books (different format)")
         
-        # Exclude trigger and already recommended
-        discovery_pool = discovery_pool[~discovery_pool['Material'].isin(used_materials)]
-        discovery_pool = discovery_pool[discovery_pool['Material'] != tm]
-        
-        # Language filter
-        if t_level2:
-            discovery_pool = discovery_pool[discovery_pool['Level 2'] == t_level2]
-        
-        # Age filter
-        if 'Ηλικία' in discovery_pool.columns and allowed_ages:
-            discovery_pool = discovery_pool[
-                discovery_pool['Ηλικία'].fillna('').astype(str).str.strip().isin(allowed_ages) |
-                (discovery_pool['Ηλικία'].fillna('') == '') |
-                (discovery_pool['Ηλικία'].fillna('').astype(str) == '0')
-            ]
-        
-        discovery_notes.append(f"After filters: {len(discovery_pool)}")
-        
-        # Score and sort
-        discovery_pool['Final_Score'] = 0
-        if 'AVAILABILITY' in discovery_pool.columns:
-            discovery_pool.loc[discovery_pool['AVAILABILITY'] == 'Άμεσα Διαθέσιμο', 'Final_Score'] += AVAIL_BOOST
-        
-        discovery_pool = discovery_pool.sort_values('Final_Score', ascending=False)
-        
-        for _, row in discovery_pool.head(remaining).iterrows():
-            if row['Material'] not in used_materials:
-                row_copy = row.copy()
-                row_copy['Assigned_Slot'] = total_filled + discovery_count + 1
-                row_copy['Slot_Role'] = 'Category Discovery'
-                row_copy['Item_Rank'] = 1
-                all_recs.append(row_copy)
-                used_materials.add(row['Material'])
-                discovery_count += 1
-        
-        discovery_notes.append(f"✓ Added {discovery_count} discovery books")
+        # 🟢 PRIORITY B: Same hierarchy, different IPs (fallback)
+        remaining_after_series = remaining - discovery_count
+        if remaining_after_series > 0:
+            discovery_pool = books_only[books_only['Hierarchy'] == t_hierarchy].copy()
+            
+            discovery_notes.append(f"Same hierarchy ({t_hierarchy}): {len(discovery_pool)}")
+            
+            # Exclude trigger and already recommended
+            discovery_pool = discovery_pool[~discovery_pool['Material'].isin(used_materials)]
+            discovery_pool = discovery_pool[discovery_pool['Material'] != tm]
+            
+            # Language filter
+            if t_level2:
+                discovery_pool = discovery_pool[discovery_pool['Level 2'] == t_level2]
+            
+            # Age filter
+            if 'Ηλικία' in discovery_pool.columns and allowed_ages:
+                discovery_pool = discovery_pool[
+                    discovery_pool['Ηλικία'].fillna('').astype(str).str.strip().isin(allowed_ages) |
+                    (discovery_pool['Ηλικία'].fillna('') == '') |
+                    (discovery_pool['Ηλικία'].fillna('').astype(str) == '0')
+                ]
+            
+            discovery_notes.append(f"After filters: {len(discovery_pool)}")
+            
+            # Score and sort
+            discovery_pool['Final_Score'] = 0
+            if 'AVAILABILITY' in discovery_pool.columns:
+                discovery_pool.loc[discovery_pool['AVAILABILITY'] == 'Άμεσα Διαθέσιμο', 'Final_Score'] += AVAIL_BOOST
+            
+            discovery_pool = discovery_pool.sort_values('Final_Score', ascending=False)
+            
+            for _, row in discovery_pool.head(remaining_after_series).iterrows():
+                if row['Material'] not in used_materials:
+                    row_copy = row.copy()
+                    row_copy['Assigned_Slot'] = total_filled + discovery_count + 1
+                    row_copy['Slot_Role'] = 'Category Discovery'
+                    row_copy['Item_Rank'] = 1
+                    all_recs.append(row_copy)
+                    used_materials.add(row['Material'])
+                    discovery_count += 1
+            
+            discovery_notes.append(f"✓ Added {discovery_count} total discovery books")
     
     slot_notes[3] = discovery_notes
     diag.append(("3. Discovery", discovery_count, f"Filled {discovery_count} slots"))
@@ -1601,6 +1662,7 @@ MARKETING_COPY = {
     "ALT_CASE": "Premium προστασία.",
     # Books
     "Series Book": "Η συνέχεια της περιπέτειας!",
+    "Series Discovery": "Άλλη έκδοση της σειράς!",
     "Cross-Sell: IP Toy": "Ο ήρωας ζωντανεύει!",
     "Cross-Sell: Plush": "Αγκαλιά με τον αγαπημένο σου!",
     "Cross-Sell: Arts": "Δημιούργησε & φαντάσου!",
