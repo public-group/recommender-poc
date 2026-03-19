@@ -75,7 +75,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v12.1 — Jack Filter + Premium Brand Boost
+        🟢 Engine v12.2 — Model Match for All Fit-Specific Slots
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -1618,28 +1618,37 @@ def run_engine(trigger, df_products, df_history, df_slots):
         afh = len(sc)
         notes = [f"Logic: {lk}"]
 
-        if lk == "PRIMARY_CASE":
+        # 🟢 MODEL-SPECIFIC SLOTS: These accessories must match the exact phone model
+        model_specific_slots = ["PRIMARY_CASE", "SCREEN_GLASS", "CAMERA_GLASS", "ALT_CASE"]
+        
+        if lk in model_specific_slots:
             if strict_tmod:
                 b4 = len(sc)
                 cv = sc[CC].fillna('').astype(str).str.lower()
                 m = sc[cv.str.contains(strict_tmod, case=False, regex=True, na=False)]
+                # Also check Title for model match
+                if m.empty:
+                    m = sc[sc['Title'].fillna('').astype(str).str.lower().str.contains(strict_tmod, case=False, regex=True, na=False)]
                 if rival_regex and not m.empty:
                     m = m[~m[CC].fillna('').astype(str).str.lower().str.contains(rival_regex, regex=True, na=False)]
                     m = m[~m['Title'].fillna('').astype(str).str.lower().str.contains(rival_regex, regex=True, na=False)]
                 notes.append(f"Model '{tmod}': {b4}→{len(m)}")
                 sc = m  
             else:
-                sc = sc.head(0) 
-            if not sc.empty:
-                b4=len(sc)
-                f=sc[sc['Τύπος Θήκης'].fillna('').astype(str).str.contains("Back Cover", case=False, na=False)]
-                notes.append(f"Back Cover: {b4}→{len(f)}")
-                sc = f  
-            if not sc.empty and tcol:
-                b4=len(sc)
-                sc_color=sc[sc['Χρώμα'].fillna('').astype(str).str.strip().str.lower().isin(ccols)]
-                notes.append(f"Color: {b4}→{len(sc_color)}")
-                if not sc_color.empty: sc = sc_color
+                sc = sc.head(0)
+            
+            # Additional filters for PRIMARY_CASE only
+            if lk == "PRIMARY_CASE":
+                if not sc.empty:
+                    b4=len(sc)
+                    f=sc[sc['Τύπος Θήκης'].fillna('').astype(str).str.contains("Back Cover", case=False, na=False)]
+                    notes.append(f"Back Cover: {b4}→{len(f)}")
+                    sc = f  
+                if not sc.empty and tcol:
+                    b4=len(sc)
+                    sc_color=sc[sc['Χρώμα'].fillna('').astype(str).str.strip().str.lower().isin(ccols)]
+                    notes.append(f"Color: {b4}→{len(sc_color)}")
+                    if not sc_color.empty: sc = sc_color
 
         afa = len(sc)
         slot_diag.append((sn, role, lk, afh, afa))
