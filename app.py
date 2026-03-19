@@ -417,7 +417,7 @@ st.sidebar.markdown("""
     .sidebar-header {
         background-color: #ff5e00;
         color: white;
-        padding: 2px 2px;
+        padding: 18px 20px;
         margin: 0 -1rem 15px -1rem;
         font-family: -apple-system, BlinkMacSystemFont, sans-serif;
         font-size: 18px;
