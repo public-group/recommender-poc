@@ -21,7 +21,7 @@ st.markdown("""
     [data-testid="stSidebar"] {
         border-right: 1px solid #eaeaea !important;
         padding-top: 0 !important;
-        top: 50px !important;
+        top: 120px !important;
     }
     [data-testid="stSidebar"] > div:first-child {
         padding-top: 0 !important;
@@ -75,7 +75,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v11.3 — Fixed Arts Cross-Sell & Title Wrap
+        🟢 Engine v11.4 — Age-Aware Cross-Sell (8+ Collectables)
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -138,25 +138,36 @@ AGE_BRACKETS = {
 
 # 🟢 ACTUAL TOY HIERARCHIES FROM YOUR DATA
 TOY_HIERARCHIES_ACTUAL = {
-    "plush": ["ΛΟΥΤΡΙΝΑ"],
+    "plush": ["ΛΟΥΤΡΙΝΑ", "ΛΟΥΤΡΙΝΑ ΜΠΡΕΛΟΚ"],
     "dolls": ["ΚΟΥΚΛΕΣ"],
-    "action_figures": ["ACTION FIGURES", "ΣΥΛΛΕΚΤΙΚΕΣ ΦΙΓΟΥΡΕΣ"],
-    "board_puzzles": ["ΟΙΚΟΓΕΝΕΙΑΚΑ ΕΠΙΤΡΑΠΕΖΙΑ", "ΠΑΙΔΙΚΑ PUZZLES", "CARD GAMES", "ΠΑΙΔΙΚΑ ΕΠΙΤΡΑΠΕΖΙΑ", "ΕΝΗΛΙΚΩΝ 1000+"],
+    "action_figures": ["ACTION FIGURES", "ΣΥΛΛΕΚΤΙΚΕΣ ΦΙΓΟΥΡΕΣ", "FUNKO POP!"],
+    "board_puzzles": ["ΟΙΚΟΓΕΝΕΙΑΚΑ ΕΠΙΤΡΑΠΕΖΙΑ", "ΠΑΙΔΙΚΑ PUZZLES", "CARD GAMES", "ΠΑΙΔΙΚΑ ΕΠΙΤΡΑΠΕΖΙΑ", "ΕΝΗΛΙΚΩΝ 1000+", "ΕΝΗΛΙΚΩΝ ΕΩΣ 999"],
     "building": ["ΚΑΤΑΣΚΕΥΕΣ", "ΜΙΚΡΟΚΟΣΜΟΣ"],
-    "toddler": ["ΒΡΕΦΙΚΑ ΠΑΙΧΝΙΔΙΑ ΔΡΑΣΤΗΡΙΟΤΗΤΩΝ", "ΦΙΓΟΥΡΕΣ & PLAYSET"],
-    "vehicles": ["ΔΙΑΦΟΡΑ ΑΥΤΟΚΙΝΗΤΑ"],
-    "creative": ["ΖΩΓΡΑΦΙΚΗ"],
+    "toddler": ["ΒΡΕΦΙΚΑ ΠΑΙΧΝΙΔΙΑ ΔΡΑΣΤΗΡΙΟΤΗΤΩΝ", "ΦΙΓΟΥΡΕΣ & PLAYSET", "Ζωάκια"],
+    "vehicles": ["ΔΙΑΦΟΡΑ ΑΥΤΟΚΙΝΗΤΑ", "ΑΥΤΟΚΙΝΗΤΑ"],
+    "creative": ["ΖΩΓΡΑΦΙΚΗ", "ΠΛΑΣΤΕΛΙΝΕΣ", "ΧΕΙΡΟΤΕΧΝΙΕΣ"],
+    # 🟢 NEW: 8+ specific categories
+    "collectable_cards": ["Collectable Cards"],  # Pokemon, FIFA, etc.
+    "knowledge_games": ["ΓΝΩΣΕΩΝ"],  # Knowledge/trivia games
+    "adult_board": ["ΕΠΙΤΡΑΠΕΖΙΑ ΕΝΗΛΙΚΩΝ"],  # Strategy games for 8+
+    "beauty_fashion": ["ΟΜΟΡΦΙΑΣ", "ΔΡΑΣΤΗΡΙΟΤΗΤΕΣ ΓΙΑ ΚΟΡΙΤΣΙΑ"],  # For older girls
+    "lamps_decor": ["LAMPS"],  # Room decor for tweens
 }
 
 # 🟢 ACTUAL STATIONERY HIERARCHIES FROM YOUR DATA
 STATIONERY_HIERARCHIES_ACTUAL = {
     "notebooks": ["ΣΗΜΕΙΩΜΑΤΑΡΙΑ", "ΤΕΤΡΑΔΙΑ"],
     "water_bottles": ["ΘΕΡΜΟΣ - ΠΑΓΟΥΡΙΑ", "ΠΑΓΟΥΡΙΑ", "ΘΕΡΜΟΣ"],
-    "arts_crafts": ["ΧΡΩΜΑΤΙΣΤΑ ΜΟΛΥΒΙΑ", "ΜΠΛΟΚ-ΧΑΡΤΙΑ", "ΚΑΣΕΤΙΝΕΣ", "ΜΑΡΚΑΔΟΡΟΙ", "ΜΑΡΚΑΔΟΡΟΙ ΣΧΕΔΙΟΥ-ΕΙΔΙΚΩΝ ΧΡΗΣΕΩΝ", "ΠΑΣΤΕΛ-ΚΗΡΟΜΠΟΓΙΕΣ"],
+    "arts_crafts": ["ΧΡΩΜΑΤΙΣΤΑ ΜΟΛΥΒΙΑ", "ΜΠΛΟΚ-ΧΑΡΤΙΑ", "ΚΑΣΕΤΙΝΕΣ", "ΜΑΡΚΑΔΟΡΟΙ", "ΜΑΡΚΑΔΟΡΟΙ ΣΧΕΔΙΟΥ-ΕΙΔΙΚΩΝ ΧΡΗΣΕΩΝ", "ΧΡΩΜΑΤΑ ΖΩΓΡΑΦΙΚΗΣ"],
     "reading": ["READING ACCESSORIES"],
     "writing": ["ΜΟΛΥΒΙΑ", "ΣΤΥΛΟ ΔΙΑΡΚΕΙΑΣ", "ΣΤΥΛΟ GEL"],
     "keychains": ["ΜΠΡΕΛΟΚ", "ΜΑΓΝΗΤΑΚΙΑ"],
     "cups": ["ΚΟΥΠΕΣ &  ΠΟΤΗΡΙΑ", "ΚΟΥΠΕΣ & ΠΟΤΗΡΙΑ"],
+    # 🟢 NEW: Additional lifestyle for 8+
+    "bags": ["ΤΣΑΝΤΑΚΙΑ - ΠΟΡΤΟΦΟΛΙΑ", "ΤΣΑΝΤΕΣ LIFESTYLE", "SHOPPING BAGS"],
+    "food_containers": ["ΦΑΓΗΤΟΔΟΧΕΙΑ", "ΤΣΑΝΤΕΣ ΦΑΓΗΤΟΥ"],
+    "stickers": ["ΑΥΤΟΚΟΛΛΗΤΑ-STICKERS"],
+    "gift_gadgets": ["GIFT GADGETS"],
 }
 
 # 🟢 BOOKS SLOT MATRIX (Similar to Smartphones structure)
@@ -315,7 +326,7 @@ def safe(v): return html_lib.escape(str(v))
 # ─────────────────────────────────────────────────────────────
 # DATA LOADING - From local file in repo
 # ─────────────────────────────────────────────────────────────
-EXCEL_FILE = "Recommendations GitHub.xlsx"  # File in same folder as app.py
+EXCEL_FILE = "Recommendations.xlsx"  # File in same folder as app.py
 
 @st.cache_data(ttl=600)  # Cache for 10 minutes
 def load_all_data():
@@ -551,13 +562,13 @@ st.sidebar.markdown(f"""
     [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] button {{
         background: #ffffff !important;
         border-radius: 12px !important;
-        min-height: 105px !important;
+        min-height: 95px !important;
         font-size: 11px !important;
         font-weight: 600 !important;
         color: #333 !important;
         white-space: pre-line !important;
         line-height: 1.3 !important;
-        padding-top: 50px !important;
+        padding-top: 45px !important;
     }}
     
     /* Smartphones button */
@@ -588,7 +599,7 @@ st.sidebar.markdown(f"""
 col1, col2 = st.sidebar.columns(2)
 
 with col1:
-    if st.button("Smartphones", key="btn_smartphones", use_container_width=True):
+    if st.button("Τηλεφωνία,\nTablets &\nWearables", key="btn_smartphones", use_container_width=True):
         st.session_state.active_cluster = "Smartphones"
         st.rerun()
 
@@ -967,7 +978,7 @@ def run_books_engine(trigger, df_all, df_history):
     # ══════════════════════════════════════════════════════════
     crosssell_notes = ["=== PRIORITY 2: CROSS-SELL ==="]
     crosssell_count = 0
-    max_crosssell = min(4, 10 - series_count)  # Fill remaining slots up to 4
+    max_crosssell = min(5, 10 - series_count)  # Fill remaining slots up to 5
     
     if max_crosssell > 0:
         # Get Toys and Stationery
@@ -1084,11 +1095,20 @@ def run_books_engine(trigger, df_all, df_history):
             
             crosssell_notes.extend(item2_notes)
         
-        # ─── CROSS-SELL SLOT 3: Puzzle / Board Game ───
+        # ─── CROSS-SELL SLOT 3: Puzzle / Board Game (age-aware) ───
         if crosssell_count < max_crosssell:
             item3_notes = ["Item 3: Puzzle / Board Game"]
             
-            puzzles = toys[toys['Hierarchy'].isin(TOY_HIERARCHIES_ACTUAL['board_puzzles'])]
+            # For 8+ ages, include adult board games and knowledge games
+            is_older_kid = effective_age in ['8', '9', '10', '11', '12', '8+', '10+', '12+']
+            
+            puzzle_hierarchies = TOY_HIERARCHIES_ACTUAL['board_puzzles'].copy()
+            if is_older_kid:
+                puzzle_hierarchies += TOY_HIERARCHIES_ACTUAL.get('knowledge_games', [])
+                puzzle_hierarchies += TOY_HIERARCHIES_ACTUAL.get('adult_board', [])
+                item3_notes.append(f"Age {effective_age}: including knowledge & adult board games")
+            
+            puzzles = toys[toys['Hierarchy'].isin(puzzle_hierarchies)]
             if not puzzles.empty:
                 puzzles = puzzles.sort_values('Final_Score', ascending=False)
                 for _, row in puzzles.iterrows():
@@ -1105,13 +1125,76 @@ def run_books_engine(trigger, df_all, df_history):
             
             crosssell_notes.extend(item3_notes)
         
-        # ─── CROSS-SELL SLOT 4: Lifestyle (Water bottle / Notebook) ───
+        # ─── CROSS-SELL SLOT 4: Collectable Cards (for 8+) OR Lifestyle ───
         if crosssell_count < max_crosssell:
-            item4_notes = ["Item 4: Lifestyle"]
+            is_older_kid = effective_age in ['8', '9', '10', '11', '12', '8+', '10+', '12+']
+            
+            if is_older_kid:
+                item4_notes = ["Item 4: Collectable Cards (8+)"]
+                
+                # Priority: Collectable Cards (Pokemon, FIFA, etc.)
+                collectables = toys[toys['Hierarchy'].isin(TOY_HIERARCHIES_ACTUAL.get('collectable_cards', []))]
+                if not collectables.empty:
+                    collectables = collectables.sort_values('Final_Score', ascending=False)
+                    for _, row in collectables.iterrows():
+                        if row['Material'] not in used_materials:
+                            row_copy = row.copy()
+                            row_copy['Assigned_Slot'] = series_count + crosssell_count + 1
+                            row_copy['Slot_Role'] = 'Cross-Sell: Collectable Cards'
+                            row_copy['Item_Rank'] = 1
+                            all_recs.append(row_copy)
+                            used_materials.add(row['Material'])
+                            crosssell_count += 1
+                            item4_notes.append(f"✓ Cards: {row['Title'][:40]}...")
+                            break
+                
+                # Fallback for 8+: Action Figures / Funko Pop
+                if len([n for n in item4_notes if '✓' in n]) == 0:
+                    figures = toys[toys['Hierarchy'].isin(TOY_HIERARCHIES_ACTUAL.get('action_figures', []))]
+                    if not figures.empty:
+                        figures = figures.sort_values('Final_Score', ascending=False)
+                        for _, row in figures.iterrows():
+                            if row['Material'] not in used_materials:
+                                row_copy = row.copy()
+                                row_copy['Assigned_Slot'] = series_count + crosssell_count + 1
+                                row_copy['Slot_Role'] = 'Cross-Sell: Action Figure'
+                                row_copy['Item_Rank'] = 1
+                                all_recs.append(row_copy)
+                                used_materials.add(row['Material'])
+                                crosssell_count += 1
+                                item4_notes.append(f"✓ Figure: {row['Title'][:40]}...")
+                                break
+            else:
+                item4_notes = ["Item 4: Lifestyle"]
+                
+                lifestyle = stationery[stationery['Hierarchy'].isin(
+                    STATIONERY_HIERARCHIES_ACTUAL['water_bottles'] + 
+                    STATIONERY_HIERARCHIES_ACTUAL['notebooks']
+                )]
+                if not lifestyle.empty:
+                    lifestyle = lifestyle.sort_values('Final_Score', ascending=False)
+                    for _, row in lifestyle.iterrows():
+                        if row['Material'] not in used_materials:
+                            row_copy = row.copy()
+                            row_copy['Assigned_Slot'] = series_count + crosssell_count + 1
+                            row_copy['Slot_Role'] = 'Cross-Sell: Lifestyle'
+                            row_copy['Item_Rank'] = 1
+                            all_recs.append(row_copy)
+                            used_materials.add(row['Material'])
+                            crosssell_count += 1
+                            item4_notes.append(f"✓ Lifestyle: {row['Title'][:40]}...")
+                            break
+            
+            crosssell_notes.extend(item4_notes)
+        
+        # ─── CROSS-SELL SLOT 5: Lifestyle for ALL ages ───
+        if crosssell_count < max_crosssell:
+            item5_notes = ["Item 5: Lifestyle (water bottle / notebook)"]
             
             lifestyle = stationery[stationery['Hierarchy'].isin(
                 STATIONERY_HIERARCHIES_ACTUAL['water_bottles'] + 
-                STATIONERY_HIERARCHIES_ACTUAL['notebooks']
+                STATIONERY_HIERARCHIES_ACTUAL['notebooks'] +
+                STATIONERY_HIERARCHIES_ACTUAL.get('food_containers', [])
             )]
             if not lifestyle.empty:
                 lifestyle = lifestyle.sort_values('Final_Score', ascending=False)
@@ -1124,10 +1207,10 @@ def run_books_engine(trigger, df_all, df_history):
                         all_recs.append(row_copy)
                         used_materials.add(row['Material'])
                         crosssell_count += 1
-                        item4_notes.append(f"✓ Lifestyle: {row['Title'][:40]}...")
+                        item5_notes.append(f"✓ Lifestyle: {row['Title'][:40]}...")
                         break
             
-            crosssell_notes.extend(item4_notes)
+            crosssell_notes.extend(item5_notes)
     
     slot_notes[2] = crosssell_notes
     diag.append(("2. Cross-Sell", crosssell_count, f"Filled {crosssell_count} slots"))
@@ -1392,6 +1475,8 @@ MARKETING_COPY = {
     "Cross-Sell: Creative Toy": "Χτίσε τον κόσμο σου!",
     "Cross-Sell: Puzzle": "Μάθε παίζοντας!",
     "Cross-Sell: Lifestyle": "Στιλ για κάθε μέρα!",
+    "Cross-Sell: Collectable Cards": "Συλλογή για πρωταθλητές!",
+    "Cross-Sell: Action Figure": "Ο ήρωας στο ράφι σου!",
     "Category Discovery": "Μια ακόμα τέλεια επιλογή!",
 }
 
