@@ -75,7 +75,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v12.5 — Year Match Earbuds/Smartwatch Only
+        🟢 Engine v12.6 — Newer First + Ultra-Premium Filter
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -1729,28 +1729,53 @@ def run_engine(trigger, df_products, df_history, df_slots):
                     notes.append(f"Color: {b4}→{len(sc_color)}")
                     if not sc_color.empty: sc = sc_color
 
-        # 🟢 YEAR MATCHING: For premium phones, prefer same-year earbuds/smartwatches
+        # 🟢 YEAR MATCHING: For premium phones, prefer newest earbuds/smartwatches
         year_match_slots = ["EARBUDS", "SMARTWATCH"]
+        ULTRA_PREMIUM_THRESHOLD = 1700  # For phones €1700+, show only premium accessories
         
-        if lk in year_match_slots and is_premium and phone_year and not sc.empty:
+        if lk in year_match_slots and is_premium and not sc.empty:
+            
+            # 🟢 ULTRA-PREMIUM FILTER: For €1700+ phones, only show Pro/Ultra/flagship accessories
+            is_ultra_premium = tprice >= ULTRA_PREMIUM_THRESHOLD
+            if is_ultra_premium:
+                b4_ultra = len(sc)
+                # Premium keywords for earbuds/watches
+                premium_keywords = ['pro', 'ultra', 'classic', 'studio', 'max', 'elite']
+                premium_pattern = '|'.join(premium_keywords)
+                
+                # Filter to premium models only
+                premium_sc = sc[sc['Title'].fillna('').str.lower().str.contains(premium_pattern, regex=True, na=False)]
+                
+                if not premium_sc.empty:
+                    sc = premium_sc
+                    notes.append(f"Ultra-premium filter (€{tprice:.0f}): {b4_ultra}→{len(sc)} (Pro/Ultra only)")
+                else:
+                    notes.append(f"Ultra-premium filter: No Pro/Ultra found, keeping all {b4_ultra}")
+            
             # Calculate accessory year for each item
-            sc['Accessory_Year'] = sc.apply(
-                lambda r: extract_year_from_accessory(str(r.get('Title', '')), str(r.get('Μοντέλο', ''))), 
-                axis=1
-            )
-            
-            # Create year priority: 0=same year, 1=adjacent, 2=other
-            sc['Year_Priority'] = 2  # Default: other
-            sc.loc[sc['Accessory_Year'] == phone_year, 'Year_Priority'] = 0  # Same year = highest priority
-            sc.loc[sc['Accessory_Year'] == phone_year - 1, 'Year_Priority'] = 1  # Previous year
-            sc.loc[sc['Accessory_Year'] == phone_year + 1, 'Year_Priority'] = 1  # Next year
-            
-            # Sort by: Year_Priority (asc), then Final_Score (desc) for availability/sales tiebreaker
-            sc = sc.sort_values(['Year_Priority', 'Final_Score'], ascending=[True, False])
-            
-            same_year_count = (sc['Year_Priority'] == 0).sum()
-            adjacent_count = (sc['Year_Priority'] == 1).sum()
-            notes.append(f"Year match ({phone_year}): {same_year_count} exact, {adjacent_count} adjacent")
+            if phone_year:
+                sc['Accessory_Year'] = sc.apply(
+                    lambda r: extract_year_from_accessory(str(r.get('Title', '')), str(r.get('Μοντέλο', ''))), 
+                    axis=1
+                )
+                
+                # Year priority: NEWER IS BETTER
+                # 0 = newer than phone (e.g., 2026 for 2025 phone) - best, latest tech
+                # 1 = same year as phone (e.g., 2025 for 2025 phone)
+                # 2 = one year older (e.g., 2024 for 2025 phone)
+                # 3 = older (e.g., 2023 or earlier)
+                sc['Year_Priority'] = 3  # Default: older
+                sc.loc[sc['Accessory_Year'] > phone_year, 'Year_Priority'] = 0  # Newer = best
+                sc.loc[sc['Accessory_Year'] == phone_year, 'Year_Priority'] = 1  # Same year
+                sc.loc[sc['Accessory_Year'] == phone_year - 1, 'Year_Priority'] = 2  # Previous year
+                
+                # Sort by: Year_Priority (asc), then Final_Score (desc) for availability/sales tiebreaker
+                sc = sc.sort_values(['Year_Priority', 'Final_Score'], ascending=[True, False])
+                
+                newer_count = (sc['Year_Priority'] == 0).sum()
+                same_year_count = (sc['Year_Priority'] == 1).sum()
+                prev_year_count = (sc['Year_Priority'] == 2).sum()
+                notes.append(f"Year priority ({phone_year}): {newer_count} newer, {same_year_count} same, {prev_year_count} prev")
 
         afa = len(sc)
         slot_diag.append((sn, role, lk, afh, afa))
