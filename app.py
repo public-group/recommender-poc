@@ -75,7 +75,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v12.6 — Newer First + Ultra-Premium Filter
+        🟢 Engine v12.7 — Smart Charger/Powerbank Matching
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -1728,6 +1728,62 @@ def run_engine(trigger, df_products, df_history, df_slots):
                     sc_color=sc[sc['Χρώμα'].fillna('').astype(str).str.strip().str.lower().isin(ccols)]
                     notes.append(f"Color: {b4}→{len(sc_color)}")
                     if not sc_color.empty: sc = sc_color
+
+        # 🟢 CHARGER/POWERBANK FEATURE MATCHING
+        # Match charger capabilities to phone features (wireless charging, fast charging, wattage)
+        charger_slots = ["WALL_CHARGER", "POWERBANK"]
+        
+        if lk in charger_slots and not sc.empty:
+            # Extract phone features
+            has_wireless_charging = 'ασύρματη φόρτιση' in tex
+            has_fast_charging = 'γρήγορη φόρτιση' in tex
+            
+            # Calculate feature boost for each charger/powerbank
+            WIRELESS_BOOST = 30000  # Prefer wireless chargers for wireless phones
+            FAST_CHARGE_BOOST = 20000  # Prefer fast chargers for fast-charge phones
+            HIGH_WATT_BOOST = 15000  # Prefer higher wattage for premium phones
+            
+            if has_wireless_charging or has_fast_charging or is_premium:
+                for idx in sc.index:
+                    item_title = str(sc.loc[idx, 'Title']).lower()
+                    item_watt = str(sc.loc[idx, 'Ισχύς (Watt)']) if 'Ισχύς (Watt)' in sc.columns else ''
+                    
+                    # Wireless charging boost
+                    if has_wireless_charging:
+                        if 'wireless' in item_title or 'ασύρματ' in item_title or 'magsafe' in item_title:
+                            sc.loc[idx, 'Final_Score'] += WIRELESS_BOOST
+                    
+                    # Fast charging / high wattage boost
+                    if has_fast_charging or is_premium:
+                        # Check wattage in title or Ισχύς column
+                        import re
+                        watt_match = re.search(r'(\d+)\s*w', item_title)
+                        watt_from_col = re.search(r'(\d+)', str(item_watt)) if item_watt else None
+                        
+                        wattage = 0
+                        if watt_match:
+                            wattage = int(watt_match.group(1))
+                        elif watt_from_col:
+                            wattage = int(watt_from_col.group(1))
+                        elif '21 - 60' in str(item_watt):
+                            wattage = 45  # Assume mid-range
+                        
+                        # Boost based on wattage (higher = better for premium/fast-charge phones)
+                        if wattage >= 45:
+                            sc.loc[idx, 'Final_Score'] += FAST_CHARGE_BOOST + HIGH_WATT_BOOST
+                        elif wattage >= 25:
+                            sc.loc[idx, 'Final_Score'] += FAST_CHARGE_BOOST
+                        elif wattage >= 20:
+                            sc.loc[idx, 'Final_Score'] += FAST_CHARGE_BOOST // 2
+                
+                # Re-sort after boosts
+                sc = sc.sort_values('Final_Score', ascending=False)
+                
+                features = []
+                if has_wireless_charging: features.append("Wireless")
+                if has_fast_charging: features.append("FastCharge")
+                if is_premium: features.append("Premium")
+                notes.append(f"Phone features: {', '.join(features)}")
 
         # 🟢 YEAR MATCHING: For premium phones, prefer newest earbuds/smartwatches
         year_match_slots = ["EARBUDS", "SMARTWATCH"]
