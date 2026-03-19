@@ -75,7 +75,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v12.9 — Brand Filter + Color Priority
+        🟢 Engine v12.11 — Price Tier Matching
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -1756,6 +1756,36 @@ def run_engine(trigger, df_products, df_history, df_slots):
                             # Keep all if no color match
                             notes.append(f"Color: no match, keeping all {b4}")
 
+        # 🟢 CROSS_SELL BRAND FILTERING: Brand-specific accessories (SmartTag, AirTag)
+        # Samsung SmartTag should only show for Samsung phones, AirTag for Apple phones
+        if lk == "CROSS_SELL" and not sc.empty:
+            b4_brand = len(sc)
+            
+            # Define brand-specific keywords
+            samsung_only_keywords = ['smarttag', 'galaxy smart']
+            apple_only_keywords = ['airtag']
+            
+            # Filter out wrong-brand tracker accessories
+            def is_compatible_accessory(row):
+                title_lower = str(row.get('Title', '')).lower()
+                acc_brand = str(row.get('Κατασκευαστής', '')).upper()
+                
+                # Samsung-only accessories (SmartTag)
+                if any(kw in title_lower for kw in samsung_only_keywords):
+                    return tb == "SAMSUNG"  # Only show for Samsung phones
+                
+                # Apple-only accessories (AirTag)
+                if any(kw in title_lower for kw in apple_only_keywords):
+                    return tb == "APPLE"  # Only show for Apple phones
+                
+                # All other accessories are compatible
+                return True
+            
+            sc = sc[sc.apply(is_compatible_accessory, axis=1)]
+            
+            if len(sc) < b4_brand:
+                notes.append(f"Brand filter (trackers): {b4_brand}→{len(sc)}")
+
         # 🟢 PHONE FEATURES (used for charger and holder matching)
         has_wireless_charging = 'ασύρματη φόρτιση' in tex
         has_fast_charging = 'γρήγορη φόρτιση' in tex
@@ -1814,6 +1844,45 @@ def run_engine(trigger, df_products, df_history, df_slots):
         # 🟢 YEAR MATCHING: For premium phones, prefer newest earbuds/smartwatches
         year_match_slots = ["EARBUDS", "SMARTWATCH"]
         ULTRA_PREMIUM_THRESHOLD = 1700  # For phones €1700+, show only premium accessories
+        
+        # 🟢 PRICE TIER FILTERING: Accessory price should match phone tier
+        # Prevents showing €9 earbuds with €2000 phones
+        if lk in year_match_slots and not sc.empty:
+            # Define minimum accessory prices based on phone price
+            if lk == "EARBUDS":
+                if tprice >= 1500:
+                    min_price = 100
+                elif tprice >= 1000:
+                    min_price = 60
+                elif tprice >= 600:
+                    min_price = 30
+                elif tprice >= 300:
+                    min_price = 15
+                else:
+                    min_price = 0
+            else:  # SMARTWATCH
+                if tprice >= 1500:
+                    min_price = 200
+                elif tprice >= 1000:
+                    min_price = 150
+                elif tprice >= 600:
+                    min_price = 80
+                elif tprice >= 300:
+                    min_price = 40
+                else:
+                    min_price = 0
+            
+            if min_price > 0:
+                b4_price = len(sc)
+                # Parse prices and filter
+                sc['Acc_Price'] = sc['LIST PRICE'].apply(lambda x: parse_euro_price(x))
+                price_filtered = sc[sc['Acc_Price'] >= min_price]
+                
+                if not price_filtered.empty:
+                    sc = price_filtered
+                    notes.append(f"Price tier (€{tprice:.0f} phone): min €{min_price} → {b4_price}→{len(sc)}")
+                else:
+                    notes.append(f"Price tier: No items ≥€{min_price}, keeping all {b4_price}")
         
         if lk in year_match_slots and is_premium and not sc.empty:
             
