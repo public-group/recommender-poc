@@ -92,8 +92,6 @@ AVAIL_BOOST      = 2
 HISTORY_BOOST    = 100000 
 HISTORY_FREQ_MIN = 5
 SERIES_BOOST     = 50000
-PREMIUM_BRAND_BOOST = 30          # extra boost for same-brand accessories on premium phones
-PREMIUM_PRICE_THRESHOLD = 900     # phones at or above this price get the premium boost
 
 TECH_CATS = {"IT", "Telephony", "TV"}
 APPL_CATS = {"MDA", "SDA", "Air Condition", "Personal Care"}
@@ -1573,15 +1571,6 @@ def run_engine(trigger, df_products, df_history, df_slots):
     
     c['Final_Score'] = c['History_Score'] + c['Frequency'] + c['Avail_Boost'] + c['Smart_Boost'] + c['Sales_Tiebreaker']
 
-    # ── Premium brand boost (phones ≥ €900) ──────────────────────────
-    if tprice >= PREMIUM_PRICE_THRESHOLD:
-        same_brand_mask = c['Κατασκευαστής'].fillna('').str.strip().str.upper() == tb
-        c.loc[same_brand_mask, 'Final_Score'] += PREMIUM_BRAND_BOOST
-        diag.append(("4c. Premium brand boost", same_brand_mask.sum(),
-                     f"€{tprice:.0f} ≥ €{PREMIUM_PRICE_THRESHOLD} → +{PREMIUM_BRAND_BOOST} to {same_brand_mask.sum()} same-brand items"))
-    else:
-        diag.append(("4c. Premium brand boost", 0, f"€{tprice:.0f} < €{PREMIUM_PRICE_THRESHOLD} → skipped"))
-
     b4u5=len(c)
     nhm=c['History_Score']==0
     if nhm.any():
@@ -1608,32 +1597,19 @@ def run_engine(trigger, df_products, df_history, df_slots):
                     m = m[~m[CC].fillna('').astype(str).str.lower().str.contains(rival_regex, regex=True, na=False)]
                     m = m[~m['Title'].fillna('').astype(str).str.lower().str.contains(rival_regex, regex=True, na=False)]
                 notes.append(f"Model '{tmod}': {b4}→{len(m)}")
-                sc = m
+                sc = m  
             else:
-                sc = sc.head(0)
+                sc = sc.head(0) 
             if not sc.empty:
                 b4=len(sc)
                 f=sc[sc['Τύπος Θήκης'].fillna('').astype(str).str.contains("Back Cover", case=False, na=False)]
                 notes.append(f"Back Cover: {b4}→{len(f)}")
-                sc = f
+                sc = f  
             if not sc.empty and tcol:
                 b4=len(sc)
                 sc_color=sc[sc['Χρώμα'].fillna('').astype(str).str.strip().str.lower().isin(ccols)]
                 notes.append(f"Color: {b4}→{len(sc_color)}")
                 if not sc_color.empty: sc = sc_color
-
-        elif lk == "ALT_CASE":
-            if strict_tmod:
-                b4 = len(sc)
-                cv = sc[CC].fillna('').astype(str).str.lower()
-                m = sc[cv.str.contains(strict_tmod, case=False, regex=True, na=False)]
-                if rival_regex and not m.empty:
-                    m = m[~m[CC].fillna('').astype(str).str.lower().str.contains(rival_regex, regex=True, na=False)]
-                    m = m[~m['Title'].fillna('').astype(str).str.lower().str.contains(rival_regex, regex=True, na=False)]
-                notes.append(f"ALT_CASE model '{tmod}': {b4}→{len(m)}")
-                sc = m
-            else:
-                sc = sc.head(0)
 
         afa = len(sc)
         slot_diag.append((sn, role, lk, afh, afa))
