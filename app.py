@@ -75,7 +75,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v11.7 — IP-First Rotation (Fixed)
+        🟢 Engine v11.8 — Expanded Arts Hierarchies for IP
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -1100,10 +1100,13 @@ def run_books_engine(trigger, df_all, df_history):
         if crosssell_count < max_crosssell:
             item2_notes = ["Item 2: Creative / Arts"]
             
-            # Stationery arts supplies - expanded to include stickers
+            # Stationery arts supplies - expanded to include writing tools for IP matches
             arts_hierarchies = (
                 STATIONERY_HIERARCHIES_ACTUAL['arts_crafts'] + 
-                STATIONERY_HIERARCHIES_ACTUAL.get('stickers', [])
+                STATIONERY_HIERARCHIES_ACTUAL.get('stickers', []) +
+                STATIONERY_HIERARCHIES_ACTUAL.get('writing', []) +  # ΜΟΛΥΒΙΑ, ΣΤΥΛΟ for IP items
+                STATIONERY_HIERARCHIES_ACTUAL.get('keychains', []) +  # ΜΠΡΕΛΟΚ, ΜΑΓΝΗΤΑΚΙΑ
+                STATIONERY_HIERARCHIES_ACTUAL.get('reading', [])  # READING ACCESSORIES
             )
             arts = stationery[stationery['Hierarchy'].isin(arts_hierarchies)].copy()
             
