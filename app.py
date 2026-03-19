@@ -75,7 +75,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v12.2 — Model Match for All Fit-Specific Slots
+        🟢 Engine v12.3 — Premium Brand Boost Override
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -1594,7 +1594,7 @@ def run_engine(trigger, df_products, df_history, df_slots):
     # 🟢 NEW: Premium phone brand preference (€900+)
     # For expensive phones, strongly prefer same-brand accessories
     PREMIUM_PRICE_THRESHOLD = 900
-    PREMIUM_BRAND_BOOST = 5000  # Strong boost to prioritize same-brand items
+    PREMIUM_BRAND_BOOST = 200000  # Must be higher than HISTORY_BOOST (100000) to ensure brand wins
     if tprice >= PREMIUM_PRICE_THRESHOLD:
         c.loc[c['Κατασκευαστής'].fillna('').str.strip().str.upper()==tb, 'Smart_Boost'] += PREMIUM_BRAND_BOOST
         diag.append(("Premium brand boost", f"€{tprice:.0f} >= €{PREMIUM_PRICE_THRESHOLD}", f"+{PREMIUM_BRAND_BOOST} for {tb} accessories"))
