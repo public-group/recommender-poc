@@ -75,7 +75,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v11.5 — IP Matching for ALL Cross-Sell
+        🟢 Engine v11.6 — Cross-Sell Rotation for Variety
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -228,6 +228,43 @@ def normalize_ip_name(name: str) -> str:
     """Normalize IP name for matching"""
     return str(name).strip().lower().replace('-', ' ').replace('_', ' ')
 
+def get_rotated_selection(df: pd.DataFrame, trigger_material: str, slot_type: str, n: int = 1) -> pd.DataFrame:
+    """
+    Select items with rotation based on trigger material.
+    This ensures different trigger books show different cross-sell items from the same IP pool.
+    
+    Uses a hash of (trigger_material + slot_type) to create a consistent but varied offset.
+    """
+    if df.empty:
+        return df.head(0)
+    
+    # Sort by score first
+    sorted_df = df.sort_values('Final_Score', ascending=False).reset_index(drop=True)
+    
+    if len(sorted_df) <= n:
+        return sorted_df.head(n)
+    
+    # Create a rotation offset based on trigger material and slot type
+    # This ensures:
+    # 1. Same trigger always gets same items (consistent)
+    # 2. Different triggers get different items (variety)
+    # 3. Different slot types for same trigger get different items
+    hash_input = f"{trigger_material}_{slot_type}"
+    hash_value = hash(hash_input)
+    
+    # Get top candidates (top 10 or all if less) - increased from 5 for more variety
+    top_candidates = min(10, len(sorted_df))
+    candidates = sorted_df.head(top_candidates)
+    
+    # Rotate selection based on hash
+    offset = abs(hash_value) % top_candidates
+    
+    # Select n items starting from offset, wrapping around
+    selected_indices = [(offset + i) % top_candidates for i in range(min(n, top_candidates))]
+    
+    return candidates.iloc[selected_indices]
+
+
 def ip_matches(series_name: str, brand: str, heroes: str) -> bool:
     """Check if book series matches toy brand or heroes"""
     if not is_valid_series(series_name):
@@ -326,7 +363,7 @@ def safe(v): return html_lib.escape(str(v))
 # ─────────────────────────────────────────────────────────────
 # DATA LOADING - From local file in repo
 # ─────────────────────────────────────────────────────────────
-EXCEL_FILE = "Recommendations GitHub.xlsx"  # File in same folder as app.py
+EXCEL_FILE = "Recommendations.xlsx"  # File in same folder as app.py
 
 @st.cache_data(ttl=600)  # Cache for 10 minutes
 def load_all_data():
@@ -1023,40 +1060,43 @@ def run_books_engine(trigger, df_all, df_history):
         if crosssell_count < max_crosssell:
             item1_notes = ["Item 1: IP Toy / Plush"]
             
-            # Priority 1: IP-matched toys
+            # Priority 1: IP-matched toys with ROTATION
             ip_toys = toys[toys['Final_Score'] >= SMART_BOOST * 5].copy()
             if not ip_toys.empty:
-                ip_toys = ip_toys.sort_values('Final_Score', ascending=False)
-                best = ip_toys.iloc[0]
-                if best['Material'] not in used_materials:
-                    row_copy = best.copy()
-                    row_copy['Assigned_Slot'] = series_count + crosssell_count + 1
-                    row_copy['Slot_Role'] = 'Cross-Sell: IP Toy'
-                    row_copy['Item_Rank'] = 1
-                    all_recs.append(row_copy)
-                    used_materials.add(best['Material'])
-                    crosssell_count += 1
-                    item1_notes.append(f"✓ IP match: {best['Title'][:40]}...")
-            
-            # Fallback: Plush
-            if crosssell_count == 0:
-                plush = toys[toys['Hierarchy'].isin(TOY_HIERARCHIES_ACTUAL['plush'])]
-                if not plush.empty:
-                    plush = plush.sort_values('Final_Score', ascending=False)
-                    best = plush.iloc[0]
+                # Use rotation to vary selection across different trigger books
+                selected = get_rotated_selection(ip_toys, tm, 'ip_toy', n=1)
+                if not selected.empty:
+                    best = selected.iloc[0]
                     if best['Material'] not in used_materials:
                         row_copy = best.copy()
                         row_copy['Assigned_Slot'] = series_count + crosssell_count + 1
-                        row_copy['Slot_Role'] = 'Cross-Sell: Plush'
+                        row_copy['Slot_Role'] = 'Cross-Sell: IP Toy'
                         row_copy['Item_Rank'] = 1
                         all_recs.append(row_copy)
                         used_materials.add(best['Material'])
                         crosssell_count += 1
-                        item1_notes.append(f"✓ Plush fallback: {best['Title'][:40]}...")
+                        item1_notes.append(f"✓ IP match (rotated): {best['Title'][:40]}...")
+            
+            # Fallback: Plush with rotation
+            if crosssell_count == 0:
+                plush = toys[toys['Hierarchy'].isin(TOY_HIERARCHIES_ACTUAL['plush'])].copy()
+                if not plush.empty:
+                    selected = get_rotated_selection(plush, tm, 'plush', n=1)
+                    if not selected.empty:
+                        best = selected.iloc[0]
+                        if best['Material'] not in used_materials:
+                            row_copy = best.copy()
+                            row_copy['Assigned_Slot'] = series_count + crosssell_count + 1
+                            row_copy['Slot_Role'] = 'Cross-Sell: Plush'
+                            row_copy['Item_Rank'] = 1
+                            all_recs.append(row_copy)
+                            used_materials.add(best['Material'])
+                            crosssell_count += 1
+                            item1_notes.append(f"✓ Plush (rotated): {best['Title'][:40]}...")
             
             crosssell_notes.extend(item1_notes)
         
-        # ─── CROSS-SELL SLOT 2: Creative / Arts (with IP preference) ───
+        # ─── CROSS-SELL SLOT 2: Creative / Arts (with IP preference + rotation) ───
         if crosssell_count < max_crosssell:
             item2_notes = ["Item 2: Creative / Arts"]
             
@@ -1085,20 +1125,21 @@ def run_books_engine(trigger, df_all, df_history):
                     ip_arts = arts[arts['Final_Score'] >= SMART_BOOST * 5]
                     item2_notes.append(f"IP matched arts for '{t_series}': {len(ip_arts)}")
                 
-                arts = arts.sort_values('Final_Score', ascending=False)
-                for _, row in arts.iterrows():
-                    if row['Material'] not in used_materials:
-                        row_copy = row.copy()
+                # Use rotation for variety
+                selected = get_rotated_selection(arts, tm, 'arts', n=1)
+                if not selected.empty:
+                    best = selected.iloc[0]
+                    if best['Material'] not in used_materials:
+                        row_copy = best.copy()
                         row_copy['Assigned_Slot'] = series_count + crosssell_count + 1
                         row_copy['Slot_Role'] = 'Cross-Sell: Arts'
                         row_copy['Item_Rank'] = 1
                         all_recs.append(row_copy)
-                        used_materials.add(row['Material'])
+                        used_materials.add(best['Material'])
                         crosssell_count += 1
-                        item2_notes.append(f"✓ Arts: {row['Title'][:40]}...")
-                        break
+                        item2_notes.append(f"✓ Arts (rotated): {best['Title'][:40]}...")
             
-            # Fallback: Creative toys (also with IP preference)
+            # Fallback: Creative toys (also with IP preference + rotation)
             if len([n for n in item2_notes if '✓' in n]) == 0:
                 creative = toys[toys['Hierarchy'].isin(TOY_HIERARCHIES_ACTUAL['creative'] + TOY_HIERARCHIES_ACTUAL['building'])].copy()
                 if not creative.empty:
@@ -1157,18 +1198,19 @@ def run_books_engine(trigger, df_all, df_history):
                     ip_puzzles = puzzles[puzzles['Final_Score'] >= SMART_BOOST * 5]
                     item3_notes.append(f"IP matched puzzles for '{t_series}': {len(ip_puzzles)}")
                 
-                puzzles = puzzles.sort_values('Final_Score', ascending=False)
-                for _, row in puzzles.iterrows():
-                    if row['Material'] not in used_materials:
-                        row_copy = row.copy()
+                # Use rotation for variety
+                selected = get_rotated_selection(puzzles, tm, 'puzzle', n=1)
+                if not selected.empty:
+                    best = selected.iloc[0]
+                    if best['Material'] not in used_materials:
+                        row_copy = best.copy()
                         row_copy['Assigned_Slot'] = series_count + crosssell_count + 1
                         row_copy['Slot_Role'] = 'Cross-Sell: Puzzle'
                         row_copy['Item_Rank'] = 1
                         all_recs.append(row_copy)
-                        used_materials.add(row['Material'])
+                        used_materials.add(best['Material'])
                         crosssell_count += 1
-                        item3_notes.append(f"✓ Puzzle: {row['Title'][:40]}...")
-                        break
+                        item3_notes.append(f"✓ Puzzle (rotated): {best['Title'][:40]}...")
             
             crosssell_notes.extend(item3_notes)
         
@@ -1179,38 +1221,38 @@ def run_books_engine(trigger, df_all, df_history):
             if is_older_kid:
                 item4_notes = ["Item 4: Collectable Cards (8+)"]
                 
-                # Priority: Collectable Cards (Pokemon, FIFA, etc.)
-                collectables = toys[toys['Hierarchy'].isin(TOY_HIERARCHIES_ACTUAL.get('collectable_cards', []))]
+                # Priority: Collectable Cards (Pokemon, FIFA, etc.) with rotation
+                collectables = toys[toys['Hierarchy'].isin(TOY_HIERARCHIES_ACTUAL.get('collectable_cards', []))].copy()
                 if not collectables.empty:
-                    collectables = collectables.sort_values('Final_Score', ascending=False)
-                    for _, row in collectables.iterrows():
-                        if row['Material'] not in used_materials:
-                            row_copy = row.copy()
+                    selected = get_rotated_selection(collectables, tm, 'collectables', n=1)
+                    if not selected.empty:
+                        best = selected.iloc[0]
+                        if best['Material'] not in used_materials:
+                            row_copy = best.copy()
                             row_copy['Assigned_Slot'] = series_count + crosssell_count + 1
                             row_copy['Slot_Role'] = 'Cross-Sell: Collectable Cards'
                             row_copy['Item_Rank'] = 1
                             all_recs.append(row_copy)
-                            used_materials.add(row['Material'])
+                            used_materials.add(best['Material'])
                             crosssell_count += 1
-                            item4_notes.append(f"✓ Cards: {row['Title'][:40]}...")
-                            break
+                            item4_notes.append(f"✓ Cards (rotated): {best['Title'][:40]}...")
                 
-                # Fallback for 8+: Action Figures / Funko Pop
+                # Fallback for 8+: Action Figures / Funko Pop with rotation
                 if len([n for n in item4_notes if '✓' in n]) == 0:
-                    figures = toys[toys['Hierarchy'].isin(TOY_HIERARCHIES_ACTUAL.get('action_figures', []))]
+                    figures = toys[toys['Hierarchy'].isin(TOY_HIERARCHIES_ACTUAL.get('action_figures', []))].copy()
                     if not figures.empty:
-                        figures = figures.sort_values('Final_Score', ascending=False)
-                        for _, row in figures.iterrows():
-                            if row['Material'] not in used_materials:
-                                row_copy = row.copy()
+                        selected = get_rotated_selection(figures, tm, 'figures', n=1)
+                        if not selected.empty:
+                            best = selected.iloc[0]
+                            if best['Material'] not in used_materials:
+                                row_copy = best.copy()
                                 row_copy['Assigned_Slot'] = series_count + crosssell_count + 1
                                 row_copy['Slot_Role'] = 'Cross-Sell: Action Figure'
                                 row_copy['Item_Rank'] = 1
                                 all_recs.append(row_copy)
-                                used_materials.add(row['Material'])
+                                used_materials.add(best['Material'])
                                 crosssell_count += 1
-                                item4_notes.append(f"✓ Figure: {row['Title'][:40]}...")
-                                break
+                                item4_notes.append(f"✓ Figure (rotated): {best['Title'][:40]}...")
             else:
                 item4_notes = ["Item 4: Lifestyle"]
                 
@@ -1227,22 +1269,23 @@ def run_books_engine(trigger, df_all, df_history):
                             if t_series.lower() in item_title or t_series.lower() in item_brand:
                                 lifestyle.loc[idx, 'Final_Score'] += SMART_BOOST * 5
                     
-                    lifestyle = lifestyle.sort_values('Final_Score', ascending=False)
-                    for _, row in lifestyle.iterrows():
-                        if row['Material'] not in used_materials:
-                            row_copy = row.copy()
+                    # Use rotation for variety
+                    selected = get_rotated_selection(lifestyle, tm, 'lifestyle4', n=1)
+                    if not selected.empty:
+                        best = selected.iloc[0]
+                        if best['Material'] not in used_materials:
+                            row_copy = best.copy()
                             row_copy['Assigned_Slot'] = series_count + crosssell_count + 1
                             row_copy['Slot_Role'] = 'Cross-Sell: Lifestyle'
                             row_copy['Item_Rank'] = 1
                             all_recs.append(row_copy)
-                            used_materials.add(row['Material'])
+                            used_materials.add(best['Material'])
                             crosssell_count += 1
-                            item4_notes.append(f"✓ Lifestyle: {row['Title'][:40]}...")
-                            break
+                            item4_notes.append(f"✓ Lifestyle (rotated): {best['Title'][:40]}...")
             
             crosssell_notes.extend(item4_notes)
         
-        # ─── CROSS-SELL SLOT 5: Lifestyle for ALL ages (with IP preference) ───
+        # ─── CROSS-SELL SLOT 5: Lifestyle for ALL ages (with IP preference + rotation) ───
         if crosssell_count < max_crosssell:
             item5_notes = ["Item 5: Lifestyle (water bottle / notebook)"]
             
@@ -1268,18 +1311,19 @@ def run_books_engine(trigger, df_all, df_history):
                     ip_lifestyle = lifestyle[lifestyle['Final_Score'] >= SMART_BOOST * 5]
                     item5_notes.append(f"IP matched lifestyle for '{t_series}': {len(ip_lifestyle)}")
                 
-                lifestyle = lifestyle.sort_values('Final_Score', ascending=False)
-                for _, row in lifestyle.iterrows():
-                    if row['Material'] not in used_materials:
-                        row_copy = row.copy()
+                # Use rotation for variety
+                selected = get_rotated_selection(lifestyle, tm, 'lifestyle5', n=1)
+                if not selected.empty:
+                    best = selected.iloc[0]
+                    if best['Material'] not in used_materials:
+                        row_copy = best.copy()
                         row_copy['Assigned_Slot'] = series_count + crosssell_count + 1
                         row_copy['Slot_Role'] = 'Cross-Sell: Lifestyle'
                         row_copy['Item_Rank'] = 1
                         all_recs.append(row_copy)
-                        used_materials.add(row['Material'])
+                        used_materials.add(best['Material'])
                         crosssell_count += 1
-                        item5_notes.append(f"✓ Lifestyle: {row['Title'][:40]}...")
-                        break
+                        item5_notes.append(f"✓ Lifestyle (rotated): {best['Title'][:40]}...")
             
             crosssell_notes.extend(item5_notes)
     
