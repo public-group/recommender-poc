@@ -21,7 +21,7 @@ st.markdown("""
     [data-testid="stSidebar"] {
         border-right: 1px solid #eaeaea !important;
         padding-top: 0 !important;
-        top: 20px !important;
+        top: 120px !important;
     }
     [data-testid="stSidebar"] > div:first-child {
         padding-top: 0 !important;
@@ -75,7 +75,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v11.4 — Age-Aware Cross-Sell (8+ Collectables)
+        🟢 Engine v11.5 — IP Matching for ALL Cross-Sell
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -1056,13 +1056,35 @@ def run_books_engine(trigger, df_all, df_history):
             
             crosssell_notes.extend(item1_notes)
         
-        # ─── CROSS-SELL SLOT 2: Creative / Arts ───
+        # ─── CROSS-SELL SLOT 2: Creative / Arts (with IP preference) ───
         if crosssell_count < max_crosssell:
             item2_notes = ["Item 2: Creative / Arts"]
             
-            # Stationery arts supplies
-            arts = stationery[stationery['Hierarchy'].isin(STATIONERY_HIERARCHIES_ACTUAL['arts_crafts'])]
+            # Stationery arts supplies - expanded to include stickers
+            arts_hierarchies = (
+                STATIONERY_HIERARCHIES_ACTUAL['arts_crafts'] + 
+                STATIONERY_HIERARCHIES_ACTUAL.get('stickers', [])
+            )
+            arts = stationery[stationery['Hierarchy'].isin(arts_hierarchies)].copy()
+            
             if not arts.empty:
+                # 🟢 IP MATCHING: Boost arts items that match book series/brand
+                if has_series:
+                    for idx, row in arts.iterrows():
+                        art_title = str(row.get('Title', '')).lower()
+                        art_brand = str(row.get('Brand', '')).lower()
+                        art_heroes = str(row.get('Ήρωες Παιχνιδιών', '')).lower()
+                        
+                        series_lower = t_series.lower()
+                        if (series_lower in art_title or 
+                            series_lower in art_brand or 
+                            series_lower in art_heroes or
+                            normalize_ip_name(t_series) in normalize_ip_name(art_title)):
+                            arts.loc[idx, 'Final_Score'] += SMART_BOOST * 5
+                    
+                    ip_arts = arts[arts['Final_Score'] >= SMART_BOOST * 5]
+                    item2_notes.append(f"IP matched arts for '{t_series}': {len(ip_arts)}")
+                
                 arts = arts.sort_values('Final_Score', ascending=False)
                 for _, row in arts.iterrows():
                     if row['Material'] not in used_materials:
@@ -1076,10 +1098,18 @@ def run_books_engine(trigger, df_all, df_history):
                         item2_notes.append(f"✓ Arts: {row['Title'][:40]}...")
                         break
             
-            # Fallback: Creative toys
+            # Fallback: Creative toys (also with IP preference)
             if len([n for n in item2_notes if '✓' in n]) == 0:
-                creative = toys[toys['Hierarchy'].isin(TOY_HIERARCHIES_ACTUAL['creative'] + TOY_HIERARCHIES_ACTUAL['building'])]
+                creative = toys[toys['Hierarchy'].isin(TOY_HIERARCHIES_ACTUAL['creative'] + TOY_HIERARCHIES_ACTUAL['building'])].copy()
                 if not creative.empty:
+                    # IP boost for creative toys too
+                    if has_series:
+                        for idx, row in creative.iterrows():
+                            toy_title = str(row.get('Title', '')).lower()
+                            toy_brand = str(row.get('Brand', '')).lower()
+                            if t_series.lower() in toy_title or t_series.lower() in toy_brand:
+                                creative.loc[idx, 'Final_Score'] += SMART_BOOST * 3
+                    
                     creative = creative.sort_values('Final_Score', ascending=False)
                     for _, row in creative.iterrows():
                         if row['Material'] not in used_materials:
@@ -1095,7 +1125,7 @@ def run_books_engine(trigger, df_all, df_history):
             
             crosssell_notes.extend(item2_notes)
         
-        # ─── CROSS-SELL SLOT 3: Puzzle / Board Game (age-aware) ───
+        # ─── CROSS-SELL SLOT 3: Puzzle / Board Game (age-aware, IP preferred) ───
         if crosssell_count < max_crosssell:
             item3_notes = ["Item 3: Puzzle / Board Game"]
             
@@ -1108,8 +1138,25 @@ def run_books_engine(trigger, df_all, df_history):
                 puzzle_hierarchies += TOY_HIERARCHIES_ACTUAL.get('adult_board', [])
                 item3_notes.append(f"Age {effective_age}: including knowledge & adult board games")
             
-            puzzles = toys[toys['Hierarchy'].isin(puzzle_hierarchies)]
+            puzzles = toys[toys['Hierarchy'].isin(puzzle_hierarchies)].copy()
             if not puzzles.empty:
+                # 🟢 IP MATCHING: Boost puzzles that match book series
+                if has_series:
+                    for idx, row in puzzles.iterrows():
+                        puzzle_title = str(row.get('Title', '')).lower()
+                        puzzle_brand = str(row.get('Brand', '')).lower()
+                        puzzle_heroes = str(row.get('Ήρωες Παιχνιδιών', '')).lower()
+                        
+                        series_lower = t_series.lower()
+                        if (series_lower in puzzle_title or 
+                            series_lower in puzzle_brand or 
+                            series_lower in puzzle_heroes or
+                            normalize_ip_name(t_series) in normalize_ip_name(puzzle_title)):
+                            puzzles.loc[idx, 'Final_Score'] += SMART_BOOST * 5
+                    
+                    ip_puzzles = puzzles[puzzles['Final_Score'] >= SMART_BOOST * 5]
+                    item3_notes.append(f"IP matched puzzles for '{t_series}': {len(ip_puzzles)}")
+                
                 puzzles = puzzles.sort_values('Final_Score', ascending=False)
                 for _, row in puzzles.iterrows():
                     if row['Material'] not in used_materials:
@@ -1170,8 +1217,16 @@ def run_books_engine(trigger, df_all, df_history):
                 lifestyle = stationery[stationery['Hierarchy'].isin(
                     STATIONERY_HIERARCHIES_ACTUAL['water_bottles'] + 
                     STATIONERY_HIERARCHIES_ACTUAL['notebooks']
-                )]
+                )].copy()
                 if not lifestyle.empty:
+                    # IP matching for lifestyle
+                    if has_series:
+                        for idx, row in lifestyle.iterrows():
+                            item_title = str(row.get('Title', '')).lower()
+                            item_brand = str(row.get('Brand', '')).lower()
+                            if t_series.lower() in item_title or t_series.lower() in item_brand:
+                                lifestyle.loc[idx, 'Final_Score'] += SMART_BOOST * 5
+                    
                     lifestyle = lifestyle.sort_values('Final_Score', ascending=False)
                     for _, row in lifestyle.iterrows():
                         if row['Material'] not in used_materials:
@@ -1187,7 +1242,7 @@ def run_books_engine(trigger, df_all, df_history):
             
             crosssell_notes.extend(item4_notes)
         
-        # ─── CROSS-SELL SLOT 5: Lifestyle for ALL ages ───
+        # ─── CROSS-SELL SLOT 5: Lifestyle for ALL ages (with IP preference) ───
         if crosssell_count < max_crosssell:
             item5_notes = ["Item 5: Lifestyle (water bottle / notebook)"]
             
@@ -1195,8 +1250,24 @@ def run_books_engine(trigger, df_all, df_history):
                 STATIONERY_HIERARCHIES_ACTUAL['water_bottles'] + 
                 STATIONERY_HIERARCHIES_ACTUAL['notebooks'] +
                 STATIONERY_HIERARCHIES_ACTUAL.get('food_containers', [])
-            )]
+            )].copy()
             if not lifestyle.empty:
+                # 🟢 IP MATCHING: Boost lifestyle items that match book series
+                if has_series:
+                    for idx, row in lifestyle.iterrows():
+                        item_title = str(row.get('Title', '')).lower()
+                        item_brand = str(row.get('Brand', '')).lower()
+                        item_heroes = str(row.get('Ήρωες Παιχνιδιών', '')).lower()
+                        
+                        series_lower = t_series.lower()
+                        if (series_lower in item_title or 
+                            series_lower in item_brand or 
+                            series_lower in item_heroes):
+                            lifestyle.loc[idx, 'Final_Score'] += SMART_BOOST * 5
+                    
+                    ip_lifestyle = lifestyle[lifestyle['Final_Score'] >= SMART_BOOST * 5]
+                    item5_notes.append(f"IP matched lifestyle for '{t_series}': {len(ip_lifestyle)}")
+                
                 lifestyle = lifestyle.sort_values('Final_Score', ascending=False)
                 for _, row in lifestyle.iterrows():
                     if row['Material'] not in used_materials:
