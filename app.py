@@ -75,7 +75,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v12.7.1 — Fixed Import Error
+        🟢 Engine v12.9 — Brand Filter + Color Priority
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -325,15 +325,25 @@ def extract_base_port(raw):
     return str(raw).strip()
 
 COLOR_MAP = {
-    'black titanium': ['μαύρο', 'black', 'διάφανο'],
-    'natural titanium': ['διάφανο', 'μπεζ', 'natural'],
-    'white titanium': ['λευκό', 'white', 'διάφανο'],
-    'blue titanium': ['μπλε', 'blue', 'διάφανο'],
-    'space black': ['μαύρο', 'black', 'διάφανο'],
-    'silver': ['ασημί', 'silver', 'διάφανο'],
-    'gold': ['χρυσό', 'gold', 'διάφανο'],
-    'starlight': ['λευκό', 'μπεζ', 'διάφανο'],
-    'midnight': ['μαύρο', 'black', 'διάφανο'],
+    'black titanium': ['μαύρο', 'black'],
+    'natural titanium': ['μπεζ', 'natural'],
+    'white titanium': ['λευκό', 'white'],
+    'blue titanium': ['μπλε', 'blue'],
+    'space black': ['μαύρο', 'black'],
+    'silver': ['ασημί', 'silver', 'γκρι'],
+    'gold': ['χρυσό', 'gold', 'μπεζ'],
+    'starlight': ['λευκό', 'μπεζ'],
+    'midnight': ['μαύρο', 'black'],
+    'white': ['λευκό', 'white', 'άσπρο'],
+    'black': ['μαύρο', 'black'],
+    'blue': ['μπλε', 'blue', 'γαλάζιο'],
+    'red': ['κόκκινο', 'red'],
+    'green': ['πράσινο', 'green'],
+    'pink': ['ροζ', 'pink'],
+    'purple': ['μωβ', 'purple'],
+    'gray': ['γκρι', 'gray', 'grey'],
+    'silver shadow': ['ασημί', 'silver', 'γκρι'],
+    'titanium': ['γκρι', 'ασημί'],
 }
 
 def get_case_colors(c):
@@ -1630,11 +1640,14 @@ def run_engine(trigger, df_products, df_history, df_slots):
             return 2019 + num
         
         # iPhone: iPhone 17 → 2025, iPhone 16 → 2024
-        iphone_match = re.search(r'iphone\s*(\d{2})', model)
+        # Formula: 2008 + num (accurate for iPhone 12+)
+        iphone_match = re.search(r'iphone\s*(\d{1,2})', model)
         if iphone_match:
             num = int(iphone_match.group(1))
-            if num >= 10:
-                return 2007 + num
+            if num >= 12:
+                return 2008 + num  # iPhone 12=2020, 16=2024, 17=2025
+            elif num >= 10:
+                return 2017  # iPhone X/10/11 were 2017-2019
         
         return None
     
@@ -1723,19 +1736,35 @@ def run_engine(trigger, df_products, df_history, df_slots):
                     sc = f  
                 if not sc.empty and tcol:
                     b4=len(sc)
-                    sc_color=sc[sc['Χρώμα'].fillna('').astype(str).str.strip().str.lower().isin(ccols)]
-                    notes.append(f"Color: {b4}→{len(sc_color)}")
-                    if not sc_color.empty: sc = sc_color
+                    # 🟢 IMPROVED: Prefer exact phone color, fallback to transparent
+                    # Get colors without transparent first
+                    exact_colors = [c for c in ccols if c != 'διάφανο' and c != 'transparent']
+                    
+                    # Try exact color match first
+                    sc_exact = sc[sc['Χρώμα'].fillna('').astype(str).str.strip().str.lower().isin(exact_colors)]
+                    
+                    if not sc_exact.empty:
+                        sc = sc_exact
+                        notes.append(f"Color (exact): {b4}→{len(sc)}")
+                    else:
+                        # Fallback to transparent
+                        sc_transparent = sc[sc['Χρώμα'].fillna('').astype(str).str.strip().str.lower().isin(['διάφανο', 'transparent', 'clear'])]
+                        if not sc_transparent.empty:
+                            sc = sc_transparent
+                            notes.append(f"Color (transparent fallback): {b4}→{len(sc)}")
+                        else:
+                            # Keep all if no color match
+                            notes.append(f"Color: no match, keeping all {b4}")
 
+        # 🟢 PHONE FEATURES (used for charger and holder matching)
+        has_wireless_charging = 'ασύρματη φόρτιση' in tex
+        has_fast_charging = 'γρήγορη φόρτιση' in tex
+        
         # 🟢 CHARGER/POWERBANK FEATURE MATCHING
         # Match charger capabilities to phone features (wireless charging, fast charging, wattage)
         charger_slots = ["WALL_CHARGER", "POWERBANK"]
         
         if lk in charger_slots and not sc.empty:
-            # Extract phone features
-            has_wireless_charging = 'ασύρματη φόρτιση' in tex
-            has_fast_charging = 'γρήγορη φόρτιση' in tex
-            
             # Calculate feature boost for each charger/powerbank
             WIRELESS_BOOST = 30000  # Prefer wireless chargers for wireless phones
             FAST_CHARGE_BOOST = 20000  # Prefer fast chargers for fast-charge phones
@@ -1788,6 +1817,16 @@ def run_engine(trigger, df_products, df_history, df_slots):
         
         if lk in year_match_slots and is_premium and not sc.empty:
             
+            # 🟢 BRAND PREFERENCE: For premium phones, prefer same-brand accessories
+            # Filter to same brand first, fallback to all if none available
+            b4_brand = len(sc)
+            same_brand = sc[sc['Κατασκευαστής'].fillna('').str.strip().str.upper() == tb]
+            if not same_brand.empty:
+                sc = same_brand
+                notes.append(f"Brand filter ({tb}): {b4_brand}→{len(sc)}")
+            else:
+                notes.append(f"Brand filter: No {tb} accessories, keeping all {b4_brand}")
+            
             # 🟢 ULTRA-PREMIUM FILTER: For €1700+ phones, only show Pro/Ultra/flagship accessories
             is_ultra_premium = tprice >= ULTRA_PREMIUM_THRESHOLD
             if is_ultra_premium:
@@ -1830,17 +1869,45 @@ def run_engine(trigger, df_products, df_history, df_slots):
                 prev_year_count = (sc['Year_Priority'] == 2).sum()
                 notes.append(f"Year priority ({phone_year}): {newer_count} newer, {same_year_count} same, {prev_year_count} prev")
 
+        # 🟢 HOLDER ROTATION: Show different car holders for different phones
+        # Also prefer MagSafe/magnetic holders for phones with wireless charging
+        if lk == "HOLDER" and not sc.empty:
+            # For phones with wireless charging, boost magnetic/MagSafe holders
+            if has_wireless_charging or tb == "APPLE":
+                for idx in sc.index:
+                    item_title = str(sc.loc[idx, 'Title']).lower()
+                    if 'magsafe' in item_title or 'magnetic' in item_title or 'mag' in item_title:
+                        sc.loc[idx, 'Final_Score'] += 10000
+                notes.append("Boosted MagSafe/magnetic holders for wireless phone")
+            
+            # Sort by Final_Score first
+            sc = sc.sort_values('Final_Score', ascending=False).copy()
+            
+            # Get top 10 available holders
+            top_holders = sc.head(10)
+            
+            if len(top_holders) > 1:
+                # Use phone material as seed for consistent but varied selection
+                seed = hash(str(tm) + "_holder") % len(top_holders)
+                
+                # Rotate the selection
+                rotated_indices = [(seed + i) % len(top_holders) for i in range(len(top_holders))]
+                sc = top_holders.iloc[rotated_indices].copy()
+                
+                notes.append(f"Holder rotation: showing #{seed + 1} of {len(top_holders)}")
+
         afa = len(sc)
         slot_diag.append((sn, role, lk, afh, afa))
         slot_notes[sn] = notes
 
         if not sc.empty:
-            # For year-matched slots, sorting was already done above - preserve it
+            # For year-matched slots and rotated HOLDER, sorting was already done - preserve it
             # For other slots, sort by Final_Score
-            if not (lk in year_match_slots and is_premium and phone_year):
+            skip_resort = (lk in year_match_slots and is_premium and phone_year) or lk == "HOLDER"
+            if not skip_resort:
                 sc = sc.sort_values('Final_Score', ascending=False).copy()
             else:
-                sc = sc.copy()  # Already sorted by Year_Priority, Final_Score
+                sc = sc.copy()  # Already sorted by Year_Priority/rotation
             sc['Assigned_Slot']=sn; sc['Slot_Role']=role
             sc['Item_Rank']=range(1,len(sc)+1)
             sc['Draft_Score']=sc['Item_Rank']*100+sn
