@@ -75,7 +75,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v12.12 — Fixed Ecosystem Wall (OPPO/VIVO)
+        🟢 Engine v12.13 — Books Series/Discovery Rotation
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -1001,7 +1001,21 @@ def run_books_engine(trigger, df_all, df_history):
             # Sort by availability first, then by any other criteria
             series_books = series_books.sort_values('Final_Score', ascending=False)
             
+            # 🟢 ROTATION: Different trigger books show different series order
+            # This prevents "always the same 7 books" regardless of trigger
+            if len(series_books) > 3:
+                top_series = series_books.head(min(12, len(series_books))).copy()
+                seed = hash(str(tm) + "_series") % max(1, len(top_series))
+                
+                # Rotate the order based on trigger
+                indices = list(range(len(top_series)))
+                rotated_indices = [indices[(seed + i) % len(indices)] for i in range(len(indices))]
+                series_books = top_series.iloc[rotated_indices]
+                
+                series_notes.append(f"Rotation applied: seed={seed}, showing different order")
+            
             # Take up to 7 series books (leaving 3 slots for cross-sell)
+            max_series = min(7, len(series_books))
             max_series = min(7, len(series_books))
             for idx, (_, row) in enumerate(series_books.head(max_series).iterrows()):
                 if row['Material'] not in used_materials:
@@ -1414,6 +1428,15 @@ def run_books_engine(trigger, df_all, df_history):
                         
                         diff_dims = diff_dims.sort_values('Final_Score', ascending=False)
                         
+                        # 🟢 ROTATION: Different triggers show different format options
+                        if len(diff_dims) > 3:
+                            top_dims = diff_dims.head(min(10, len(diff_dims))).copy()
+                            seed = hash(str(tm) + "_dims") % max(1, len(top_dims))
+                            
+                            indices = list(range(len(top_dims)))
+                            rotated_indices = [indices[(seed + i) % len(indices)] for i in range(len(indices))]
+                            diff_dims = top_dims.iloc[rotated_indices]
+                        
                         for _, row in diff_dims.head(remaining).iterrows():
                             if row['Material'] not in used_materials and discovery_count < remaining:
                                 row_copy = row.copy()
@@ -1457,6 +1480,17 @@ def run_books_engine(trigger, df_all, df_history):
                 discovery_pool.loc[discovery_pool['AVAILABILITY'] == 'Άμεσα Διαθέσιμο', 'Final_Score'] += AVAIL_BOOST
             
             discovery_pool = discovery_pool.sort_values('Final_Score', ascending=False)
+            
+            # 🟢 ROTATION: Different triggers show different discovery books
+            if len(discovery_pool) > 5:
+                top_discovery = discovery_pool.head(min(15, len(discovery_pool))).copy()
+                seed = hash(str(tm) + "_discovery") % max(1, len(top_discovery))
+                
+                indices = list(range(len(top_discovery)))
+                rotated_indices = [indices[(seed + i) % len(indices)] for i in range(len(indices))]
+                discovery_pool = top_discovery.iloc[rotated_indices]
+                
+                discovery_notes.append(f"Rotation applied: seed={seed}")
             
             for _, row in discovery_pool.head(remaining_after_series).iterrows():
                 if row['Material'] not in used_materials:
