@@ -75,7 +75,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v11.9 — Series Discovery + Fixed Filename
+        🟢 Engine v12.0 — Hierarchy Ecosystem Wall
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -1547,7 +1547,21 @@ def run_engine(trigger, df_products, df_history, df_slots):
         c = c[~c['Κατασκευαστής'].fillna('').str.strip().str.upper().isin(ANDROID_OEMS)]
     elif tb in ANDROID_OEMS:
         c = c[c['Κατασκευαστής'].fillna('').str.strip().str.upper() != "APPLE"]
-    diag.append(("4b. Ecosystem wall", len(c), f"Removed {b4eco-len(c)}"))
+    diag.append(("4b. Ecosystem wall (manufacturer)", len(c), f"Removed {b4eco-len(c)}"))
+    
+    # 🟢 NEW: Filter out rival brand hierarchies (e.g., "IPHONE SCREEN PROTECTORS" for Samsung)
+    b4hier = len(c)
+    if tb == "APPLE":
+        # For Apple, exclude hierarchies with Android brand names
+        android_hier_keywords = ['samsung', 'xiaomi', 'huawei', 'oppo', 'oneplus', 'realme', 'android']
+        hier_pattern = '|'.join(android_hier_keywords)
+        c = c[~c['Hierarchy'].fillna('').str.lower().str.contains(hier_pattern, regex=True, na=False)]
+    elif tb in ANDROID_OEMS:
+        # For Android (Samsung, Xiaomi, etc.), exclude hierarchies with "IPHONE" or "APPLE"
+        apple_hier_keywords = ['iphone', 'apple', 'ipad', 'macbook', 'airpods']
+        hier_pattern = '|'.join(apple_hier_keywords)
+        c = c[~c['Hierarchy'].fillna('').str.lower().str.contains(hier_pattern, regex=True, na=False)]
+    diag.append(("4c. Ecosystem wall (hierarchy)", len(c), f"Removed {b4hier-len(c)}"))
 
     tcust = df_history[df_history['Material']==tm]['customerEmail'].unique()
     bw = df_history[(df_history['customerEmail'].isin(tcust))&(df_history['Material']!=tm)]
