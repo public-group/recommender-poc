@@ -21,7 +21,7 @@ st.markdown("""
     [data-testid="stSidebar"] {
         border-right: 1px solid #eaeaea !important;
         padding-top: 0 !important;
-        top: 120px !important;
+        top: 20px !important;
     }
     [data-testid="stSidebar"] > div:first-child {
         padding-top: 0 !important;
@@ -75,7 +75,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v11.6 — Cross-Sell Rotation for Variety
+        🟢 Engine v11.7 — IP-First Rotation (Fixed)
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -363,7 +363,7 @@ def safe(v): return html_lib.escape(str(v))
 # ─────────────────────────────────────────────────────────────
 # DATA LOADING - From local file in repo
 # ─────────────────────────────────────────────────────────────
-EXCEL_FILE = "Recommendations GitHub.xlsx"  # File in same folder as app.py
+EXCEL_FILE = "Recommendations.xlsx"  # File in same folder as app.py
 
 @st.cache_data(ttl=600)  # Cache for 10 minutes
 def load_all_data():
@@ -1109,6 +1109,7 @@ def run_books_engine(trigger, df_all, df_history):
             
             if not arts.empty:
                 # 🟢 IP MATCHING: Boost arts items that match book series/brand
+                ip_arts = pd.DataFrame()
                 if has_series:
                     for idx, row in arts.iterrows():
                         art_title = str(row.get('Title', '')).lower()
@@ -1125,8 +1126,9 @@ def run_books_engine(trigger, df_all, df_history):
                     ip_arts = arts[arts['Final_Score'] >= SMART_BOOST * 5]
                     item2_notes.append(f"IP matched arts for '{t_series}': {len(ip_arts)}")
                 
-                # Use rotation for variety
-                selected = get_rotated_selection(arts, tm, 'arts', n=1)
+                # 🟢 PRIORITY: Rotate within IP-matched pool first, fallback to all arts
+                pool_to_use = ip_arts if not ip_arts.empty else arts
+                selected = get_rotated_selection(pool_to_use, tm, 'arts', n=1)
                 if not selected.empty:
                     best = selected.iloc[0]
                     if best['Material'] not in used_materials:
@@ -1137,7 +1139,8 @@ def run_books_engine(trigger, df_all, df_history):
                         all_recs.append(row_copy)
                         used_materials.add(best['Material'])
                         crosssell_count += 1
-                        item2_notes.append(f"✓ Arts (rotated): {best['Title'][:40]}...")
+                        is_ip = "IP " if not ip_arts.empty and best['Material'] in ip_arts['Material'].values else ""
+                        item2_notes.append(f"✓ {is_ip}Arts (rotated): {best['Title'][:40]}...")
             
             # Fallback: Creative toys (also with IP preference + rotation)
             if len([n for n in item2_notes if '✓' in n]) == 0:
@@ -1182,6 +1185,7 @@ def run_books_engine(trigger, df_all, df_history):
             puzzles = toys[toys['Hierarchy'].isin(puzzle_hierarchies)].copy()
             if not puzzles.empty:
                 # 🟢 IP MATCHING: Boost puzzles that match book series
+                ip_puzzles = pd.DataFrame()
                 if has_series:
                     for idx, row in puzzles.iterrows():
                         puzzle_title = str(row.get('Title', '')).lower()
@@ -1198,8 +1202,9 @@ def run_books_engine(trigger, df_all, df_history):
                     ip_puzzles = puzzles[puzzles['Final_Score'] >= SMART_BOOST * 5]
                     item3_notes.append(f"IP matched puzzles for '{t_series}': {len(ip_puzzles)}")
                 
-                # Use rotation for variety
-                selected = get_rotated_selection(puzzles, tm, 'puzzle', n=1)
+                # 🟢 PRIORITY: Rotate within IP-matched pool first, fallback to all puzzles
+                pool_to_use = ip_puzzles if not ip_puzzles.empty else puzzles
+                selected = get_rotated_selection(pool_to_use, tm, 'puzzle', n=1)
                 if not selected.empty:
                     best = selected.iloc[0]
                     if best['Material'] not in used_materials:
@@ -1210,7 +1215,8 @@ def run_books_engine(trigger, df_all, df_history):
                         all_recs.append(row_copy)
                         used_materials.add(best['Material'])
                         crosssell_count += 1
-                        item3_notes.append(f"✓ Puzzle (rotated): {best['Title'][:40]}...")
+                        is_ip = "IP " if not ip_puzzles.empty and best['Material'] in ip_puzzles['Material'].values else ""
+                        item3_notes.append(f"✓ {is_ip}Puzzle (rotated): {best['Title'][:40]}...")
             
             crosssell_notes.extend(item3_notes)
         
@@ -1262,15 +1268,19 @@ def run_books_engine(trigger, df_all, df_history):
                 )].copy()
                 if not lifestyle.empty:
                     # IP matching for lifestyle
+                    ip_lifestyle = pd.DataFrame()
                     if has_series:
                         for idx, row in lifestyle.iterrows():
                             item_title = str(row.get('Title', '')).lower()
                             item_brand = str(row.get('Brand', '')).lower()
                             if t_series.lower() in item_title or t_series.lower() in item_brand:
                                 lifestyle.loc[idx, 'Final_Score'] += SMART_BOOST * 5
+                        
+                        ip_lifestyle = lifestyle[lifestyle['Final_Score'] >= SMART_BOOST * 5]
                     
-                    # Use rotation for variety
-                    selected = get_rotated_selection(lifestyle, tm, 'lifestyle4', n=1)
+                    # 🟢 PRIORITY: Rotate within IP-matched pool first, fallback to all lifestyle
+                    pool_to_use = ip_lifestyle if not ip_lifestyle.empty else lifestyle
+                    selected = get_rotated_selection(pool_to_use, tm, 'lifestyle4', n=1)
                     if not selected.empty:
                         best = selected.iloc[0]
                         if best['Material'] not in used_materials:
@@ -1281,7 +1291,8 @@ def run_books_engine(trigger, df_all, df_history):
                             all_recs.append(row_copy)
                             used_materials.add(best['Material'])
                             crosssell_count += 1
-                            item4_notes.append(f"✓ Lifestyle (rotated): {best['Title'][:40]}...")
+                            is_ip = "IP " if not ip_lifestyle.empty and best['Material'] in ip_lifestyle['Material'].values else ""
+                            item4_notes.append(f"✓ {is_ip}Lifestyle (rotated): {best['Title'][:40]}...")
             
             crosssell_notes.extend(item4_notes)
         
@@ -1296,6 +1307,7 @@ def run_books_engine(trigger, df_all, df_history):
             )].copy()
             if not lifestyle.empty:
                 # 🟢 IP MATCHING: Boost lifestyle items that match book series
+                ip_lifestyle = pd.DataFrame()
                 if has_series:
                     for idx, row in lifestyle.iterrows():
                         item_title = str(row.get('Title', '')).lower()
@@ -1311,8 +1323,9 @@ def run_books_engine(trigger, df_all, df_history):
                     ip_lifestyle = lifestyle[lifestyle['Final_Score'] >= SMART_BOOST * 5]
                     item5_notes.append(f"IP matched lifestyle for '{t_series}': {len(ip_lifestyle)}")
                 
-                # Use rotation for variety
-                selected = get_rotated_selection(lifestyle, tm, 'lifestyle5', n=1)
+                # 🟢 PRIORITY: Rotate within IP-matched pool first, fallback to all lifestyle
+                pool_to_use = ip_lifestyle if not ip_lifestyle.empty else lifestyle
+                selected = get_rotated_selection(pool_to_use, tm, 'lifestyle5', n=1)
                 if not selected.empty:
                     best = selected.iloc[0]
                     if best['Material'] not in used_materials:
@@ -1323,7 +1336,8 @@ def run_books_engine(trigger, df_all, df_history):
                         all_recs.append(row_copy)
                         used_materials.add(best['Material'])
                         crosssell_count += 1
-                        item5_notes.append(f"✓ Lifestyle (rotated): {best['Title'][:40]}...")
+                        is_ip = "IP " if not ip_lifestyle.empty and best['Material'] in ip_lifestyle['Material'].values else ""
+                        item5_notes.append(f"✓ {is_ip}Lifestyle (rotated): {best['Title'][:40]}...")
             
             crosssell_notes.extend(item5_notes)
     
