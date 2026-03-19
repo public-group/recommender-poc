@@ -75,7 +75,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v12.0 — Hierarchy Ecosystem Wall
+        🟢 Engine v12.1 — Jack Filter + Premium Brand Boost
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -1563,6 +1563,14 @@ def run_engine(trigger, df_products, df_history, df_slots):
         c = c[~c['Hierarchy'].fillna('').str.lower().str.contains(hier_pattern, regex=True, na=False)]
     diag.append(("4c. Ecosystem wall (hierarchy)", len(c), f"Removed {b4hier-len(c)}"))
 
+    # 🟢 NEW: Filter out 3.5mm jack/aux products for modern phones (most don't have jacks)
+    # Modern flagships (2020+) typically don't have headphone jacks
+    b4jack = len(c)
+    jack_keywords = ['3.5mm', '3,5mm', 'aux', 'jack', 'btmusicreceiver', 'music receiver', 'audio receiver']
+    jack_pattern = '|'.join(jack_keywords)
+    c = c[~c['Title'].fillna('').str.lower().str.contains(jack_pattern, regex=True, na=False)]
+    diag.append(("4d. Jack/Aux filter", len(c), f"Removed {b4jack-len(c)}"))
+
     tcust = df_history[df_history['Material']==tm]['customerEmail'].unique()
     bw = df_history[(df_history['customerEmail'].isin(tcust))&(df_history['Material']!=tm)]
     fdf = bw['Material'].value_counts().reset_index(); fdf.columns=['NID','Frequency']
@@ -1582,6 +1590,14 @@ def run_engine(trigger, df_products, df_history, df_slots):
     if strict_tmod:
         c.loc[c['Μοντέλο'].fillna('').astype(str).str.contains(strict_tmod, case=False, regex=True, na=False), 'Smart_Boost'] += SMART_BOOST
     c.loc[c['Κατασκευαστής'].fillna('').str.strip().str.upper()==tb,'Smart_Boost']+=SMART_BOOST
+    
+    # 🟢 NEW: Premium phone brand preference (€900+)
+    # For expensive phones, strongly prefer same-brand accessories
+    PREMIUM_PRICE_THRESHOLD = 900
+    PREMIUM_BRAND_BOOST = 5000  # Strong boost to prioritize same-brand items
+    if tprice >= PREMIUM_PRICE_THRESHOLD:
+        c.loc[c['Κατασκευαστής'].fillna('').str.strip().str.upper()==tb, 'Smart_Boost'] += PREMIUM_BRAND_BOOST
+        diag.append(("Premium brand boost", f"€{tprice:.0f} >= €{PREMIUM_PRICE_THRESHOLD}", f"+{PREMIUM_BRAND_BOOST} for {tb} accessories"))
     
     c['Final_Score'] = c['History_Score'] + c['Frequency'] + c['Avail_Boost'] + c['Smart_Boost'] + c['Sales_Tiebreaker']
 
