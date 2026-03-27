@@ -75,7 +75,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v13.4 — Discovery: Series Format → Category
+        🟢 Engine v13.5 — Format as Preference (not filter)
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -1102,45 +1102,52 @@ def run_books_engine(trigger, df_all, df_history, mode='A'):
             series_books = series_books[series_books['Level 2'] == t_level2]
             series_notes.append(f"Level 2 match ({t_level2}): {before}→{len(series_books)}")
         
-        # 🟢 FORMAT LOCK: Match ALL format attributes for consistent edition
-        # 1. Cover type (Εξώφυλλο)
-        if t_cover and t_cover != 'nan' and t_cover != '0' and 'Εξώφυλλο' in series_books.columns and not series_books.empty:
-            before = len(series_books)
-            cover_match = series_books[series_books['Εξώφυλλο'].fillna('').astype(str).str.strip() == t_cover]
-            if not cover_match.empty:
-                series_books = cover_match
-                series_notes.append(f"Cover match ({t_cover}): {before}→{len(series_books)}")
+        # 🟢 FORMAT PREFERENCE: Score books by format match (NOT a hard filter)
+        # Books with matching format get higher scores, but ALL series books are kept
+        FORMAT_MATCH_BOOST = 1000  # Boost for matching format
         
-        # 2. Dimensions (Διαστάσεις)
-        if t_dims and t_dims != 'nan' and t_dims != 'NaN' and 'Διαστάσεις' in series_books.columns and not series_books.empty:
-            before = len(series_books)
-            dims_match = series_books[series_books['Διαστάσεις'].fillna('').astype(str).str.strip() == t_dims]
-            if not dims_match.empty:
-                series_books = dims_match
-                series_notes.append(f"Dimensions match: {before}→{len(series_books)}")
-        
-        # 3. Publishing series (Εκδοτική Σειρά)
-        if t_pub_series and t_pub_series != 'nan' and t_pub_series != '0' and 'Εκδοτική Σειρά' in series_books.columns and not series_books.empty:
-            before = len(series_books)
-            pub_match = series_books[series_books['Εκδοτική Σειρά'].fillna('').astype(str).str.strip() == t_pub_series]
-            if not pub_match.empty:
-                series_books = pub_match
-                series_notes.append(f"Publishing series match ({t_pub_series}): {before}→{len(series_books)}")
-        
-        # 4. Illustration details (Λεπτομέρειες εικονογράφησης) - if present
-        if t_illus and t_illus != 'nan' and t_illus != '0' and 'Λεπτομέρειες εικονογράφησης' in series_books.columns and not series_books.empty:
-            before = len(series_books)
-            illus_match = series_books[series_books['Λεπτομέρειες εικονογράφησης'].fillna('').astype(str).str.strip() == t_illus]
-            if not illus_match.empty:
-                series_books = illus_match
-                series_notes.append(f"Illustration match: {before}→{len(series_books)}")
+        if not series_books.empty:
+            series_books['Format_Score'] = 0
+            
+            # 1. Cover type bonus
+            if t_cover and t_cover != 'nan' and t_cover != '0' and 'Εξώφυλλο' in series_books.columns:
+                series_books.loc[
+                    series_books['Εξώφυλλο'].fillna('').astype(str).str.strip() == t_cover, 
+                    'Format_Score'
+                ] += FORMAT_MATCH_BOOST
+                match_count = (series_books['Εξώφυλλο'].fillna('').astype(str).str.strip() == t_cover).sum()
+                series_notes.append(f"Cover match ({t_cover}): {match_count} books boosted")
+            
+            # 2. Dimensions bonus
+            if t_dims and t_dims != 'nan' and t_dims != 'NaN' and 'Διαστάσεις' in series_books.columns:
+                series_books.loc[
+                    series_books['Διαστάσεις'].fillna('').astype(str).str.strip() == t_dims,
+                    'Format_Score'
+                ] += FORMAT_MATCH_BOOST
+                match_count = (series_books['Διαστάσεις'].fillna('').astype(str).str.strip() == t_dims).sum()
+                series_notes.append(f"Dimensions match: {match_count} books boosted")
+            
+            # 3. Publishing series bonus
+            if t_pub_series and t_pub_series != 'nan' and t_pub_series != '0' and 'Εκδοτική Σειρά' in series_books.columns:
+                series_books.loc[
+                    series_books['Εκδοτική Σειρά'].fillna('').astype(str).str.strip() == t_pub_series,
+                    'Format_Score'
+                ] += FORMAT_MATCH_BOOST
+            
+            # 4. Illustration details bonus
+            if t_illus and t_illus != 'nan' and t_illus != '0' and 'Λεπτομέρειες εικονογράφησης' in series_books.columns:
+                series_books.loc[
+                    series_books['Λεπτομέρειες εικονογράφησης'].fillna('').astype(str).str.strip() == t_illus,
+                    'Format_Score'
+                ] += FORMAT_MATCH_BOOST
         
         # Score and sort series books
         if not series_books.empty:
-            series_books['Final_Score'] = SERIES_BOOST
+            series_books['Final_Score'] = SERIES_BOOST + series_books['Format_Score']
             if 'AVAILABILITY' in series_books.columns:
                 series_books.loc[series_books['AVAILABILITY'] == 'Άμεσα Διαθέσιμο', 'Final_Score'] += AVAIL_BOOST
             
+            series_notes.append(f"Total series pool: {len(series_books)} books")
             series_notes.append(f"MODE: {'A (Series First)' if mode == 'A' else 'B (Next in Series)'}")
             
             # 🟢 PARTIAL BOX SET HANDLING (same for both modes)
@@ -1161,13 +1168,16 @@ def run_books_engine(trigger, df_all, df_history, mode='A'):
             else:
                 # ════════════════════════════════════════════════════════
                 # MODE A: SERIES FIRST (Management's preference)
-                # Fill up to 10 slots with series books, sorted by availability
+                # Fill up to 10 slots with series books, sorted by format match + availability
                 # ════════════════════════════════════════════════════════
                 if mode == 'A':
                     series_books = series_books.sort_values('Final_Score', ascending=False)
-                    max_series = min(10, len(series_books))
+                    max_series = 10
                     
-                    for idx, (_, row) in enumerate(series_books.head(max_series).iterrows()):
+                    # Iterate through ALL series books until we have 10 unique titles
+                    for _, row in series_books.iterrows():
+                        if series_count >= max_series:
+                            break
                         row_canonical = get_canonical_book_name(row['Title'], row.get('Τίτλος πρωτοτύπου', ''))
                         
                         if row['Material'] not in used_materials and row_canonical not in used_titles:
@@ -1180,7 +1190,7 @@ def run_books_engine(trigger, df_all, df_history, mode='A'):
                             used_titles.add(row_canonical)
                             series_count += 1
                     
-                    series_notes.append(f"✓ Mode A: Added {series_count} series books (up to 10)")
+                    series_notes.append(f"✓ Mode A: Added {series_count} unique series books")
                 
                 # ════════════════════════════════════════════════════════
                 # MODE B: NEXT IN SERIES (User's preference)
@@ -1199,14 +1209,21 @@ def run_books_engine(trigger, df_all, df_history, mode='A'):
                         main_7_books = series_books[series_books['_hp_order'] <= 7].copy()
                         spinoffs = series_books[series_books['_hp_order'] > 7].copy()
                         
-                        series_notes.append(f"Main 7 books found: {len(main_7_books)}, Spinoffs: {len(spinoffs)}")
+                        series_notes.append(f"Main 7 pool: {len(main_7_books)} editions, Spinoffs: {len(spinoffs)}")
                         
                         # Books AFTER trigger (next in reading order) - ONLY from main 7
-                        books_after = main_7_books[main_7_books['_hp_order'] > trigger_order].sort_values('_hp_order')
-                        # Books BEFORE trigger (start from beginning) - ONLY from main 7
-                        books_before = main_7_books[main_7_books['_hp_order'] < trigger_order].sort_values('_hp_order')
+                        # Sort by: reading order first, then format score (prefer matching format)
+                        books_after = main_7_books[main_7_books['_hp_order'] > trigger_order].copy()
+                        books_after = books_after.sort_values(['_hp_order', 'Final_Score'], ascending=[True, False])
                         
-                        series_notes.append(f"Main 7 - After #{trigger_order}: {len(books_after)}, Before: {len(books_before)}")
+                        # Books BEFORE trigger (start from beginning) - ONLY from main 7
+                        books_before = main_7_books[main_7_books['_hp_order'] < trigger_order].copy()
+                        books_before = books_before.sort_values(['_hp_order', 'Final_Score'], ascending=[True, False])
+                        
+                        # Count unique canonical titles
+                        after_unique = books_after['_canonical'].nunique() if '_canonical' in books_after.columns else len(books_after)
+                        before_unique = books_before['_canonical'].nunique() if '_canonical' in books_before.columns else len(books_before)
+                        series_notes.append(f"After #{trigger_order}: {after_unique} unique books, Before: {before_unique} unique books")
                         
                         # Add "next" books first (those after trigger in reading order)
                         next_added = 0
@@ -1227,8 +1244,8 @@ def run_books_engine(trigger, df_all, df_history, mode='A'):
                         
                         # Fill remaining (up to 6 total) with books from beginning
                         if next_added < 6 and not books_before.empty:
-                            remaining = 6 - next_added
-                            series_notes.append(f"Only {next_added} after, filling {remaining} from beginning")
+                            remaining_slots = 6 - next_added
+                            series_notes.append(f"Added {next_added} after, filling {remaining_slots} from beginning")
                             
                             for _, row in books_before.iterrows():
                                 if series_count >= 6:
@@ -1247,11 +1264,13 @@ def run_books_engine(trigger, df_all, df_history, mode='A'):
                         series_notes.append(f"✓ Mode B (HP): Added {series_count} main series books")
                     
                     else:
-                        # Non-HP series: Sort by availability, cap at 6
+                        # Non-HP series: Sort by format match + availability, cap at 6 unique titles
                         series_books = series_books.sort_values('Final_Score', ascending=False)
-                        max_series = min(6, len(series_books))
+                        max_series = 6
                         
-                        for idx, (_, row) in enumerate(series_books.head(max_series).iterrows()):
+                        for _, row in series_books.iterrows():
+                            if series_count >= max_series:
+                                break
                             row_canonical = get_canonical_book_name(row['Title'], row.get('Τίτλος πρωτοτύπου', ''))
                             
                             if row['Material'] not in used_materials and row_canonical not in used_titles:
@@ -1264,7 +1283,7 @@ def run_books_engine(trigger, df_all, df_history, mode='A'):
                                 used_titles.add(row_canonical)
                                 series_count += 1
                         
-                        series_notes.append(f"✓ Mode B: Added {series_count} series books (max 6)")
+                        series_notes.append(f"✓ Mode B: Added {series_count} unique series books (max 6)")
     else:
         series_notes.append("No valid series found on trigger - skipping series engine")
     
@@ -1664,9 +1683,12 @@ def run_books_engine(trigger, df_all, df_history, mode='A'):
                     
                     spinoffs = spinoffs.sort_values('Final_Score', ascending=False)
                     
-                    for _, row in spinoffs.head(remaining).iterrows():
+                    added_spinoffs = 0
+                    for _, row in spinoffs.iterrows():
+                        if discovery_count >= remaining:
+                            break
                         row_canonical = get_canonical_book_name(row['Title'], row.get('Τίτλος πρωτοτύπου', ''))
-                        if row['Material'] not in used_materials and row_canonical not in used_titles and discovery_count < remaining:
+                        if row['Material'] not in used_materials and row_canonical not in used_titles:
                             row_copy = row.copy()
                             row_copy['Assigned_Slot'] = total_filled + discovery_count + 1
                             row_copy['Slot_Role'] = 'Explore Series'  # HP spinoffs
@@ -1675,8 +1697,9 @@ def run_books_engine(trigger, df_all, df_history, mode='A'):
                             used_materials.add(row['Material'])
                             used_titles.add(row_canonical)
                             discovery_count += 1
+                            added_spinoffs += 1
                     
-                    discovery_notes.append(f"✓ Added {discovery_count} HP spinoffs")
+                    discovery_notes.append(f"✓ Added {added_spinoffs} HP spinoffs")
         
         # 🟢 PRIORITY B: Same series, different format/edition
         # (books from same series but with different cover/dimensions)
