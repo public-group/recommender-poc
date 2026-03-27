@@ -75,7 +75,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v13.2 — Dual Mode (A: Series First, B: Next-in-Series)
+        🟢 Engine v13.3 — HP Main 7 Only + Spinoffs in Discovery
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -1195,14 +1195,20 @@ def run_books_engine(trigger, df_all, df_history, mode='A'):
                         
                         series_books['_hp_order'] = series_books['Title'].apply(get_hp_order)
                         
-                        # Books AFTER trigger (next in reading order)
-                        books_after = series_books[series_books['_hp_order'] > trigger_order].sort_values('_hp_order')
-                        # Books BEFORE trigger (start from beginning)
-                        books_before = series_books[series_books['_hp_order'] < trigger_order].sort_values('_hp_order')
+                        # 🟢 ONLY MAIN 7 BOOKS in series slots (spinoffs go to discovery)
+                        main_7_books = series_books[series_books['_hp_order'] <= 7].copy()
+                        spinoffs = series_books[series_books['_hp_order'] > 7].copy()
                         
-                        series_notes.append(f"After #{trigger_order}: {len(books_after)}, Before: {len(books_before)}")
+                        series_notes.append(f"Main 7 books found: {len(main_7_books)}, Spinoffs: {len(spinoffs)}")
                         
-                        # Add up to 6 "next" books (those after trigger first)
+                        # Books AFTER trigger (next in reading order) - ONLY from main 7
+                        books_after = main_7_books[main_7_books['_hp_order'] > trigger_order].sort_values('_hp_order')
+                        # Books BEFORE trigger (start from beginning) - ONLY from main 7
+                        books_before = main_7_books[main_7_books['_hp_order'] < trigger_order].sort_values('_hp_order')
+                        
+                        series_notes.append(f"Main 7 - After #{trigger_order}: {len(books_after)}, Before: {len(books_before)}")
+                        
+                        # Add "next" books first (those after trigger in reading order)
                         next_added = 0
                         for _, row in books_after.iterrows():
                             if next_added >= 6:
@@ -1238,7 +1244,7 @@ def run_books_engine(trigger, df_all, df_history, mode='A'):
                                     used_titles.add(row_canonical)
                                     series_count += 1
                         
-                        series_notes.append(f"✓ Mode B (HP): Added {series_count} books")
+                        series_notes.append(f"✓ Mode B (HP): Added {series_count} main series books")
                     
                     else:
                         # Non-HP series: Sort by availability, cap at 6
@@ -1623,8 +1629,58 @@ def run_books_engine(trigger, df_all, df_history, mode='A'):
     elif remaining > 0:
         books_only = df_all[df_all['Level 1'] == 'Books'].copy()
         
-        # 🟢 PRIORITY A: Same series, different dimensions (for large series)
-        if has_series:
+        # 🟢 PRIORITY A: For HP Mode B - Show spinoffs first ("Explore more from the series")
+        if mode == 'B' and has_series and is_harry_potter_series(t_series):
+            # Find HP spinoffs (books with order > 7)
+            series_col = 'Σειρά βιβλίου'
+            if series_col in books_only.columns:
+                hp_all = books_only[
+                    books_only[series_col].fillna('').astype(str).str.strip() == t_series
+                ].copy()
+                
+                # Filter to same language
+                if t_level2:
+                    hp_all = hp_all[hp_all['Level 2'] == t_level2]
+                
+                # Calculate HP order
+                hp_all['_hp_order'] = hp_all['Title'].apply(get_hp_order)
+                
+                # Get spinoffs (order > 7) that weren't already shown
+                spinoffs = hp_all[hp_all['_hp_order'] > 7].copy()
+                spinoffs = spinoffs[~spinoffs['Material'].isin(used_materials)]
+                spinoffs = spinoffs[spinoffs['Material'] != tm]
+                
+                # Also exclude box sets
+                if not trigger_is_box_set:
+                    spinoffs = spinoffs[~spinoffs['Title'].apply(is_box_set)]
+                
+                discovery_notes.append(f"HP spinoffs available: {len(spinoffs)}")
+                
+                if not spinoffs.empty:
+                    # Score by availability
+                    spinoffs['Final_Score'] = 0
+                    if 'AVAILABILITY' in spinoffs.columns:
+                        spinoffs.loc[spinoffs['AVAILABILITY'] == 'Άμεσα Διαθέσιμο', 'Final_Score'] += AVAIL_BOOST
+                    
+                    spinoffs = spinoffs.sort_values('Final_Score', ascending=False)
+                    
+                    for _, row in spinoffs.head(remaining).iterrows():
+                        row_canonical = get_canonical_book_name(row['Title'], row.get('Τίτλος πρωτοτύπου', ''))
+                        if row['Material'] not in used_materials and row_canonical not in used_titles and discovery_count < remaining:
+                            row_copy = row.copy()
+                            row_copy['Assigned_Slot'] = total_filled + discovery_count + 1
+                            row_copy['Slot_Role'] = 'Explore Series'  # HP spinoffs
+                            row_copy['Item_Rank'] = 1
+                            all_recs.append(row_copy)
+                            used_materials.add(row['Material'])
+                            used_titles.add(row_canonical)
+                            discovery_count += 1
+                    
+                    discovery_notes.append(f"✓ Added {discovery_count} HP spinoffs")
+        
+        # 🟢 PRIORITY B: Same series, different dimensions (for large series)
+        remaining_after_spinoffs = remaining - discovery_count
+        if has_series and remaining_after_spinoffs > 0:
             # Find series column
             series_col = 'Σειρά βιβλίου'
             if series_col not in books_only.columns:
@@ -1674,7 +1730,7 @@ def run_books_engine(trigger, df_all, df_history, mode='A'):
                         
                         diff_dims = diff_dims.sort_values('Final_Score', ascending=False)
                         
-                        for _, row in diff_dims.head(remaining).iterrows():
+                        for _, row in diff_dims.head(remaining_after_spinoffs).iterrows():
                             row_canonical = get_canonical_book_name(row['Title'], row.get('Τίτλος πρωτοτύπου', ''))
                             if row['Material'] not in used_materials and row_canonical not in used_titles and discovery_count < remaining:
                                 row_copy = row.copy()
@@ -2310,6 +2366,7 @@ MARKETING_COPY = {
     "Cross-Sell: Lifestyle": "Στιλ για κάθε μέρα!",
     "Cross-Sell: Collectable Cards": "Συλλογή για πρωταθλητές!",
     "Cross-Sell: Action Figure": "Ο ήρωας στο ράφι σου!",
+    "Explore Series": "Ανακάλυψε κι άλλα από τη σειρά!",  # HP spinoffs
     "Category Discovery": "Μια ακόμα τέλεια επιλογή!",
 }
 
