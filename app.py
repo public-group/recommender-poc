@@ -75,7 +75,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v13.8 — HP Debug Mode
+        🟢 Engine v13.9 — Deep HP Debug
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -1042,6 +1042,9 @@ def run_books_engine(trigger, df_all, df_history, mode='A'):
     trigger_canonical = get_canonical_book_name(tt, t_orig_title)
     used_titles.add(trigger_canonical)  # Never recommend the same book as trigger
     
+    # 🔍 DEBUG
+    diag.append(("Debug", "", f"Trigger canonical: '{trigger_canonical}'"))
+    
     box_status = "complete box set" if trigger_is_complete_box else ("partial box set" if trigger_is_box_set else "individual book")
     diag.append(("0. Trigger", "", f"Series: '{t_series}' (valid: {has_series}), Age: '{effective_age}', Type: {box_status}"))
     
@@ -1238,6 +1241,9 @@ def run_books_engine(trigger, df_all, df_history, mode='A'):
                         if not books_after.empty:
                             after_titles = books_after.groupby('_hp_order')['Title'].first().to_dict()
                             series_notes.append(f"Books after #{trigger_order}: {after_titles}")
+                            # Show actual canonical values
+                            canonical_dist = books_after['_canonical'].value_counts().head(5).to_dict()
+                            series_notes.append(f"Canonical distribution in books_after: {canonical_dist}")
                         if not books_before.empty:
                             before_titles = books_before.groupby('_hp_order')['Title'].first().to_dict()
                             series_notes.append(f"Books before #{trigger_order}: {before_titles}")
@@ -1249,10 +1255,16 @@ def run_books_engine(trigger, df_all, df_history, mode='A'):
                         
                         # Add "next" books first (those after trigger in reading order)
                         next_added = 0
-                        for _, row in books_after.iterrows():
+                        skipped_reasons = []
+                        for idx, (_, row) in enumerate(books_after.iterrows()):
                             if next_added >= 6:
                                 break
                             row_canonical = get_canonical_book_name(row['Title'], row.get('Τίτλος πρωτοτύπου', ''))
+                            
+                            # Debug first 5 iterations
+                            if idx < 5:
+                                skipped_reasons.append(f"Row {idx}: hp={row['_hp_order']}, canon='{row_canonical}', in_used={row_canonical in used_titles}")
+                            
                             if row['Material'] not in used_materials and row_canonical not in used_titles:
                                 row_copy = row.copy()
                                 row_copy['Assigned_Slot'] = series_count + 1
@@ -1263,6 +1275,8 @@ def run_books_engine(trigger, df_all, df_history, mode='A'):
                                 used_titles.add(row_canonical)
                                 series_count += 1
                                 next_added += 1
+                        
+                        series_notes.append(f"Loop debug: {skipped_reasons}")
                         
                         # Fill remaining (up to 6 total) with books from beginning
                         if next_added < 6 and not books_before.empty:
