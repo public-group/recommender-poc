@@ -75,7 +75,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v13.5 — Format as Preference (not filter)
+        🟢 Engine v13.6 — Language as Preference (not filter)
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -1096,18 +1096,22 @@ def run_books_engine(trigger, df_all, df_history, mode='A'):
             series_books = series_books[~series_books['Title'].apply(is_box_set)]
             series_notes.append(f"Excluded box sets: {before}→{len(series_books)}")
         
-        # Language filter (Greek with Greek, English with English)
-        if t_level2:
-            before = len(series_books)
-            series_books = series_books[series_books['Level 2'] == t_level2]
-            series_notes.append(f"Level 2 match ({t_level2}): {before}→{len(series_books)}")
-        
-        # 🟢 FORMAT PREFERENCE: Score books by format match (NOT a hard filter)
-        # Books with matching format get higher scores, but ALL series books are kept
-        FORMAT_MATCH_BOOST = 1000  # Boost for matching format
+        # 🟢 FORMAT & LANGUAGE PREFERENCE: Score books by match (NOT hard filters)
+        # Books matching format/language get higher scores, but ALL series books are kept
+        FORMAT_MATCH_BOOST = 1000  # Boost for each matching format attribute
+        LANGUAGE_MATCH_BOOST = 5000  # Strong preference for same language (but not required)
         
         if not series_books.empty:
             series_books['Format_Score'] = 0
+            
+            # 0. LANGUAGE preference (Level 2) - strong boost but NOT a filter
+            if t_level2 and 'Level 2' in series_books.columns:
+                series_books.loc[
+                    series_books['Level 2'] == t_level2,
+                    'Format_Score'
+                ] += LANGUAGE_MATCH_BOOST
+                match_count = (series_books['Level 2'] == t_level2).sum()
+                series_notes.append(f"Language match ({t_level2}): {match_count} books boosted")
             
             # 1. Cover type bonus
             if t_cover and t_cover != 'nan' and t_cover != '0' and 'Εξώφυλλο' in series_books.columns:
@@ -1657,9 +1661,10 @@ def run_books_engine(trigger, df_all, df_history, mode='A'):
                     books_only[series_col].fillna('').astype(str).str.strip() == t_series
                 ].copy()
                 
-                # Filter to same language
-                if t_level2:
-                    hp_all = hp_all[hp_all['Level 2'] == t_level2]
+                # Language preference (not hard filter) - score same language higher
+                if t_level2 and 'Level 2' in hp_all.columns:
+                    hp_all['_lang_score'] = 0
+                    hp_all.loc[hp_all['Level 2'] == t_level2, '_lang_score'] = 5000
                 
                 # Calculate HP order
                 hp_all['_hp_order'] = hp_all['Title'].apply(get_hp_order)
@@ -1676,8 +1681,8 @@ def run_books_engine(trigger, df_all, df_history, mode='A'):
                 discovery_notes.append(f"HP spinoffs available: {len(spinoffs)}")
                 
                 if not spinoffs.empty:
-                    # Score by availability
-                    spinoffs['Final_Score'] = 0
+                    # Score by language preference and availability
+                    spinoffs['Final_Score'] = spinoffs['_lang_score'] if '_lang_score' in spinoffs.columns else 0
                     if 'AVAILABILITY' in spinoffs.columns:
                         spinoffs.loc[spinoffs['AVAILABILITY'] == 'Άμεσα Διαθέσιμο', 'Final_Score'] += AVAIL_BOOST
                     
@@ -1727,9 +1732,10 @@ def run_books_engine(trigger, df_all, df_history, mode='A'):
                 same_series = same_series[~same_series['Material'].isin(used_materials)]
                 same_series = same_series[same_series['Material'] != tm]
                 
-                # Language filter
-                if t_level2:
-                    same_series = same_series[same_series['Level 2'] == t_level2]
+                # Language preference (not hard filter)
+                if t_level2 and 'Level 2' in same_series.columns:
+                    same_series['_lang_score'] = 0
+                    same_series.loc[same_series['Level 2'] == t_level2, '_lang_score'] = 5000
                 
                 # 🟢 SAME BOOK DETECTION: Use canonical name
                 same_series['_canonical'] = same_series.apply(
@@ -1757,8 +1763,8 @@ def run_books_engine(trigger, df_all, df_history, mode='A'):
                 discovery_notes.append(f"Different format/edition: {len(diff_format)}")
                 
                 if not diff_format.empty:
-                    # Score by availability
-                    diff_format['Final_Score'] = 0
+                    # Score by language preference and availability
+                    diff_format['Final_Score'] = diff_format['_lang_score'] if '_lang_score' in diff_format.columns else 0
                     if 'AVAILABILITY' in diff_format.columns:
                         diff_format.loc[diff_format['AVAILABILITY'] == 'Άμεσα Διαθέσιμο', 'Final_Score'] += AVAIL_BOOST
                     
