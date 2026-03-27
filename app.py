@@ -75,7 +75,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v13.3 — HP Main 7 Only + Spinoffs in Discovery
+        🟢 Engine v13.4 — Discovery: Series Format → Category
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -1678,8 +1678,11 @@ def run_books_engine(trigger, df_all, df_history, mode='A'):
                     
                     discovery_notes.append(f"✓ Added {discovery_count} HP spinoffs")
         
-        # 🟢 PRIORITY B: Same series, different dimensions (for large series)
+        # 🟢 PRIORITY B: Same series, different format/edition
+        # (books from same series but with different cover/dimensions)
         remaining_after_spinoffs = remaining - discovery_count
+        discovery_notes.append(f"Remaining after spinoffs: {remaining_after_spinoffs}")
+        
         if has_series and remaining_after_spinoffs > 0:
             # Find series column
             series_col = 'Σειρά βιβλίου'
@@ -1690,10 +1693,12 @@ def run_books_engine(trigger, df_all, df_history, mode='A'):
                         break
             
             if series_col in books_only.columns:
-                # Get same-series books with DIFFERENT dimensions
+                # Get same-series books
                 same_series = books_only[
                     books_only[series_col].fillna('').astype(str).str.strip() == t_series
                 ].copy()
+                
+                discovery_notes.append(f"Same series pool: {len(same_series)}")
                 
                 # Exclude already used materials
                 same_series = same_series[~same_series['Material'].isin(used_materials)]
@@ -1715,37 +1720,47 @@ def run_books_engine(trigger, df_all, df_history, mode='A'):
                 if not trigger_is_box_set:
                     same_series = same_series[~same_series['Title'].apply(is_box_set)]
                 
-                # Get books with DIFFERENT dimensions (other formats/editions)
-                if t_dims and t_dims != 'nan' and 'Διαστάσεις' in same_series.columns:
-                    diff_dims = same_series[
-                        same_series['Διαστάσεις'].fillna('').astype(str).str.strip() != t_dims
+                discovery_notes.append(f"Same series after filters: {len(same_series)}")
+                
+                # Get books with DIFFERENT dimensions/cover (other formats/editions)
+                diff_format = same_series.copy()
+                
+                # Filter for different dimensions OR different cover
+                if 'Διαστάσεις' in diff_format.columns and t_dims and t_dims != 'nan':
+                    diff_format = diff_format[
+                        diff_format['Διαστάσεις'].fillna('').astype(str).str.strip() != t_dims
                     ]
-                    discovery_notes.append(f"Same series, different dimensions: {len(diff_dims)}")
+                
+                discovery_notes.append(f"Different format/edition: {len(diff_format)}")
+                
+                if not diff_format.empty:
+                    # Score by availability
+                    diff_format['Final_Score'] = 0
+                    if 'AVAILABILITY' in diff_format.columns:
+                        diff_format.loc[diff_format['AVAILABILITY'] == 'Άμεσα Διαθέσιμο', 'Final_Score'] += AVAIL_BOOST
                     
-                    if not diff_dims.empty:
-                        # Score by availability - DETERMINISTIC (no rotation)
-                        diff_dims['Final_Score'] = 0
-                        if 'AVAILABILITY' in diff_dims.columns:
-                            diff_dims.loc[diff_dims['AVAILABILITY'] == 'Άμεσα Διαθέσιμο', 'Final_Score'] += AVAIL_BOOST
-                        
-                        diff_dims = diff_dims.sort_values('Final_Score', ascending=False)
-                        
-                        for _, row in diff_dims.head(remaining_after_spinoffs).iterrows():
-                            row_canonical = get_canonical_book_name(row['Title'], row.get('Τίτλος πρωτοτύπου', ''))
-                            if row['Material'] not in used_materials and row_canonical not in used_titles and discovery_count < remaining:
-                                row_copy = row.copy()
-                                row_copy['Assigned_Slot'] = total_filled + discovery_count + 1
-                                row_copy['Slot_Role'] = 'Series Discovery'
-                                row_copy['Item_Rank'] = 1
-                                all_recs.append(row_copy)
-                                used_materials.add(row['Material'])
-                                used_titles.add(row_canonical)
-                                discovery_count += 1
-                        
-                        discovery_notes.append(f"✓ Added {discovery_count} same-series books (different format)")
+                    diff_format = diff_format.sort_values('Final_Score', ascending=False)
+                    
+                    added_here = 0
+                    for _, row in diff_format.head(remaining_after_spinoffs).iterrows():
+                        row_canonical = get_canonical_book_name(row['Title'], row.get('Τίτλος πρωτοτύπου', ''))
+                        if row['Material'] not in used_materials and row_canonical not in used_titles and discovery_count < remaining:
+                            row_copy = row.copy()
+                            row_copy['Assigned_Slot'] = total_filled + discovery_count + 1
+                            row_copy['Slot_Role'] = 'Series Discovery'
+                            row_copy['Item_Rank'] = 1
+                            all_recs.append(row_copy)
+                            used_materials.add(row['Material'])
+                            used_titles.add(row_canonical)
+                            discovery_count += 1
+                            added_here += 1
+                    
+                    discovery_notes.append(f"✓ Added {added_here} same-series different format")
         
-        # 🟢 PRIORITY B: Same hierarchy, different IPs (fallback)
+        # 🟢 PRIORITY C: Same category/hierarchy (fallback when no more from series)
         remaining_after_series = remaining - discovery_count
+        discovery_notes.append(f"Remaining after series discovery: {remaining_after_series}")
+        
         if remaining_after_series > 0:
             discovery_pool = books_only[books_only['Hierarchy'] == t_hierarchy].copy()
             
