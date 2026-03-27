@@ -75,7 +75,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v12.13 — Books Series/Discovery Rotation
+        🟢 Engine v13.1 — Dual Mode Toggle (A/B)
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -787,6 +787,19 @@ elif active_cluster == "Kids Books":
                 actual_series = series_display.get(selected_series_display, selected_series_display)
                 kids_books = kids_books[kids_books['Σειρά βιβλίου'] == actual_series]
     
+    # 🟢 MODE TOGGLE: Two recommendation strategies
+    st.sidebar.markdown('<p class="sidebar-section">Λογική Προτάσεων</p>', unsafe_allow_html=True)
+    books_mode = st.sidebar.radio(
+        "",
+        options=["Option A: Series First", "Option B: Next in Series"],
+        index=0,
+        label_visibility="collapsed",
+        help="Option A: Up to 10 series books, then cross-sell. Option B: Max 6 'next' books + 4 cross-sell"
+    )
+    
+    # Store mode in session state
+    st.session_state.books_mode = "A" if "Option A" in books_mode else "B"
+    
     st.sidebar.markdown('<p class="sidebar-section">Επιλέξτε Βιβλίο</p>', unsafe_allow_html=True)
     sel = st.sidebar.selectbox("", kids_books['Title'].unique(), label_visibility="collapsed")
     
@@ -887,16 +900,109 @@ with st.sidebar:
 
 
 # ─────────────────────────────────────────────────────────────
-# 🟢 KIDS BOOKS ENGINE (FIXED)
+# 🟢 KIDS BOOKS ENGINE (DUAL MODE)
 # ─────────────────────────────────────────────────────────────
-def run_books_engine(trigger, df_all, df_history):
+def run_books_engine(trigger, df_all, df_history, mode='A'):
     """
-    Kids Books Recommendation Engine with FIXED Series Logic
+    Kids Books Recommendation Engine with TWO MODES:
+    
+    Mode A (Management): Series First
+    - Priority 1: Fill up to 10 slots with series books
+    - Priority 2: Cross-sell (up to 4 slots if series < 10)
+    - Priority 3: Category Discovery (remaining slots)
+    
+    Mode B (Next in Series):
+    - Priority 1: Up to 6 books using "next in series" logic
+    - Priority 2: Cross-sell (4 slots always)
+    - If fewer than 6 books remaining, show "start from beginning" books
     """
     diag = []
     slot_notes = {}
     all_recs = []
     used_materials = set()
+    used_titles = set()  # Track titles to prevent showing same book
+    
+    # 🟢 HARRY POTTER PREDEFINED ORDER
+    # Map title keywords to reading order (1-7 for main series, 8+ for spinoffs)
+    HARRY_POTTER_ORDER = {
+        # Greek titles
+        'φιλοσοφική λίθος': 1, 'philosopher': 1, "sorcerer's stone": 1,
+        'μυστικό δωμάτιο': 2, 'chamber of secrets': 2, 'κάμαρα': 2,
+        'αιχμάλωτος': 3, 'αζκαμπάν': 3, 'prisoner of azkaban': 3,
+        'κύπελλο φωτιάς': 4, 'goblet of fire': 4, 'κύπελλο της φωτιάς': 4,
+        'τάγμα του φοίνικα': 5, 'order of the phoenix': 5, 'φοίνικα': 5,
+        'ημίαιμος πρίγκιψ': 6, 'half-blood prince': 6, 'ημίαιμος': 6,
+        'κλήροι του θανάτου': 7, 'deathly hallows': 7, 'θανάτου': 7,
+        # Spinoffs (order 8+)
+        'καταραμένο παιδί': 8, 'cursed child': 8,
+        'φανταστικά ζώα': 9, 'fantastic beasts': 9,
+        'quidditch': 10, 'κουίντιτς': 10,
+        'beedle': 11, 'μπιντλ': 11,
+    }
+    
+    def get_hp_order(title):
+        """Get Harry Potter reading order from title"""
+        title_lower = str(title).lower()
+        for keyword, order in HARRY_POTTER_ORDER.items():
+            if keyword in title_lower:
+                return order
+        return 99  # Unknown
+    
+    def is_harry_potter_series(series_name):
+        """Check if this is the Harry Potter series"""
+        series_lower = str(series_name).lower()
+        return 'harry potter' in series_lower or 'χάρι πότερ' in series_lower or 'χαρι ποτερ' in series_lower
+    
+    # 🟢 HELPER: Detect if a book is a box set
+    def is_box_set(title):
+        """Check if title indicates a box set/collection"""
+        title_lower = str(title).lower()
+        box_keywords = ['box set', 'boxset', 'box-set', 'κασετίνα', 'συλλογή', 'collection', 
+                        'βαλιτσάκι', 'σετ βιβλίων', 'book set', 'complete series', 'books 1-']
+        return any(kw in title_lower for kw in box_keywords)
+    
+    # 🟢 HELPER: Check if box set is complete (contains all books)
+    def is_complete_box_set(title):
+        """Check if box set appears to be a complete collection"""
+        title_lower = str(title).lower()
+        complete_keywords = ['complete', 'ολοκληρωμένη', 'πλήρης', 'all books', 'όλα τα βιβλία', 
+                            'full collection', '1-7', '1-8', 'complete collection']
+        return any(kw in title_lower for kw in complete_keywords)
+    
+    # 🟢 HELPER: Extract canonical book identifier from title (improved)
+    def get_canonical_book_name(title, orig_title=''):
+        """
+        Extract the core book name to detect same book in different editions.
+        Returns normalized title for comparison.
+        """
+        title_lower = str(title).lower().strip()
+        orig_lower = str(orig_title).lower().strip() if orig_title and orig_title != 'nan' else ''
+        
+        # Use original title if available (more reliable for matching)
+        canonical = orig_lower if orig_lower else title_lower
+        
+        # Common series prefixes to strip
+        prefixes = [
+            'ο χάρι πότερ και ', 'ο χαρι ποτερ και ', 'harry potter and the ', 'harry potter and ',
+            'fantastic beasts: ', 'φανταστικά ζώα: ', 'φανταστικά ζώα και ',
+            'diary of a wimpy kid: ', 'diary of a wimpy kid ',
+            'dog man: ', 'dog man ', 'captain underpants: ', 'captain underpants ',
+        ]
+        
+        for prefix in prefixes:
+            if canonical.startswith(prefix):
+                canonical = canonical[len(prefix):]
+                break
+        
+        # Remove edition suffixes
+        suffixes = [' (illustrated)', ' (εικονογραφημένο)', ' - illustrated edition', 
+                    ' - συλλεκτική έκδοση', ' (anniversary edition)', ' (deluxe edition)',
+                    ' - collector\'s edition', ' - special edition', ' - gift edition']
+        for suffix in suffixes:
+            if canonical.endswith(suffix):
+                canonical = canonical[:-len(suffix)]
+        
+        return canonical.strip()
     
     # Trigger attributes - with robust extraction
     tm = trigger['Material']
@@ -928,15 +1034,28 @@ def run_books_engine(trigger, df_all, df_history):
     allowed_ages = get_allowed_ages(effective_age)
     has_series = is_valid_series(t_series)
     
-    diag.append(("0. Trigger", "", f"Series: '{t_series}' (valid: {has_series}), Age: '{effective_age}'"))
+    # 🟢 BOX SET DETECTION
+    trigger_is_box_set = is_box_set(tt)
+    trigger_is_complete_box = trigger_is_box_set and is_complete_box_set(tt)
+    
+    # 🟢 CANONICAL BOOK NAME: To detect same book in different editions
+    trigger_canonical = get_canonical_book_name(tt, t_orig_title)
+    used_titles.add(trigger_canonical)  # Never recommend the same book as trigger
+    
+    box_status = "complete box set" if trigger_is_complete_box else ("partial box set" if trigger_is_box_set else "individual book")
+    diag.append(("0. Trigger", "", f"Series: '{t_series}' (valid: {has_series}), Age: '{effective_age}', Type: {box_status}"))
     
     # ══════════════════════════════════════════════════════════
-    # PRIORITY 1: SERIES ENGINE (Slots 1-3, or more if available)
+    # PRIORITY 1: SERIES ENGINE (Slots 1-7, or skip for complete box sets)
     # ══════════════════════════════════════════════════════════
     series_notes = ["=== PRIORITY 1: SERIES ENGINE ==="]
     series_count = 0
     
-    if has_series:
+    # 🟢 BOX SET RULE: Complete box sets should NOT show series books (only cross-sell)
+    if trigger_is_complete_box:
+        series_notes.append("⚠ Complete box set detected - skipping series books, only showing cross-sell")
+        diag.append(("1. Series Engine", 0, "Skipped (complete box set)"))
+    elif has_series:
         # Get all books from same series
         books_only = df_all[df_all['Level 1'] == 'Books'].copy()
         
@@ -962,13 +1081,20 @@ def run_books_engine(trigger, df_all, df_history):
         series_books = series_books[series_books['Material'] != tm]
         series_notes.append(f"After excluding trigger: {len(series_books)}")
         
-        # Exclude same original title (different editions of same book)
-        if t_orig_title and t_orig_title != 'nan' and t_orig_title != '0':
+        # 🟢 SAME BOOK DETECTION (improved): Use canonical name to detect same book
+        # This catches both original title matches AND title pattern matches
+        before = len(series_books)
+        series_books['_canonical'] = series_books.apply(
+            lambda r: get_canonical_book_name(r.get('Title', ''), r.get('Τίτλος πρωτοτύπου', '')), axis=1
+        )
+        series_books = series_books[series_books['_canonical'] != trigger_canonical]
+        series_notes.append(f"Excluded same book (canonical): {before}→{len(series_books)}")
+        
+        # 🟢 BOX SET RULE: Individual books should NOT show box sets
+        if not trigger_is_box_set and not series_books.empty:
             before = len(series_books)
-            series_books = series_books[
-                series_books['Τίτλος πρωτοτύπου'].fillna('').astype(str).str.strip() != t_orig_title
-            ]
-            series_notes.append(f"Excluded same original title: {before}→{len(series_books)}")
+            series_books = series_books[~series_books['Title'].apply(is_box_set)]
+            series_notes.append(f"Excluded box sets: {before}→{len(series_books)}")
         
         # Language filter (Greek with Greek, English with English)
         if t_level2:
@@ -976,7 +1102,8 @@ def run_books_engine(trigger, df_all, df_history):
             series_books = series_books[series_books['Level 2'] == t_level2]
             series_notes.append(f"Level 2 match ({t_level2}): {before}→{len(series_books)}")
         
-        # FORMAT LOCK: Match cover type
+        # 🟢 FORMAT LOCK: Match ALL format attributes for consistent edition
+        # 1. Cover type (Εξώφυλλο)
         if t_cover and t_cover != 'nan' and t_cover != '0' and not series_books.empty:
             before = len(series_books)
             cover_match = series_books[series_books['Εξώφυλλο'].fillna('').astype(str).str.strip() == t_cover]
@@ -984,7 +1111,7 @@ def run_books_engine(trigger, df_all, df_history):
                 series_books = cover_match
                 series_notes.append(f"Cover match ({t_cover}): {before}→{len(series_books)}")
         
-        # FORMAT LOCK: Match dimensions (same print run)
+        # 2. Dimensions (Διαστάσεις)
         if t_dims and t_dims != 'nan' and t_dims != 'NaN' and not series_books.empty:
             before = len(series_books)
             dims_match = series_books[series_books['Διαστάσεις'].fillna('').astype(str).str.strip() == t_dims]
@@ -992,42 +1119,162 @@ def run_books_engine(trigger, df_all, df_history):
                 series_books = dims_match
                 series_notes.append(f"Dimensions match: {before}→{len(series_books)}")
         
-        # Score series books
+        # 3. Publishing series (Εκδοτική Σειρά)
+        if t_pub_series and t_pub_series != 'nan' and t_pub_series != '0' and 'Εκδοτική Σειρά' in series_books.columns and not series_books.empty:
+            before = len(series_books)
+            pub_match = series_books[series_books['Εκδοτική Σειρά'].fillna('').astype(str).str.strip() == t_pub_series]
+            if not pub_match.empty:
+                series_books = pub_match
+                series_notes.append(f"Publishing series match ({t_pub_series}): {before}→{len(series_books)}")
+        
+        # 4. Illustration details (Λεπτομέρειες εικονογράφησης) - if present
+        if t_illus and t_illus != 'nan' and t_illus != '0' and 'Λεπτομέρειες εικονογράφησης' in series_books.columns and not series_books.empty:
+            before = len(series_books)
+            illus_match = series_books[series_books['Λεπτομέρειες εικονογράφησης'].fillna('').astype(str).str.strip() == t_illus]
+            if not illus_match.empty:
+                series_books = illus_match
+                series_notes.append(f"Illustration match: {before}→{len(series_books)}")
+        
+        # Score and sort series books
         if not series_books.empty:
             series_books['Final_Score'] = SERIES_BOOST
             if 'AVAILABILITY' in series_books.columns:
                 series_books.loc[series_books['AVAILABILITY'] == 'Άμεσα Διαθέσιμο', 'Final_Score'] += AVAIL_BOOST
             
-            # Sort by availability first, then by any other criteria
-            series_books = series_books.sort_values('Final_Score', ascending=False)
+            series_notes.append(f"MODE: {'A (Series First)' if mode == 'A' else 'B (Next in Series)'}")
             
-            # 🟢 ROTATION: Different trigger books show different series order
-            # This prevents "always the same 7 books" regardless of trigger
-            if len(series_books) > 3:
-                top_series = series_books.head(min(12, len(series_books))).copy()
-                seed = hash(str(tm) + "_series") % max(1, len(top_series))
+            # ════════════════════════════════════════════════════════
+            # MODE A: SERIES FIRST (Management's preference)
+            # Fill up to 10 slots with series books, sorted by availability
+            # ════════════════════════════════════════════════════════
+            if mode == 'A':
+                # Sort by availability (best-selling/available first)
+                series_books = series_books.sort_values('Final_Score', ascending=False)
                 
-                # Rotate the order based on trigger
-                indices = list(range(len(top_series)))
-                rotated_indices = [indices[(seed + i) % len(indices)] for i in range(len(indices))]
-                series_books = top_series.iloc[rotated_indices]
+                # 🟢 PARTIAL BOX SET HANDLING: Show 1-2 other box sets
+                if trigger_is_box_set and not trigger_is_complete_box:
+                    box_sets_in_series = series_books[series_books['Title'].apply(is_box_set)]
+                    if not box_sets_in_series.empty:
+                        for _, row in box_sets_in_series.head(2).iterrows():
+                            if row['Material'] not in used_materials:
+                                row_copy = row.copy()
+                                row_copy['Assigned_Slot'] = series_count + 1
+                                row_copy['Slot_Role'] = 'Other Box Set'
+                                row_copy['Item_Rank'] = 1
+                                all_recs.append(row_copy)
+                                used_materials.add(row['Material'])
+                                used_titles.add(get_canonical_book_name(row['Title'], row.get('Τίτλος πρωτοτύπου', '')))
+                                series_count += 1
+                        series_notes.append(f"✓ Added other box sets: {series_count}")
+                else:
+                    # Take up to 10 series books (fill entire carousel if possible)
+                    max_series = min(10, len(series_books))
+                    for idx, (_, row) in enumerate(series_books.head(max_series).iterrows()):
+                        row_canonical = get_canonical_book_name(row['Title'], row.get('Τίτλος πρωτοτύπου', ''))
+                        
+                        if row['Material'] not in used_materials and row_canonical not in used_titles:
+                            row_copy = row.copy()
+                            row_copy['Assigned_Slot'] = series_count + 1
+                            row_copy['Slot_Role'] = 'Series Book'
+                            row_copy['Item_Rank'] = 1
+                            all_recs.append(row_copy)
+                            used_materials.add(row['Material'])
+                            used_titles.add(row_canonical)
+                            series_count += 1
+                    
+                    series_notes.append(f"✓ Added {series_count} series books (Mode A: up to 10)")
+            
+            # ════════════════════════════════════════════════════════
+            # MODE B: NEXT IN SERIES (User's preference)
+            # Max 6 series books using reading order logic
+            # ════════════════════════════════════════════════════════
+            else:  # mode == 'B'
+                # 🟢 HARRY POTTER SPECIAL: Use predefined reading order
+                if is_harry_potter_series(t_series):
+                    trigger_order = get_hp_order(tt)
+                    series_notes.append(f"Harry Potter: trigger is book #{trigger_order}")
+                    
+                    # Calculate reading order for all series books
+                    series_books['_hp_order'] = series_books['Title'].apply(get_hp_order)
+                    
+                    # Get books AFTER the current one in reading order
+                    books_after = series_books[series_books['_hp_order'] > trigger_order].sort_values('_hp_order')
+                    books_before = series_books[series_books['_hp_order'] < trigger_order].sort_values('_hp_order')
+                    
+                    series_notes.append(f"Books after #{trigger_order}: {len(books_after)}, before: {len(books_before)}")
+                    
+                    # Take up to 6 "next" books
+                    next_books_added = 0
+                    for _, row in books_after.head(6).iterrows():
+                        row_canonical = get_canonical_book_name(row['Title'], row.get('Τίτλος πρωτοτύπου', ''))
+                        
+                        if row['Material'] not in used_materials and row_canonical not in used_titles:
+                            row_copy = row.copy()
+                            row_copy['Assigned_Slot'] = series_count + 1
+                            row_copy['Slot_Role'] = 'Series Book'
+                            row_copy['Item_Rank'] = 1
+                            all_recs.append(row_copy)
+                            used_materials.add(row['Material'])
+                            used_titles.add(row_canonical)
+                            series_count += 1
+                            next_books_added += 1
+                    
+                    # If fewer than 6 books after, fill with "start from beginning" books
+                    if next_books_added < 6 and not books_before.empty:
+                        remaining_slots = 6 - next_books_added
+                        series_notes.append(f"Only {next_books_added} books after, adding {remaining_slots} from beginning")
+                        
+                        for _, row in books_before.head(remaining_slots).iterrows():
+                            row_canonical = get_canonical_book_name(row['Title'], row.get('Τίτλος πρωτοτύπου', ''))
+                            
+                            if row['Material'] not in used_materials and row_canonical not in used_titles:
+                                row_copy = row.copy()
+                                row_copy['Assigned_Slot'] = series_count + 1
+                                row_copy['Slot_Role'] = 'Start from Beginning'  # Special role
+                                row_copy['Item_Rank'] = 1
+                                all_recs.append(row_copy)
+                                used_materials.add(row['Material'])
+                                used_titles.add(row_canonical)
+                                series_count += 1
+                    
+                    series_notes.append(f"✓ Added {series_count} HP books (Mode B: next in series)")
                 
-                series_notes.append(f"Rotation applied: seed={seed}, showing different order")
-            
-            # Take up to 7 series books (leaving 3 slots for cross-sell)
-            max_series = min(7, len(series_books))
-            max_series = min(7, len(series_books))
-            for idx, (_, row) in enumerate(series_books.head(max_series).iterrows()):
-                if row['Material'] not in used_materials:
-                    row_copy = row.copy()
-                    row_copy['Assigned_Slot'] = series_count + 1
-                    row_copy['Slot_Role'] = f'Series Book'
-                    row_copy['Item_Rank'] = 1
-                    all_recs.append(row_copy)
-                    used_materials.add(row['Material'])
-                    series_count += 1
-            
-            series_notes.append(f"✓ Added {series_count} series books to slots 1-{series_count}")
+                else:
+                    # Non-HP series: Sort by availability, take up to 6
+                    series_books = series_books.sort_values('Final_Score', ascending=False)
+                    
+                    # 🟢 PARTIAL BOX SET HANDLING
+                    if trigger_is_box_set and not trigger_is_complete_box:
+                        box_sets_in_series = series_books[series_books['Title'].apply(is_box_set)]
+                        if not box_sets_in_series.empty:
+                            for _, row in box_sets_in_series.head(2).iterrows():
+                                if row['Material'] not in used_materials:
+                                    row_copy = row.copy()
+                                    row_copy['Assigned_Slot'] = series_count + 1
+                                    row_copy['Slot_Role'] = 'Other Box Set'
+                                    row_copy['Item_Rank'] = 1
+                                    all_recs.append(row_copy)
+                                    used_materials.add(row['Material'])
+                                    used_titles.add(get_canonical_book_name(row['Title'], row.get('Τίτλος πρωτοτύπου', '')))
+                                    series_count += 1
+                            series_notes.append(f"✓ Added other box sets: {series_count}")
+                    else:
+                        # Take up to 6 series books (Mode B limit)
+                        max_series = min(6, len(series_books))
+                        for idx, (_, row) in enumerate(series_books.head(max_series).iterrows()):
+                            row_canonical = get_canonical_book_name(row['Title'], row.get('Τίτλος πρωτοτύπου', ''))
+                            
+                            if row['Material'] not in used_materials and row_canonical not in used_titles:
+                                row_copy = row.copy()
+                                row_copy['Assigned_Slot'] = series_count + 1
+                                row_copy['Slot_Role'] = 'Series Book'
+                                row_copy['Item_Rank'] = 1
+                                all_recs.append(row_copy)
+                                used_materials.add(row['Material'])
+                                used_titles.add(row_canonical)
+                                series_count += 1
+                        
+                        series_notes.append(f"✓ Added {series_count} series books (Mode B: max 6)")
     else:
         series_notes.append("No valid series found on trigger - skipping series engine")
     
@@ -1036,10 +1283,20 @@ def run_books_engine(trigger, df_all, df_history):
     
     # ══════════════════════════════════════════════════════════
     # PRIORITY 2: CROSS-SELL (Toys & Stationery)
+    # Mode A: Up to 4 slots if series < 10
+    # Mode B: Always 4 slots (since max 6 series books)
     # ══════════════════════════════════════════════════════════
     crosssell_notes = ["=== PRIORITY 2: CROSS-SELL ==="]
     crosssell_count = 0
-    max_crosssell = min(5, 10 - series_count)  # Fill remaining slots up to 5
+    
+    if mode == 'A':
+        # Mode A: Only fill remaining slots up to 4
+        max_crosssell = min(4, 10 - series_count)
+        crosssell_notes.append(f"Mode A: {max_crosssell} cross-sell slots available (series filled {series_count})")
+    else:
+        # Mode B: Always 4 cross-sell slots
+        max_crosssell = 4
+        crosssell_notes.append(f"Mode B: {max_crosssell} cross-sell slots (always 4)")
     
     if max_crosssell > 0:
         # Get Toys and Stationery
@@ -1373,14 +1630,21 @@ def run_books_engine(trigger, df_all, df_history):
     
     # ══════════════════════════════════════════════════════════
     # PRIORITY 3: CATEGORY DISCOVERY (Fill remaining slots)
-    # Prefer same-series books with different dimensions over other IPs
+    # Mode A: Fill remaining slots with best-selling books in same category
+    # Mode B: Skip (we already have 6+4=10 slots)
     # ══════════════════════════════════════════════════════════
     discovery_notes = ["=== PRIORITY 3: CATEGORY DISCOVERY ==="]
     total_filled = series_count + crosssell_count
     remaining = 10 - total_filled
     discovery_count = 0
     
-    if remaining > 0:
+    # 🟢 MODE B: Skip discovery (6 series + 4 cross-sell = 10)
+    if mode == 'B':
+        discovery_notes.append(f"Mode B: Skipping discovery (filled {total_filled} slots)")
+    # 🟢 SKIP DISCOVERY FOR COMPLETE BOX SETS - only cross-sell matters
+    elif trigger_is_complete_box:
+        discovery_notes.append("⚠ Complete box set - skipping discovery, cross-sell only")
+    elif remaining > 0:
         books_only = df_all[df_all['Level 1'] == 'Books'].copy()
         
         # 🟢 PRIORITY A: Same series, different dimensions (for large series)
@@ -1407,11 +1671,17 @@ def run_books_engine(trigger, df_all, df_history):
                 if t_level2:
                     same_series = same_series[same_series['Level 2'] == t_level2]
                 
-                # Exclude same original title (different editions)
-                if t_orig_title and t_orig_title != 'nan' and t_orig_title != '0':
-                    same_series = same_series[
-                        same_series['Τίτλος πρωτοτύπου'].fillna('').astype(str).str.strip() != t_orig_title
-                    ]
+                # 🟢 SAME BOOK DETECTION: Use canonical name
+                same_series['_canonical'] = same_series.apply(
+                    lambda r: get_canonical_book_name(r.get('Title', ''), r.get('Τίτλος πρωτοτύπου', '')), axis=1
+                )
+                same_series = same_series[same_series['_canonical'] != trigger_canonical]
+                # Also exclude titles already shown in series slots
+                same_series = same_series[~same_series['_canonical'].isin(used_titles)]
+                
+                # 🟢 EXCLUDE BOX SETS for individual books
+                if not trigger_is_box_set:
+                    same_series = same_series[~same_series['Title'].apply(is_box_set)]
                 
                 # Get books with DIFFERENT dimensions (other formats/editions)
                 if t_dims and t_dims != 'nan':
@@ -1421,30 +1691,23 @@ def run_books_engine(trigger, df_all, df_history):
                     discovery_notes.append(f"Same series, different dimensions: {len(diff_dims)}")
                     
                     if not diff_dims.empty:
-                        # Score by availability
+                        # Score by availability - DETERMINISTIC (no rotation)
                         diff_dims['Final_Score'] = 0
                         if 'AVAILABILITY' in diff_dims.columns:
                             diff_dims.loc[diff_dims['AVAILABILITY'] == 'Άμεσα Διαθέσιμο', 'Final_Score'] += AVAIL_BOOST
                         
                         diff_dims = diff_dims.sort_values('Final_Score', ascending=False)
                         
-                        # 🟢 ROTATION: Different triggers show different format options
-                        if len(diff_dims) > 3:
-                            top_dims = diff_dims.head(min(10, len(diff_dims))).copy()
-                            seed = hash(str(tm) + "_dims") % max(1, len(top_dims))
-                            
-                            indices = list(range(len(top_dims)))
-                            rotated_indices = [indices[(seed + i) % len(indices)] for i in range(len(indices))]
-                            diff_dims = top_dims.iloc[rotated_indices]
-                        
                         for _, row in diff_dims.head(remaining).iterrows():
-                            if row['Material'] not in used_materials and discovery_count < remaining:
+                            row_canonical = get_canonical_book_name(row['Title'], row.get('Τίτλος πρωτοτύπου', ''))
+                            if row['Material'] not in used_materials and row_canonical not in used_titles and discovery_count < remaining:
                                 row_copy = row.copy()
                                 row_copy['Assigned_Slot'] = total_filled + discovery_count + 1
                                 row_copy['Slot_Role'] = 'Series Discovery'
                                 row_copy['Item_Rank'] = 1
                                 all_recs.append(row_copy)
                                 used_materials.add(row['Material'])
+                                used_titles.add(row_canonical)
                                 discovery_count += 1
                         
                         discovery_notes.append(f"✓ Added {discovery_count} same-series books (different format)")
@@ -1464,6 +1727,18 @@ def run_books_engine(trigger, df_all, df_history):
             if t_level2:
                 discovery_pool = discovery_pool[discovery_pool['Level 2'] == t_level2]
             
+            # 🟢 SAME BOOK DETECTION: Use canonical name
+            discovery_pool['_canonical'] = discovery_pool.apply(
+                lambda r: get_canonical_book_name(r.get('Title', ''), r.get('Τίτλος πρωτοτύπου', '')), axis=1
+            )
+            discovery_pool = discovery_pool[discovery_pool['_canonical'] != trigger_canonical]
+            # Also exclude titles already shown in series/discovery slots
+            discovery_pool = discovery_pool[~discovery_pool['_canonical'].isin(used_titles)]
+            
+            # 🟢 EXCLUDE BOX SETS for individual books
+            if not trigger_is_box_set:
+                discovery_pool = discovery_pool[~discovery_pool['Title'].apply(is_box_set)]
+            
             # Age filter
             if 'Ηλικία' in discovery_pool.columns and allowed_ages:
                 discovery_pool = discovery_pool[
@@ -1474,32 +1749,23 @@ def run_books_engine(trigger, df_all, df_history):
             
             discovery_notes.append(f"After filters: {len(discovery_pool)}")
             
-            # Score and sort
+            # Score and sort - DETERMINISTIC (no rotation)
             discovery_pool['Final_Score'] = 0
             if 'AVAILABILITY' in discovery_pool.columns:
                 discovery_pool.loc[discovery_pool['AVAILABILITY'] == 'Άμεσα Διαθέσιμο', 'Final_Score'] += AVAIL_BOOST
             
             discovery_pool = discovery_pool.sort_values('Final_Score', ascending=False)
             
-            # 🟢 ROTATION: Different triggers show different discovery books
-            if len(discovery_pool) > 5:
-                top_discovery = discovery_pool.head(min(15, len(discovery_pool))).copy()
-                seed = hash(str(tm) + "_discovery") % max(1, len(top_discovery))
-                
-                indices = list(range(len(top_discovery)))
-                rotated_indices = [indices[(seed + i) % len(indices)] for i in range(len(indices))]
-                discovery_pool = top_discovery.iloc[rotated_indices]
-                
-                discovery_notes.append(f"Rotation applied: seed={seed}")
-            
             for _, row in discovery_pool.head(remaining_after_series).iterrows():
-                if row['Material'] not in used_materials:
+                row_canonical = get_canonical_book_name(row['Title'], row.get('Τίτλος πρωτοτύπου', ''))
+                if row['Material'] not in used_materials and row_canonical not in used_titles:
                     row_copy = row.copy()
                     row_copy['Assigned_Slot'] = total_filled + discovery_count + 1
                     row_copy['Slot_Role'] = 'Category Discovery'
                     row_copy['Item_Rank'] = 1
                     all_recs.append(row_copy)
                     used_materials.add(row['Material'])
+                    used_titles.add(row_canonical)
                     discovery_count += 1
             
             discovery_notes.append(f"✓ Added {discovery_count} total discovery books")
@@ -2039,7 +2305,8 @@ def run_engine(trigger, df_products, df_history, df_slots):
 if active_cluster == "Smartphones":
     recs, diag, slot_diag, slot_notes, full_candidates = run_engine(trigger, df_products, df_history, df_slots)
 else:
-    recs, diag, slot_notes, full_candidates = run_books_engine(trigger, df_books, df_history)
+    books_mode = st.session_state.get('books_mode', 'A')
+    recs, diag, slot_notes, full_candidates = run_books_engine(trigger, df_books, df_history, mode=books_mode)
     slot_diag = []
 
 # Marketing Copy
@@ -2056,6 +2323,8 @@ MARKETING_COPY = {
     "ALT_CASE": "Premium προστασία.",
     # Books
     "Series Book": "Η συνέχεια της περιπέτειας!",
+    "Start from Beginning": "Ξεκίνα από την αρχή!",  # Mode B: Start from beginning
+    "Other Box Set": "Ολόκληρη η συλλογή!",  # For partial box sets
     "Series Discovery": "Άλλη έκδοση της σειράς!",
     "Cross-Sell: IP Toy": "Ο ήρωας ζωντανεύει!",
     "Cross-Sell: Plush": "Αγκαλιά με τον αγαπημένο σου!",
