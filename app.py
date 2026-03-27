@@ -75,7 +75,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v13.1 — Dual Mode Toggle (A/B)
+        🟢 Engine v13.2 — Dual Mode (A: Series First, B: Next-in-Series)
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -1104,7 +1104,7 @@ def run_books_engine(trigger, df_all, df_history, mode='A'):
         
         # 🟢 FORMAT LOCK: Match ALL format attributes for consistent edition
         # 1. Cover type (Εξώφυλλο)
-        if t_cover and t_cover != 'nan' and t_cover != '0' and not series_books.empty:
+        if t_cover and t_cover != 'nan' and t_cover != '0' and 'Εξώφυλλο' in series_books.columns and not series_books.empty:
             before = len(series_books)
             cover_match = series_books[series_books['Εξώφυλλο'].fillna('').astype(str).str.strip() == t_cover]
             if not cover_match.empty:
@@ -1112,7 +1112,7 @@ def run_books_engine(trigger, df_all, df_history, mode='A'):
                 series_notes.append(f"Cover match ({t_cover}): {before}→{len(series_books)}")
         
         # 2. Dimensions (Διαστάσεις)
-        if t_dims and t_dims != 'nan' and t_dims != 'NaN' and not series_books.empty:
+        if t_dims and t_dims != 'nan' and t_dims != 'NaN' and 'Διαστάσεις' in series_books.columns and not series_books.empty:
             before = len(series_books)
             dims_match = series_books[series_books['Διαστάσεις'].fillna('').astype(str).str.strip() == t_dims]
             if not dims_match.empty:
@@ -1143,32 +1143,30 @@ def run_books_engine(trigger, df_all, df_history, mode='A'):
             
             series_notes.append(f"MODE: {'A (Series First)' if mode == 'A' else 'B (Next in Series)'}")
             
-            # ════════════════════════════════════════════════════════
-            # MODE A: SERIES FIRST (Management's preference)
-            # Fill up to 10 slots with series books, sorted by availability
-            # ════════════════════════════════════════════════════════
-            if mode == 'A':
-                # Sort by availability (best-selling/available first)
-                series_books = series_books.sort_values('Final_Score', ascending=False)
-                
-                # 🟢 PARTIAL BOX SET HANDLING: Show 1-2 other box sets
-                if trigger_is_box_set and not trigger_is_complete_box:
-                    box_sets_in_series = series_books[series_books['Title'].apply(is_box_set)]
-                    if not box_sets_in_series.empty:
-                        for _, row in box_sets_in_series.head(2).iterrows():
-                            if row['Material'] not in used_materials:
-                                row_copy = row.copy()
-                                row_copy['Assigned_Slot'] = series_count + 1
-                                row_copy['Slot_Role'] = 'Other Box Set'
-                                row_copy['Item_Rank'] = 1
-                                all_recs.append(row_copy)
-                                used_materials.add(row['Material'])
-                                used_titles.add(get_canonical_book_name(row['Title'], row.get('Τίτλος πρωτοτύπου', '')))
-                                series_count += 1
-                        series_notes.append(f"✓ Added other box sets: {series_count}")
-                else:
-                    # Take up to 10 series books (fill entire carousel if possible)
+            # 🟢 PARTIAL BOX SET HANDLING (same for both modes)
+            if trigger_is_box_set and not trigger_is_complete_box:
+                box_sets_in_series = series_books[series_books['Title'].apply(is_box_set)]
+                if not box_sets_in_series.empty:
+                    for _, row in box_sets_in_series.head(2).iterrows():
+                        if row['Material'] not in used_materials:
+                            row_copy = row.copy()
+                            row_copy['Assigned_Slot'] = series_count + 1
+                            row_copy['Slot_Role'] = 'Other Box Set'
+                            row_copy['Item_Rank'] = 1
+                            all_recs.append(row_copy)
+                            used_materials.add(row['Material'])
+                            used_titles.add(get_canonical_book_name(row['Title'], row.get('Τίτλος πρωτοτύπου', '')))
+                            series_count += 1
+                    series_notes.append(f"✓ Added other box sets: {series_count}")
+            else:
+                # ════════════════════════════════════════════════════════
+                # MODE A: SERIES FIRST (Management's preference)
+                # Fill up to 10 slots with series books, sorted by availability
+                # ════════════════════════════════════════════════════════
+                if mode == 'A':
+                    series_books = series_books.sort_values('Final_Score', ascending=False)
                     max_series = min(10, len(series_books))
+                    
                     for idx, (_, row) in enumerate(series_books.head(max_series).iterrows()):
                         row_canonical = get_canonical_book_name(row['Title'], row.get('Τίτλος πρωτοτύπου', ''))
                         
@@ -1182,85 +1180,71 @@ def run_books_engine(trigger, df_all, df_history, mode='A'):
                             used_titles.add(row_canonical)
                             series_count += 1
                     
-                    series_notes.append(f"✓ Added {series_count} series books (Mode A: up to 10)")
-            
-            # ════════════════════════════════════════════════════════
-            # MODE B: NEXT IN SERIES (User's preference)
-            # Max 6 series books using reading order logic
-            # ════════════════════════════════════════════════════════
-            else:  # mode == 'B'
-                # 🟢 HARRY POTTER SPECIAL: Use predefined reading order
-                if is_harry_potter_series(t_series):
-                    trigger_order = get_hp_order(tt)
-                    series_notes.append(f"Harry Potter: trigger is book #{trigger_order}")
-                    
-                    # Calculate reading order for all series books
-                    series_books['_hp_order'] = series_books['Title'].apply(get_hp_order)
-                    
-                    # Get books AFTER the current one in reading order
-                    books_after = series_books[series_books['_hp_order'] > trigger_order].sort_values('_hp_order')
-                    books_before = series_books[series_books['_hp_order'] < trigger_order].sort_values('_hp_order')
-                    
-                    series_notes.append(f"Books after #{trigger_order}: {len(books_after)}, before: {len(books_before)}")
-                    
-                    # Take up to 6 "next" books
-                    next_books_added = 0
-                    for _, row in books_after.head(6).iterrows():
-                        row_canonical = get_canonical_book_name(row['Title'], row.get('Τίτλος πρωτοτύπου', ''))
+                    series_notes.append(f"✓ Mode A: Added {series_count} series books (up to 10)")
+                
+                # ════════════════════════════════════════════════════════
+                # MODE B: NEXT IN SERIES (User's preference)
+                # Max 6 series books using reading order:
+                # Book 1 → 2,3,4,5,6,7 | Book 5 → 6,7,1,2,3,4
+                # ════════════════════════════════════════════════════════
+                else:  # mode == 'B'
+                    # 🟢 HARRY POTTER: Use predefined reading order
+                    if is_harry_potter_series(t_series):
+                        trigger_order = get_hp_order(tt)
+                        series_notes.append(f"Harry Potter: trigger is book #{trigger_order}")
                         
-                        if row['Material'] not in used_materials and row_canonical not in used_titles:
-                            row_copy = row.copy()
-                            row_copy['Assigned_Slot'] = series_count + 1
-                            row_copy['Slot_Role'] = 'Series Book'
-                            row_copy['Item_Rank'] = 1
-                            all_recs.append(row_copy)
-                            used_materials.add(row['Material'])
-                            used_titles.add(row_canonical)
-                            series_count += 1
-                            next_books_added += 1
-                    
-                    # If fewer than 6 books after, fill with "start from beginning" books
-                    if next_books_added < 6 and not books_before.empty:
-                        remaining_slots = 6 - next_books_added
-                        series_notes.append(f"Only {next_books_added} books after, adding {remaining_slots} from beginning")
+                        series_books['_hp_order'] = series_books['Title'].apply(get_hp_order)
                         
-                        for _, row in books_before.head(remaining_slots).iterrows():
+                        # Books AFTER trigger (next in reading order)
+                        books_after = series_books[series_books['_hp_order'] > trigger_order].sort_values('_hp_order')
+                        # Books BEFORE trigger (start from beginning)
+                        books_before = series_books[series_books['_hp_order'] < trigger_order].sort_values('_hp_order')
+                        
+                        series_notes.append(f"After #{trigger_order}: {len(books_after)}, Before: {len(books_before)}")
+                        
+                        # Add up to 6 "next" books (those after trigger first)
+                        next_added = 0
+                        for _, row in books_after.iterrows():
+                            if next_added >= 6:
+                                break
                             row_canonical = get_canonical_book_name(row['Title'], row.get('Τίτλος πρωτοτύπου', ''))
-                            
                             if row['Material'] not in used_materials and row_canonical not in used_titles:
                                 row_copy = row.copy()
                                 row_copy['Assigned_Slot'] = series_count + 1
-                                row_copy['Slot_Role'] = 'Start from Beginning'  # Special role
+                                row_copy['Slot_Role'] = 'Series Book'
                                 row_copy['Item_Rank'] = 1
                                 all_recs.append(row_copy)
                                 used_materials.add(row['Material'])
                                 used_titles.add(row_canonical)
                                 series_count += 1
-                    
-                    series_notes.append(f"✓ Added {series_count} HP books (Mode B: next in series)")
-                
-                else:
-                    # Non-HP series: Sort by availability, take up to 6
-                    series_books = series_books.sort_values('Final_Score', ascending=False)
-                    
-                    # 🟢 PARTIAL BOX SET HANDLING
-                    if trigger_is_box_set and not trigger_is_complete_box:
-                        box_sets_in_series = series_books[series_books['Title'].apply(is_box_set)]
-                        if not box_sets_in_series.empty:
-                            for _, row in box_sets_in_series.head(2).iterrows():
-                                if row['Material'] not in used_materials:
+                                next_added += 1
+                        
+                        # Fill remaining (up to 6 total) with books from beginning
+                        if next_added < 6 and not books_before.empty:
+                            remaining = 6 - next_added
+                            series_notes.append(f"Only {next_added} after, filling {remaining} from beginning")
+                            
+                            for _, row in books_before.iterrows():
+                                if series_count >= 6:
+                                    break
+                                row_canonical = get_canonical_book_name(row['Title'], row.get('Τίτλος πρωτοτύπου', ''))
+                                if row['Material'] not in used_materials and row_canonical not in used_titles:
                                     row_copy = row.copy()
                                     row_copy['Assigned_Slot'] = series_count + 1
-                                    row_copy['Slot_Role'] = 'Other Box Set'
+                                    row_copy['Slot_Role'] = 'Start from Beginning'
                                     row_copy['Item_Rank'] = 1
                                     all_recs.append(row_copy)
                                     used_materials.add(row['Material'])
-                                    used_titles.add(get_canonical_book_name(row['Title'], row.get('Τίτλος πρωτοτύπου', '')))
+                                    used_titles.add(row_canonical)
                                     series_count += 1
-                            series_notes.append(f"✓ Added other box sets: {series_count}")
+                        
+                        series_notes.append(f"✓ Mode B (HP): Added {series_count} books")
+                    
                     else:
-                        # Take up to 6 series books (Mode B limit)
+                        # Non-HP series: Sort by availability, cap at 6
+                        series_books = series_books.sort_values('Final_Score', ascending=False)
                         max_series = min(6, len(series_books))
+                        
                         for idx, (_, row) in enumerate(series_books.head(max_series).iterrows()):
                             row_canonical = get_canonical_book_name(row['Title'], row.get('Τίτλος πρωτοτύπου', ''))
                             
@@ -1274,7 +1258,7 @@ def run_books_engine(trigger, df_all, df_history, mode='A'):
                                 used_titles.add(row_canonical)
                                 series_count += 1
                         
-                        series_notes.append(f"✓ Added {series_count} series books (Mode B: max 6)")
+                        series_notes.append(f"✓ Mode B: Added {series_count} series books (max 6)")
     else:
         series_notes.append("No valid series found on trigger - skipping series engine")
     
@@ -1283,20 +1267,14 @@ def run_books_engine(trigger, df_all, df_history, mode='A'):
     
     # ══════════════════════════════════════════════════════════
     # PRIORITY 2: CROSS-SELL (Toys & Stationery)
-    # Mode A: Up to 4 slots if series < 10
-    # Mode B: Always 4 slots (since max 6 series books)
+    # Up to 4 slots after series books
     # ══════════════════════════════════════════════════════════
     crosssell_notes = ["=== PRIORITY 2: CROSS-SELL ==="]
     crosssell_count = 0
     
-    if mode == 'A':
-        # Mode A: Only fill remaining slots up to 4
-        max_crosssell = min(4, 10 - series_count)
-        crosssell_notes.append(f"Mode A: {max_crosssell} cross-sell slots available (series filled {series_count})")
-    else:
-        # Mode B: Always 4 cross-sell slots
-        max_crosssell = 4
-        crosssell_notes.append(f"Mode B: {max_crosssell} cross-sell slots (always 4)")
+    # Both modes: fill up to 4 cross-sell slots after series
+    max_crosssell = min(4, 10 - series_count)
+    crosssell_notes.append(f"Cross-sell: {max_crosssell} slots available (series filled {series_count})")
     
     if max_crosssell > 0:
         # Get Toys and Stationery
@@ -1629,20 +1607,18 @@ def run_books_engine(trigger, df_all, df_history, mode='A'):
     diag.append(("2. Cross-Sell", crosssell_count, f"Filled {crosssell_count} slots"))
     
     # ══════════════════════════════════════════════════════════
-    # PRIORITY 3: CATEGORY DISCOVERY (Fill remaining slots)
-    # Mode A: Fill remaining slots with best-selling books in same category
-    # Mode B: Skip (we already have 6+4=10 slots)
+    # PRIORITY 3: CATEGORY DISCOVERY (Fill remaining slots to 10)
+    # Both modes fill to 10 total items
     # ══════════════════════════════════════════════════════════
     discovery_notes = ["=== PRIORITY 3: CATEGORY DISCOVERY ==="]
     total_filled = series_count + crosssell_count
     remaining = 10 - total_filled
     discovery_count = 0
     
-    # 🟢 MODE B: Skip discovery (6 series + 4 cross-sell = 10)
-    if mode == 'B':
-        discovery_notes.append(f"Mode B: Skipping discovery (filled {total_filled} slots)")
+    discovery_notes.append(f"Filled so far: {total_filled} (series: {series_count}, cross-sell: {crosssell_count}), remaining: {remaining}")
+    
     # 🟢 SKIP DISCOVERY FOR COMPLETE BOX SETS - only cross-sell matters
-    elif trigger_is_complete_box:
+    if trigger_is_complete_box:
         discovery_notes.append("⚠ Complete box set - skipping discovery, cross-sell only")
     elif remaining > 0:
         books_only = df_all[df_all['Level 1'] == 'Books'].copy()
@@ -1684,7 +1660,7 @@ def run_books_engine(trigger, df_all, df_history, mode='A'):
                     same_series = same_series[~same_series['Title'].apply(is_box_set)]
                 
                 # Get books with DIFFERENT dimensions (other formats/editions)
-                if t_dims and t_dims != 'nan':
+                if t_dims and t_dims != 'nan' and 'Διαστάσεις' in same_series.columns:
                     diff_dims = same_series[
                         same_series['Διαστάσεις'].fillna('').astype(str).str.strip() != t_dims
                     ]
