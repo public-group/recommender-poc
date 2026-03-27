@@ -75,7 +75,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v13.9 — Deep HP Debug
+        🟢 Engine v14.0 — Fixed NaN Canonical Bug
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -975,11 +975,23 @@ def run_books_engine(trigger, df_all, df_history, mode='A'):
         Extract the core book name to detect same book in different editions.
         Returns normalized title for comparison.
         """
-        title_lower = str(title).lower().strip()
-        orig_lower = str(orig_title).lower().strip() if orig_title and orig_title != 'nan' else ''
+        import pandas as pd
         
-        # Use original title if available (more reliable for matching)
+        title_lower = str(title).lower().strip() if title and str(title) != 'nan' else ''
+        
+        # Handle NaN properly - check with pandas
+        orig_lower = ''
+        if orig_title is not None and not pd.isna(orig_title):
+            orig_str = str(orig_title).lower().strip()
+            if orig_str and orig_str != 'nan':
+                orig_lower = orig_str
+        
+        # Use original title if available, otherwise use title
         canonical = orig_lower if orig_lower else title_lower
+        
+        # If still empty, return empty string
+        if not canonical or canonical == 'nan':
+            return title_lower if title_lower and title_lower != 'nan' else ''
         
         # Common series prefixes to strip
         prefixes = [
@@ -997,7 +1009,8 @@ def run_books_engine(trigger, df_all, df_history, mode='A'):
         # Remove edition suffixes
         suffixes = [' (illustrated)', ' (εικονογραφημένο)', ' - illustrated edition', 
                     ' - συλλεκτική έκδοση', ' (anniversary edition)', ' (deluxe edition)',
-                    ' - collector\'s edition', ' - special edition', ' - gift edition']
+                    ' - collector\'s edition', ' - special edition', ' - gift edition',
+                    ' - gryffindor edition', ' - slytherin edition', ' - hufflepuff edition', ' - ravenclaw edition']
         for suffix in suffixes:
             if canonical.endswith(suffix):
                 canonical = canonical[:-len(suffix)]
