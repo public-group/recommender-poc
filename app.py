@@ -1173,9 +1173,11 @@ def run_books_engine(trigger, df_all, df_history, mode='A'):
             if before != len(series_books):
                 series_notes.append(f"Excluded audiobooks/CDs: {before}→{len(series_books)}")
         
-        # 🟢 EDITION LINE EXTRACTION: Detect edition style from title
+       
+
+# 🟢 EDITION LINE EXTRACTION: Detect edition style from title
         def get_edition_line(title):
-            """Extract edition line from title (e.g., 'Gryffindor Edition' → 'gryffindor')"""
+            """Extract exact edition line from title (e.g., 'house_hufflepuff')"""
             title_lower = str(title).lower()
             
             # House editions
@@ -1187,11 +1189,14 @@ def run_books_engine(trigger, df_all, df_history, mode='A'):
             edition_patterns = [
                 ('minalima', 'minalima'),
                 ('illustrated', 'illustrated'),
+                ('εικονογραφημέν', 'illustrated'),
                 ('20th anniversary', 'anniversary_20'),
                 ('25th anniversary', 'anniversary_25'),
                 ('anniversary', 'anniversary'),
+                ('επετειακή', 'anniversary'),
                 ('deluxe', 'deluxe'),
                 ('collector', 'collector'),
+                ('συλλεκτική', 'collector'),
                 ('special', 'special'),
                 ('gift', 'gift'),
             ]
@@ -1202,63 +1207,87 @@ def run_books_engine(trigger, df_all, df_history, mode='A'):
             
             return 'standard'  # No special edition detected
         
-        trigger_edition_line = get_edition_line(tt)
-        series_notes.append(f"Trigger edition line: {trigger_edition_line}")
+        def get_edition_type(title):
+            """Get broader category for fallback (e.g., any house edition matches any other house edition)"""
+            line = get_edition_line(title)
+            if line.startswith('house_'): return 'house'
+            if line.startswith('anniversary_'): return 'anniversary'
+            return line
+
+        trigger_edition_exact = get_edition_line(tt)
+        trigger_edition_type = get_edition_type(tt)
+        series_notes.append(f"Trigger edition: {trigger_edition_exact} (Type: {trigger_edition_type})")
         t_pub_date = str(trigger.get('Ημερ/νία έκδοσης', '')).strip()
         series_notes.append(f"Trigger attrs: Cover={t_cover}, Dims={t_dims}, PubDate={t_pub_date}, Price={t_price}")
         
-        # 🟢 FORMAT PREFERENCE: Score books by format match (NOT a hard filter)
-        # Books with matching format get higher scores, but ALL series books are kept
-        FORMAT_MATCH_BOOST = 1000  # Boost for matching format
-        EDITION_LINE_BOOST = 5000  # Strong boost for same edition line (Gryffindor with Gryffindor, etc.)
+        # 🟢 FORMAT PREFERENCE: Score books by format match
+        FORMAT_MATCH_BOOST = 1000
         
         if not series_books.empty:
             series_books['Format_Score'] = 0
             
-            # 0. EDITION LINE matching (strongest signal!)
-            series_books['_edition_line'] = series_books['Title'].apply(get_edition_line)
-            edition_match = series_books['_edition_line'] == trigger_edition_line
-            series_books.loc[edition_match, 'Format_Score'] += EDITION_LINE_BOOST
-            match_count = edition_match.sum()
-            series_notes.append(f"Edition line match ({trigger_edition_line}): {match_count} books boosted")
+            # 0. SPECIAL EDITION MATCHING (The strongest signal!)
+            series_books['_edition_exact'] = series_books['Title'].apply(get_edition_line)
+            series_books['_edition_type'] = series_books['Title'].apply(get_edition_type)
+            
+            exact_match = series_books['_edition_exact'] == trigger_edition_exact
+            type_match = series_books['_edition_type'] == trigger_edition_type
+            
+            if trigger_edition_type != 'standard':
+                # Boost 1: EXACT special edition match (e.g., Hufflepuff to Hufflepuff)
+                series_books.loc[exact_match, 'Format_Score'] += 20000
+                series_notes.append(f"Exact special edition match ({trigger_edition_exact}): {exact_match.sum()} boosted")
+                
+                # Boost 2: SAME TYPE of special edition (e.g., Hufflepuff to Slytherin)
+                series_books.loc[type_match & ~exact_match, 'Format_Score'] += 10000
+                
+                # Boost 3: ANY special edition over a standard one
+                any_special = series_books['_edition_type'] != 'standard'
+                series_books.loc[any_special & ~type_match & ~exact_match, 'Format_Score'] += 5000
+            else:
+                # If trigger is standard, strongly prefer standard!
+                series_books.loc[exact_match, 'Format_Score'] += 10000
+                series_notes.append(f"Standard edition match: {exact_match.sum()} boosted")
             
             # 1. Cover type bonus
-            if t_cover and t_cover != 'nan' and t_cover != '0' and 'Εξώφυλλο' in series_books.columns:
+            if t_cover and t_cover not in ['nan', '0'] and 'Εξώφυλλο' in series_books.columns:
                 series_books.loc[
                     series_books['Εξώφυλλο'].fillna('').astype(str).str.strip() == t_cover, 
                     'Format_Score'
                 ] += FORMAT_MATCH_BOOST
-                match_count = (series_books['Εξώφυλλο'].fillna('').astype(str).str.strip() == t_cover).sum()
-                series_notes.append(f"Cover match ({t_cover}): {match_count} books boosted")
             
             # 2. Dimensions bonus
-            if t_dims and t_dims != 'nan' and t_dims != 'NaN' and 'Διαστάσεις' in series_books.columns:
+            if t_dims and t_dims not in ['nan', 'NaN'] and 'Διαστάσεις' in series_books.columns:
                 series_books.loc[
                     series_books['Διαστάσεις'].fillna('').astype(str).str.strip() == t_dims,
                     'Format_Score'
                 ] += FORMAT_MATCH_BOOST
-                match_count = (series_books['Διαστάσεις'].fillna('').astype(str).str.strip() == t_dims).sum()
-                series_notes.append(f"Dimensions match: {match_count} books boosted")
             
-            # 3. Publishing series bonus
-            if t_pub_series and t_pub_series != 'nan' and t_pub_series != '0' and 'Εκδοτική Σειρά' in series_books.columns:
+            # 3. Publishing series & Illustrations bonus
+            if t_pub_series and t_pub_series not in ['nan', '0'] and 'Εκδοτική Σειρά' in series_books.columns:
                 series_books.loc[
                     series_books['Εκδοτική Σειρά'].fillna('').astype(str).str.strip() == t_pub_series,
                     'Format_Score'
                 ] += FORMAT_MATCH_BOOST
-            
-            # 4. Illustration details bonus
-            if t_illus and t_illus != 'nan' and t_illus != '0' and 'Λεπτομέρειες εικονογράφησης' in series_books.columns:
+                
+            if t_illus and t_illus not in ['nan', '0'] and 'Λεπτομέρειες εικονογράφησης' in series_books.columns:
                 series_books.loc[
                     series_books['Λεπτομέρειες εικονογράφησης'].fillna('').astype(str).str.strip() == t_illus,
                     'Format_Score'
                 ] += FORMAT_MATCH_BOOST
-        
+
         # Score and sort series books
         if not series_books.empty:
-            series_books['Final_Score'] = SERIES_BOOST + series_books['Format_Score']
+            # Add sales tiebreaker so we don't randomly pick between equal formats
+            if 'Sum of Sales' in series_books.columns:
+                series_books['Sales_Tiebreaker'] = pd.to_numeric(series_books['Sum of Sales'], errors='coerce').fillna(0)
+            else:
+                series_books['Sales_Tiebreaker'] = 0
+                
+            series_books['Final_Score'] = SERIES_BOOST + series_books['Format_Score'] + series_books['Sales_Tiebreaker']
             if 'AVAILABILITY' in series_books.columns:
                 series_books.loc[series_books['AVAILABILITY'] == 'Άμεσα Διαθέσιμο', 'Final_Score'] += AVAIL_BOOST
+
             
             # 🔍 DEBUG: Show top candidates with their attributes
             debug_cols = ['Title', 'Εξώφυλλο', 'Διαστάσεις', 'Εκδοτική Σειρά', 'Ημερ/νία έκδοσης', 'LIST PRICE', 'Format_Score']
