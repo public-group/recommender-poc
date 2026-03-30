@@ -75,7 +75,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v14.3 — Debug Book Attributes
+        🟢 Engine v14.4 — Debug Publication Dates
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -1163,7 +1163,8 @@ def run_books_engine(trigger, df_all, df_history, mode='A'):
         
         trigger_edition_line = get_edition_line(tt)
         series_notes.append(f"Trigger edition line: {trigger_edition_line}")
-        series_notes.append(f"Trigger attrs: Cover={t_cover}, Dims={t_dims}, PubSeries={t_pub_series}, Price={t_price}")
+        t_pub_date = str(trigger.get('Ημερ/νία έκδοσης', '')).strip()
+        series_notes.append(f"Trigger attrs: Cover={t_cover}, Dims={t_dims}, PubDate={t_pub_date}, Price={t_price}")
         
         # 🟢 FORMAT PREFERENCE: Score books by format match (NOT a hard filter)
         # Books with matching format get higher scores, but ALL series books are kept
@@ -1219,12 +1220,20 @@ def run_books_engine(trigger, df_all, df_history, mode='A'):
                 series_books.loc[series_books['AVAILABILITY'] == 'Άμεσα Διαθέσιμο', 'Final_Score'] += AVAIL_BOOST
             
             # 🔍 DEBUG: Show top candidates with their attributes
-            debug_cols = ['Title', 'Εξώφυλλο', 'Διαστάσεις', 'Εκδοτική Σειρά', 'LIST PRICE', 'Format_Score', '_hp_order' if '_hp_order' in series_books.columns else 'Final_Score']
+            debug_cols = ['Title', 'Εξώφυλλο', 'Διαστάσεις', 'Εκδοτική Σειρά', 'Ημερ/νία έκδοσης', 'LIST PRICE', 'Format_Score']
             debug_cols = [c for c in debug_cols if c in series_books.columns]
             top_candidates = series_books.nlargest(8, 'Format_Score')[debug_cols]
             series_notes.append(f"Top candidates by format score:")
             for _, row in top_candidates.iterrows():
-                series_notes.append(f"  - {row['Title'][:40]}... | Cover: {row.get('Εξώφυλλο', 'N/A')} | Dims: {row.get('Διαστάσεις', 'N/A')} | PubSeries: {row.get('Εκδοτική Σειρά', 'N/A')} | Score: {row.get('Format_Score', 0)}")
+                pub_date = row.get('Ημερ/νία έκδοσης', 'N/A')
+                series_notes.append(f"  - {row['Title'][:40]}... | Cover: {row.get('Εξώφυλλο', 'N/A')} | Dims: {row.get('Διαστάσεις', 'N/A')} | PubDate: {pub_date} | Score: {row.get('Format_Score', 0)}")
+            
+            # Also show some lower-scored books for comparison
+            other_candidates = series_books.nsmallest(5, 'Format_Score')[debug_cols]
+            series_notes.append(f"Other candidates (lower scores):")
+            for _, row in other_candidates.iterrows():
+                pub_date = row.get('Ημερ/νία έκδοσης', 'N/A')
+                series_notes.append(f"  - {row['Title'][:40]}... | Cover: {row.get('Εξώφυλλο', 'N/A')} | Dims: {row.get('Διαστάσεις', 'N/A')} | PubDate: {pub_date} | Score: {row.get('Format_Score', 0)}")
             
             series_notes.append(f"Total series pool: {len(series_books)} books")
             series_notes.append(f"MODE: {'A (Series First)' if mode == 'A' else 'B (Next in Series)'}")
