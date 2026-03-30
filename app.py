@@ -75,7 +75,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v14.6 — Filter Audiobooks + Debug Duplicates
+        🟢 Engine v14.7 — Apostrophe Fix + Loop Debug
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -1041,6 +1041,9 @@ def run_books_engine(trigger, df_all, df_history, mode='A'):
                 canonical = canonical[:-len(suffix)]
                 break
         
+        # 4. Normalize apostrophes (curly → straight)
+        canonical = canonical.replace("'", "'").replace("'", "'").replace("`", "'")
+        
         return canonical.strip()
     
     # Trigger attributes - with robust extraction
@@ -1401,10 +1404,15 @@ def run_books_engine(trigger, df_all, df_history, mode='A'):
                             remaining_slots = 6 - next_added
                             series_notes.append(f"Added {next_added} after, filling {remaining_slots} from beginning")
                             
+                            # 🔍 DEBUG: Show what canonicals we're checking
+                            debug_canonicals = []
                             for _, row in books_before.iterrows():
                                 if series_count >= 6:
                                     break
                                 row_canonical = get_canonical_book_name(row['Title'], row.get('Τίτλος πρωτοτύπου', ''))
+                                in_used = row_canonical in used_titles
+                                debug_canonicals.append(f"hp{row['_hp_order']}: '{row_canonical}' in_used={in_used}")
+                                
                                 if row['Material'] not in used_materials and row_canonical not in used_titles:
                                     row_copy = row.copy()
                                     row_copy['Assigned_Slot'] = series_count + 1
@@ -1414,6 +1422,8 @@ def run_books_engine(trigger, df_all, df_history, mode='A'):
                                     used_materials.add(row['Material'])
                                     used_titles.add(row_canonical)
                                     series_count += 1
+                            
+                            series_notes.append(f"Before-loop debug: {debug_canonicals[:10]}")
                         
                         series_notes.append(f"✓ Mode B (HP): Added {series_count} main series books")
                     
