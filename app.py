@@ -75,7 +75,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v14.4 — Debug Publication Dates
+        🟢 Engine v14.5 — Fixed Cursed Child Duplicate
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -1013,23 +1013,26 @@ def run_books_engine(trigger, df_all, df_history, mode='A'):
             'edition', 'έκδοση', 'illustrated', 'εικονογραφημένο', 'εικονογραφημένη',
             'collector', 'συλλεκτική', 'deluxe', 'anniversary', 'special', 'gift',
             'paperback', 'hardcover', 'hardback', 'softcover', 'minalima',
-            'gryffindor', 'slytherin', 'hufflepuff', 'ravenclaw',  # HP house editions
+            'gryffindor', 'slytherin', 'hufflepuff', 'ravenclaw', 'rehearsal',
         ]
         
-        # Check for " - Something" or ": Something" patterns
-        for delimiter in [' - ', ': ', ' – ', ' — ']:  # include various dash types
-            if delimiter in canonical:
-                parts = canonical.split(delimiter)
-                if len(parts) >= 2:
-                    suffix_part = parts[-1].lower()
-                    # If the suffix contains any edition keyword, strip it
-                    if any(kw in suffix_part for kw in edition_keywords):
-                        canonical = delimiter.join(parts[:-1])
-        
-        # Also handle parentheses: "Book Title (Something Edition)"
+        # 1. FIRST: Strip parenthetical editions "(Something Edition)"
         paren_match = re.search(r'\s*\([^)]*(?:' + '|'.join(edition_keywords) + r')[^)]*\)\s*$', canonical)
         if paren_match:
             canonical = canonical[:paren_match.start()]
+        
+        # 2. THEN: Check for " - Something" or ": Something" patterns
+        # Only strip if the ENTIRE suffix part is edition-related (not meaningful content)
+        for delimiter in [' - ', ': ', ' – ', ' — ']:
+            if delimiter in canonical:
+                parts = canonical.split(delimiter)
+                if len(parts) >= 2:
+                    suffix_part = parts[-1].lower().strip()
+                    # Only strip if suffix is SHORT and contains edition keyword
+                    # This prevents stripping "parts one and two" but strips "gryffindor edition"
+                    words = suffix_part.split()
+                    if len(words) <= 4 and any(kw in suffix_part for kw in edition_keywords):
+                        canonical = delimiter.join(parts[:-1])
         
         return canonical.strip()
     
