@@ -75,7 +75,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v14.7 — Apostrophe Fix + Loop Debug
+        🟢 Engine v14.8 — Strip Language Editions
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -1016,8 +1016,16 @@ def run_books_engine(trigger, df_all, df_history, mode='A'):
             'gryffindor', 'slytherin', 'hufflepuff', 'ravenclaw', 'rehearsal',
         ]
         
-        # 1. FIRST: Strip parenthetical editions "(Something Edition)"
-        paren_match = re.search(r'\s*\([^)]*(?:' + '|'.join(edition_keywords) + r')[^)]*\)\s*$', canonical)
+        # Language keywords - translations should be treated as same book
+        language_keywords = [
+            'ancient greek', 'latin', 'irish', 'scots', 'welsh', 'gaelic',
+            'french', 'german', 'spanish', 'italian', 'portuguese',
+            'greek', 'αρχαία ελληνικά', 'λατινικά',
+        ]
+        
+        # 1. FIRST: Strip parenthetical content (editions OR languages)
+        all_strip_keywords = edition_keywords + language_keywords
+        paren_match = re.search(r'\s*\([^)]*(?:' + '|'.join(all_strip_keywords) + r')[^)]*\)\s*$', canonical)
         if paren_match:
             canonical = canonical[:paren_match.start()]
         
