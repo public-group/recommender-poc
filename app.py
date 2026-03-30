@@ -75,7 +75,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v14.8 — Strip Language Editions
+        🟢 Engine v14.9 — Filter Novelty Language Editions
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -1016,16 +1016,8 @@ def run_books_engine(trigger, df_all, df_history, mode='A'):
             'gryffindor', 'slytherin', 'hufflepuff', 'ravenclaw', 'rehearsal',
         ]
         
-        # Language keywords - translations should be treated as same book
-        language_keywords = [
-            'ancient greek', 'latin', 'irish', 'scots', 'welsh', 'gaelic',
-            'french', 'german', 'spanish', 'italian', 'portuguese',
-            'greek', 'αρχαία ελληνικά', 'λατινικά',
-        ]
-        
-        # 1. FIRST: Strip parenthetical content (editions OR languages)
-        all_strip_keywords = edition_keywords + language_keywords
-        paren_match = re.search(r'\s*\([^)]*(?:' + '|'.join(all_strip_keywords) + r')[^)]*\)\s*$', canonical)
+        # 1. FIRST: Strip parenthetical editions "(Something Edition)"
+        paren_match = re.search(r'\s*\([^)]*(?:' + '|'.join(edition_keywords) + r')[^)]*\)\s*$', canonical)
         if paren_match:
             canonical = canonical[:paren_match.start()]
         
@@ -1152,6 +1144,22 @@ def run_books_engine(trigger, df_all, df_history, mode='A'):
             before = len(series_books)
             series_books = series_books[series_books['Level 2'] == t_level2]
             series_notes.append(f"Language filter ({t_level2}): {before}→{len(series_books)}")
+        
+        # 🟢 NOVELTY LANGUAGE FILTER: Exclude Latin/Ancient Greek/Irish etc. novelty editions
+        # These are special editions, not regular English/Greek books
+        def is_novelty_language(title):
+            title_lower = str(title).lower()
+            novelty_langs = [
+                '(ancient greek)', '(latin)', '(irish)', '(scots)', '(welsh)', 
+                '(gaelic)', '(αρχαία ελληνικά)', '(λατινικά)',
+            ]
+            return any(lang in title_lower for lang in novelty_langs)
+        
+        if not series_books.empty:
+            before = len(series_books)
+            series_books = series_books[~series_books['Title'].apply(is_novelty_language)]
+            if before != len(series_books):
+                series_notes.append(f"Excluded novelty languages: {before}→{len(series_books)}")
         
         # 🟢 AUDIOBOOK/CD FILTER: Exclude audiobooks from book recommendations
         def is_audiobook(title):
