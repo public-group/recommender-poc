@@ -75,7 +75,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v14.2 — Universal Edition Stripping
+        🟢 Engine v14.3 — Debug Book Attributes
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -1132,12 +1132,53 @@ def run_books_engine(trigger, df_all, df_history, mode='A'):
             series_books = series_books[series_books['Level 2'] == t_level2]
             series_notes.append(f"Language filter ({t_level2}): {before}→{len(series_books)}")
         
+        # 🟢 EDITION LINE EXTRACTION: Detect edition style from title
+        def get_edition_line(title):
+            """Extract edition line from title (e.g., 'Gryffindor Edition' → 'gryffindor')"""
+            title_lower = str(title).lower()
+            
+            # House editions
+            for house in ['gryffindor', 'slytherin', 'hufflepuff', 'ravenclaw']:
+                if house in title_lower:
+                    return 'house_' + house
+            
+            # Other edition patterns
+            edition_patterns = [
+                ('minalima', 'minalima'),
+                ('illustrated', 'illustrated'),
+                ('20th anniversary', 'anniversary_20'),
+                ('25th anniversary', 'anniversary_25'),
+                ('anniversary', 'anniversary'),
+                ('deluxe', 'deluxe'),
+                ('collector', 'collector'),
+                ('special', 'special'),
+                ('gift', 'gift'),
+            ]
+            
+            for pattern, line in edition_patterns:
+                if pattern in title_lower:
+                    return line
+            
+            return 'standard'  # No special edition detected
+        
+        trigger_edition_line = get_edition_line(tt)
+        series_notes.append(f"Trigger edition line: {trigger_edition_line}")
+        series_notes.append(f"Trigger attrs: Cover={t_cover}, Dims={t_dims}, PubSeries={t_pub_series}, Price={t_price}")
+        
         # 🟢 FORMAT PREFERENCE: Score books by format match (NOT a hard filter)
         # Books with matching format get higher scores, but ALL series books are kept
         FORMAT_MATCH_BOOST = 1000  # Boost for matching format
+        EDITION_LINE_BOOST = 5000  # Strong boost for same edition line (Gryffindor with Gryffindor, etc.)
         
         if not series_books.empty:
             series_books['Format_Score'] = 0
+            
+            # 0. EDITION LINE matching (strongest signal!)
+            series_books['_edition_line'] = series_books['Title'].apply(get_edition_line)
+            edition_match = series_books['_edition_line'] == trigger_edition_line
+            series_books.loc[edition_match, 'Format_Score'] += EDITION_LINE_BOOST
+            match_count = edition_match.sum()
+            series_notes.append(f"Edition line match ({trigger_edition_line}): {match_count} books boosted")
             
             # 1. Cover type bonus
             if t_cover and t_cover != 'nan' and t_cover != '0' and 'Εξώφυλλο' in series_books.columns:
@@ -1176,6 +1217,14 @@ def run_books_engine(trigger, df_all, df_history, mode='A'):
             series_books['Final_Score'] = SERIES_BOOST + series_books['Format_Score']
             if 'AVAILABILITY' in series_books.columns:
                 series_books.loc[series_books['AVAILABILITY'] == 'Άμεσα Διαθέσιμο', 'Final_Score'] += AVAIL_BOOST
+            
+            # 🔍 DEBUG: Show top candidates with their attributes
+            debug_cols = ['Title', 'Εξώφυλλο', 'Διαστάσεις', 'Εκδοτική Σειρά', 'LIST PRICE', 'Format_Score', '_hp_order' if '_hp_order' in series_books.columns else 'Final_Score']
+            debug_cols = [c for c in debug_cols if c in series_books.columns]
+            top_candidates = series_books.nlargest(8, 'Format_Score')[debug_cols]
+            series_notes.append(f"Top candidates by format score:")
+            for _, row in top_candidates.iterrows():
+                series_notes.append(f"  - {row['Title'][:40]}... | Cover: {row.get('Εξώφυλλο', 'N/A')} | Dims: {row.get('Διαστάσεις', 'N/A')} | PubSeries: {row.get('Εκδοτική Σειρά', 'N/A')} | Score: {row.get('Format_Score', 0)}")
             
             series_notes.append(f"Total series pool: {len(series_books)} books")
             series_notes.append(f"MODE: {'A (Series First)' if mode == 'A' else 'B (Next in Series)'}")
