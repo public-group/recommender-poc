@@ -75,7 +75,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v14.0 — Fixed NaN Canonical Bug
+        🟢 Engine v14.2 — Universal Edition Stripping
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -976,6 +976,7 @@ def run_books_engine(trigger, df_all, df_history, mode='A'):
         Returns normalized title for comparison.
         """
         import pandas as pd
+        import re
         
         title_lower = str(title).lower().strip() if title and str(title) != 'nan' else ''
         
@@ -1006,14 +1007,29 @@ def run_books_engine(trigger, df_all, df_history, mode='A'):
                 canonical = canonical[len(prefix):]
                 break
         
-        # Remove edition suffixes
-        suffixes = [' (illustrated)', ' (εικονογραφημένο)', ' - illustrated edition', 
-                    ' - συλλεκτική έκδοση', ' (anniversary edition)', ' (deluxe edition)',
-                    ' - collector\'s edition', ' - special edition', ' - gift edition',
-                    ' - gryffindor edition', ' - slytherin edition', ' - hufflepuff edition', ' - ravenclaw edition']
-        for suffix in suffixes:
-            if canonical.endswith(suffix):
-                canonical = canonical[:-len(suffix)]
+        # 🟢 UNIVERSAL EDITION STRIPPING
+        # Keywords that indicate an edition variant
+        edition_keywords = [
+            'edition', 'έκδοση', 'illustrated', 'εικονογραφημένο', 'εικονογραφημένη',
+            'collector', 'συλλεκτική', 'deluxe', 'anniversary', 'special', 'gift',
+            'paperback', 'hardcover', 'hardback', 'softcover', 'minalima',
+            'gryffindor', 'slytherin', 'hufflepuff', 'ravenclaw',  # HP house editions
+        ]
+        
+        # Check for " - Something" or ": Something" patterns
+        for delimiter in [' - ', ': ', ' – ', ' — ']:  # include various dash types
+            if delimiter in canonical:
+                parts = canonical.split(delimiter)
+                if len(parts) >= 2:
+                    suffix_part = parts[-1].lower()
+                    # If the suffix contains any edition keyword, strip it
+                    if any(kw in suffix_part for kw in edition_keywords):
+                        canonical = delimiter.join(parts[:-1])
+        
+        # Also handle parentheses: "Book Title (Something Edition)"
+        paren_match = re.search(r'\s*\([^)]*(?:' + '|'.join(edition_keywords) + r')[^)]*\)\s*$', canonical)
+        if paren_match:
+            canonical = canonical[:paren_match.start()]
         
         return canonical.strip()
     
@@ -1054,9 +1070,6 @@ def run_books_engine(trigger, df_all, df_history, mode='A'):
     # 🟢 CANONICAL BOOK NAME: To detect same book in different editions
     trigger_canonical = get_canonical_book_name(tt, t_orig_title)
     used_titles.add(trigger_canonical)  # Never recommend the same book as trigger
-    
-    # 🔍 DEBUG
-    diag.append(("Debug", "", f"Trigger canonical: '{trigger_canonical}'"))
     
     box_status = "complete box set" if trigger_is_complete_box else ("partial box set" if trigger_is_box_set else "individual book")
     diag.append(("0. Trigger", "", f"Series: '{t_series}' (valid: {has_series}), Age: '{effective_age}', Type: {box_status}"))
@@ -1103,15 +1116,6 @@ def run_books_engine(trigger, df_all, df_history, mode='A'):
         series_books['_canonical'] = series_books.apply(
             lambda r: get_canonical_book_name(r.get('Title', ''), r.get('Τίτλος πρωτοτύπου', '')), axis=1
         )
-        
-        # 🔍 DEBUG: Show unique canonical names found
-        unique_canonicals = series_books['_canonical'].unique()[:10]  # Show first 10
-        series_notes.append(f"Sample canonicals: {list(unique_canonicals)}")
-        
-        # 🔍 DEBUG: Check if Τίτλος πρωτοτύπου is being used
-        if 'Τίτλος πρωτοτύπου' in series_books.columns:
-            orig_titles = series_books['Τίτλος πρωτοτύπου'].dropna().unique()[:5]
-            series_notes.append(f"Sample orig titles: {list(orig_titles)}")
         
         series_books = series_books[series_books['_canonical'] != trigger_canonical]
         series_notes.append(f"Excluded same book (canonical): {before}→{len(series_books)}")
@@ -1194,29 +1198,66 @@ def run_books_engine(trigger, df_all, df_history, mode='A'):
             else:
                 # ════════════════════════════════════════════════════════
                 # MODE A: SERIES FIRST (Management's preference)
-                # Fill up to 10 slots with series books, sorted by format match + availability
+                # Fill up to 10 slots with series books
+                # For HP: Use reading order, then spinoffs
                 # ════════════════════════════════════════════════════════
                 if mode == 'A':
-                    series_books = series_books.sort_values('Final_Score', ascending=False)
                     max_series = 10
                     
-                    # Iterate through ALL series books until we have 10 unique titles
-                    for _, row in series_books.iterrows():
-                        if series_count >= max_series:
-                            break
-                        row_canonical = get_canonical_book_name(row['Title'], row.get('Τίτλος πρωτοτύπου', ''))
+                    # 🟢 HARRY POTTER: Use reading order for Mode A too
+                    if is_harry_potter_series(t_series):
+                        trigger_order = get_hp_order(tt)
+                        series_notes.append(f"Harry Potter (Mode A): trigger is book #{trigger_order}")
                         
-                        if row['Material'] not in used_materials and row_canonical not in used_titles:
-                            row_copy = row.copy()
-                            row_copy['Assigned_Slot'] = series_count + 1
-                            row_copy['Slot_Role'] = 'Series Book'
-                            row_copy['Item_Rank'] = 1
-                            all_recs.append(row_copy)
-                            used_materials.add(row['Material'])
-                            used_titles.add(row_canonical)
-                            series_count += 1
-                    
-                    series_notes.append(f"✓ Mode A: Added {series_count} unique series books")
+                        series_books['_hp_order'] = series_books['Title'].apply(get_hp_order)
+                        
+                        # Sort by HP order first, then by format score
+                        # Books after trigger come first, then books before (wrap around)
+                        books_after = series_books[series_books['_hp_order'] > trigger_order].copy()
+                        books_after = books_after.sort_values(['_hp_order', 'Final_Score'], ascending=[True, False])
+                        
+                        books_before = series_books[series_books['_hp_order'] < trigger_order].copy()
+                        books_before = books_before.sort_values(['_hp_order', 'Final_Score'], ascending=[True, False])
+                        
+                        # Combined: after first, then before (reading order)
+                        combined = pd.concat([books_after, books_before])
+                        
+                        for _, row in combined.iterrows():
+                            if series_count >= max_series:
+                                break
+                            row_canonical = get_canonical_book_name(row['Title'], row.get('Τίτλος πρωτοτύπου', ''))
+                            
+                            if row['Material'] not in used_materials and row_canonical not in used_titles:
+                                row_copy = row.copy()
+                                row_copy['Assigned_Slot'] = series_count + 1
+                                row_copy['Slot_Role'] = 'Series Book'
+                                row_copy['Item_Rank'] = 1
+                                all_recs.append(row_copy)
+                                used_materials.add(row['Material'])
+                                used_titles.add(row_canonical)
+                                series_count += 1
+                        
+                        series_notes.append(f"✓ Mode A (HP): Added {series_count} books in reading order")
+                    else:
+                        # Non-HP series: Sort by format match + availability
+                        series_books = series_books.sort_values('Final_Score', ascending=False)
+                        
+                        for _, row in series_books.iterrows():
+                            if series_count >= max_series:
+                                break
+                            row_canonical = get_canonical_book_name(row['Title'], row.get('Τίτλος πρωτοτύπου', ''))
+                            
+                            if row['Material'] not in used_materials and row_canonical not in used_titles:
+                                row_copy = row.copy()
+                                row_copy['Assigned_Slot'] = series_count + 1
+                                row_copy['Slot_Role'] = 'Series Book'
+                                row_copy['Item_Rank'] = 1
+                                all_recs.append(row_copy)
+                                used_materials.add(row['Material'])
+                                used_titles.add(row_canonical)
+                                series_count += 1
+                        
+                        series_notes.append(f"✓ Mode A: Added {series_count} unique series books")
                 
                 # ════════════════════════════════════════════════════════
                 # MODE B: NEXT IN SERIES (User's preference)
@@ -1230,10 +1271,6 @@ def run_books_engine(trigger, df_all, df_history, mode='A'):
                         series_notes.append(f"Harry Potter: trigger is book #{trigger_order}")
                         
                         series_books['_hp_order'] = series_books['Title'].apply(get_hp_order)
-                        
-                        # 🔍 DEBUG: Show HP order distribution
-                        order_counts = series_books['_hp_order'].value_counts().sort_index()
-                        series_notes.append(f"HP order distribution: {dict(order_counts)}")
                         
                         # 🟢 ONLY MAIN 7 BOOKS in series slots (spinoffs go to discovery)
                         main_7_books = series_books[series_books['_hp_order'] <= 7].copy()
@@ -1250,33 +1287,17 @@ def run_books_engine(trigger, df_all, df_history, mode='A'):
                         books_before = main_7_books[main_7_books['_hp_order'] < trigger_order].copy()
                         books_before = books_before.sort_values(['_hp_order', 'Final_Score'], ascending=[True, False])
                         
-                        # 🔍 DEBUG: Show what books are in each group
-                        if not books_after.empty:
-                            after_titles = books_after.groupby('_hp_order')['Title'].first().to_dict()
-                            series_notes.append(f"Books after #{trigger_order}: {after_titles}")
-                            # Show actual canonical values
-                            canonical_dist = books_after['_canonical'].value_counts().head(5).to_dict()
-                            series_notes.append(f"Canonical distribution in books_after: {canonical_dist}")
-                        if not books_before.empty:
-                            before_titles = books_before.groupby('_hp_order')['Title'].first().to_dict()
-                            series_notes.append(f"Books before #{trigger_order}: {before_titles}")
-                        
                         # Count unique canonical titles
                         after_unique = books_after['_canonical'].nunique() if '_canonical' in books_after.columns else len(books_after)
                         before_unique = books_before['_canonical'].nunique() if '_canonical' in books_before.columns else len(books_before)
-                        series_notes.append(f"Unique canonicals - After: {after_unique}, Before: {before_unique}")
+                        series_notes.append(f"Unique books - After #{trigger_order}: {after_unique}, Before: {before_unique}")
                         
                         # Add "next" books first (those after trigger in reading order)
                         next_added = 0
-                        skipped_reasons = []
-                        for idx, (_, row) in enumerate(books_after.iterrows()):
+                        for _, row in books_after.iterrows():
                             if next_added >= 6:
                                 break
                             row_canonical = get_canonical_book_name(row['Title'], row.get('Τίτλος πρωτοτύπου', ''))
-                            
-                            # Debug first 5 iterations
-                            if idx < 5:
-                                skipped_reasons.append(f"Row {idx}: hp={row['_hp_order']}, canon='{row_canonical}', in_used={row_canonical in used_titles}")
                             
                             if row['Material'] not in used_materials and row_canonical not in used_titles:
                                 row_copy = row.copy()
@@ -1288,8 +1309,6 @@ def run_books_engine(trigger, df_all, df_history, mode='A'):
                                 used_titles.add(row_canonical)
                                 series_count += 1
                                 next_added += 1
-                        
-                        series_notes.append(f"Loop debug: {skipped_reasons}")
                         
                         # Fill remaining (up to 6 total) with books from beginning
                         if next_added < 6 and not books_before.empty:
