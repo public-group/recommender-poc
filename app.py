@@ -75,7 +75,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v14.5 — Fixed Cursed Child Duplicate
+        🟢 Engine v14.6 — Filter Audiobooks + Debug Duplicates
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -1034,6 +1034,13 @@ def run_books_engine(trigger, df_all, df_history, mode='A'):
                     if len(words) <= 4 and any(kw in suffix_part for kw in edition_keywords):
                         canonical = delimiter.join(parts[:-1])
         
+        # 3. Strip audiobook/CD suffixes (so CD version matches regular book)
+        audiobook_suffixes = [' cd', ' audiobook', ' audio book', ' mp3', ' audio']
+        for suffix in audiobook_suffixes:
+            if canonical.endswith(suffix):
+                canonical = canonical[:-len(suffix)]
+                break
+        
         return canonical.strip()
     
     # Trigger attributes - with robust extraction
@@ -1134,6 +1141,18 @@ def run_books_engine(trigger, df_all, df_history, mode='A'):
             before = len(series_books)
             series_books = series_books[series_books['Level 2'] == t_level2]
             series_notes.append(f"Language filter ({t_level2}): {before}→{len(series_books)}")
+        
+        # 🟢 AUDIOBOOK/CD FILTER: Exclude audiobooks from book recommendations
+        def is_audiobook(title):
+            title_lower = str(title).lower()
+            audiobook_keywords = [' cd', ' audiobook', ' audio book', ' mp3', 'ηχητικό', 'ακουστικό']
+            return any(kw in title_lower for kw in audiobook_keywords)
+        
+        if not series_books.empty:
+            before = len(series_books)
+            series_books = series_books[~series_books['Title'].apply(is_audiobook)]
+            if before != len(series_books):
+                series_notes.append(f"Excluded audiobooks/CDs: {before}→{len(series_books)}")
         
         # 🟢 EDITION LINE EXTRACTION: Detect edition style from title
         def get_edition_line(title):
@@ -1237,6 +1256,12 @@ def run_books_engine(trigger, df_all, df_history, mode='A'):
             for _, row in other_candidates.iterrows():
                 pub_date = row.get('Ημερ/νία έκδοσης', 'N/A')
                 series_notes.append(f"  - {row['Title'][:40]}... | Cover: {row.get('Εξώφυλλο', 'N/A')} | Dims: {row.get('Διαστάσεις', 'N/A')} | PubDate: {pub_date} | Score: {row.get('Format_Score', 0)}")
+            
+            # 🔍 DEBUG: Check for duplicate canonicals (same book appearing twice)
+            canonical_counts = series_books['_canonical'].value_counts()
+            duplicates = canonical_counts[canonical_counts > 1]
+            if len(duplicates) > 0:
+                series_notes.append(f"⚠ Duplicate canonicals: {dict(duplicates.head(5))}")
             
             series_notes.append(f"Total series pool: {len(series_books)} books")
             series_notes.append(f"MODE: {'A (Series First)' if mode == 'A' else 'B (Next in Series)'}")
