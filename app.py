@@ -75,7 +75,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v15.1 — Word Doc Cross-Sell Logic (Age Brackets + Gender + Hierarchy)
+        🟢 Engine v15.2 — Gender File + Mode B IP-First + No Magnifying Glass
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -913,14 +913,45 @@ def run_books_engine(trigger, df_all, df_history, mode='A'):
     
     Mode B (Next in Series):
     - Priority 1: Up to 6 books using "next in series" logic
-    - Priority 2: Cross-sell (4 slots always)
-    - If fewer than 6 books remaining, show "start from beginning" books
+    - Priority 2: IP-matched products (up to 4)
+    - If < 4 IP products: Fill with MORE series books
+    - Priority 3: Cross-sell (non-IP, if slots remain)
+    - Priority 4: Book discovery
     """
     diag = []
     slot_notes = {}
     all_recs = []
     used_materials = set()
     used_titles = set()  # Track titles to prevent showing same book
+    
+    # ══════════════════════════════════════════════════════════
+    # 🟢 LOAD GENDER CATEGORIES FROM FILE
+    # ══════════════════════════════════════════════════════════
+    SERIES_GENDER_MAP = {}
+    try:
+        import os
+        gender_file_paths = [
+            '/mnt/user-data/uploads/kids_books_categories.xlsx',
+            'kids_books_categories.xlsx',
+            '/mount/src/recommender-poc/kids_books_categories.xlsx',
+        ]
+        for gf_path in gender_file_paths:
+            if os.path.exists(gf_path):
+                gender_df = pd.read_excel(gf_path)
+                for _, row in gender_df.iterrows():
+                    series_name = str(row.get('Series Name', '')).strip()
+                    category = str(row.get('Category', 'Universal')).strip()
+                    if series_name:
+                        # Map category to gender
+                        if category == 'Girls-leaning':
+                            SERIES_GENDER_MAP[series_name.lower()] = 'girl'
+                        elif category == 'Boys-leaning':
+                            SERIES_GENDER_MAP[series_name.lower()] = 'boy'
+                        else:
+                            SERIES_GENDER_MAP[series_name.lower()] = 'neutral'
+                break
+    except Exception as e:
+        pass  # Continue without gender file if not found
     
     # 🟢 HARRY POTTER PREDEFINED ORDER
     # Map title keywords to reading order (1-7 for main series, 8+ for spinoffs)
@@ -1472,12 +1503,14 @@ def run_books_engine(trigger, df_all, df_history, mode='A'):
     
     # ══════════════════════════════════════════════════════════
     # PRIORITY 2: CROSS-SELL (Toys & Stationery)
-    # Up to 4 slots after series books
+    # Mode A: Up to 4 cross-sell slots after series
+    # Mode B: IP products first (up to 4), then MORE series books if < 4 IP, then non-IP cross-sell
     # ══════════════════════════════════════════════════════════
     crosssell_notes = ["=== PRIORITY 2: CROSS-SELL ==="]
     crosssell_count = 0
+    ip_product_count = 0  # Track IP-matched products for Mode B
     
-    # Both modes: fill up to 4 cross-sell slots after series
+    # Calculate slots available
     max_crosssell = min(4, 10 - series_count)
     crosssell_notes.append(f"Cross-sell: {max_crosssell} slots available (series filled {series_count})")
     
@@ -1543,10 +1576,16 @@ def run_books_engine(trigger, df_all, df_history, mode='A'):
         crosssell_notes.append(f"Age bracket: {age_bracket} (trigger age: {t_age})")
         
         # ══════════════════════════════════════════════════════════
-        # GENDER DETECTION (check Φύλο field first, then keywords)
+        # GENDER DETECTION (check gender file first, then fallbacks)
         # ══════════════════════════════════════════════════════════
         def detect_gender(trigger_row, series_name, title, hierarchy):
-            """Detect gender from data fields, hierarchy, or keywords"""
+            """Detect gender from gender file, data fields, hierarchy, or keywords"""
+            
+            # 0. CHECK GENDER CATEGORIES FILE FIRST (most reliable)
+            series_lower = str(series_name).lower().strip()
+            if series_lower in SERIES_GENDER_MAP:
+                return SERIES_GENDER_MAP[series_lower]
+            
             # 1. Check Φύλο field if available
             gender_field = str(trigger_row.get('Φύλο', '')).lower().strip()
             if gender_field:
@@ -1560,7 +1599,7 @@ def run_books_engine(trigger, df_all, df_history, mode='A'):
             if any(x in hier_lower for x in ['barbie', 'princess', 'πριγκίπισσα']):
                 return 'girl'
             
-            # 3. Check series/title keywords
+            # 3. Fallback: Check series/title keywords (if not in file)
             text = (str(series_name) + ' ' + str(title)).lower()
             girl_keywords = [
                 'fairy', 'magic', 'princess', 'rainbow', 'unicorn', 'ballerina',
@@ -1581,7 +1620,7 @@ def run_books_engine(trigger, df_all, df_history, mode='A'):
             return 'neutral'
         
         detected_gender = detect_gender(trigger, t_series, tt, t_hierarchy)
-        crosssell_notes.append(f"Detected gender: {detected_gender}")
+        crosssell_notes.append(f"Detected gender: {detected_gender} (from {'file' if t_series.lower().strip() in SERIES_GENDER_MAP else 'keywords'})")
         
         # ══════════════════════════════════════════════════════════
         # HIERARCHY CATEGORY DETECTION (for cross-sell logic)
@@ -1675,8 +1714,9 @@ def run_books_engine(trigger, df_all, df_history, mode='A'):
         if 'AVAILABILITY' in stationery.columns:
             stationery.loc[stationery['AVAILABILITY'] == 'Άμεσα Διαθέσιμο', 'Final_Score'] += AVAIL_BOOST
         
-        # IP MATCHING: Boost toys that match book series
+        # IP MATCHING: Boost toys AND stationery that match book series
         if has_series:
+            # Mark IP-matched toys
             for idx in toys.index:
                 toy_brand = str(toys.loc[idx, 'Brand']) if 'Brand' in toys.columns else ''
                 toy_heroes = str(toys.loc[idx, 'Ήρωες Παιχνιδιών']) if 'Ήρωες Παιχνιδιών' in toys.columns else ''
@@ -1685,11 +1725,109 @@ def run_books_engine(trigger, df_all, df_history, mode='A'):
                 if ip_matches(t_series, toy_brand, toy_heroes) or normalize_ip_name(t_series) in normalize_ip_name(toy_title):
                     toys.loc[idx, 'Final_Score'] += SMART_BOOST * 5
             
-            ip_matched = toys[toys['Final_Score'] >= SMART_BOOST * 5]
-            crosssell_notes.append(f"IP matched toys for '{t_series}': {len(ip_matched)}")
+            # Mark IP-matched stationery
+            for idx in stationery.index:
+                stat_brand = str(stationery.loc[idx, 'Brand']) if 'Brand' in stationery.columns else ''
+                stat_heroes = str(stationery.loc[idx, 'Ήρωες Παιχνιδιών']) if 'Ήρωες Παιχνιδιών' in stationery.columns else ''
+                stat_title = str(stationery.loc[idx, 'Title']) if 'Title' in stationery.columns else ''
+                
+                if ip_matches(t_series, stat_brand, stat_heroes) or normalize_ip_name(t_series) in normalize_ip_name(stat_title):
+                    stationery.loc[idx, 'Final_Score'] += SMART_BOOST * 5
+            
+            ip_matched_toys = toys[toys['Final_Score'] >= SMART_BOOST * 5]
+            ip_matched_stationery = stationery[stationery['Final_Score'] >= SMART_BOOST * 5]
+            crosssell_notes.append(f"IP matched for '{t_series}': {len(ip_matched_toys)} toys, {len(ip_matched_stationery)} stationery")
+        else:
+            ip_matched_toys = pd.DataFrame()
+            ip_matched_stationery = pd.DataFrame()
         
         # ═══════════════════════════════════════════════════════════════
-        # CROSS-SELL SLOT 1: IP Toy OR Age-Appropriate Fallback (from Word doc)
+        # MODE B SPECIAL: IP PRODUCTS FIRST (up to 4), then more series books
+        # ═══════════════════════════════════════════════════════════════
+        if mode == 'B' and has_series:
+            ip_notes = ["=== MODE B: IP PRODUCTS FIRST ==="]
+            
+            # Combine all IP-matched products
+            all_ip_products = []
+            
+            # Add IP toys
+            if not ip_matched_toys.empty:
+                for _, row in ip_matched_toys.sort_values('Final_Score', ascending=False).iterrows():
+                    if row['Material'] not in used_materials and len(all_ip_products) < 4:
+                        row_copy = row.copy()
+                        row_copy['_source'] = 'toy'
+                        all_ip_products.append(row_copy)
+            
+            # Add IP stationery
+            if not ip_matched_stationery.empty:
+                for _, row in ip_matched_stationery.sort_values('Final_Score', ascending=False).iterrows():
+                    if row['Material'] not in used_materials and len(all_ip_products) < 4:
+                        row_copy = row.copy()
+                        row_copy['_source'] = 'stationery'
+                        all_ip_products.append(row_copy)
+            
+            ip_notes.append(f"Found {len(all_ip_products)} IP products to fill slots")
+            
+            # Add IP products to recommendations
+            for i, ip_row in enumerate(all_ip_products):
+                ip_row['Assigned_Slot'] = series_count + crosssell_count + 1
+                ip_row['Slot_Role'] = f"Cross-Sell: IP {ip_row['_source'].title()}"
+                ip_row['Item_Rank'] = 1
+                all_recs.append(ip_row)
+                used_materials.add(ip_row['Material'])
+                crosssell_count += 1
+                ip_product_count += 1
+                ip_notes.append(f"  ✓ IP {ip_row['_source']}: {ip_row['Title'][:40]}...")
+            
+            # If < 4 IP products, fill with MORE series books
+            ip_slots_filled = len(all_ip_products)
+            if ip_slots_filled < 4:
+                remaining_ip_slots = 4 - ip_slots_filled
+                ip_notes.append(f"Only {ip_slots_filled} IP products, filling {remaining_ip_slots} slots with more series books")
+                
+                # Get more series books (reuse series pool logic)
+                books_only = df_all[df_all['Level 1'] == 'Books'].copy()
+                series_col = 'Σειρά βιβλίου'
+                if series_col in books_only.columns:
+                    extra_series = books_only[
+                        books_only[series_col].fillna('').astype(str).str.strip() == t_series
+                    ].copy()
+                    
+                    # Apply same filters as priority 1
+                    extra_series = extra_series[extra_series['Material'].apply(lambda m: m not in used_materials)]
+                    extra_series = extra_series[extra_series['Level 2'] == t_level2] if t_level2 else extra_series
+                    
+                    # Exclude box sets if trigger is individual
+                    if not trigger_is_box_set:
+                        extra_series = extra_series[~extra_series['Title'].apply(is_box_set)]
+                    
+                    # Sort by score and take needed
+                    if 'Final_Score' not in extra_series.columns:
+                        extra_series['Final_Score'] = 0
+                    extra_series = extra_series.sort_values('Final_Score', ascending=False)
+                    
+                    extra_added = 0
+                    for _, row in extra_series.iterrows():
+                        if extra_added >= remaining_ip_slots:
+                            break
+                        if row['Material'] not in used_materials:
+                            row_copy = row.copy()
+                            row_copy['Assigned_Slot'] = series_count + crosssell_count + 1
+                            row_copy['Slot_Role'] = 'Series Book (IP Fill)'
+                            row_copy['Item_Rank'] = 1
+                            all_recs.append(row_copy)
+                            used_materials.add(row['Material'])
+                            crosssell_count += 1
+                            extra_added += 1
+                            ip_notes.append(f"  ✓ Extra series: {row['Title'][:40]}...")
+            
+            crosssell_notes.extend(ip_notes)
+            
+            # Don't change max_crosssell - slots 1-4 will naturally stop when crosssell_count reaches it
+            crosssell_notes.append(f"After IP/series fill: {crosssell_count} slots used, {max_crosssell - crosssell_count} non-IP slots remaining")
+        
+        # ═══════════════════════════════════════════════════════════════
+        # CROSS-SELL SLOT 1: IP Toy OR Age-Appropriate Fallback (Mode A or Mode B fallback)
         # ═══════════════════════════════════════════════════════════════
         if crosssell_count < max_crosssell:
             item1_notes = ["Item 1: IP Toy / Age-Appropriate Fallback"]
@@ -2000,9 +2138,12 @@ def run_books_engine(trigger, df_all, df_history, mode='A'):
                             item3_notes.append(f"✓ Toddler → Baby toy: {best['Title'][:40]}...")
                             item3_found = True
             
-            # Condition D: Fiction/Literature → Reading accessories (bookmarks, lights)
+            # Condition D: Fiction/Literature → Reading accessories (bookmarks, lights - NOT magnifying glasses)
             if hierarchy_category == 'fiction' and not item3_found:
                 reading = stationery[stationery['Hierarchy'].str.contains('READING|ΣΕΛΙΔΟΔΕΙΚΤ', case=False, na=False)].copy()
+                # 🟢 EXCLUDE inappropriate items (magnifying glasses, etc.)
+                exclude_keywords = ['φακ', 'magnif', 'μεγεθυντ', 'lens', 'lupe']
+                reading = reading[~reading['Title'].str.lower().str.contains('|'.join(exclude_keywords), na=False)]
                 reading = reading[reading.apply(lambda r: stationery_matches_gender(r.get('Title',''), r.get('Brand',''), detected_gender), axis=1)]
                 if not reading.empty:
                     selected = get_rotated_selection(reading, tm, 'reading', n=1)
