@@ -75,7 +75,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v15.5 — Mode B Uses Format-Scored Pool for Extra Books
+        🟢 Engine v15.6 — Mode B Age Bracket
     </div>
 </div>
 """, unsafe_allow_html=True)
