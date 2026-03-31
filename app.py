@@ -75,7 +75,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v15.6 — Dog Man Reading Order (Book 4 → 5,6,7,8...)
+        🟢 Engine v15.7 — Dog Man Reading Order + Better Duplicate Detection
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -1075,12 +1075,27 @@ def run_books_engine(trigger, df_all, df_history, mode='A'):
             'ο χάρι πότερ και ', 'ο χαρι ποτερ και ', 'harry potter and the ', 'harry potter and ',
             'fantastic beasts: ', 'φανταστικά ζώα: ', 'φανταστικά ζώα και ',
             'diary of a wimpy kid: ', 'diary of a wimpy kid ',
-            'dog man: ', 'dog man ', 'captain underpants: ', 'captain underpants ',
+            'captain underpants: ', 'captain underpants ',
         ]
         
         for prefix in prefixes:
             if canonical.startswith(prefix):
                 canonical = canonical[len(prefix):]
+                break
+        
+        # 🟢 NUMBERED SERIES PREFIX: Strip "dog man X: " or "dog man X- " or "adventures of dog man X: "
+        # This catches "Dog Man 7: For Whom the Ball Rolls" → "for whom the ball rolls"
+        # And "Adventures of Dog Man 2: Unleashed" → "unleashed"
+        dm_patterns = [
+            r'^adventures\s+of\s+dog\s*man\s*\d{0,2}\s*[-:]\s*',  # Adventures of Dog Man 2: ...
+            r'^dog\s*man\s*\d{1,2}\s*[-:]\s*',  # Dog Man 7: ...
+            r'^dog\s*man\s*[-:]\s*',  # Dog Man: ... (no number)
+            r'^dog\s*man\s+',  # Dog Man ... (just series name with space)
+        ]
+        for pattern in dm_patterns:
+            dm_match = re.match(pattern, canonical)
+            if dm_match:
+                canonical = canonical[dm_match.end():]
                 break
         
         # 🟢 UNIVERSAL EDITION STRIPPING
@@ -1117,7 +1132,30 @@ def run_books_engine(trigger, df_all, df_history, mode='A'):
                 canonical = canonical[:-len(suffix)]
                 break
         
-        # 4. Normalize apostrophes (curly → straight)
+        # 4. Strip format suffixes (PB = paperback, HB = hardback)
+        format_suffixes = [' pb', ' hb', ' (pb)', ' (hb)']
+        for suffix in format_suffixes:
+            if canonical.endswith(suffix):
+                canonical = canonical[:-len(suffix)]
+                break
+        
+        # 5. Strip marketing parentheticals like "(the new book...)" or "(a graphic novel)"
+        marketing_paren = re.search(r'\s*\([^)]*(?:new|graphic novel|book|novel)[^)]*\)\s*$', canonical, re.IGNORECASE)
+        if marketing_paren:
+            canonical = canonical[:marketing_paren.start()]
+        
+        # 5b. Strip marketing suffixes like ": a graphic novel"
+        marketing_suffixes = [': a graphic novel', ' - a graphic novel', ': graphic novel']
+        for suffix in marketing_suffixes:
+            if canonical.endswith(suffix):
+                canonical = canonical[:-len(suffix)]
+                break
+        
+        # 5c. Strip redundant "dog man: " in middle of title (e.g., "dog man: big jim begins")
+        if canonical.startswith('dog man: '):
+            canonical = canonical[9:]  # len('dog man: ') = 9
+        
+        # 6. Normalize apostrophes (curly → straight)
         canonical = canonical.replace("'", "'").replace("'", "'").replace("`", "'")
         
         return canonical.strip()
