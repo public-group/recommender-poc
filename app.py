@@ -75,7 +75,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v15.3 — No LEGO Technic/Icons, Strict Age Filter, No Self-Recommend
+        🟢 Engine v15.5 — Mode B Uses Format-Scored Pool for Extra Books
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -911,12 +911,12 @@ def run_books_engine(trigger, df_all, df_history, mode='A'):
     - Priority 2: Cross-sell (up to 4 slots if series < 10)
     - Priority 3: Category Discovery (remaining slots)
     
-    Mode B (Next in Series):
+    Mode B (Next in Series): 6 Books + 4 Cross-Sell
     - Priority 1: Up to 6 books using "next in series" logic
-    - Priority 2: IP-matched products (up to 4)
-    - If < 4 IP products: Fill with MORE series books
-    - Priority 3: Cross-sell (non-IP, if slots remain)
-    - Priority 4: Book discovery
+    - Priority 2: 4 Cross-sell slots:
+        * First: IP-matched products (toys/stationery with series name)
+        * Then: Non-IP cross-sell for remaining slots
+    - Priority 3: Book discovery (if still slots remain)
     """
     diag = []
     slot_notes = {}
@@ -1126,6 +1126,7 @@ def run_books_engine(trigger, df_all, df_history, mode='A'):
     # ══════════════════════════════════════════════════════════
     series_notes = ["=== PRIORITY 1: SERIES ENGINE ==="]
     series_count = 0
+    scored_pool = pd.DataFrame()  # Will be populated with format-scored series books
     
     # 🟢 BOX SET RULE: Complete box sets should NOT show series books (only cross-sell)
     if trigger_is_complete_box:
@@ -1318,6 +1319,9 @@ def run_books_engine(trigger, df_all, df_history, mode='A'):
             
             series_notes.append(f"Total series pool: {len(series_books)} books")
             series_notes.append(f"MODE: {'A (Series First)' if mode == 'A' else 'B (Next in Series)'}")
+            
+            # 🟢 SAVE SORTED POOL FOR MODE B IP FILL (uses same format-scored order)
+            scored_pool = series_books.sort_values('Final_Score', ascending=False).copy()
             
             # 🟢 PARTIAL BOX SET HANDLING (same for both modes)
             if trigger_is_box_set and not trigger_is_complete_box:
@@ -1764,7 +1768,9 @@ def run_books_engine(trigger, df_all, df_history, mode='A'):
             ip_matched_stationery = pd.DataFrame()
         
         # ═══════════════════════════════════════════════════════════════
-        # MODE B SPECIAL: IP PRODUCTS FIRST (up to 4), then more series books
+        # MODE B SPECIAL: IP PRODUCTS FIRST (up to 4)
+        # If < 4 IP products → fill with MORE series books (from same scored pool)
+        # Then non-IP cross-sell for remaining slots
         # ═══════════════════════════════════════════════════════════════
         if mode == 'B' and has_series:
             ip_notes = ["=== MODE B: IP PRODUCTS FIRST ==="]
@@ -1801,52 +1807,36 @@ def run_books_engine(trigger, df_all, df_history, mode='A'):
                 ip_product_count += 1
                 ip_notes.append(f"  ✓ IP {ip_row['_source']}: {ip_row['Title'][:40]}...")
             
-            # If < 4 IP products, fill with MORE series books
+            # 🟢 FIX: If < 4 IP products, fill with MORE SERIES BOOKS from scored_pool
             ip_slots_filled = len(all_ip_products)
             if ip_slots_filled < 4:
                 remaining_ip_slots = 4 - ip_slots_filled
                 ip_notes.append(f"Only {ip_slots_filled} IP products, filling {remaining_ip_slots} slots with more series books")
                 
-                # Get more series books (reuse series pool logic)
-                books_only = df_all[df_all['Level 1'] == 'Books'].copy()
-                series_col = 'Σειρά βιβλίου'
-                if series_col in books_only.columns:
-                    extra_series = books_only[
-                        books_only[series_col].fillna('').astype(str).str.strip() == t_series
-                    ].copy()
-                    
-                    # Apply same filters as priority 1
-                    extra_series = extra_series[extra_series['Material'].apply(lambda m: m not in used_materials)]
-                    extra_series = extra_series[extra_series['Level 2'] == t_level2] if t_level2 else extra_series
-                    
-                    # Exclude box sets if trigger is individual
-                    if not trigger_is_box_set:
-                        extra_series = extra_series[~extra_series['Title'].apply(is_box_set)]
-                    
-                    # Sort by score and take needed
-                    if 'Final_Score' not in extra_series.columns:
-                        extra_series['Final_Score'] = 0
-                    extra_series = extra_series.sort_values('Final_Score', ascending=False)
-                    
-                    extra_added = 0
-                    for _, row in extra_series.iterrows():
-                        if extra_added >= remaining_ip_slots:
-                            break
-                        if row['Material'] not in used_materials:
-                            row_copy = row.copy()
-                            row_copy['Assigned_Slot'] = series_count + crosssell_count + 1
-                            row_copy['Slot_Role'] = 'Series Book (IP Fill)'
-                            row_copy['Item_Rank'] = 1
-                            all_recs.append(row_copy)
-                            used_materials.add(row['Material'])
-                            crosssell_count += 1
-                            extra_added += 1
-                            ip_notes.append(f"  ✓ Extra series: {row['Title'][:40]}...")
+                # Use the SAME scored_pool from Priority 1 (already sorted by format score!)
+                extra_added = 0
+                for _, row in scored_pool.iterrows():
+                    if extra_added >= remaining_ip_slots:
+                        break
+                    if row['Material'] not in used_materials:
+                        row_copy = row.copy()
+                        row_copy['Assigned_Slot'] = series_count + crosssell_count + 1
+                        row_copy['Slot_Role'] = 'Series Book (IP Fill)'
+                        row_copy['Item_Rank'] = 1
+                        all_recs.append(row_copy)
+                        used_materials.add(row['Material'])
+                        crosssell_count += 1
+                        series_count += 1  # Also count as series book
+                        extra_added += 1
+                        ip_notes.append(f"  ✓ Extra series (score {row.get('Final_Score', 0)}): {row['Title'][:40]}...")
+                
+                ip_notes.append(f"Added {extra_added} extra series books from format-scored pool")
             
             crosssell_notes.extend(ip_notes)
             
-            # Don't change max_crosssell - slots 1-4 will naturally stop when crosssell_count reaches it
-            crosssell_notes.append(f"After IP/series fill: {crosssell_count} slots used, {max_crosssell - crosssell_count} non-IP slots remaining")
+            # Update max_crosssell for remaining non-IP slots
+            max_crosssell = max(0, 4 - crosssell_count)
+            crosssell_notes.append(f"After IP/series fill: {crosssell_count} slots used, {max_crosssell} non-IP slots remaining")
         
         # ═══════════════════════════════════════════════════════════════
         # CROSS-SELL SLOT 1: IP Toy OR Age-Appropriate Fallback (Mode A or Mode B fallback)
