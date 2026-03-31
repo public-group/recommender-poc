@@ -75,7 +75,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v15.6 — Mode B Age Bracket
+        🟢 Engine v15.7 — IP match
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -266,37 +266,58 @@ def get_rotated_selection(df: pd.DataFrame, trigger_material: str, slot_type: st
 
 
 def ip_matches(series_name: str, brand: str, heroes: str) -> bool:
-    """Check if book series matches toy brand or heroes"""
+    """Check if book series matches toy brand or heroes (Stricter matching)"""
     if not is_valid_series(series_name):
         return False
+        
     series_norm = normalize_ip_name(series_name)
     brand_norm = normalize_ip_name(brand)
     heroes_norm = normalize_ip_name(heroes)
     
-    # Direct match
-    if series_norm in brand_norm or brand_norm in series_norm:
+    # 1. Exact match
+    if series_norm and (series_norm == brand_norm or series_norm == heroes_norm):
         return True
-    if series_norm in heroes_norm or heroes_norm in series_norm:
-        return True
-    
-    # Common mappings
+        
+    # 2. Explicit Mappings (Safest approach for known IPs)
     mappings = {
-        'harry potter': ['harry potter'],
+        'harry potter': ['harry potter', 'hogwarts'],
         'peppa pig': ['peppa pig', 'peppa'],
         'bluey': ['bluey'],
         'spiderman': ['spiderman', 'spider-man', 'spider man', 'spidey'],
         'frozen': ['frozen', 'elsa', 'anna'],
-        'disney': ['disney', 'mickey', 'minnie'],
+        'disney': ['disney', 'mickey', 'minnie', 'donald'],
         'barbie': ['barbie'],
         'marvel': ['marvel', 'avengers', 'hulk', 'iron man', 'captain america'],
         'μικροί κύριοι': ['μικροί κύριοι', 'mr. men', 'little miss'],
+        'pokemon': ['pokemon', 'pikachu'],
+        'star wars': ['star wars', 'mandalorian', 'yoda', 'darth vader'],
+        'minecraft': ['minecraft'],
+        'five nights at freddy': ['five nights at freddy', 'fnaf'], # Explicit rule for FNAF
     }
     
+    # Check if the book series belongs to any known mapped IP
     for key, variants in mappings.items():
-        if any(v in series_norm for v in variants):
-            if any(v in brand_norm or v in heroes_norm for v in variants):
-                return True
-    
+        if key in series_norm:
+            # Use regex word boundaries to prevent partial matches 
+            import re
+            for v in variants:
+                pattern = r'\b' + re.escape(v) + r'\b'
+                if re.search(pattern, brand_norm) or re.search(pattern, heroes_norm):
+                    return True
+            # If it's a known series but didn't match the specific variants, stop here
+            # to prevent false positive fallbacks
+            return False
+            
+    # 3. Generic Substring Fallback
+    # Prevent single-word heroes (like "Freddy" or "Sam") from randomly matching multi-word series
+    if brand_norm and len(brand_norm) > 3:
+        if brand_norm in series_norm or series_norm in brand_norm:
+            return True
+            
+    if heroes_norm and len(heroes_norm.split()) >= 2: # Require at least 2 words for generic hero match
+        if heroes_norm in series_norm or series_norm in heroes_norm:
+            return True
+            
     return False
 
 def detect_logic_key(role: str) -> str:
