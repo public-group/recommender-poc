@@ -75,7 +75,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v14.9 — Filter Novelty Language Editions
+        🟢 Engine v15.1 — Word Doc Cross-Sell Logic (Age Brackets + Gender + Hierarchy)
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -1488,14 +1488,153 @@ def run_books_engine(trigger, df_all, df_history, mode='A'):
         
         crosssell_notes.append(f"Toys pool: {len(toys)}, Stationery pool: {len(stationery)}")
         
-        # Age filter for toys
-        if 'Προτεινόμενη Ηλικία' in toys.columns and effective_age:
+        # ══════════════════════════════════════════════════════════
+        # AGE BRACKET SYSTEM (from Word doc)
+        # ══════════════════════════════════════════════════════════
+        def get_age_bracket(age_str):
+            """Return age bracket number (1-7) based on trigger age"""
+            if not age_str:
+                return 5  # Default to preschool
+            age_lower = str(age_str).lower().strip()
+            
+            # Bracket 1: Newborn (0-5 months)
+            if any(x in age_lower for x in ['0+ μηνών', '0+ ετών', '3+ μηνών', '5+ μηνών']):
+                return 1
+            # Bracket 2: Sitter/Crawler (6-11 months)
+            elif any(x in age_lower for x in ['6+ μηνών', '9+ μηνών']):
+                return 2
+            # Bracket 3: Early Toddler (1-1.5 years)
+            elif any(x in age_lower for x in ['12+ μηνών', '1+ ετών', '1.5+ ετών']):
+                return 3
+            # Bracket 4: Advanced Toddler (2 years)
+            elif any(x in age_lower for x in ['24+ μηνών', '2+ ετών']):
+                return 4
+            # Bracket 5: Preschool to Early Primary (3-6 years)
+            elif any(x in age_lower for x in ['3+ ετών', '4+ ετών', '5+ ετών', '6+ ετών']):
+                return 5
+            # Bracket 6: Older Kids & Tweens (7-12 years)
+            elif any(x in age_lower for x in ['7+ ετών', '8+ ετών', '9+ ετών', '10+ ετών', '11+ ετών', '12+ ετών']):
+                return 6
+            # Bracket 7: Teens & Collectors (13-18+ years)
+            elif any(x in age_lower for x in ['13+ ετών', '14+ ετών', '15+ ετών', '16+ ετών', '17+ ετών', '18+ ετών']):
+                return 7
+            return 5  # Default
+        
+        def get_allowed_toy_ages(bracket):
+            """Return allowed toy ages based on bracket"""
+            if bracket == 1:
+                return ['0+ μηνών', '0+ ετών', '3+ μηνών', '5+ μηνών', '6+ μηνών', '']
+            elif bracket == 2:
+                return ['6+ μηνών', '9+ μηνών', '12+ μηνών', '1+ ετών', '']
+            elif bracket == 3:
+                return ['9+ μηνών', '12+ μηνών', '1+ ετών', '1.5+ ετών', '24+ μηνών', '2+ ετών', '']
+            elif bracket == 4:
+                return ['1.5+ ετών', '24+ μηνών', '2+ ετών', '3+ ετών', '']
+            elif bracket == 5:
+                return ['3+ ετών', '4+ ετών', '5+ ετών', '6+ ετών', '7+ ετών', '8+ ετών', '']
+            elif bracket == 6:
+                return ['6+ ετών', '7+ ετών', '8+ ετών', '9+ ετών', '10+ ετών', '11+ ετών', '12+ ετών', '13+ ετών', '14+ ετών', '']
+            elif bracket == 7:
+                return ['10+ ετών', '11+ ετών', '12+ ετών', '13+ ετών', '14+ ετών', '15+ ετών', '16+ ετών', '17+ ετών', '18+ ετών', '']
+            return ['']  # Allow all if unknown
+        
+        age_bracket = get_age_bracket(t_age)
+        bracket_allowed_ages = get_allowed_toy_ages(age_bracket)
+        crosssell_notes.append(f"Age bracket: {age_bracket} (trigger age: {t_age})")
+        
+        # ══════════════════════════════════════════════════════════
+        # GENDER DETECTION (check Φύλο field first, then keywords)
+        # ══════════════════════════════════════════════════════════
+        def detect_gender(trigger_row, series_name, title, hierarchy):
+            """Detect gender from data fields, hierarchy, or keywords"""
+            # 1. Check Φύλο field if available
+            gender_field = str(trigger_row.get('Φύλο', '')).lower().strip()
+            if gender_field:
+                if any(x in gender_field for x in ['κορίτσι', 'girl', 'θηλυκό', 'female']):
+                    return 'girl'
+                elif any(x in gender_field for x in ['αγόρι', 'boy', 'αρσενικό', 'male']):
+                    return 'boy'
+            
+            # 2. Check hierarchy for gender indicators
+            hier_lower = str(hierarchy).lower()
+            if any(x in hier_lower for x in ['barbie', 'princess', 'πριγκίπισσα']):
+                return 'girl'
+            
+            # 3. Check series/title keywords
+            text = (str(series_name) + ' ' + str(title)).lower()
+            girl_keywords = [
+                'fairy', 'magic', 'princess', 'rainbow', 'unicorn', 'ballerina',
+                'barbie', 'frozen', 'elsa', 'anna', 'mermaid', 'kitty', 'doll',
+                'sparkle', 'glitter', 'flower', 'νεράιδα', 'πριγκίπισσα', 'κούκλα',
+            ]
+            boy_keywords = [
+                'quest', 'warrior', 'beast', 'dragon', 'dinosaur', 'dino', 'monster',
+                'ninja', 'pirate', 'superhero', 'hero', 'battle', 'fight', 'soldier',
+                'robot', 'car', 'truck', 'spider-man', 'batman', 'marvel', 'avengers',
+                'star wars', 'minecraft', 'pokemon', 'δεινόσαυρος', 'πειρατής', 'ήρωας',
+            ]
+            
+            if any(kw in text for kw in girl_keywords):
+                return 'girl'
+            elif any(kw in text for kw in boy_keywords):
+                return 'boy'
+            return 'neutral'
+        
+        detected_gender = detect_gender(trigger, t_series, tt, t_hierarchy)
+        crosssell_notes.append(f"Detected gender: {detected_gender}")
+        
+        # ══════════════════════════════════════════════════════════
+        # HIERARCHY CATEGORY DETECTION (for cross-sell logic)
+        # ══════════════════════════════════════════════════════════
+        def get_hierarchy_category(hierarchy):
+            """Categorize hierarchy for cross-sell logic"""
+            hier_lower = str(hierarchy).lower()
+            
+            # Arts/Crafts books
+            if any(x in hier_lower for x in ['ζωγραφικη', 'χειροτεχνι', 'αυτοκολλητ', 'δραστηριοτητ', 'τεχνη', 'μουσικ']):
+                return 'arts'
+            # STEM/Knowledge books
+            elif any(x in hier_lower for x in ['εφευρεσ', 'πειραμ', 'αστρονομ', 'φυσικ', 'χημ', 'βιολογ', 'επιστημ', 
+                                                'τεχνολογ', 'γνωσ', 'εγκυκλοπαιδ', 'περιβαλλον', 'οικολογ', 'ζωα', 
+                                                'ιστορ', 'γεωγραφ', 'ατλαντ', 'μυθολογ']):
+                return 'stem'
+            # Preschool books
+            elif any(x in hier_lower for x in ['προσχολικ', 'χρωματα', 'σχηματα', 'αντιθετ', 'αναγνωση', 'γραφη']):
+                return 'preschool'
+            # Fiction/Literature
+            elif any(x in hier_lower for x in ['λογοτεχν', 'παραμυθ', 'μυθ', 'κομικ', 'χιουμορ', 'παιδικ']):
+                return 'fiction'
+            # Puzzle/Activity books
+            elif any(x in hier_lower for x in ['παζλ', 'σπαζοκεφαλ', 'αινιγμ', 'παιχνιδ', 'διαδραστικ']):
+                return 'activity'
+            return 'general'
+        
+        hierarchy_category = get_hierarchy_category(t_hierarchy)
+        crosssell_notes.append(f"Hierarchy category: {hierarchy_category}")
+        
+        # ══════════════════════════════════════════════════════════
+        # ADULT BRAND EXCLUSION
+        # ══════════════════════════════════════════════════════════
+        adult_brands = ['moleskine', 'leuchtturm', 'rhodia', 'field notes', 'midori']
+        def is_adult_brand(title, brand=''):
+            text = (str(title) + ' ' + str(brand)).lower()
+            return any(ab in text for ab in adult_brands)
+        
+        stationery = stationery[~stationery.apply(
+            lambda r: is_adult_brand(r.get('Title', ''), r.get('Brand', '')), axis=1
+        )]
+        crosssell_notes.append(f"Stationery after adult brand filter: {len(stationery)}")
+        
+        # ══════════════════════════════════════════════════════════
+        # AGE FILTER FOR TOYS (using bracket system)
+        # ══════════════════════════════════════════════════════════
+        if 'Προτεινόμενη Ηλικία' in toys.columns:
             toys = toys[
-                toys['Προτεινόμενη Ηλικία'].fillna('').astype(str).str.strip().isin(allowed_ages) |
+                toys['Προτεινόμενη Ηλικία'].fillna('').astype(str).str.strip().isin(bracket_allowed_ages) |
                 (toys['Προτεινόμενη Ηλικία'].fillna('') == '') |
                 (toys['Προτεινόμενη Ηλικία'].fillna('').astype(str) == '0')
             ]
-            crosssell_notes.append(f"Toys after age filter: {len(toys)}")
+            crosssell_notes.append(f"Toys after age bracket filter: {len(toys)}")
         
         # Initialize scores
         toys['Final_Score'] = 0
@@ -1520,14 +1659,15 @@ def run_books_engine(trigger, df_all, df_history, mode='A'):
             ip_matched = toys[toys['Final_Score'] >= SMART_BOOST * 5]
             crosssell_notes.append(f"IP matched toys for '{t_series}': {len(ip_matched)}")
         
-        # ─── CROSS-SELL SLOT 1: IP-matched Toy or Plush ───
+        # ═══════════════════════════════════════════════════════════════
+        # CROSS-SELL SLOT 1: IP Toy OR Age-Appropriate Fallback (from Word doc)
+        # ═══════════════════════════════════════════════════════════════
         if crosssell_count < max_crosssell:
-            item1_notes = ["Item 1: IP Toy / Plush"]
+            item1_notes = ["Item 1: IP Toy / Age-Appropriate Fallback"]
             
-            # Priority 1: IP-matched toys with ROTATION
+            # Priority 1: IP-matched toys
             ip_toys = toys[toys['Final_Score'] >= SMART_BOOST * 5].copy()
             if not ip_toys.empty:
-                # Use rotation to vary selection across different trigger books
                 selected = get_rotated_selection(ip_toys, tm, 'ip_toy', n=1)
                 if not selected.empty:
                     best = selected.iloc[0]
@@ -1541,272 +1681,462 @@ def run_books_engine(trigger, df_all, df_history, mode='A'):
                         crosssell_count += 1
                         item1_notes.append(f"✓ IP match (rotated): {best['Title'][:40]}...")
             
-            # Fallback: Plush with rotation
+            # NO IP FALLBACK (from Word doc - age-bracket based)
             if crosssell_count == 0:
-                plush = toys[toys['Hierarchy'].isin(TOY_HIERARCHIES_ACTUAL['plush'])].copy()
-                if not plush.empty:
-                    selected = get_rotated_selection(plush, tm, 'plush', n=1)
-                    if not selected.empty:
-                        best = selected.iloc[0]
-                        if best['Material'] not in used_materials:
-                            row_copy = best.copy()
-                            row_copy['Assigned_Slot'] = series_count + crosssell_count + 1
-                            row_copy['Slot_Role'] = 'Cross-Sell: Plush'
-                            row_copy['Item_Rank'] = 1
-                            all_recs.append(row_copy)
-                            used_materials.add(best['Material'])
-                            crosssell_count += 1
-                            item1_notes.append(f"✓ Plush (rotated): {best['Title'][:40]}...")
-            
-            crosssell_notes.extend(item1_notes)
-        
-        # ─── CROSS-SELL SLOT 2: Creative / Arts (with IP preference + rotation) ───
-        if crosssell_count < max_crosssell:
-            item2_notes = ["Item 2: Creative / Arts"]
-            
-            # Stationery arts supplies - expanded to include writing tools for IP matches
-            arts_hierarchies = (
-                STATIONERY_HIERARCHIES_ACTUAL['arts_crafts'] + 
-                STATIONERY_HIERARCHIES_ACTUAL.get('stickers', []) +
-                STATIONERY_HIERARCHIES_ACTUAL.get('writing', []) +  # ΜΟΛΥΒΙΑ, ΣΤΥΛΟ for IP items
-                STATIONERY_HIERARCHIES_ACTUAL.get('keychains', []) +  # ΜΠΡΕΛΟΚ, ΜΑΓΝΗΤΑΚΙΑ
-                STATIONERY_HIERARCHIES_ACTUAL.get('reading', [])  # READING ACCESSORIES
-            )
-            arts = stationery[stationery['Hierarchy'].isin(arts_hierarchies)].copy()
-            
-            if not arts.empty:
-                # 🟢 IP MATCHING: Boost arts items that match book series/brand
-                ip_arts = pd.DataFrame()
-                if has_series:
-                    for idx, row in arts.iterrows():
-                        art_title = str(row.get('Title', '')).lower()
-                        art_brand = str(row.get('Brand', '')).lower()
-                        art_heroes = str(row.get('Ήρωες Παιχνιδιών', '')).lower()
-                        
-                        series_lower = t_series.lower()
-                        if (series_lower in art_title or 
-                            series_lower in art_brand or 
-                            series_lower in art_heroes or
-                            normalize_ip_name(t_series) in normalize_ip_name(art_title)):
-                            arts.loc[idx, 'Final_Score'] += SMART_BOOST * 5
-                    
-                    ip_arts = arts[arts['Final_Score'] >= SMART_BOOST * 5]
-                    item2_notes.append(f"IP matched arts for '{t_series}': {len(ip_arts)}")
+                item1_notes.append("No IP match, using age-bracket fallback")
                 
-                # 🟢 PRIORITY: Rotate within IP-matched pool first, fallback to all arts
-                pool_to_use = ip_arts if not ip_arts.empty else arts
-                selected = get_rotated_selection(pool_to_use, tm, 'arts', n=1)
-                if not selected.empty:
-                    best = selected.iloc[0]
-                    if best['Material'] not in used_materials:
-                        row_copy = best.copy()
-                        row_copy['Assigned_Slot'] = series_count + crosssell_count + 1
-                        row_copy['Slot_Role'] = 'Cross-Sell: Arts'
-                        row_copy['Item_Rank'] = 1
-                        all_recs.append(row_copy)
-                        used_materials.add(best['Material'])
-                        crosssell_count += 1
-                        is_ip = "IP " if not ip_arts.empty and best['Material'] in ip_arts['Material'].values else ""
-                        item2_notes.append(f"✓ {is_ip}Arts (rotated): {best['Title'][:40]}...")
-            
-            # Fallback: Creative toys (also with IP preference + rotation)
-            if len([n for n in item2_notes if '✓' in n]) == 0:
-                creative = toys[toys['Hierarchy'].isin(TOY_HIERARCHIES_ACTUAL['creative'] + TOY_HIERARCHIES_ACTUAL['building'])].copy()
-                if not creative.empty:
-                    # IP boost for creative toys too
-                    if has_series:
-                        for idx, row in creative.iterrows():
-                            toy_title = str(row.get('Title', '')).lower()
-                            toy_brand = str(row.get('Brand', '')).lower()
-                            if t_series.lower() in toy_title or t_series.lower() in toy_brand:
-                                creative.loc[idx, 'Final_Score'] += SMART_BOOST * 3
-                    
-                    creative = creative.sort_values('Final_Score', ascending=False)
-                    for _, row in creative.iterrows():
-                        if row['Material'] not in used_materials:
-                            row_copy = row.copy()
-                            row_copy['Assigned_Slot'] = series_count + crosssell_count + 1
-                            row_copy['Slot_Role'] = 'Cross-Sell: Creative Toy'
-                            row_copy['Item_Rank'] = 1
-                            all_recs.append(row_copy)
-                            used_materials.add(row['Material'])
-                            crosssell_count += 1
-                            item2_notes.append(f"✓ Creative toy: {row['Title'][:40]}...")
-                            break
-            
-            crosssell_notes.extend(item2_notes)
-        
-        # ─── CROSS-SELL SLOT 3: Puzzle / Board Game (age-aware, IP preferred) ───
-        if crosssell_count < max_crosssell:
-            item3_notes = ["Item 3: Puzzle / Board Game"]
-            
-            # For 8+ ages, include adult board games and knowledge games
-            is_older_kid = effective_age in ['8', '9', '10', '11', '12', '8+', '10+', '12+']
-            
-            puzzle_hierarchies = TOY_HIERARCHIES_ACTUAL['board_puzzles'].copy()
-            if is_older_kid:
-                puzzle_hierarchies += TOY_HIERARCHIES_ACTUAL.get('knowledge_games', [])
-                puzzle_hierarchies += TOY_HIERARCHIES_ACTUAL.get('adult_board', [])
-                item3_notes.append(f"Age {effective_age}: including knowledge & adult board games")
-            
-            puzzles = toys[toys['Hierarchy'].isin(puzzle_hierarchies)].copy()
-            if not puzzles.empty:
-                # 🟢 IP MATCHING: Boost puzzles that match book series
-                ip_puzzles = pd.DataFrame()
-                if has_series:
-                    for idx, row in puzzles.iterrows():
-                        puzzle_title = str(row.get('Title', '')).lower()
-                        puzzle_brand = str(row.get('Brand', '')).lower()
-                        puzzle_heroes = str(row.get('Ήρωες Παιχνιδιών', '')).lower()
-                        
-                        series_lower = t_series.lower()
-                        if (series_lower in puzzle_title or 
-                            series_lower in puzzle_brand or 
-                            series_lower in puzzle_heroes or
-                            normalize_ip_name(t_series) in normalize_ip_name(puzzle_title)):
-                            puzzles.loc[idx, 'Final_Score'] += SMART_BOOST * 5
-                    
-                    ip_puzzles = puzzles[puzzles['Final_Score'] >= SMART_BOOST * 5]
-                    item3_notes.append(f"IP matched puzzles for '{t_series}': {len(ip_puzzles)}")
+                # Define gender-appropriate toy filter
+                def toy_matches_gender(title, brand, gender):
+                    """Filter toys by gender appropriateness"""
+                    text = (str(title) + ' ' + str(brand)).lower()
+                    if gender == 'girl':
+                        # Exclude boy-specific
+                        boy_only = ['spider-man', 'batman', 'avengers', 'marvel', 'dinosaur', 'dino', 
+                                   'monster truck', 'transformers', 'ninja', 'nerf', 'army', 'soldier']
+                        return not any(b in text for b in boy_only)
+                    elif gender == 'boy':
+                        # Exclude girl-specific
+                        girl_only = ['barbie', 'princess', 'frozen', 'elsa', 'anna', 'fairy', 
+                                    'unicorn', 'my little pony', 'hello kitty', 'ballerina']
+                        return not any(g in text for g in girl_only)
+                    return True
                 
-                # 🟢 PRIORITY: Rotate within IP-matched pool first, fallback to all puzzles
-                pool_to_use = ip_puzzles if not ip_puzzles.empty else puzzles
-                selected = get_rotated_selection(pool_to_use, tm, 'puzzle', n=1)
-                if not selected.empty:
-                    best = selected.iloc[0]
-                    if best['Material'] not in used_materials:
-                        row_copy = best.copy()
-                        row_copy['Assigned_Slot'] = series_count + crosssell_count + 1
-                        row_copy['Slot_Role'] = 'Cross-Sell: Puzzle'
-                        row_copy['Item_Rank'] = 1
-                        all_recs.append(row_copy)
-                        used_materials.add(best['Material'])
-                        crosssell_count += 1
-                        is_ip = "IP " if not ip_puzzles.empty and best['Material'] in ip_puzzles['Material'].values else ""
-                        item3_notes.append(f"✓ {is_ip}Puzzle (rotated): {best['Title'][:40]}...")
-            
-            crosssell_notes.extend(item3_notes)
-        
-        # ─── CROSS-SELL SLOT 4: Collectable Cards (for 8+) OR Lifestyle ───
-        if crosssell_count < max_crosssell:
-            is_older_kid = effective_age in ['8', '9', '10', '11', '12', '8+', '10+', '12+']
-            
-            if is_older_kid:
-                item4_notes = ["Item 4: Collectable Cards (8+)"]
+                fallback_found = False
                 
-                # Priority: Collectable Cards (Pokemon, FIFA, etc.) with rotation
-                collectables = toys[toys['Hierarchy'].isin(TOY_HIERARCHIES_ACTUAL.get('collectable_cards', []))].copy()
-                if not collectables.empty:
-                    selected = get_rotated_selection(collectables, tm, 'collectables', n=1)
-                    if not selected.empty:
-                        best = selected.iloc[0]
-                        if best['Material'] not in used_materials:
-                            row_copy = best.copy()
-                            row_copy['Assigned_Slot'] = series_count + crosssell_count + 1
-                            row_copy['Slot_Role'] = 'Cross-Sell: Collectable Cards'
-                            row_copy['Item_Rank'] = 1
-                            all_recs.append(row_copy)
-                            used_materials.add(best['Material'])
-                            crosssell_count += 1
-                            item4_notes.append(f"✓ Cards (rotated): {best['Title'][:40]}...")
-                
-                # Fallback for 8+: Action Figures / Funko Pop with rotation
-                if len([n for n in item4_notes if '✓' in n]) == 0:
-                    figures = toys[toys['Hierarchy'].isin(TOY_HIERARCHIES_ACTUAL.get('action_figures', []))].copy()
-                    if not figures.empty:
-                        selected = get_rotated_selection(figures, tm, 'figures', n=1)
+                # Bracket 1-4: Toddlers (0-3 years) → Plush first
+                if age_bracket <= 4:
+                    plush = toys[toys['Hierarchy'].isin(TOY_HIERARCHIES_ACTUAL['plush'])].copy()
+                    plush = plush[plush.apply(lambda r: toy_matches_gender(r.get('Title',''), r.get('Brand',''), detected_gender), axis=1)]
+                    if not plush.empty:
+                        selected = get_rotated_selection(plush, tm, 'plush', n=1)
                         if not selected.empty:
                             best = selected.iloc[0]
                             if best['Material'] not in used_materials:
                                 row_copy = best.copy()
                                 row_copy['Assigned_Slot'] = series_count + crosssell_count + 1
-                                row_copy['Slot_Role'] = 'Cross-Sell: Action Figure'
+                                row_copy['Slot_Role'] = 'Cross-Sell: Plush'
                                 row_copy['Item_Rank'] = 1
                                 all_recs.append(row_copy)
                                 used_materials.add(best['Material'])
                                 crosssell_count += 1
-                                item4_notes.append(f"✓ Figure (rotated): {best['Title'][:40]}...")
-            else:
-                item4_notes = ["Item 4: Lifestyle"]
+                                item1_notes.append(f"✓ Toddler plush: {best['Title'][:40]}...")
+                                fallback_found = True
                 
-                lifestyle = stationery[stationery['Hierarchy'].isin(
-                    STATIONERY_HIERARCHIES_ACTUAL['water_bottles'] + 
-                    STATIONERY_HIERARCHIES_ACTUAL['notebooks']
-                )].copy()
-                if not lifestyle.empty:
-                    # IP matching for lifestyle
-                    ip_lifestyle = pd.DataFrame()
-                    if has_series:
-                        for idx, row in lifestyle.iterrows():
-                            item_title = str(row.get('Title', '')).lower()
-                            item_brand = str(row.get('Brand', '')).lower()
-                            if t_series.lower() in item_title or t_series.lower() in item_brand:
-                                lifestyle.loc[idx, 'Final_Score'] += SMART_BOOST * 5
-                        
-                        ip_lifestyle = lifestyle[lifestyle['Final_Score'] >= SMART_BOOST * 5]
-                    
-                    # 🟢 PRIORITY: Rotate within IP-matched pool first, fallback to all lifestyle
-                    pool_to_use = ip_lifestyle if not ip_lifestyle.empty else lifestyle
-                    selected = get_rotated_selection(pool_to_use, tm, 'lifestyle4', n=1)
+                # Bracket 5: Preschool (4-7 years) → Action Figures/Dolls based on gender
+                elif age_bracket == 5 and not fallback_found:
+                    if detected_gender == 'girl':
+                        # Try dolls first
+                        dolls = toys[toys['Hierarchy'].isin(TOY_HIERARCHIES_ACTUAL.get('dolls', []))].copy()
+                        dolls = dolls[dolls.apply(lambda r: toy_matches_gender(r.get('Title',''), r.get('Brand',''), detected_gender), axis=1)]
+                        if not dolls.empty:
+                            selected = get_rotated_selection(dolls, tm, 'dolls', n=1)
+                            if not selected.empty:
+                                best = selected.iloc[0]
+                                if best['Material'] not in used_materials:
+                                    row_copy = best.copy()
+                                    row_copy['Assigned_Slot'] = series_count + crosssell_count + 1
+                                    row_copy['Slot_Role'] = 'Cross-Sell: Doll'
+                                    row_copy['Item_Rank'] = 1
+                                    all_recs.append(row_copy)
+                                    used_materials.add(best['Material'])
+                                    crosssell_count += 1
+                                    item1_notes.append(f"✓ Preschool doll: {best['Title'][:40]}...")
+                                    fallback_found = True
+                    else:
+                        # Try action figures for boys/neutral
+                        figures = toys[toys['Hierarchy'].isin(TOY_HIERARCHIES_ACTUAL.get('action_figures', []))].copy()
+                        figures = figures[figures.apply(lambda r: toy_matches_gender(r.get('Title',''), r.get('Brand',''), detected_gender), axis=1)]
+                        if not figures.empty:
+                            selected = get_rotated_selection(figures, tm, 'figures', n=1)
+                            if not selected.empty:
+                                best = selected.iloc[0]
+                                if best['Material'] not in used_materials:
+                                    row_copy = best.copy()
+                                    row_copy['Assigned_Slot'] = series_count + crosssell_count + 1
+                                    row_copy['Slot_Role'] = 'Cross-Sell: Action Figure'
+                                    row_copy['Item_Rank'] = 1
+                                    all_recs.append(row_copy)
+                                    used_materials.add(best['Material'])
+                                    crosssell_count += 1
+                                    item1_notes.append(f"✓ Preschool figure: {best['Title'][:40]}...")
+                                    fallback_found = True
+                
+                # Bracket 6-7: Older kids (8+) → Board games or Collectables
+                elif age_bracket >= 6 and not fallback_found:
+                    # Try board games
+                    games = toys[toys['Hierarchy'].isin(TOY_HIERARCHIES_ACTUAL.get('board_puzzles', []))].copy()
+                    games = games[games.apply(lambda r: toy_matches_gender(r.get('Title',''), r.get('Brand',''), detected_gender), axis=1)]
+                    if not games.empty:
+                        selected = get_rotated_selection(games, tm, 'games', n=1)
+                        if not selected.empty:
+                            best = selected.iloc[0]
+                            if best['Material'] not in used_materials:
+                                row_copy = best.copy()
+                                row_copy['Assigned_Slot'] = series_count + crosssell_count + 1
+                                row_copy['Slot_Role'] = 'Cross-Sell: Board Game'
+                                row_copy['Item_Rank'] = 1
+                                all_recs.append(row_copy)
+                                used_materials.add(best['Material'])
+                                crosssell_count += 1
+                                item1_notes.append(f"✓ Older kids game: {best['Title'][:40]}...")
+                                fallback_found = True
+                
+                # Universal fallback: Plush (gender-filtered)
+                if not fallback_found:
+                    plush = toys[toys['Hierarchy'].isin(TOY_HIERARCHIES_ACTUAL['plush'])].copy()
+                    plush = plush[plush.apply(lambda r: toy_matches_gender(r.get('Title',''), r.get('Brand',''), detected_gender), axis=1)]
+                    if not plush.empty:
+                        selected = get_rotated_selection(plush, tm, 'plush_fallback', n=1)
+                        if not selected.empty:
+                            best = selected.iloc[0]
+                            if best['Material'] not in used_materials:
+                                row_copy = best.copy()
+                                row_copy['Assigned_Slot'] = series_count + crosssell_count + 1
+                                row_copy['Slot_Role'] = 'Cross-Sell: Plush'
+                                row_copy['Item_Rank'] = 1
+                                all_recs.append(row_copy)
+                                used_materials.add(best['Material'])
+                                crosssell_count += 1
+                                item1_notes.append(f"✓ Fallback plush: {best['Title'][:40]}...")
+            
+            crosssell_notes.extend(item1_notes)
+        
+        # ═══════════════════════════════════════════════════════════════
+        # CROSS-SELL SLOT 2: Hierarchy-Based (from Word doc Logic 4)
+        # Arts books → Arts supplies, Fiction → Lego, STEM → Educational
+        # ═══════════════════════════════════════════════════════════════
+        if crosssell_count < max_crosssell:
+            item2_notes = ["Item 2: Hierarchy-Based Creative"]
+            item2_found = False
+            
+            # Define gender filter for stationery
+            def stationery_matches_gender(title, brand, gender):
+                text = (str(title) + ' ' + str(brand)).lower()
+                if gender == 'girl':
+                    boy_only = ['spider-man', 'batman', 'avengers', 'marvel', 'dinosaur', 'cars', 'minecraft']
+                    return not any(b in text for b in boy_only)
+                elif gender == 'boy':
+                    girl_only = ['barbie', 'princess', 'frozen', 'fairy', 'unicorn', 'hello kitty']
+                    return not any(g in text for g in girl_only)
+                return True
+            
+            # Condition A: Arts/Crafts books → Arts supplies
+            if hierarchy_category == 'arts' and not item2_found:
+                arts_hierarchies = STATIONERY_HIERARCHIES_ACTUAL.get('arts_crafts', [])
+                arts = stationery[stationery['Hierarchy'].isin(arts_hierarchies)].copy()
+                arts = arts[arts.apply(lambda r: stationery_matches_gender(r.get('Title',''), r.get('Brand',''), detected_gender), axis=1)]
+                if not arts.empty:
+                    selected = get_rotated_selection(arts, tm, 'arts_direct', n=1)
                     if not selected.empty:
                         best = selected.iloc[0]
                         if best['Material'] not in used_materials:
                             row_copy = best.copy()
                             row_copy['Assigned_Slot'] = series_count + crosssell_count + 1
-                            row_copy['Slot_Role'] = 'Cross-Sell: Lifestyle'
+                            row_copy['Slot_Role'] = 'Cross-Sell: Arts Supplies'
                             row_copy['Item_Rank'] = 1
                             all_recs.append(row_copy)
                             used_materials.add(best['Material'])
                             crosssell_count += 1
-                            is_ip = "IP " if not ip_lifestyle.empty and best['Material'] in ip_lifestyle['Material'].values else ""
-                            item4_notes.append(f"✓ {is_ip}Lifestyle (rotated): {best['Title'][:40]}...")
+                            item2_notes.append(f"✓ Arts book → Arts supplies: {best['Title'][:40]}...")
+                            item2_found = True
+            
+            # Condition B: Fiction/Fantasy → Lego/Building Sets
+            if hierarchy_category == 'fiction' and not item2_found:
+                building = toys[toys['Hierarchy'].isin(TOY_HIERARCHIES_ACTUAL.get('building', []))].copy()
+                building = building[building.apply(lambda r: toy_matches_gender(r.get('Title',''), r.get('Brand',''), detected_gender), axis=1)]
+                if not building.empty:
+                    selected = get_rotated_selection(building, tm, 'building', n=1)
+                    if not selected.empty:
+                        best = selected.iloc[0]
+                        if best['Material'] not in used_materials:
+                            row_copy = best.copy()
+                            row_copy['Assigned_Slot'] = series_count + crosssell_count + 1
+                            row_copy['Slot_Role'] = 'Cross-Sell: Building Set'
+                            row_copy['Item_Rank'] = 1
+                            all_recs.append(row_copy)
+                            used_materials.add(best['Material'])
+                            crosssell_count += 1
+                            item2_notes.append(f"✓ Fiction → Building: {best['Title'][:40]}...")
+                            item2_found = True
+            
+            # Condition C: STEM/Knowledge → Educational toys
+            if hierarchy_category == 'stem' and not item2_found:
+                educational = toys[toys['Hierarchy'].isin(TOY_HIERARCHIES_ACTUAL.get('creative', []))].copy()
+                educational = educational[educational.apply(lambda r: toy_matches_gender(r.get('Title',''), r.get('Brand',''), detected_gender), axis=1)]
+                if not educational.empty:
+                    selected = get_rotated_selection(educational, tm, 'educational', n=1)
+                    if not selected.empty:
+                        best = selected.iloc[0]
+                        if best['Material'] not in used_materials:
+                            row_copy = best.copy()
+                            row_copy['Assigned_Slot'] = series_count + crosssell_count + 1
+                            row_copy['Slot_Role'] = 'Cross-Sell: Educational'
+                            row_copy['Item_Rank'] = 1
+                            all_recs.append(row_copy)
+                            used_materials.add(best['Material'])
+                            crosssell_count += 1
+                            item2_notes.append(f"✓ STEM → Educational: {best['Title'][:40]}...")
+                            item2_found = True
+            
+            # Condition D: Preschool → Building blocks (ΤΟΥΒΛΑΚΙΑ)
+            if hierarchy_category == 'preschool' and not item2_found:
+                blocks = toys[toys['Hierarchy'].str.contains('ΤΟΥΒΛΑΚ', case=False, na=False)].copy()
+                if not blocks.empty:
+                    selected = get_rotated_selection(blocks, tm, 'blocks', n=1)
+                    if not selected.empty:
+                        best = selected.iloc[0]
+                        if best['Material'] not in used_materials:
+                            row_copy = best.copy()
+                            row_copy['Assigned_Slot'] = series_count + crosssell_count + 1
+                            row_copy['Slot_Role'] = 'Cross-Sell: Building Blocks'
+                            row_copy['Item_Rank'] = 1
+                            all_recs.append(row_copy)
+                            used_materials.add(best['Material'])
+                            crosssell_count += 1
+                            item2_notes.append(f"✓ Preschool → Blocks: {best['Title'][:40]}...")
+                            item2_found = True
+            
+            # Universal Fallback: Age-based (from Word doc Condition E)
+            if not item2_found:
+                if age_bracket <= 6:  # <= 11 years
+                    # Try drawing blocks/paper first, then plush
+                    paper = stationery[stationery['Hierarchy'].str.contains('ΜΠΛΟΚ|ΧΑΡΤ', case=False, na=False)].copy()
+                    paper = paper[paper.apply(lambda r: stationery_matches_gender(r.get('Title',''), r.get('Brand',''), detected_gender), axis=1)]
+                    if not paper.empty:
+                        selected = get_rotated_selection(paper, tm, 'paper', n=1)
+                        if not selected.empty:
+                            best = selected.iloc[0]
+                            if best['Material'] not in used_materials:
+                                row_copy = best.copy()
+                                row_copy['Assigned_Slot'] = series_count + crosssell_count + 1
+                                row_copy['Slot_Role'] = 'Cross-Sell: Drawing Paper'
+                                row_copy['Item_Rank'] = 1
+                                all_recs.append(row_copy)
+                                used_materials.add(best['Material'])
+                                crosssell_count += 1
+                                item2_notes.append(f"✓ Fallback paper: {best['Title'][:40]}...")
+                                item2_found = True
+                else:  # 12+ years (teens)
+                    # Squishmallows or notebooks
+                    squish = toys[toys['Title'].str.contains('SQUISHMALLOW|SQUISH', case=False, na=False)].copy()
+                    if not squish.empty:
+                        selected = get_rotated_selection(squish, tm, 'squish', n=1)
+                        if not selected.empty:
+                            best = selected.iloc[0]
+                            if best['Material'] not in used_materials:
+                                row_copy = best.copy()
+                                row_copy['Assigned_Slot'] = series_count + crosssell_count + 1
+                                row_copy['Slot_Role'] = 'Cross-Sell: Squishmallow'
+                                row_copy['Item_Rank'] = 1
+                                all_recs.append(row_copy)
+                                used_materials.add(best['Material'])
+                                crosssell_count += 1
+                                item2_notes.append(f"✓ Teen Squishmallow: {best['Title'][:40]}...")
+                                item2_found = True
+            
+            crosssell_notes.extend(item2_notes)
+        
+        # ═══════════════════════════════════════════════════════════════
+        # CROSS-SELL SLOT 3: Puzzles/Games OR Reading Accessories (from Word doc Logic 5)
+        # ═══════════════════════════════════════════════════════════════
+        if crosssell_count < max_crosssell:
+            item3_notes = ["Item 3: Puzzle/Games or Reading"]
+            item3_found = False
+            
+            # Condition A: Activity books → Puzzles
+            if hierarchy_category == 'activity' and not item3_found:
+                puzzles = toys[toys['Hierarchy'].isin(TOY_HIERARCHIES_ACTUAL.get('board_puzzles', []))].copy()
+                puzzles = puzzles[puzzles.apply(lambda r: toy_matches_gender(r.get('Title',''), r.get('Brand',''), detected_gender), axis=1)]
+                if not puzzles.empty:
+                    selected = get_rotated_selection(puzzles, tm, 'puzzles_activity', n=1)
+                    if not selected.empty:
+                        best = selected.iloc[0]
+                        if best['Material'] not in used_materials:
+                            row_copy = best.copy()
+                            row_copy['Assigned_Slot'] = series_count + crosssell_count + 1
+                            row_copy['Slot_Role'] = 'Cross-Sell: Puzzle'
+                            row_copy['Item_Rank'] = 1
+                            all_recs.append(row_copy)
+                            used_materials.add(best['Material'])
+                            crosssell_count += 1
+                            item3_notes.append(f"✓ Activity → Puzzle: {best['Title'][:40]}...")
+                            item3_found = True
+            
+            # Condition B: STEM books → Knowledge games (ΓΝΩΣΕΩΝ)
+            if hierarchy_category == 'stem' and not item3_found:
+                knowledge = toys[toys['Hierarchy'].str.contains('ΓΝΩΣ', case=False, na=False)].copy()
+                if not knowledge.empty:
+                    selected = get_rotated_selection(knowledge, tm, 'knowledge', n=1)
+                    if not selected.empty:
+                        best = selected.iloc[0]
+                        if best['Material'] not in used_materials:
+                            row_copy = best.copy()
+                            row_copy['Assigned_Slot'] = series_count + crosssell_count + 1
+                            row_copy['Slot_Role'] = 'Cross-Sell: Knowledge Game'
+                            row_copy['Item_Rank'] = 1
+                            all_recs.append(row_copy)
+                            used_materials.add(best['Material'])
+                            crosssell_count += 1
+                            item3_notes.append(f"✓ STEM → Knowledge: {best['Title'][:40]}...")
+                            item3_found = True
+            
+            # Condition C: Toddlers (≤3 years) → Baby activity toys
+            if age_bracket <= 4 and not item3_found:
+                baby_toys = toys[toys['Hierarchy'].str.contains('ΒΡΕΦΙΚ|ΔΡΑΣΤΗΡΙΟΤ', case=False, na=False)].copy()
+                if not baby_toys.empty:
+                    selected = get_rotated_selection(baby_toys, tm, 'baby_activity', n=1)
+                    if not selected.empty:
+                        best = selected.iloc[0]
+                        if best['Material'] not in used_materials:
+                            row_copy = best.copy()
+                            row_copy['Assigned_Slot'] = series_count + crosssell_count + 1
+                            row_copy['Slot_Role'] = 'Cross-Sell: Baby Activity'
+                            row_copy['Item_Rank'] = 1
+                            all_recs.append(row_copy)
+                            used_materials.add(best['Material'])
+                            crosssell_count += 1
+                            item3_notes.append(f"✓ Toddler → Baby toy: {best['Title'][:40]}...")
+                            item3_found = True
+            
+            # Condition D: Fiction/Literature → Reading accessories (bookmarks, lights)
+            if hierarchy_category == 'fiction' and not item3_found:
+                reading = stationery[stationery['Hierarchy'].str.contains('READING|ΣΕΛΙΔΟΔΕΙΚΤ', case=False, na=False)].copy()
+                reading = reading[reading.apply(lambda r: stationery_matches_gender(r.get('Title',''), r.get('Brand',''), detected_gender), axis=1)]
+                if not reading.empty:
+                    selected = get_rotated_selection(reading, tm, 'reading', n=1)
+                    if not selected.empty:
+                        best = selected.iloc[0]
+                        if best['Material'] not in used_materials:
+                            row_copy = best.copy()
+                            row_copy['Assigned_Slot'] = series_count + crosssell_count + 1
+                            row_copy['Slot_Role'] = 'Cross-Sell: Reading Accessory'
+                            row_copy['Item_Rank'] = 1
+                            all_recs.append(row_copy)
+                            used_materials.add(best['Material'])
+                            crosssell_count += 1
+                            item3_notes.append(f"✓ Fiction → Reading: {best['Title'][:40]}...")
+                            item3_found = True
+            
+            # Universal fallback: Board game/puzzle (gender-filtered)
+            if not item3_found:
+                puzzles = toys[toys['Hierarchy'].isin(TOY_HIERARCHIES_ACTUAL.get('board_puzzles', []))].copy()
+                puzzles = puzzles[puzzles.apply(lambda r: toy_matches_gender(r.get('Title',''), r.get('Brand',''), detected_gender), axis=1)]
+                if not puzzles.empty:
+                    selected = get_rotated_selection(puzzles, tm, 'puzzles_fallback', n=1)
+                    if not selected.empty:
+                        best = selected.iloc[0]
+                        if best['Material'] not in used_materials:
+                            row_copy = best.copy()
+                            row_copy['Assigned_Slot'] = series_count + crosssell_count + 1
+                            row_copy['Slot_Role'] = 'Cross-Sell: Puzzle'
+                            row_copy['Item_Rank'] = 1
+                            all_recs.append(row_copy)
+                            used_materials.add(best['Material'])
+                            crosssell_count += 1
+                            item3_notes.append(f"✓ Fallback puzzle: {best['Title'][:40]}...")
+            
+            crosssell_notes.extend(item3_notes)
+        
+        # ═══════════════════════════════════════════════════════════════
+        # CROSS-SELL SLOT 4: Lifestyle (from Word doc Logic 6)
+        # Age-based: <12 → Water bottles, ≥12 → Notebooks
+        # ═══════════════════════════════════════════════════════════════
+        if crosssell_count < max_crosssell:
+            item4_notes = ["Item 4: Lifestyle (Age-Based)"]
+            item4_found = False
+            
+            # Condition A: STEM → Interactive/3D puzzles
+            if hierarchy_category == 'stem' and not item4_found:
+                interactive = toys[toys['Hierarchy'].str.contains('ΔΙΑΔΡΑΣΤΙΚ|3D PUZZLE', case=False, na=False)].copy()
+                if not interactive.empty:
+                    selected = get_rotated_selection(interactive, tm, 'interactive', n=1)
+                    if not selected.empty:
+                        best = selected.iloc[0]
+                        if best['Material'] not in used_materials:
+                            row_copy = best.copy()
+                            row_copy['Assigned_Slot'] = series_count + crosssell_count + 1
+                            row_copy['Slot_Role'] = 'Cross-Sell: Interactive'
+                            row_copy['Item_Rank'] = 1
+                            all_recs.append(row_copy)
+                            used_materials.add(best['Material'])
+                            crosssell_count += 1
+                            item4_notes.append(f"✓ STEM → Interactive: {best['Title'][:40]}...")
+                            item4_found = True
+            
+            # Condition B: Preschool → Wooden toys
+            if hierarchy_category == 'preschool' and not item4_found:
+                wooden = toys[toys['Hierarchy'].str.contains('ΞΥΛΙΝ', case=False, na=False)].copy()
+                if not wooden.empty:
+                    selected = get_rotated_selection(wooden, tm, 'wooden', n=1)
+                    if not selected.empty:
+                        best = selected.iloc[0]
+                        if best['Material'] not in used_materials:
+                            row_copy = best.copy()
+                            row_copy['Assigned_Slot'] = series_count + crosssell_count + 1
+                            row_copy['Slot_Role'] = 'Cross-Sell: Wooden Toy'
+                            row_copy['Item_Rank'] = 1
+                            all_recs.append(row_copy)
+                            used_materials.add(best['Material'])
+                            crosssell_count += 1
+                            item4_notes.append(f"✓ Preschool → Wooden: {best['Title'][:40]}...")
+                            item4_found = True
+            
+            # Age-based lifestyle fallback (from Word doc)
+            if not item4_found:
+                if age_bracket <= 6:  # ≤11 years → Water bottles/Food containers
+                    lifestyle = stationery[stationery['Hierarchy'].str.contains('ΠΑΓΟΥΡ|ΦΑΓΗΤΟΔΟΧ', case=False, na=False)].copy()
+                    lifestyle = lifestyle[lifestyle.apply(lambda r: stationery_matches_gender(r.get('Title',''), r.get('Brand',''), detected_gender), axis=1)]
+                    if not lifestyle.empty:
+                        selected = get_rotated_selection(lifestyle, tm, 'waterbottle', n=1)
+                        if not selected.empty:
+                            best = selected.iloc[0]
+                            if best['Material'] not in used_materials:
+                                row_copy = best.copy()
+                                row_copy['Assigned_Slot'] = series_count + crosssell_count + 1
+                                row_copy['Slot_Role'] = 'Cross-Sell: Water Bottle'
+                                row_copy['Item_Rank'] = 1
+                                all_recs.append(row_copy)
+                                used_materials.add(best['Material'])
+                                crosssell_count += 1
+                                item4_notes.append(f"✓ Kids → Water bottle: {best['Title'][:40]}...")
+                                item4_found = True
+                else:  # ≥12 years → Notebooks first, then water bottles
+                    notebooks = stationery[stationery['Hierarchy'].str.contains('ΣΗΜΕΙΩΜΑΤ', case=False, na=False)].copy()
+                    notebooks = notebooks[notebooks.apply(lambda r: stationery_matches_gender(r.get('Title',''), r.get('Brand',''), detected_gender), axis=1)]
+                    if not notebooks.empty:
+                        selected = get_rotated_selection(notebooks, tm, 'notebook', n=1)
+                        if not selected.empty:
+                            best = selected.iloc[0]
+                            if best['Material'] not in used_materials:
+                                row_copy = best.copy()
+                                row_copy['Assigned_Slot'] = series_count + crosssell_count + 1
+                                row_copy['Slot_Role'] = 'Cross-Sell: Notebook'
+                                row_copy['Item_Rank'] = 1
+                                all_recs.append(row_copy)
+                                used_materials.add(best['Material'])
+                                crosssell_count += 1
+                                item4_notes.append(f"✓ Teen → Notebook: {best['Title'][:40]}...")
+                                item4_found = True
+            
+            # Final fallback: Water bottles (universal)
+            if not item4_found:
+                lifestyle = stationery[stationery['Hierarchy'].str.contains('ΠΑΓΟΥΡ', case=False, na=False)].copy()
+                lifestyle = lifestyle[lifestyle.apply(lambda r: stationery_matches_gender(r.get('Title',''), r.get('Brand',''), detected_gender), axis=1)]
+                if not lifestyle.empty:
+                    selected = get_rotated_selection(lifestyle, tm, 'waterbottle_fallback', n=1)
+                    if not selected.empty:
+                        best = selected.iloc[0]
+                        if best['Material'] not in used_materials:
+                            row_copy = best.copy()
+                            row_copy['Assigned_Slot'] = series_count + crosssell_count + 1
+                            row_copy['Slot_Role'] = 'Cross-Sell: Water Bottle'
+                            row_copy['Item_Rank'] = 1
+                            all_recs.append(row_copy)
+                            used_materials.add(best['Material'])
+                            crosssell_count += 1
+                            item4_notes.append(f"✓ Fallback water bottle: {best['Title'][:40]}...")
             
             crosssell_notes.extend(item4_notes)
-        
-        # ─── CROSS-SELL SLOT 5: Lifestyle for ALL ages (with IP preference + rotation) ───
-        if crosssell_count < max_crosssell:
-            item5_notes = ["Item 5: Lifestyle (water bottle / notebook)"]
-            
-            lifestyle = stationery[stationery['Hierarchy'].isin(
-                STATIONERY_HIERARCHIES_ACTUAL['water_bottles'] + 
-                STATIONERY_HIERARCHIES_ACTUAL['notebooks'] +
-                STATIONERY_HIERARCHIES_ACTUAL.get('food_containers', [])
-            )].copy()
-            if not lifestyle.empty:
-                # 🟢 IP MATCHING: Boost lifestyle items that match book series
-                ip_lifestyle = pd.DataFrame()
-                if has_series:
-                    for idx, row in lifestyle.iterrows():
-                        item_title = str(row.get('Title', '')).lower()
-                        item_brand = str(row.get('Brand', '')).lower()
-                        item_heroes = str(row.get('Ήρωες Παιχνιδιών', '')).lower()
-                        
-                        series_lower = t_series.lower()
-                        if (series_lower in item_title or 
-                            series_lower in item_brand or 
-                            series_lower in item_heroes):
-                            lifestyle.loc[idx, 'Final_Score'] += SMART_BOOST * 5
-                    
-                    ip_lifestyle = lifestyle[lifestyle['Final_Score'] >= SMART_BOOST * 5]
-                    item5_notes.append(f"IP matched lifestyle for '{t_series}': {len(ip_lifestyle)}")
-                
-                # 🟢 PRIORITY: Rotate within IP-matched pool first, fallback to all lifestyle
-                pool_to_use = ip_lifestyle if not ip_lifestyle.empty else lifestyle
-                selected = get_rotated_selection(pool_to_use, tm, 'lifestyle5', n=1)
-                if not selected.empty:
-                    best = selected.iloc[0]
-                    if best['Material'] not in used_materials:
-                        row_copy = best.copy()
-                        row_copy['Assigned_Slot'] = series_count + crosssell_count + 1
-                        row_copy['Slot_Role'] = 'Cross-Sell: Lifestyle'
-                        row_copy['Item_Rank'] = 1
-                        all_recs.append(row_copy)
-                        used_materials.add(best['Material'])
-                        crosssell_count += 1
-                        is_ip = "IP " if not ip_lifestyle.empty and best['Material'] in ip_lifestyle['Material'].values else ""
-                        item5_notes.append(f"✓ {is_ip}Lifestyle (rotated): {best['Title'][:40]}...")
-            
-            crosssell_notes.extend(item5_notes)
     
     slot_notes[2] = crosssell_notes
     diag.append(("2. Cross-Sell", crosssell_count, f"Filled {crosssell_count} slots"))
