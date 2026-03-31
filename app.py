@@ -1529,7 +1529,7 @@ def run_books_engine(trigger, df_all, df_history, mode='A'):
         crosssell_notes.append(f"Toys pool: {len(toys)}, Stationery pool: {len(stationery)}")
         
         # ══════════════════════════════════════════════════════════
-        # AGE BRACKET SYSTEM (from Word doc)
+        # AGE BRACKET SYSTEM (from Word doc) - FIXED SUBSTRING FLAW
         # ══════════════════════════════════════════════════════════
         def get_age_bracket(age_str):
             """Return age bracket number (1-7) based on trigger age"""
@@ -1537,27 +1537,31 @@ def run_books_engine(trigger, df_all, df_history, mode='A'):
                 return 5  # Default to preschool
             age_lower = str(age_str).lower().strip()
             
-            # Bracket 1: Newborn (0-5 months)
-            if any(x in age_lower for x in ['0+ μηνών', '0+ ετών', '3+ μηνών', '5+ μηνών']):
-                return 1
-            # Bracket 2: Sitter/Crawler (6-11 months)
-            elif any(x in age_lower for x in ['6+ μηνών', '9+ μηνών']):
-                return 2
-            # Bracket 3: Early Toddler (1-1.5 years)
-            elif any(x in age_lower for x in ['12+ μηνών', '1+ ετών', '1.5+ ετών']):
-                return 3
-            # Bracket 4: Advanced Toddler (2 years)
-            elif any(x in age_lower for x in ['24+ μηνών', '2+ ετών']):
-                return 4
-            # Bracket 5: Preschool to Early Primary (3-6 years)
-            elif any(x in age_lower for x in ['3+ ετών', '4+ ετών', '5+ ετών', '6+ ετών']):
-                return 5
+            # Check older brackets FIRST to prevent single-digit substring overlaps
+            # (e.g., preventing "13+ ετών" from falsely triggering "3+ ετών")
+            
+            # Bracket 7: Teens & Collectors (13-18+ years)
+            if any(x in age_lower for x in ['13+ ετών', '14+ ετών', '15+ ετών', '16+ ετών', '17+ ετών', '18+ ετών']):
+                return 7
             # Bracket 6: Older Kids & Tweens (7-12 years)
             elif any(x in age_lower for x in ['7+ ετών', '8+ ετών', '9+ ετών', '10+ ετών', '11+ ετών', '12+ ετών']):
                 return 6
-            # Bracket 7: Teens & Collectors (13-18+ years)
-            elif any(x in age_lower for x in ['13+ ετών', '14+ ετών', '15+ ετών', '16+ ετών', '17+ ετών', '18+ ετών']):
-                return 7
+            # Bracket 5: Preschool to Early Primary (3-6 years)
+            elif any(x in age_lower for x in ['3+ ετών', '4+ ετών', '5+ ετών', '6+ ετών']):
+                return 5
+            # Bracket 4: Advanced Toddler (2 years)
+            elif any(x in age_lower for x in ['24+ μηνών', '2+ ετών']):
+                return 4
+            # Bracket 3: Early Toddler (1-1.5 years)
+            elif any(x in age_lower for x in ['12+ μηνών', '1+ ετών', '1.5+ ετών']):
+                return 3
+            # Bracket 2: Sitter/Crawler (6-11 months)
+            elif any(x in age_lower for x in ['6+ μηνών', '9+ μηνών']):
+                return 2
+            # Bracket 1: Newborn (0-5 months)
+            elif any(x in age_lower for x in ['0+ μηνών', '0+ ετών', '3+ μηνών', '5+ μηνών']):
+                return 1
+                
             return 5  # Default
         
         def get_allowed_toy_ages(bracket):
