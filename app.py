@@ -75,7 +75,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v15.5 — Mode B Uses Format-Scored Pool for Extra Books
+        🟢 Engine v15.6 — Dog Man Reading Order (Book 4 → 5,6,7,8...)
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -266,58 +266,37 @@ def get_rotated_selection(df: pd.DataFrame, trigger_material: str, slot_type: st
 
 
 def ip_matches(series_name: str, brand: str, heroes: str) -> bool:
-    """Check if book series matches toy brand or heroes (Stricter matching)"""
+    """Check if book series matches toy brand or heroes"""
     if not is_valid_series(series_name):
         return False
-        
     series_norm = normalize_ip_name(series_name)
     brand_norm = normalize_ip_name(brand)
     heroes_norm = normalize_ip_name(heroes)
     
-    # 1. Exact match
-    if series_norm and (series_norm == brand_norm or series_norm == heroes_norm):
+    # Direct match
+    if series_norm in brand_norm or brand_norm in series_norm:
         return True
-        
-    # 2. Explicit Mappings (Safest approach for known IPs)
+    if series_norm in heroes_norm or heroes_norm in series_norm:
+        return True
+    
+    # Common mappings
     mappings = {
-        'harry potter': ['harry potter', 'hogwarts'],
+        'harry potter': ['harry potter'],
         'peppa pig': ['peppa pig', 'peppa'],
         'bluey': ['bluey'],
         'spiderman': ['spiderman', 'spider-man', 'spider man', 'spidey'],
         'frozen': ['frozen', 'elsa', 'anna'],
-        'disney': ['disney', 'mickey', 'minnie', 'donald'],
+        'disney': ['disney', 'mickey', 'minnie'],
         'barbie': ['barbie'],
         'marvel': ['marvel', 'avengers', 'hulk', 'iron man', 'captain america'],
         'μικροί κύριοι': ['μικροί κύριοι', 'mr. men', 'little miss'],
-        'pokemon': ['pokemon', 'pikachu'],
-        'star wars': ['star wars', 'mandalorian', 'yoda', 'darth vader'],
-        'minecraft': ['minecraft'],
-        'five nights at freddy': ['five nights at freddy', 'fnaf'], # Explicit rule for FNAF
     }
     
-    # Check if the book series belongs to any known mapped IP
     for key, variants in mappings.items():
-        if key in series_norm:
-            # Use regex word boundaries to prevent partial matches 
-            import re
-            for v in variants:
-                pattern = r'\b' + re.escape(v) + r'\b'
-                if re.search(pattern, brand_norm) or re.search(pattern, heroes_norm):
-                    return True
-            # If it's a known series but didn't match the specific variants, stop here
-            # to prevent false positive fallbacks
-            return False
-            
-    # 3. Generic Substring Fallback
-    # Prevent single-word heroes (like "Freddy" or "Sam") from randomly matching multi-word series
-    if brand_norm and len(brand_norm) > 3:
-        if brand_norm in series_norm or series_norm in brand_norm:
-            return True
-            
-    if heroes_norm and len(heroes_norm.split()) >= 2: # Require at least 2 words for generic hero match
-        if heroes_norm in series_norm or series_norm in heroes_norm:
-            return True
-            
+        if any(v in series_norm for v in variants):
+            if any(v in brand_norm or v in heroes_norm for v in variants):
+                return True
+    
     return False
 
 def detect_logic_key(role: str) -> str:
@@ -1005,6 +984,51 @@ def run_books_engine(trigger, df_all, df_history, mode='A'):
         series_lower = str(series_name).lower()
         return 'harry potter' in series_lower or 'χάρι πότερ' in series_lower or 'χαρι ποτερ' in series_lower
     
+    # 🟢 DOG MAN SERIES: Extract book number from title
+    def is_dog_man_series(series_name):
+        """Check if this is the Dog Man series"""
+        series_lower = str(series_name).lower()
+        return 'dog man' in series_lower
+    
+    def get_dog_man_order(title):
+        """Extract Dog Man book number from title (e.g., 'Dog Man 10: Mothering Heights' → 10)"""
+        import re
+        title_lower = str(title).lower()
+        
+        # Pattern: "dog man X" or "dog man X:" or "dog man X-" where X is 1-2 digits
+        match = re.search(r'dog\s*man\s*(\d{1,2})(?:\s*[-:]|\s|$)', title_lower)
+        if match:
+            return int(match.group(1))
+        
+        # First book has no number, just "Dog Man" or "Adventures of Dog Man"
+        if 'dog man' in title_lower and not re.search(r'dog\s*man\s*\d', title_lower):
+            # Check if it's "Adventures of Dog Man 2" etc.
+            adv_match = re.search(r'adventures\s*of\s*dog\s*man\s*(\d)', title_lower)
+            if adv_match:
+                return int(adv_match.group(1))
+            # Otherwise it's book 1
+            return 1
+        
+        # 🟢 FALLBACK: Known Dog Man titles without "Dog Man X" pattern
+        known_titles = {
+            'a tale of two kitties': 3,
+            'tale of two kitties': 3,
+            'lord of the fleas': 5,
+            'brawl of the wild': 6,
+            'for whom the ball rolls': 7,
+            'fetch-22': 8, 'fetch 22': 8,
+            'grime and punishment': 9,
+            'mothering heights': 10,
+            'twenty thousand fleas': 11,
+            'scarlet shedder': 12,
+            'big jim begins': 13,
+        }
+        for keyword, order in known_titles.items():
+            if keyword in title_lower:
+                return order
+        
+        return 99  # Unknown
+    
     # 🟢 HELPER: Detect if a book is a box set
     def is_box_set(title):
         """Check if title indicates a box set/collection"""
@@ -1402,8 +1426,44 @@ def run_books_engine(trigger, df_all, df_history, mode='A'):
                                 series_count += 1
                         
                         series_notes.append(f"✓ Mode A (HP): Added {series_count} books in reading order")
+                    
+                    # 🟢 DOG MAN: Use number in title for reading order (Mode A)
+                    elif is_dog_man_series(t_series):
+                        trigger_order = get_dog_man_order(tt)
+                        series_notes.append(f"Dog Man (Mode A): trigger is book #{trigger_order}")
+                        
+                        series_books['_dm_order'] = series_books['Title'].apply(get_dog_man_order)
+                        
+                        # Sort by Dog Man order first, then by format score
+                        # Books after trigger come first, then books before (wrap around)
+                        books_after = series_books[series_books['_dm_order'] > trigger_order].copy()
+                        books_after = books_after.sort_values(['_dm_order', 'Final_Score'], ascending=[True, False])
+                        
+                        books_before = series_books[series_books['_dm_order'] < trigger_order].copy()
+                        books_before = books_before.sort_values(['_dm_order', 'Final_Score'], ascending=[True, False])
+                        
+                        # Combined: after first, then before (reading order)
+                        combined = pd.concat([books_after, books_before])
+                        
+                        for _, row in combined.iterrows():
+                            if series_count >= max_series:
+                                break
+                            row_canonical = get_canonical_book_name(row['Title'], row.get('Τίτλος πρωτοτύπου', ''))
+                            
+                            if row['Material'] not in used_materials and row_canonical not in used_titles:
+                                row_copy = row.copy()
+                                row_copy['Assigned_Slot'] = series_count + 1
+                                row_copy['Slot_Role'] = 'Series Book'
+                                row_copy['Item_Rank'] = 1
+                                all_recs.append(row_copy)
+                                used_materials.add(row['Material'])
+                                used_titles.add(row_canonical)
+                                series_count += 1
+                        
+                        series_notes.append(f"✓ Mode A (Dog Man): Added {series_count} books in reading order")
+                    
                     else:
-                        # Non-HP series: Sort by format match + availability
+                        # Non-HP/Dog Man series: Sort by format match + availability
                         series_books = series_books.sort_values('Final_Score', ascending=False)
                         
                         for _, row in series_books.iterrows():
@@ -1502,8 +1562,69 @@ def run_books_engine(trigger, df_all, df_history, mode='A'):
                         
                         series_notes.append(f"✓ Mode B (HP): Added {series_count} main series books")
                     
+                    # 🟢 DOG MAN: Use number in title for reading order
+                    elif is_dog_man_series(t_series):
+                        trigger_order = get_dog_man_order(tt)
+                        series_notes.append(f"Dog Man: trigger is book #{trigger_order}")
+                        
+                        series_books['_dm_order'] = series_books['Title'].apply(get_dog_man_order)
+                        
+                        # Books AFTER trigger (next in reading order)
+                        # Sort by: reading order first, then format score (prefer matching format)
+                        books_after = series_books[series_books['_dm_order'] > trigger_order].copy()
+                        books_after = books_after.sort_values(['_dm_order', 'Final_Score'], ascending=[True, False])
+                        
+                        # Books BEFORE trigger (start from beginning)
+                        books_before = series_books[series_books['_dm_order'] < trigger_order].copy()
+                        books_before = books_before.sort_values(['_dm_order', 'Final_Score'], ascending=[True, False])
+                        
+                        # Count unique canonical titles
+                        after_unique = books_after['_canonical'].nunique() if '_canonical' in books_after.columns else len(books_after)
+                        before_unique = books_before['_canonical'].nunique() if '_canonical' in books_before.columns else len(books_before)
+                        series_notes.append(f"Unique books - After #{trigger_order}: {after_unique}, Before: {before_unique}")
+                        
+                        # Add "next" books first (those after trigger in reading order)
+                        next_added = 0
+                        for _, row in books_after.iterrows():
+                            if next_added >= 6:
+                                break
+                            row_canonical = get_canonical_book_name(row['Title'], row.get('Τίτλος πρωτοτύπου', ''))
+                            
+                            if row['Material'] not in used_materials and row_canonical not in used_titles:
+                                row_copy = row.copy()
+                                row_copy['Assigned_Slot'] = series_count + 1
+                                row_copy['Slot_Role'] = 'Series Book'
+                                row_copy['Item_Rank'] = 1
+                                all_recs.append(row_copy)
+                                used_materials.add(row['Material'])
+                                used_titles.add(row_canonical)
+                                series_count += 1
+                                next_added += 1
+                        
+                        # Fill remaining (up to 6 total) with books from beginning
+                        if next_added < 6 and not books_before.empty:
+                            remaining_slots = 6 - next_added
+                            series_notes.append(f"Added {next_added} after, filling {remaining_slots} from beginning")
+                            
+                            for _, row in books_before.iterrows():
+                                if series_count >= 6:
+                                    break
+                                row_canonical = get_canonical_book_name(row['Title'], row.get('Τίτλος πρωτοτύπου', ''))
+                                
+                                if row['Material'] not in used_materials and row_canonical not in used_titles:
+                                    row_copy = row.copy()
+                                    row_copy['Assigned_Slot'] = series_count + 1
+                                    row_copy['Slot_Role'] = 'Start from Beginning'
+                                    row_copy['Item_Rank'] = 1
+                                    all_recs.append(row_copy)
+                                    used_materials.add(row['Material'])
+                                    used_titles.add(row_canonical)
+                                    series_count += 1
+                        
+                        series_notes.append(f"✓ Mode B (Dog Man): Added {series_count} books in reading order")
+                    
                     else:
-                        # Non-HP series: Sort by format match + availability, cap at 6 unique titles
+                        # Non-HP/Dog Man series: Sort by format match + availability, cap at 6 unique titles
                         series_books = series_books.sort_values('Final_Score', ascending=False)
                         max_series = 6
                         
@@ -1550,7 +1671,7 @@ def run_books_engine(trigger, df_all, df_history, mode='A'):
         crosssell_notes.append(f"Toys pool: {len(toys)}, Stationery pool: {len(stationery)}")
         
         # ══════════════════════════════════════════════════════════
-        # AGE BRACKET SYSTEM (from Word doc) - FIXED SUBSTRING FLAW
+        # AGE BRACKET SYSTEM (from Word doc)
         # ══════════════════════════════════════════════════════════
         def get_age_bracket(age_str):
             """Return age bracket number (1-7) based on trigger age"""
@@ -1558,31 +1679,27 @@ def run_books_engine(trigger, df_all, df_history, mode='A'):
                 return 5  # Default to preschool
             age_lower = str(age_str).lower().strip()
             
-            # Check older brackets FIRST to prevent single-digit substring overlaps
-            # (e.g., preventing "13+ ετών" from falsely triggering "3+ ετών")
-            
-            # Bracket 7: Teens & Collectors (13-18+ years)
-            if any(x in age_lower for x in ['13+ ετών', '14+ ετών', '15+ ετών', '16+ ετών', '17+ ετών', '18+ ετών']):
-                return 7
-            # Bracket 6: Older Kids & Tweens (7-12 years)
-            elif any(x in age_lower for x in ['7+ ετών', '8+ ετών', '9+ ετών', '10+ ετών', '11+ ετών', '12+ ετών']):
-                return 6
-            # Bracket 5: Preschool to Early Primary (3-6 years)
-            elif any(x in age_lower for x in ['3+ ετών', '4+ ετών', '5+ ετών', '6+ ετών']):
-                return 5
-            # Bracket 4: Advanced Toddler (2 years)
-            elif any(x in age_lower for x in ['24+ μηνών', '2+ ετών']):
-                return 4
-            # Bracket 3: Early Toddler (1-1.5 years)
-            elif any(x in age_lower for x in ['12+ μηνών', '1+ ετών', '1.5+ ετών']):
-                return 3
+            # Bracket 1: Newborn (0-5 months)
+            if any(x in age_lower for x in ['0+ μηνών', '0+ ετών', '3+ μηνών', '5+ μηνών']):
+                return 1
             # Bracket 2: Sitter/Crawler (6-11 months)
             elif any(x in age_lower for x in ['6+ μηνών', '9+ μηνών']):
                 return 2
-            # Bracket 1: Newborn (0-5 months)
-            elif any(x in age_lower for x in ['0+ μηνών', '0+ ετών', '3+ μηνών', '5+ μηνών']):
-                return 1
-                
+            # Bracket 3: Early Toddler (1-1.5 years)
+            elif any(x in age_lower for x in ['12+ μηνών', '1+ ετών', '1.5+ ετών']):
+                return 3
+            # Bracket 4: Advanced Toddler (2 years)
+            elif any(x in age_lower for x in ['24+ μηνών', '2+ ετών']):
+                return 4
+            # Bracket 5: Preschool to Early Primary (3-6 years)
+            elif any(x in age_lower for x in ['3+ ετών', '4+ ετών', '5+ ετών', '6+ ετών']):
+                return 5
+            # Bracket 6: Older Kids & Tweens (7-12 years)
+            elif any(x in age_lower for x in ['7+ ετών', '8+ ετών', '9+ ετών', '10+ ετών', '11+ ετών', '12+ ετών']):
+                return 6
+            # Bracket 7: Teens & Collectors (13-18+ years)
+            elif any(x in age_lower for x in ['13+ ετών', '14+ ετών', '15+ ετών', '16+ ετών', '17+ ετών', '18+ ετών']):
+                return 7
             return 5  # Default
         
         def get_allowed_toy_ages(bracket):
