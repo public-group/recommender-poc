@@ -75,7 +75,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v15.2 — Gender File + Mode B IP-First + No Magnifying Glass
+        🟢 Engine v15.3 — No LEGO Technic/Icons, Strict Age Filter, No Self-Recommend
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -1081,6 +1081,9 @@ def run_books_engine(trigger, df_all, df_history, mode='A'):
     tm = trigger['Material']
     tt = str(trigger.get('Title', ''))
     
+    # 🟢 CRITICAL: Add trigger to used_materials to prevent self-recommendation
+    used_materials.add(tm)
+    
     # 🟢 FIX: More robust series extraction
     t_series_raw = trigger.get('Σειρά βιβλίου', None)
     if t_series_raw is None:
@@ -1665,15 +1668,34 @@ def run_books_engine(trigger, df_all, df_history, mode='A'):
         crosssell_notes.append(f"Stationery after adult brand filter: {len(stationery)}")
         
         # ══════════════════════════════════════════════════════════
+        # ADULT TOY HIERARCHY EXCLUSION (18+ LEGO lines, etc.)
+        # ══════════════════════════════════════════════════════════
+        adult_toy_hierarchies = [
+            'TECHNIC', 'LEGO ICONS', 'ICONS', 'CREATOR EXPERT', 'ARCHITECTURE',
+            'LEGO ART', 'IDEAS', 'BOTANICS', 'LEGO BOTANICAL',
+        ]
+        before_adult = len(toys)
+        toys = toys[~toys['Hierarchy'].str.upper().str.strip().isin([h.upper() for h in adult_toy_hierarchies])]
+        crosssell_notes.append(f"Toys after adult hierarchy filter (TECHNIC, ICONS etc.): {before_adult}→{len(toys)}")
+        
+        # ══════════════════════════════════════════════════════════
         # AGE FILTER FOR TOYS (using bracket system)
         # ══════════════════════════════════════════════════════════
         if 'Προτεινόμενη Ηλικία' in toys.columns:
-            toys = toys[
-                toys['Προτεινόμενη Ηλικία'].fillna('').astype(str).str.strip().isin(bracket_allowed_ages) |
-                (toys['Προτεινόμενη Ηλικία'].fillna('') == '') |
-                (toys['Προτεινόμενη Ηλικία'].fillna('').astype(str) == '0')
-            ]
-            crosssell_notes.append(f"Toys after age bracket filter: {len(toys)}")
+            # Only allow toys with matching age OR explicit kids ages (not NaN)
+            # NaN age is NOT allowed unless age bracket is 6+ (older kids who can handle general products)
+            if age_bracket <= 5:  # Babies to 6-year-olds: strict age filtering
+                toys = toys[
+                    toys['Προτεινόμενη Ηλικία'].fillna('').astype(str).str.strip().isin(bracket_allowed_ages)
+                ]
+                crosssell_notes.append(f"Toys after STRICT age filter (bracket {age_bracket}): {len(toys)}")
+            else:  # Older kids (7+): allow products without age too
+                toys = toys[
+                    toys['Προτεινόμενη Ηλικία'].fillna('').astype(str).str.strip().isin(bracket_allowed_ages) |
+                    (toys['Προτεινόμενη Ηλικία'].fillna('') == '') |
+                    (toys['Προτεινόμενη Ηλικία'].fillna('').astype(str) == '0')
+                ]
+                crosssell_notes.append(f"Toys after age bracket filter (bracket {age_bracket}): {len(toys)}")
         
         # ══════════════════════════════════════════════════════════
         # GENDER FILTER FUNCTIONS (shared by all slots)
