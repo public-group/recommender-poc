@@ -75,7 +75,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v15.8 — IP match
+        🟢 Engine v15.5 — Mode B Uses Format-Scored Pool for Extra Books
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -1004,30 +1004,6 @@ def run_books_engine(trigger, df_all, df_history, mode='A'):
         """Check if this is the Harry Potter series"""
         series_lower = str(series_name).lower()
         return 'harry potter' in series_lower or 'χάρι πότερ' in series_lower or 'χαρι ποτερ' in series_lower
-
-# 🟢 DOG MAN PREDEFINED ORDER
-    def get_dog_man_order(title):
-        """Extract Dog Man reading order directly from the title number"""
-        import re
-        title_lower = str(title).lower()
-        
-        # Look for "Dog Man X" or "Adventures of Dog Man X"
-        match = re.search(r'dog\s*man\s*(\d+)', title_lower)
-        if match:
-            return int(match.group(1))
-            
-        # Fallback for Book 1 which often lacks a number
-        if title_lower.strip() == 'dog man' or title_lower.startswith('dog man:'):
-            return 1
-            
-        return 99  # Unknown order
-        
-    def is_dog_man_series(series_name):
-        """Check if this is the Dog Man series"""
-        series_lower = str(series_name).lower()
-        return 'dog man' in series_lower
-
-
     
     # 🟢 HELPER: Detect if a book is a box set
     def is_box_set(title):
@@ -1384,30 +1360,28 @@ def run_books_engine(trigger, df_all, df_history, mode='A'):
                             series_count += 1
                     series_notes.append(f"✓ Added other box sets: {series_count}")
             else:
-
-# ════════════════════════════════════════════════════════
+                # ════════════════════════════════════════════════════════
                 # MODE A: SERIES FIRST (Management's preference)
+                # Fill up to 10 slots with series books
+                # For HP: Use reading order, then spinoffs
                 # ════════════════════════════════════════════════════════
                 if mode == 'A':
                     max_series = 10
                     
                     # 🟢 HARRY POTTER: Use reading order for Mode A too
                     if is_harry_potter_series(t_series):
-                        # ... [Keep your existing Harry Potter code exactly as is] ...
+                        trigger_order = get_hp_order(tt)
+                        series_notes.append(f"Harry Potter (Mode A): trigger is book #{trigger_order}")
                         
-                    # 🟢 DOG MAN: Use reading order based on title numbers
-                    elif is_dog_man_series(t_series):
-                        trigger_order = get_dog_man_order(tt)
-                        series_notes.append(f"Dog Man (Mode A): trigger is book #{trigger_order}")
+                        series_books['_hp_order'] = series_books['Title'].apply(get_hp_order)
                         
-                        series_books['_dm_order'] = series_books['Title'].apply(get_dog_man_order)
-                        
+                        # Sort by HP order first, then by format score
                         # Books after trigger come first, then books before (wrap around)
-                        books_after = series_books[series_books['_dm_order'] > trigger_order].copy()
-                        books_after = books_after.sort_values(['_dm_order', 'Final_Score'], ascending=[True, False])
+                        books_after = series_books[series_books['_hp_order'] > trigger_order].copy()
+                        books_after = books_after.sort_values(['_hp_order', 'Final_Score'], ascending=[True, False])
                         
-                        books_before = series_books[series_books['_dm_order'] < trigger_order].copy()
-                        books_before = books_before.sort_values(['_dm_order', 'Final_Score'], ascending=[True, False])
+                        books_before = series_books[series_books['_hp_order'] < trigger_order].copy()
+                        books_before = books_before.sort_values(['_hp_order', 'Final_Score'], ascending=[True, False])
                         
                         # Combined: after first, then before (reading order)
                         combined = pd.concat([books_after, books_before])
@@ -1427,10 +1401,9 @@ def run_books_engine(trigger, df_all, df_history, mode='A'):
                                 used_titles.add(row_canonical)
                                 series_count += 1
                         
-                        series_notes.append(f"✓ Mode A (Dog Man): Added {series_count} books in reading order")
-                        
+                        series_notes.append(f"✓ Mode A (HP): Added {series_count} books in reading order")
                     else:
-                        # Non-HP/Dog Man series: Sort by format match + availability
+                        # Non-HP series: Sort by format match + availability
                         series_books = series_books.sort_values('Final_Score', ascending=False)
                         
                         for _, row in series_books.iterrows():
@@ -1452,28 +1425,38 @@ def run_books_engine(trigger, df_all, df_history, mode='A'):
                 
                 # ════════════════════════════════════════════════════════
                 # MODE B: NEXT IN SERIES (User's preference)
+                # Max 6 series books using reading order:
+                # Book 1 → 2,3,4,5,6,7 | Book 5 → 6,7,1,2,3,4
                 # ════════════════════════════════════════════════════════
                 else:  # mode == 'B'
                     # 🟢 HARRY POTTER: Use predefined reading order
                     if is_harry_potter_series(t_series):
-                        # ... [Keep your existing Harry Potter code exactly as is] ...
+                        trigger_order = get_hp_order(tt)
+                        series_notes.append(f"Harry Potter: trigger is book #{trigger_order}")
                         
-                    # 🟢 DOG MAN: Extract reading order from titles
-                    elif is_dog_man_series(t_series):
-                        trigger_order = get_dog_man_order(tt)
-                        series_notes.append(f"Dog Man: trigger is book #{trigger_order}")
+                        series_books['_hp_order'] = series_books['Title'].apply(get_hp_order)
                         
-                        series_books['_dm_order'] = series_books['Title'].apply(get_dog_man_order)
+                        # 🟢 ONLY MAIN 7 BOOKS in series slots (spinoffs go to discovery)
+                        main_7_books = series_books[series_books['_hp_order'] <= 7].copy()
+                        spinoffs = series_books[series_books['_hp_order'] > 7].copy()
                         
-                        # Books AFTER trigger (next in reading order)
-                        books_after = series_books[series_books['_dm_order'] > trigger_order].copy()
-                        books_after = books_after.sort_values(['_dm_order', 'Final_Score'], ascending=[True, False])
+                        series_notes.append(f"Main 7 pool: {len(main_7_books)} editions, Spinoffs: {len(spinoffs)}")
                         
-                        # Books BEFORE trigger (start from beginning)
-                        books_before = series_books[series_books['_dm_order'] < trigger_order].copy()
-                        books_before = books_before.sort_values(['_dm_order', 'Final_Score'], ascending=[True, False])
+                        # Books AFTER trigger (next in reading order) - ONLY from main 7
+                        # Sort by: reading order first, then format score (prefer matching format)
+                        books_after = main_7_books[main_7_books['_hp_order'] > trigger_order].copy()
+                        books_after = books_after.sort_values(['_hp_order', 'Final_Score'], ascending=[True, False])
                         
-                        # Add "next" books first
+                        # Books BEFORE trigger (start from beginning) - ONLY from main 7
+                        books_before = main_7_books[main_7_books['_hp_order'] < trigger_order].copy()
+                        books_before = books_before.sort_values(['_hp_order', 'Final_Score'], ascending=[True, False])
+                        
+                        # Count unique canonical titles
+                        after_unique = books_after['_canonical'].nunique() if '_canonical' in books_after.columns else len(books_after)
+                        before_unique = books_before['_canonical'].nunique() if '_canonical' in books_before.columns else len(books_before)
+                        series_notes.append(f"Unique books - After #{trigger_order}: {after_unique}, Before: {before_unique}")
+                        
+                        # Add "next" books first (those after trigger in reading order)
                         next_added = 0
                         for _, row in books_after.iterrows():
                             if next_added >= 6:
@@ -1496,10 +1479,14 @@ def run_books_engine(trigger, df_all, df_history, mode='A'):
                             remaining_slots = 6 - next_added
                             series_notes.append(f"Added {next_added} after, filling {remaining_slots} from beginning")
                             
+                            # 🔍 DEBUG: Show what canonicals we're checking
+                            debug_canonicals = []
                             for _, row in books_before.iterrows():
                                 if series_count >= 6:
                                     break
                                 row_canonical = get_canonical_book_name(row['Title'], row.get('Τίτλος πρωτοτύπου', ''))
+                                in_used = row_canonical in used_titles
+                                debug_canonicals.append(f"hp{row['_hp_order']}: '{row_canonical}' in_used={in_used}")
                                 
                                 if row['Material'] not in used_materials and row_canonical not in used_titles:
                                     row_copy = row.copy()
@@ -1510,11 +1497,13 @@ def run_books_engine(trigger, df_all, df_history, mode='A'):
                                     used_materials.add(row['Material'])
                                     used_titles.add(row_canonical)
                                     series_count += 1
-                                    
-                        series_notes.append(f"✓ Mode B (Dog Man): Added {series_count} series books")
-
+                            
+                            series_notes.append(f"Before-loop debug: {debug_canonicals[:10]}")
+                        
+                        series_notes.append(f"✓ Mode B (HP): Added {series_count} main series books")
+                    
                     else:
-                        # Non-HP/Dog Man series: Sort by format match + availability, cap at 6 unique titles
+                        # Non-HP series: Sort by format match + availability, cap at 6 unique titles
                         series_books = series_books.sort_values('Final_Score', ascending=False)
                         max_series = 6
                         
