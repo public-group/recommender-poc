@@ -1636,6 +1636,35 @@ def run_books_engine(trigger, df_all, df_history, mode='A'):
             ]
             crosssell_notes.append(f"Toys after age bracket filter: {len(toys)}")
         
+        # ══════════════════════════════════════════════════════════
+        # GENDER FILTER FUNCTIONS (shared by all slots)
+        # ══════════════════════════════════════════════════════════
+        def toy_matches_gender(title, brand, gender):
+            """Filter toys by gender appropriateness"""
+            text = (str(title) + ' ' + str(brand)).lower()
+            if gender == 'girl':
+                # Exclude boy-specific
+                boy_only = ['spider-man', 'batman', 'avengers', 'marvel', 'dinosaur', 'dino', 
+                           'monster truck', 'transformers', 'ninja', 'nerf', 'army', 'soldier']
+                return not any(b in text for b in boy_only)
+            elif gender == 'boy':
+                # Exclude girl-specific
+                girl_only = ['barbie', 'princess', 'frozen', 'elsa', 'anna', 'fairy', 
+                            'unicorn', 'my little pony', 'hello kitty', 'ballerina']
+                return not any(g in text for g in girl_only)
+            return True
+        
+        def stationery_matches_gender(title, brand, gender):
+            """Filter stationery by gender appropriateness"""
+            text = (str(title) + ' ' + str(brand)).lower()
+            if gender == 'girl':
+                boy_only = ['spider-man', 'batman', 'avengers', 'marvel', 'dinosaur', 'cars', 'minecraft']
+                return not any(b in text for b in boy_only)
+            elif gender == 'boy':
+                girl_only = ['barbie', 'princess', 'frozen', 'fairy', 'unicorn', 'hello kitty']
+                return not any(g in text for g in girl_only)
+            return True
+        
         # Initialize scores
         toys['Final_Score'] = 0
         stationery['Final_Score'] = 0
@@ -1684,22 +1713,6 @@ def run_books_engine(trigger, df_all, df_history, mode='A'):
             # NO IP FALLBACK (from Word doc - age-bracket based)
             if crosssell_count == 0:
                 item1_notes.append("No IP match, using age-bracket fallback")
-                
-                # Define gender-appropriate toy filter
-                def toy_matches_gender(title, brand, gender):
-                    """Filter toys by gender appropriateness"""
-                    text = (str(title) + ' ' + str(brand)).lower()
-                    if gender == 'girl':
-                        # Exclude boy-specific
-                        boy_only = ['spider-man', 'batman', 'avengers', 'marvel', 'dinosaur', 'dino', 
-                                   'monster truck', 'transformers', 'ninja', 'nerf', 'army', 'soldier']
-                        return not any(b in text for b in boy_only)
-                    elif gender == 'boy':
-                        # Exclude girl-specific
-                        girl_only = ['barbie', 'princess', 'frozen', 'elsa', 'anna', 'fairy', 
-                                    'unicorn', 'my little pony', 'hello kitty', 'ballerina']
-                        return not any(g in text for g in girl_only)
-                    return True
                 
                 fallback_found = False
                 
@@ -1808,17 +1821,6 @@ def run_books_engine(trigger, df_all, df_history, mode='A'):
         if crosssell_count < max_crosssell:
             item2_notes = ["Item 2: Hierarchy-Based Creative"]
             item2_found = False
-            
-            # Define gender filter for stationery
-            def stationery_matches_gender(title, brand, gender):
-                text = (str(title) + ' ' + str(brand)).lower()
-                if gender == 'girl':
-                    boy_only = ['spider-man', 'batman', 'avengers', 'marvel', 'dinosaur', 'cars', 'minecraft']
-                    return not any(b in text for b in boy_only)
-                elif gender == 'boy':
-                    girl_only = ['barbie', 'princess', 'frozen', 'fairy', 'unicorn', 'hello kitty']
-                    return not any(g in text for g in girl_only)
-                return True
             
             # Condition A: Arts/Crafts books → Arts supplies
             if hierarchy_category == 'arts' and not item2_found:
