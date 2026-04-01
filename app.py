@@ -7,6 +7,27 @@ import io
 import traceback
 from difflib import SequenceMatcher
 
+import streamlit as st
+
+# 1. Professional Tab Title and Icon
+st.set_page_config(
+    page_title="Recommender Intelligence POC", 
+    page_icon="🎯", 
+    layout="wide"
+)
+
+# 2. Modern 2026 "Clean UI" Hack
+# Using st.html (the modern replacement for markdown hacks) to hide UI
+st.html("""
+    <style>
+    /* Hide the Streamlit header, footer, and menu */
+    header {visibility: hidden;}
+    footer {visibility: hidden;}
+    #MainMenu {visibility: hidden;}
+    /* Remove top padding for a flush look */
+    .block-container {padding-top: 0rem;}
+    </style>
+""")
 
 st.set_page_config(page_title="Smart Recommender POC", layout="wide")
 
