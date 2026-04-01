@@ -21,7 +21,7 @@ st.markdown("""
     [data-testid="stSidebar"] {
         border-right: 1px solid #eaeaea !important;
         padding-top: 0 !important;
-        top: 10px !important;
+        top: 30px !important;
     }
     [data-testid="stSidebar"] > div:first-child {
         padding-top: 0 !important;
@@ -442,7 +442,7 @@ except Exception as e:
     st.code(traceback.format_exc())
     st.stop()
 
-# 🟢 SIDEBAR STYLING - Public.gr Style
+# 🟢 AR STYLING - Public.gr Style
 st.sidebar.markdown("""
 <style>
     /* Sidebar background */
