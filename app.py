@@ -75,7 +75,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v15.8 — Reading Order for Dog Man + Μικροί Κύριοι
+        🟢 Engine v16 — Ready for Review
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -558,7 +558,7 @@ st.sidebar.markdown("""
     /* Section divider */
     .section-divider {
         border: none;
-        border-top: 1px solid #e0e0e0;
+        border-top: 3px solid #e0e0e0;
         margin: 8px 0 4px 0;
     }
     
@@ -570,7 +570,7 @@ st.sidebar.markdown("""
         color: #888;
         text-transform: uppercase;
         letter-spacing: 0.5px;
-        margin: 4px 0 4px 0;
+        margin: 0px 0 0px 0;
     }
     
     /* Style selectboxes */
