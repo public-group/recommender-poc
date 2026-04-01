@@ -24,8 +24,6 @@ st.html("""
     header {visibility: hidden;}
     footer {visibility: hidden;}
     #MainMenu {visibility: hidden;}
-    /* Remove top padding for a flush look */
-    .block-container {padding-top: 0rem;}
     </style>
 """)
 
