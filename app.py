@@ -449,10 +449,18 @@ st.sidebar.markdown("""
     [data-testid="stSidebar"] > div:first-child {
         background-color: #f5f5f5 !important;
         padding-top: 0 !important;
+        padding-left: 0 !important;
+        padding-right: 0 !important;
     }
     
     [data-testid="stSidebar"] {
         background-color: #f5f5f5 !important;
+    }
+    
+    /* Remove default padding from sidebar content */
+    [data-testid="stSidebar"] [data-testid="stVerticalBlock"] {
+        padding-left: 1rem !important;
+        padding-right: 1rem !important;
     }
     
     /* Hide the default sidebar collapse button completely */
@@ -460,12 +468,13 @@ st.sidebar.markdown("""
         display: none !important;
     }
     
-    /* Sidebar header bar - orange like Public */
+    /* Sidebar header bar - orange like Public, full width */
     .sidebar-header {
         background-color: #ff5e00;
         color: white;
         padding: 18px 20px;
-        margin: 0 -1rem 15px -1rem;
+        margin: 0 -1rem 10px -1rem;
+        width: calc(100% + 2rem);
         font-family: -apple-system, BlinkMacSystemFont, sans-serif;
         font-size: 18px;
         font-weight: 700;
@@ -473,6 +482,7 @@ st.sidebar.markdown("""
         display: flex;
         align-items: center;
         justify-content: space-between;
+        box-sizing: border-box;
     }
     
     /* X close button in header */
@@ -524,11 +534,21 @@ st.sidebar.markdown("""
         box-shadow: 0 4px 12px rgba(255, 94, 0, 0.15) !important;
     }
     
+    /* Reduce default Streamlit gaps in sidebar */
+    [data-testid="stSidebar"] [data-testid="stVerticalBlock"] > div {
+        gap: 0.5rem !important;
+    }
+    
+    [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] {
+        gap: 0.5rem !important;
+        margin-bottom: 0 !important;
+    }
+    
     /* Section divider */
     .section-divider {
         border: none;
         border-top: 1px solid #e0e0e0;
-        margin: 20px 0 15px 0;
+        margin: 12px 0 8px 0;
     }
     
     /* Section headers */
@@ -539,7 +559,7 @@ st.sidebar.markdown("""
         color: #888;
         text-transform: uppercase;
         letter-spacing: 0.5px;
-        margin: 15px 0 10px 0;
+        margin: 8px 0 6px 0;
     }
     
     /* Style selectboxes */
@@ -646,7 +666,7 @@ st.sidebar.markdown(f"""
 col1, col2 = st.sidebar.columns(2)
 
 with col1:
-    if st.button("Smartphones", key="btn_smartphones", use_container_width=True):
+    if st.button("Τηλεφωνία,\nTablets &\nWearables", key="btn_smartphones", use_container_width=True):
         st.session_state.active_cluster = "Smartphones"
         st.rerun()
 
