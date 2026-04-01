@@ -21,7 +21,7 @@ st.markdown("""
     [data-testid="stSidebar"] {
         border-right: 1px solid #eaeaea !important;
         padding-top: 0 !important;
-        top: 20px !important;
+        top: 10px !important;
     }
     [data-testid="stSidebar"] > div:first-child {
         padding-top: 0 !important;
