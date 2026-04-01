@@ -445,22 +445,13 @@ except Exception as e:
 # 🟢 SIDEBAR STYLING - Public.gr Style
 st.sidebar.markdown("""
 <style>
-    /* Light gray background like Public.gr menu */
+    /* Sidebar background */
     [data-testid="stSidebar"] > div:first-child {
         background-color: #f5f5f5 !important;
-        padding-top: 0 !important;
-        padding-left: 0 !important;
-        padding-right: 0 !important;
     }
     
     [data-testid="stSidebar"] {
         background-color: #f5f5f5 !important;
-    }
-    
-    /* Remove default padding from sidebar content */
-    [data-testid="stSidebar"] [data-testid="stVerticalBlock"] {
-        padding-left: 1rem !important;
-        padding-right: 1rem !important;
     }
     
     /* Hide the default sidebar collapse button completely */
@@ -468,13 +459,15 @@ st.sidebar.markdown("""
         display: none !important;
     }
     
-    /* Sidebar header bar - orange like Public, full width */
+    /* Sidebar header bar - use negative margins to go full width */
     .sidebar-header {
         background-color: #ff5e00;
         color: white;
         padding: 18px 20px;
-        margin: 0 -1rem 10px -1rem;
-        width: calc(100% + 2rem);
+        margin-left: -1rem;
+        margin-right: -1rem;
+        margin-top: -1rem;
+        margin-bottom: 10px;
         font-family: -apple-system, BlinkMacSystemFont, sans-serif;
         font-size: 18px;
         font-weight: 700;
@@ -483,6 +476,15 @@ st.sidebar.markdown("""
         align-items: center;
         justify-content: space-between;
         box-sizing: border-box;
+    }
+    
+    /* Reduce gaps in sidebar */
+    [data-testid="stSidebar"] .block-container {
+        padding-top: 0 !important;
+    }
+    
+    [data-testid="stSidebar"] [data-testid="stVerticalBlockBorderWrapper"] {
+        gap: 0.3rem !important;
     }
     
     /* X close button in header */
@@ -536,7 +538,7 @@ st.sidebar.markdown("""
     
     /* Reduce default Streamlit gaps in sidebar */
     [data-testid="stSidebar"] [data-testid="stVerticalBlock"] > div {
-        gap: 0.5rem !important;
+        gap: 0.3rem !important;
     }
     
     [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] {
@@ -544,11 +546,20 @@ st.sidebar.markdown("""
         margin-bottom: 0 !important;
     }
     
+    /* Reduce Streamlit's default element spacing */
+    [data-testid="stSidebar"] .element-container {
+        margin-bottom: 0.25rem !important;
+    }
+    
+    [data-testid="stSidebar"] [data-testid="stMarkdown"] {
+        margin-bottom: 0 !important;
+    }
+    
     /* Section divider */
     .section-divider {
         border: none;
         border-top: 1px solid #e0e0e0;
-        margin: 12px 0 8px 0;
+        margin: 8px 0 4px 0;
     }
     
     /* Section headers */
@@ -559,7 +570,7 @@ st.sidebar.markdown("""
         color: #888;
         text-transform: uppercase;
         letter-spacing: 0.5px;
-        margin: 8px 0 6px 0;
+        margin: 4px 0 4px 0;
     }
     
     /* Style selectboxes */
