@@ -75,7 +75,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v15.9 — HP Order-Based Dedup (fixes duplicate editions)
+        🟢 Engine v15.9b — HP Dedup: hp_order + canonical (preserves format matching)
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -1486,7 +1486,7 @@ def run_books_engine(trigger, df_all, df_history, mode='A'):
                         
                         series_books['_hp_order'] = series_books['Title'].apply(get_hp_order)
                         
-                        # 🟢 Track HP order numbers to prevent same book in different editions
+                        # 🟢 Track hp_order to prevent duplicate editions
                         used_hp_orders = {trigger_order}
                         
                         # Sort by HP order first, then by format score
@@ -1504,9 +1504,10 @@ def run_books_engine(trigger, df_all, df_history, mode='A'):
                             if series_count >= max_series:
                                 break
                             hp_order = row['_hp_order']
+                            row_canonical = get_canonical_book_name(row['Title'], row.get('Τίτλος πρωτοτύπου', ''))
                             
-                            # 🟢 Check hp_order to prevent same book in different editions
-                            if row['Material'] not in used_materials and hp_order not in used_hp_orders:
+                            # 🟢 Check BOTH hp_order AND canonical to prevent duplicates
+                            if row['Material'] not in used_materials and hp_order not in used_hp_orders and row_canonical not in used_titles:
                                 row_copy = row.copy()
                                 row_copy['Assigned_Slot'] = series_count + 1
                                 row_copy['Slot_Role'] = 'Series Book'
@@ -1514,7 +1515,7 @@ def run_books_engine(trigger, df_all, df_history, mode='A'):
                                 all_recs.append(row_copy)
                                 used_materials.add(row['Material'])
                                 used_hp_orders.add(hp_order)
-                                used_titles.add(f"hp_{hp_order}")
+                                used_titles.add(row_canonical)
                                 series_count += 1
                         
                         series_notes.append(f"✓ Mode A (HP): Added {series_count} books in reading order")
@@ -1629,9 +1630,9 @@ def run_books_engine(trigger, df_all, df_history, mode='A'):
                         
                         series_notes.append(f"Main 7 pool: {len(main_7_books)} editions, Spinoffs: {len(spinoffs)}")
                         
-                        # 🟢 Track HP order numbers to prevent same book in different editions
-                        # (fixes issue where Greek edition has no Τίτλος πρωτοτύπου → different canonical)
-                        used_hp_orders = {trigger_order}  # Don't recommend the trigger book
+                        # 🟢 Track BOTH hp_order AND canonical to prevent duplicates
+                        # Some editions have Greek canonical, some have English - track both ways
+                        used_hp_orders = {trigger_order}
                         
                         # Books AFTER trigger (next in reading order) - ONLY from main 7
                         # Sort by: reading order first, then format score (prefer matching format)
@@ -1642,7 +1643,7 @@ def run_books_engine(trigger, df_all, df_history, mode='A'):
                         books_before = main_7_books[main_7_books['_hp_order'] < trigger_order].copy()
                         books_before = books_before.sort_values(['_hp_order', 'Final_Score'], ascending=[True, False])
                         
-                        # Count unique canonical titles
+                        # Count unique hp orders
                         after_unique = books_after['_hp_order'].nunique()
                         before_unique = books_before['_hp_order'].nunique()
                         series_notes.append(f"Unique books - After #{trigger_order}: {after_unique}, Before: {before_unique}")
@@ -1653,17 +1654,18 @@ def run_books_engine(trigger, df_all, df_history, mode='A'):
                             if next_added >= 6:
                                 break
                             hp_order = row['_hp_order']
+                            row_canonical = get_canonical_book_name(row['Title'], row.get('Τίτλος πρωτοτύπου', ''))
                             
-                            # 🟢 Check BOTH material AND hp_order (canonical can differ due to missing orig_title)
-                            if row['Material'] not in used_materials and hp_order not in used_hp_orders:
+                            # 🟢 Check BOTH hp_order AND canonical - either blocks the book
+                            if row['Material'] not in used_materials and hp_order not in used_hp_orders and row_canonical not in used_titles:
                                 row_copy = row.copy()
                                 row_copy['Assigned_Slot'] = series_count + 1
                                 row_copy['Slot_Role'] = 'Series Book'
                                 row_copy['Item_Rank'] = 1
                                 all_recs.append(row_copy)
                                 used_materials.add(row['Material'])
-                                used_hp_orders.add(hp_order)  # Track HP order to prevent duplicates
-                                used_titles.add(f"hp_{hp_order}")  # Also add to used_titles for cross-priority dedup
+                                used_hp_orders.add(hp_order)
+                                used_titles.add(row_canonical)
                                 series_count += 1
                                 next_added += 1
                         
@@ -1676,9 +1678,10 @@ def run_books_engine(trigger, df_all, df_history, mode='A'):
                                 if series_count >= 6:
                                     break
                                 hp_order = row['_hp_order']
+                                row_canonical = get_canonical_book_name(row['Title'], row.get('Τίτλος πρωτοτύπου', ''))
                                 
-                                # 🟢 Check hp_order to prevent same book in different editions
-                                if row['Material'] not in used_materials and hp_order not in used_hp_orders:
+                                # 🟢 Check BOTH hp_order AND canonical
+                                if row['Material'] not in used_materials and hp_order not in used_hp_orders and row_canonical not in used_titles:
                                     row_copy = row.copy()
                                     row_copy['Assigned_Slot'] = series_count + 1
                                     row_copy['Slot_Role'] = 'Start from Beginning'
@@ -1686,10 +1689,10 @@ def run_books_engine(trigger, df_all, df_history, mode='A'):
                                     all_recs.append(row_copy)
                                     used_materials.add(row['Material'])
                                     used_hp_orders.add(hp_order)
-                                    used_titles.add(f"hp_{hp_order}")
+                                    used_titles.add(row_canonical)
                                     series_count += 1
                         
-                        series_notes.append(f"✓ Mode B (HP): Added {series_count} main series books (orders: {sorted(used_hp_orders)})")
+                        series_notes.append(f"✓ Mode B (HP): Added {series_count} main series books")
                     
                     # 🟢 DOG MAN: Use number in title for reading order
                     elif is_dog_man_series(t_series):
