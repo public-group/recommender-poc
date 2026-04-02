@@ -21,7 +21,7 @@ st.markdown("""
     [data-testid="stSidebar"] {
         border-right: 1px solid #eaeaea !important;
         padding-top: 0 !important;
-        top: 20px !important;
+        top: 35px !important;
     }
     [data-testid="stSidebar"] > div:first-child {
         padding-top: 0 !important;
@@ -75,7 +75,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v15.9b — HP Dedup: hp_order + canonical (preserves format matching)
+        🟢 Engine v16 — Ready for Review Version
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -677,7 +677,7 @@ st.sidebar.markdown(f"""
 col1, col2 = st.sidebar.columns(2)
 
 with col1:
-    if st.button("Τηλεφωνία,\nTablets &\nWearables", key="btn_smartphones", use_container_width=True):
+    if st.button("Smartphones", key="btn_smartphones", use_container_width=True):
         st.session_state.active_cluster = "Smartphones"
         st.rerun()
 
