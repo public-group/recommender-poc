@@ -75,7 +75,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v16.4 — Year Score Boost Fix
+        🟢 Engine v16.5 — Lower-End Brand/Sales & TUNE Priority
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -745,8 +745,16 @@ def run_engine(trigger, df_products, df_history, df_slots):
         
         diag.append(("Premium High-End Strategy", f"€{tprice:.0f} >= €{PREMIUM_PRICE_THRESHOLD}", "1. Exact Brand, 2. Priciest Best-Sellers, 3. Priciest Fallbacks"))
     else:
-        # For non-premium, keep the standard smart boost for same brand matching
-        c.loc[c['Κατασκευαστής'].fillna('').str.strip().str.upper()==tb,'Smart_Boost']+=SMART_BOOST
+        # 🟢 LOWER-END STRATEGY
+        # Rule 2: Exclude other major brands from being recommended entirely to avoid cross-contamination
+        MAJOR_BRANDS = ["APPLE", "SAMSUNG", "XIAOMI", "HUAWEI", "OPPO"]
+        other_majors = [b for b in MAJOR_BRANDS if b != tb]
+        b4_major = len(c)
+        c = c[~c['Κατασκευαστής'].fillna('').str.strip().str.upper().isin(other_majors)]
+        diag.append(("Lower-End Major Brand Filter", len(c), f"Removed {b4_major - len(c)} cross-brand items"))
+        
+        # Base smart boost for exact brand matches globally
+        c.loc[c['Κατασκευαστής'].fillna('').str.strip().str.upper()==tb,'Smart_Boost'] += SMART_BOOST
     
     def extract_year_from_model(model_str):
         model = str(model_str).lower()
@@ -846,6 +854,22 @@ def run_engine(trigger, df_products, df_history, df_slots):
                             notes.append(f"Color (transparent fallback): {b4}→{len(sc)}")
                         else:
                             notes.append(f"Color: no match, keeping all {b4}")
+            
+            # 🟢 LOWER-END PROTECTION RULE (Rule 1)
+            # Prioritize Brand+Sales, then TUNE, then Brand w/o Sales
+            if not is_premium and not sc.empty:
+                is_same_brand_slot = sc['Κατασκευαστής'].fillna('').str.strip().str.upper() == tb
+                has_sales_slot = sc['Sales_Tiebreaker'].fillna(0.0) > 0
+                is_tune_slot = sc['Κατασκευαστής'].fillna('').str.strip().str.upper() == "TUNE"
+                
+                # Apply custom score hierarchy
+                sc.loc[is_same_brand_slot & has_sales_slot, 'Final_Score'] += 200000.0
+                sc.loc[is_tune_slot, 'Final_Score'] += 100000.0
+                sc.loc[is_same_brand_slot & ~has_sales_slot, 'Final_Score'] += 50000.0
+                
+                # Standard sales tiebreaker within the tiers
+                sc['Final_Score'] += sc['Sales_Tiebreaker'].fillna(0.0) * 10.0
+                notes.append("Applied Lower-End Protection Rule: 1. Brand+Sales, 2. TUNE")
 
         if lk == "CROSS_SELL" and not sc.empty:
             b4_brand = len(sc)
