@@ -713,7 +713,7 @@ def run_engine(trigger, df_products, df_history, df_slots):
         c.loc[ok[~ok].index,'History_Score']=0
 
     c['Avail_Boost']=0; c.loc[c['AVAILABILITY']=='Άμεσα Διαθέσιμο','Avail_Boost']=AVAIL_BOOST
-    c['Smart_Boost']=0
+    c['Smart_Boost'] = 0.0
     
     if strict_tmod:
         c.loc[c['Μοντέλο'].fillna('').astype(str).str.contains(strict_tmod, case=False, regex=True, na=False), 'Smart_Boost'] += SMART_BOOST
@@ -738,7 +738,7 @@ def run_engine(trigger, df_products, df_history, df_slots):
         
         # Apply dynamic scalar based on Price AND Sales to naturally float high-end best-sellers up 
         # Price scaled by 100 to emphasize higher-end gear, Sales scaled by 10 to act as a definitive tie-breaker.
-        c.loc[~is_same_brand, 'Smart_Boost'] += (c.loc[~is_same_brand, 'Next_Price'] * 100) + (c.loc[~is_same_brand, 'Sales_Tiebreaker'] * 10)
+        c.loc[~is_same_brand, 'Smart_Boost'] += (c.loc[~is_same_brand, 'Next_Price'].fillna(0.0) * 100) + (c.loc[~is_same_brand, 'Sales_Tiebreaker'].fillna(0.0) * 10)
         
         diag.append(("Premium High-End Strategy", f"€{tprice:.0f} >= €{PREMIUM_PRICE_THRESHOLD}", "Prioritized brand match absolutely, fell back to high-end best-sellers"))
     else:
