@@ -75,7 +75,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v16.1 — Premium Brand Matching Updated
+        🟢 Engine v16.2 — Priciest Best-Seller Preference
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -718,29 +718,29 @@ def run_engine(trigger, df_products, df_history, df_slots):
     if strict_tmod:
         c.loc[c['Μοντέλο'].fillna('').astype(str).str.contains(strict_tmod, case=False, regex=True, na=False), 'Smart_Boost'] += SMART_BOOST
 
-    # 🟢 NEW: Premium phone absolute brand preference & High-End Best Seller Fallback
+    # 🟢 NEW: Premium phone price & best-seller preference (Brand agnostic)
     PREMIUM_PRICE_THRESHOLD = 900
-    PREMIUM_BRAND_BOOST = 500000  # Massive absolute boost to ensure brand match completely dominates
-    HIGH_END_BRAND_BOOST = 50000  # Extra boost for premium 3rd party brands
+    PREMIUM_ACC_MIN_PRICE = 25.0
     
     is_premium = tprice >= PREMIUM_PRICE_THRESHOLD
     if is_premium:
-        # 1. Absolute Priority: Exact Brand Match in every slot (e.g., Apple on Apple)
-        is_same_brand = c['Κατασκευαστής'].fillna('').str.strip().str.upper() == tb
-        c.loc[is_same_brand, 'Smart_Boost'] += PREMIUM_BRAND_BOOST
+        # User Strategy: If there are best sellers, choose the priciest one. 
+        # If no best sellers, choose one above a certain price threshold.
         
-        # 2. Fallback Priority: High-End & Best Sellers for slots without brand match (e.g., Apple doesn't make Screen Protectors)
-        # Identify top-tier 3rd party accessory brands
-        premium_3rd_party = ['BELKIN', 'PANZERGLASS', 'SPIGEN', 'UAG', 'PITAKA', 'NOMAD', 'MOUS', 'ANKER', 'BASEUS', 'NILLKIN', 'SATECHI', 'GUESS', 'KARL LAGERFELD', 'IDEAL OF SWEDEN']
-        is_premium_3rd = c['Κατασκευαστής'].fillna('').str.strip().str.upper().isin(premium_3rd_party)
+        is_best_seller = c['Sales_Tiebreaker'].fillna(0.0) > 0
+        is_expensive = c['Next_Price'].fillna(0.0) >= PREMIUM_ACC_MIN_PRICE
         
-        c.loc[~is_same_brand & is_premium_3rd, 'Smart_Boost'] += HIGH_END_BRAND_BOOST
+        # Tier 1: Best Sellers get massive boost so they beat non-best sellers
+        c.loc[is_best_seller, 'Smart_Boost'] += 200000.0
         
-        # Apply dynamic scalar based on Price AND Sales to naturally float high-end best-sellers up 
-        # Price scaled by 100 to emphasize higher-end gear, Sales scaled by 10 to act as a definitive tie-breaker.
-        c.loc[~is_same_brand, 'Smart_Boost'] += (c.loc[~is_same_brand, 'Next_Price'].fillna(0.0) * 100) + (c.loc[~is_same_brand, 'Sales_Tiebreaker'].fillna(0.0) * 10)
+        # Tier 2: If not a best seller, but above price threshold, give it a medium boost 
+        # so it beats cheap items
+        c.loc[~is_best_seller & is_expensive, 'Smart_Boost'] += 100000.0
         
-        diag.append(("Premium High-End Strategy", f"€{tprice:.0f} >= €{PREMIUM_PRICE_THRESHOLD}", "Prioritized brand match absolutely, fell back to high-end best-sellers"))
+        # Finally, scale everything by price so within any tier, the PRICIEST item floats to the top
+        c['Smart_Boost'] += c['Next_Price'].fillna(0.0) * 1000.0
+        
+        diag.append(("Premium High-End Strategy", f"€{tprice:.0f} >= €{PREMIUM_PRICE_THRESHOLD}", "Prioritized priciest best-sellers, fell back to expensive items"))
     else:
         # For non-premium, keep the standard smart boost for same brand matching
         c.loc[c['Κατασκευαστής'].fillna('').str.strip().str.upper()==tb,'Smart_Boost']+=SMART_BOOST
@@ -925,14 +925,6 @@ def run_engine(trigger, df_products, df_history, df_slots):
                     notes.append(f"Price tier: No items ≥€{min_price}, keeping all {b4_price}")
         
         if lk in year_match_slots and is_premium and not sc.empty:
-            b4_brand = len(sc)
-            same_brand = sc[sc['Κατασκευαστής'].fillna('').str.strip().str.upper() == tb]
-            if not same_brand.empty:
-                sc = same_brand
-                notes.append(f"Brand filter ({tb}): {b4_brand}→{len(sc)}")
-            else:
-                notes.append(f"Brand filter: No {tb} accessories, keeping all {b4_brand}")
-            
             is_ultra_premium = tprice >= ULTRA_PREMIUM_THRESHOLD
             if is_ultra_premium:
                 b4_ultra = len(sc)
