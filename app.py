@@ -1010,7 +1010,8 @@ def run_books_engine(trigger, df_all, df_history):
         toys = df_all[df_all['Level 1'] == 'Toys'].copy()
         stationery = df_all[df_all['Level 1'] == 'Stationery'].copy()
         
-        age_bracket = get_age_bracket(t_age)
+        age_bracket_str = get_age_bracket(t_age)
+        age_bracket = int(age_bracket_str.replace('BRACKET_', '')) if 'BRACKET_' in age_bracket_str else 5
         def get_allowed_toy_ages(bracket):
             if bracket == 1: return ['0+ μηνών', '0+ ετών', '3+ μηνών', '5+ μηνών', '6+ μηνών', '']
             elif bracket == 2: return ['6+ μηνών', '9+ μηνών', '12+ μηνών', '1+ ετών', '']
