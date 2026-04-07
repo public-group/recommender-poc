@@ -75,7 +75,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v17.0 — Dynamic Books Reading Order & Sales Fallback
+        🟢 Engine v17.1 — Best-Selling Hierarchy Discovery for Books
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -1416,10 +1416,25 @@ def run_books_engine(trigger, df_all, df_history):
             if 'Ηλικία' in discovery_pool.columns and allowed_ages:
                 discovery_pool = discovery_pool[discovery_pool['Ηλικία'].fillna('').astype(str).str.strip().isin(allowed_ages) | (discovery_pool['Ηλικία'].fillna('') == '') | (discovery_pool['Ηλικία'].fillna('').astype(str) == '0')]
             
+            if 'Sum of Sales' in discovery_pool.columns:
+                discovery_pool['Sales_Score'] = pd.to_numeric(discovery_pool['Sum of Sales'], errors='coerce').fillna(0)
+            else:
+                tcust = df_history[df_history['Material']==tm]['customerEmail'].unique() if not df_history.empty else []
+                bw = df_history[(df_history['customerEmail'].isin(tcust))&(df_history['Material']!=tm)] if not df_history.empty else pd.DataFrame()
+                fdf = bw['Material'].value_counts().reset_index() if not bw.empty else pd.DataFrame(columns=['NID', 'Frequency'])
+                if not fdf.empty:
+                    fdf.columns = ['NID', 'Frequency']
+                    discovery_pool = discovery_pool.merge(fdf, left_on='Material', right_on='NID', how='left')
+                    discovery_pool['Sales_Score'] = discovery_pool['Frequency'].fillna(0)
+                else:
+                    discovery_pool['Sales_Score'] = 0
+            
             discovery_pool['Final_Score'] = 0
             if 'AVAILABILITY' in discovery_pool.columns:
                 discovery_pool.loc[discovery_pool['AVAILABILITY'] == 'Άμεσα Διαθέσιμο', 'Final_Score'] += AVAIL_BOOST
-            discovery_pool = discovery_pool.sort_values('Final_Score', ascending=False)
+            
+            discovery_pool = discovery_pool.sort_values(['Sales_Score', 'Final_Score'], ascending=[False, False])
+            discovery_notes.append(f"Sorting discovery pool by Sales (Best Sellers) and Availability.")
             
             for _, row in discovery_pool.head(remaining_after_spinoffs).iterrows():
                 row_canonical = get_canonical_book_name(row['Title'], row.get('Τίτλος πρωτοτύπου', ''))
