@@ -75,7 +75,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v16.2 — Priciest Best-Seller Preference
+        🟢 Engine v16.3 — Premium Brand First, Priciest Best-Seller Fallback
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -718,29 +718,32 @@ def run_engine(trigger, df_products, df_history, df_slots):
     if strict_tmod:
         c.loc[c['Μοντέλο'].fillna('').astype(str).str.contains(strict_tmod, case=False, regex=True, na=False), 'Smart_Boost'] += SMART_BOOST
 
-    # 🟢 NEW: Premium phone price & best-seller preference (Brand agnostic)
+    # 🟢 NEW: Premium phone absolute brand preference & High-End Best Seller Fallback
     PREMIUM_PRICE_THRESHOLD = 850
+    PREMIUM_BRAND_BOOST = 5000000.0  # Massive absolute boost to guarantee brand matches win
+    BEST_SELLER_BOOST = 200000.0
+    EXPENSIVE_BOOST = 100000.0
     PREMIUM_ACC_MIN_PRICE = 25.0
     
     is_premium = tprice >= PREMIUM_PRICE_THRESHOLD
     if is_premium:
-        # User Strategy: If there are best sellers, choose the priciest one. 
-        # If no best sellers, choose one above a certain price threshold.
-        
+        is_same_brand = c['Κατασκευαστής'].fillna('').str.strip().str.upper() == tb
         is_best_seller = c['Sales_Tiebreaker'].fillna(0.0) > 0
         is_expensive = c['Next_Price'].fillna(0.0) >= PREMIUM_ACC_MIN_PRICE
         
-        # Tier 1: Best Sellers get massive boost so they beat non-best sellers
-        c.loc[is_best_seller, 'Smart_Boost'] += 200000.0
+        # Tier 0: Absolute Priority: Exact Brand Match in every slot (e.g., Apple on Apple)
+        c.loc[is_same_brand, 'Smart_Boost'] += PREMIUM_BRAND_BOOST
         
-        # Tier 2: If not a best seller, but above price threshold, give it a medium boost 
-        # so it beats cheap items
-        c.loc[~is_best_seller & is_expensive, 'Smart_Boost'] += 100000.0
+        # Tier 1: Fallback Priority 1: Best Sellers for slots without brand match
+        c.loc[~is_same_brand & is_best_seller, 'Smart_Boost'] += BEST_SELLER_BOOST
         
-        # Finally, scale everything by price so within any tier, the PRICIEST item floats to the top
+        # Tier 2: Fallback Priority 2: Expensive items
+        c.loc[~is_same_brand & ~is_best_seller & is_expensive, 'Smart_Boost'] += EXPENSIVE_BOOST
+        
+        # Intra-tier sorting: scale everything by price so the PRICIEST item floats to the top of its respective tier
         c['Smart_Boost'] += c['Next_Price'].fillna(0.0) * 1000.0
         
-        diag.append(("Premium High-End Strategy", f"€{tprice:.0f} >= €{PREMIUM_PRICE_THRESHOLD}", "Prioritized priciest best-sellers, fell back to expensive items"))
+        diag.append(("Premium High-End Strategy", f"€{tprice:.0f} >= €{PREMIUM_PRICE_THRESHOLD}", "1. Exact Brand, 2. Priciest Best-Sellers, 3. Priciest Fallbacks"))
     else:
         # For non-premium, keep the standard smart boost for same brand matching
         c.loc[c['Κατασκευαστής'].fillna('').str.strip().str.upper()==tb,'Smart_Boost']+=SMART_BOOST
