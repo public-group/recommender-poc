@@ -75,7 +75,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v16.3 — Premium Brand First, Priciest Best-Seller Fallback
+        🟢 Engine v16.4 — Year Score Boost Fix
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -943,17 +943,15 @@ def run_engine(trigger, df_products, df_history, df_slots):
             if phone_year:
                 sc['Accessory_Year'] = sc.apply(lambda r: extract_year_from_accessory(str(r.get('Title', '')), str(r.get('Μοντέλο', ''))), axis=1)
                 
-                sc['Year_Priority'] = 3 
-                sc.loc[sc['Accessory_Year'] > phone_year, 'Year_Priority'] = 0 
-                sc.loc[sc['Accessory_Year'] == phone_year, 'Year_Priority'] = 1 
-                sc.loc[sc['Accessory_Year'] == phone_year - 1, 'Year_Priority'] = 2 
+                # Add year boost directly to Final_Score so it respects Brand/Tier hierarchy
+                sc.loc[sc['Accessory_Year'] > phone_year, 'Final_Score'] += 800000.0 
+                sc.loc[sc['Accessory_Year'] == phone_year, 'Final_Score'] += 600000.0 
+                sc.loc[sc['Accessory_Year'] == phone_year - 1, 'Final_Score'] += 400000.0 
                 
-                sc = sc.sort_values(['Year_Priority', 'Final_Score'], ascending=[True, False])
-                
-                newer_count = (sc['Year_Priority'] == 0).sum()
-                same_year_count = (sc['Year_Priority'] == 1).sum()
-                prev_year_count = (sc['Year_Priority'] == 2).sum()
-                notes.append(f"Year priority ({phone_year}): {newer_count} newer, {same_year_count} same, {prev_year_count} prev")
+                newer_count = (sc['Accessory_Year'] > phone_year).sum()
+                same_year_count = (sc['Accessory_Year'] == phone_year).sum()
+                prev_year_count = (sc['Accessory_Year'] == phone_year - 1).sum()
+                notes.append(f"Year boost ({phone_year}): {newer_count} newer, {same_year_count} same, {prev_year_count} prev")
 
         if lk == "HOLDER" and not sc.empty:
             if has_wireless_charging or tb == "APPLE":
@@ -977,7 +975,7 @@ def run_engine(trigger, df_products, df_history, df_slots):
         slot_notes[sn] = notes
 
         if not sc.empty:
-            skip_resort = (lk in year_match_slots and is_premium and phone_year) or lk == "HOLDER"
+            skip_resort = (lk == "HOLDER")
             if not skip_resort:
                 sc = sc.sort_values('Final_Score', ascending=False).copy()
             else:
