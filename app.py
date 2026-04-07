@@ -75,7 +75,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v16.8 — Universal Wearable Brand & Structural Charger Looping
+        🟢 Engine v17.0 — Dynamic Books Reading Order & Sales Fallback
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -512,10 +512,6 @@ elif active_cluster == "Kids Books":
                 actual_series = series_display.get(selected_series_display, selected_series_display)
                 kids_books = kids_books[kids_books['Σειρά βιβλίου'] == actual_series]
     
-    st.sidebar.markdown('<p class="sidebar-section">Λογική Προτάσεων</p>', unsafe_allow_html=True)
-    books_mode = st.sidebar.radio("", options=["Option A: Series First", "Option B: Next in Series"], index=0, label_visibility="collapsed")
-    st.session_state.books_mode = "A" if "Option A" in books_mode else "B"
-    
     st.sidebar.markdown('<p class="sidebar-section">Επιλέξτε Βιβλίο</p>', unsafe_allow_html=True)
     sel = st.sidebar.selectbox("", kids_books['Title'].unique(), label_visibility="collapsed")
     if sel:
@@ -599,11 +595,854 @@ with st.sidebar:
         st.rerun()
 
 # ─────────────────────────────────────────────────────────────
-# 🟢 KIDS BOOKS ENGINE (Skipped full details for brevity)
+# 🟢 KIDS BOOKS ENGINE (REWRITTEN FOR DYNAMIC ORDERING)
 # ─────────────────────────────────────────────────────────────
-def run_books_engine(trigger, df_all, df_history, mode='A'):
-    # Implementation kept exactly the same as provided (omitted content logic here for character limit, assume identical execution)
-    return pd.DataFrame(), [], {}, pd.DataFrame()
+def run_books_engine(trigger, df_all, df_history):
+    diag = []
+    slot_notes = {}
+    all_recs = []
+    used_materials = set()
+    used_titles = set()
+    
+    # ══════════════════════════════════════════════════════════
+    # 🟢 LOAD GENDER & ORDER CATEGORIES FROM FILE
+    # ══════════════════════════════════════════════════════════
+    SERIES_GENDER_MAP = {}
+    SERIES_ORDER_MAP = {}
+    try:
+        import os
+        gender_file_paths = [
+            '/mnt/user-data/uploads/kids_books_categories.xlsx',
+            'kids_books_categories.xlsx',
+            '/mount/src/recommender-poc/kids_books_categories.xlsx',
+        ]
+        for gf_path in gender_file_paths:
+            if os.path.exists(gf_path):
+                gender_df = pd.read_excel(gf_path)
+                for _, row in gender_df.iterrows():
+                    series_name = str(row.get('Series Name', '')).strip()
+                    category = str(row.get('Category', 'Universal')).strip()
+                    
+                    # Read Order logic from 3rd column
+                    order_type = str(row.iloc[2]).strip() if len(row) > 2 else 'Standalone'
+                    
+                    if series_name:
+                        series_lower = series_name.lower()
+                        if category == 'Girls-leaning':
+                            SERIES_GENDER_MAP[series_lower] = 'girl'
+                        elif category == 'Boys-leaning':
+                            SERIES_GENDER_MAP[series_lower] = 'boy'
+                        else:
+                            SERIES_GENDER_MAP[series_lower] = 'neutral'
+                            
+                        SERIES_ORDER_MAP[series_lower] = order_type
+                break
+    except Exception as e:
+        pass 
+
+    # 🟢 HARDCODED ORDER EXTRACTIONS
+    HARRY_POTTER_ORDER = {
+        'φιλοσοφική λίθος': 1, 'philosopher': 1, "sorcerer's stone": 1,
+        'μυστικό δωμάτιο': 2, 'chamber of secrets': 2, 'κάμαρα': 2,
+        'αιχμάλωτος': 3, 'αζκαμπάν': 3, 'prisoner of azkaban': 3,
+        'κύπελλο φωτιάς': 4, 'goblet of fire': 4, 'κύπελλο της φωτιάς': 4,
+        'τάγμα του φοίνικα': 5, 'order of the phoenix': 5, 'φοίνικα': 5,
+        'ημίαιμος πρίγκιψ': 6, 'half-blood prince': 6, 'ημίαιμος': 6,
+        'κλήροι του θανάτου': 7, 'deathly hallows': 7, 'θανάτου': 7,
+        'καταραμένο παιδί': 8, 'cursed child': 8,
+        'φανταστικά ζώα': 9, 'fantastic beasts': 9,
+        'quidditch': 10, 'κουίντιτς': 10,
+        'beedle': 11, 'μπιντλ': 11,
+    }
+    
+    def get_hp_order(title):
+        title_lower = str(title).lower()
+        for keyword, order in HARRY_POTTER_ORDER.items():
+            if keyword in title_lower: return order
+        return 99 
+    
+    def is_harry_potter_series(series_name):
+        series_lower = str(series_name).lower()
+        return 'harry potter' in series_lower or 'χάρι πότερ' in series_lower or 'χαρι ποτερ' in series_lower
+
+    def is_dog_man_series(series_name):
+        return 'dog man' in str(series_name).lower()
+    
+    def get_dog_man_order(title):
+        title_lower = str(title).lower()
+        match = re.search(r'dog\s*man\s*(\d{1,2})(?:\s*[-:]|\s|$)', title_lower)
+        if match: return int(match.group(1))
+        if 'dog man' in title_lower and not re.search(r'dog\s*man\s*\d', title_lower):
+            adv_match = re.search(r'adventures\s*of\s*dog\s*man\s*(\d)', title_lower)
+            if adv_match: return int(adv_match.group(1))
+            return 1
+        known_titles = {
+            'a tale of two kitties': 3, 'tale of two kitties': 3,
+            'lord of the fleas': 5, 'brawl of the wild': 6,
+            'for whom the ball rolls': 7, 'fetch-22': 8, 'fetch 22': 8,
+            'grime and punishment': 9, 'mothering heights': 10,
+            'twenty thousand fleas': 11, 'scarlet shedder': 12, 'big jim begins': 13,
+        }
+        for keyword, order in known_titles.items():
+            if keyword in title_lower: return order
+        return 99
+    
+    def is_mikroi_kyrioi_series(series_name):
+        series_lower = str(series_name).lower()
+        return 'μικροί κύριοι' in series_lower or 'μικρές κυρίες' in series_lower or 'mr. men' in series_lower or 'little miss' in series_lower
+    
+    def get_mikroi_kyrioi_order(title):
+        title_lower = str(title).lower()
+        match = re.search(r'(?:μικροί κύριοι|μικρές κυρίες|mr\.?\s*men|little miss)[^0-9]*(\d{1,3})', title_lower)
+        if match: return int(match.group(1))
+        return 99 
+
+    def is_box_set(title):
+        title_lower = str(title).lower()
+        box_keywords = ['box set', 'boxset', 'box-set', 'κασετίνα', 'συλλογή', 'collection', 
+                        'βαλιτσάκι', 'σετ βιβλίων', 'book set', 'complete series', 'books 1-']
+        return any(kw in title_lower for kw in box_keywords)
+    
+    def is_complete_box_set(title):
+        title_lower = str(title).lower()
+        complete_keywords = ['complete', 'ολοκληρωμένη', 'πλήρης', 'all books', 'όλα τα βιβλία', 
+                            'full collection', '1-7', '1-8', 'complete collection']
+        return any(kw in title_lower for kw in complete_keywords)
+
+    def get_canonical_book_name(title, orig_title=''):
+        title_lower = str(title).lower().strip() if title and str(title) != 'nan' else ''
+        orig_lower = ''
+        if orig_title is not None and not pd.isna(orig_title):
+            orig_str = str(orig_title).lower().strip()
+            if orig_str and orig_str != 'nan':
+                orig_lower = orig_str
+        
+        canonical = orig_lower if orig_lower else title_lower
+        if not canonical or canonical == 'nan':
+            return title_lower if title_lower and title_lower != 'nan' else ''
+        
+        prefixes = [
+            'ο χάρι πότερ και ', 'ο χαρι ποτερ και ', 'harry potter and the ', 'harry potter and ',
+            'fantastic beasts: ', 'φανταστικά ζώα: ', 'φανταστικά ζώα και ',
+            'diary of a wimpy kid: ', 'diary of a wimpy kid ',
+            'captain underpants: ', 'captain underpants ',
+        ]
+        for prefix in prefixes:
+            if canonical.startswith(prefix):
+                canonical = canonical[len(prefix):]
+                break
+        
+        dm_patterns = [
+            r'^adventures\s+of\s+dog\s*man\s*\d{0,2}\s*[-:]\s*',
+            r'^dog\s*man\s*\d{1,2}\s*[-:]\s*',
+            r'^dog\s*man\s*[-:]\s*',
+            r'^dog\s*man\s+',
+        ]
+        for pattern in dm_patterns:
+            dm_match = re.match(pattern, canonical)
+            if dm_match:
+                canonical = canonical[dm_match.end():]
+                break
+        
+        edition_keywords = [
+            'edition', 'έκδοση', 'illustrated', 'εικονογραφημένο', 'εικονογραφημένη',
+            'collector', 'συλλεκτική', 'deluxe', 'anniversary', 'special', 'gift',
+            'paperback', 'hardcover', 'hardback', 'softcover', 'minalima',
+            'gryffindor', 'slytherin', 'hufflepuff', 'ravenclaw', 'rehearsal',
+        ]
+        
+        paren_match = re.search(r'\s*\([^)]*(?:' + '|'.join(edition_keywords) + r')[^)]*\)\s*$', canonical)
+        if paren_match: canonical = canonical[:paren_match.start()]
+        
+        for delimiter in [' - ', ': ', ' – ', ' — ']:
+            if delimiter in canonical:
+                parts = canonical.split(delimiter)
+                if len(parts) >= 2:
+                    suffix_part = parts[-1].lower().strip()
+                    words = suffix_part.split()
+                    if len(words) <= 4 and any(kw in suffix_part for kw in edition_keywords):
+                        canonical = delimiter.join(parts[:-1])
+        
+        for suffix in [' cd', ' audiobook', ' audio book', ' mp3', ' audio']:
+            if canonical.endswith(suffix):
+                canonical = canonical[:-len(suffix)]
+                break
+        
+        for suffix in [' pb', ' hb', ' (pb)', ' (hb)']:
+            if canonical.endswith(suffix):
+                canonical = canonical[:-len(suffix)]
+                break
+        
+        marketing_paren = re.search(r'\s*\([^)]*(?:new|graphic novel|book|novel)[^)]*\)\s*$', canonical, re.IGNORECASE)
+        if marketing_paren: canonical = canonical[:marketing_paren.start()]
+        
+        for suffix in [': a graphic novel', ' - a graphic novel', ': graphic novel']:
+            if canonical.endswith(suffix):
+                canonical = canonical[:-len(suffix)]
+                break
+        
+        if canonical.startswith('dog man: '): canonical = canonical[9:]
+        canonical = canonical.replace("'", "'").replace("'", "'").replace("`", "'")
+        
+        return canonical.strip()
+
+    tm = trigger['Material']
+    tt = str(trigger.get('Title', ''))
+    used_materials.add(tm)
+    
+    t_series_raw = trigger.get('Σειρά βιβλίου', None)
+    if t_series_raw is None:
+        for col in trigger.index:
+            if 'σειρά' in col.lower() or 'series' in col.lower():
+                t_series_raw = trigger.get(col, None)
+                break
+    t_series = str(t_series_raw).strip() if t_series_raw is not None and not pd.isna(t_series_raw) else ''
+    
+    t_age = str(trigger.get('Ηλικία', '')).strip()
+    t_rec_age = str(trigger.get('Προτεινόμενη Ηλικία', '')).strip()
+    t_cover = str(trigger.get('Εξώφυλλο', '')).strip()
+    t_dims = str(trigger.get('Διαστάσεις', '')).strip()
+    t_illus = str(trigger.get('Λεπτομέρειες εικονογράφησης', '')).strip()
+    t_pub_series = str(trigger.get('Εκδοτική Σειρά', '')).strip()
+    t_orig_title = str(trigger.get('Τίτλος πρωτοτύπου', '')).strip()
+    t_hierarchy = str(trigger.get('Hierarchy', '')).strip()
+    t_level2 = str(trigger.get('Level 2', '')).strip()
+    t_brand = str(trigger.get('Brand', '')).strip()
+    t_price = parse_euro_price(trigger.get('LIST PRICE', 0))
+    
+    effective_age = t_age if t_age and t_age != 'nan' and t_age != '0' else t_rec_age
+    allowed_ages = get_allowed_ages(effective_age)
+    has_series = is_valid_series(t_series)
+    
+    trigger_is_box_set = is_box_set(tt)
+    trigger_is_complete_box = trigger_is_box_set and is_complete_box_set(tt)
+    trigger_canonical = get_canonical_book_name(tt, t_orig_title)
+    used_titles.add(trigger_canonical)
+    
+    box_status = "complete box set" if trigger_is_complete_box else ("partial box set" if trigger_is_box_set else "individual book")
+    diag.append(("0. Trigger", "", f"Series: '{t_series}' (valid: {has_series}), Age: '{effective_age}', Type: {box_status}"))
+    
+    # ══════════════════════════════════════════════════════════
+    # PRIORITY 1: SERIES ENGINE (Up to 10 slots)
+    # ══════════════════════════════════════════════════════════
+    series_notes = ["=== PRIORITY 1: SERIES ENGINE ==="]
+    series_count = 0
+    max_series = 10
+    
+    if trigger_is_complete_box:
+        series_notes.append("⚠ Complete box set detected - skipping series books")
+        diag.append(("1. Series Engine", 0, "Skipped (complete box set)"))
+    elif has_series:
+        books_only = df_all[df_all['Level 1'] == 'Books'].copy()
+        series_col = 'Σειρά βιβλίου'
+        if series_col not in books_only.columns:
+            for col in books_only.columns:
+                if 'σειρά' in col.lower() or 'series' in col.lower():
+                    series_col = col
+                    break
+        
+        if series_col in books_only.columns:
+            series_books = books_only[books_only[series_col].fillna('').astype(str).str.strip() == t_series].copy()
+        else:
+            series_books = pd.DataFrame()
+        
+        series_books = series_books[series_books['Material'] != tm]
+        series_books['_canonical'] = series_books.apply(lambda r: get_canonical_book_name(r.get('Title', ''), r.get('Τίτλος πρωτοτύπου', '')), axis=1)
+        series_books = series_books[series_books['_canonical'] != trigger_canonical]
+        
+        if not trigger_is_box_set and not series_books.empty:
+            series_books = series_books[~series_books['Title'].apply(is_box_set)]
+            
+        if t_level2:
+            series_books = series_books[series_books['Level 2'] == t_level2]
+            
+        def is_novelty_language(title):
+            novelty_langs = ['(ancient greek)', '(latin)', '(irish)', '(scots)', '(welsh)', '(gaelic)', '(αρχαία ελληνικά)', '(λατινικά)']
+            return any(lang in str(title).lower() for lang in novelty_langs)
+        if not series_books.empty:
+            series_books = series_books[~series_books['Title'].apply(is_novelty_language)]
+            
+        def is_audiobook(title):
+            audiobook_keywords = [' cd', ' audiobook', ' audio book', ' mp3', 'ηχητικό', 'ακουστικό']
+            return any(kw in str(title).lower() for kw in audiobook_keywords)
+        if not series_books.empty:
+            series_books = series_books[~series_books['Title'].apply(is_audiobook)]
+            
+        def get_edition_line(title):
+            title_lower = str(title).lower()
+            for house in ['gryffindor', 'slytherin', 'hufflepuff', 'ravenclaw']:
+                if house in title_lower: return 'house_' + house
+            edition_patterns = [
+                ('minalima', 'minalima'), ('illustrated', 'illustrated'), ('20th anniversary', 'anniversary_20'),
+                ('25th anniversary', 'anniversary_25'), ('anniversary', 'anniversary'), ('deluxe', 'deluxe'),
+                ('collector', 'collector'), ('special', 'special'), ('gift', 'gift'),
+            ]
+            for pattern, line in edition_patterns:
+                if pattern in title_lower: return line
+            return 'standard'
+        
+        trigger_edition_line = get_edition_line(tt)
+        
+        # Base Format Score
+        if not series_books.empty:
+            series_books['Format_Score'] = 0
+            series_books['_edition_line'] = series_books['Title'].apply(get_edition_line)
+            series_books.loc[series_books['_edition_line'] == trigger_edition_line, 'Format_Score'] += 5000
+            
+            if t_cover and t_cover != 'nan' and t_cover != '0' and 'Εξώφυλλο' in series_books.columns:
+                series_books.loc[series_books['Εξώφυλλο'].fillna('').astype(str).str.strip() == t_cover, 'Format_Score'] += 1000
+            if t_dims and t_dims != 'nan' and t_dims != 'NaN' and 'Διαστάσεις' in series_books.columns:
+                series_books.loc[series_books['Διαστάσεις'].fillna('').astype(str).str.strip() == t_dims, 'Format_Score'] += 1000
+            if t_pub_series and t_pub_series != 'nan' and t_pub_series != '0' and 'Εκδοτική Σειρά' in series_books.columns:
+                series_books.loc[series_books['Εκδοτική Σειρά'].fillna('').astype(str).str.strip() == t_pub_series, 'Format_Score'] += 1000
+            if t_illus and t_illus != 'nan' and t_illus != '0' and 'Λεπτομέρειες εικονογράφησης' in series_books.columns:
+                series_books.loc[series_books['Λεπτομέρειες εικονογράφησης'].fillna('').astype(str).str.strip() == t_illus, 'Format_Score'] += 1000
+                
+            series_books['Final_Score'] = SERIES_BOOST + series_books['Format_Score']
+            if 'AVAILABILITY' in series_books.columns:
+                series_books.loc[series_books['AVAILABILITY'] == 'Άμεσα Διαθέσιμο', 'Final_Score'] += AVAIL_BOOST
+
+        # 🟢 PREPARE PUBLISH DATE & SALES 
+        if 'Ημερ/νία έκδοσης' in series_books.columns:
+            series_books['Pub_Date'] = pd.to_datetime(series_books['Ημερ/νία έκδοσης'], errors='coerce')
+        else:
+            series_books['Pub_Date'] = pd.NaT
+            
+        t_pub_date = trigger.get('Ημερ/νία έκδοσης', '')
+        t_pub_date_parsed = pd.to_datetime(t_pub_date, errors='coerce') if t_pub_date else pd.NaT
+        
+        if 'Sum of Sales' in series_books.columns:
+            series_books['Sales_Score'] = pd.to_numeric(series_books['Sum of Sales'], errors='coerce').fillna(0)
+        else:
+            # Fallback to history frequency if Sum of Sales isn't attached
+            tcust = df_history[df_history['Material']==tm]['customerEmail'].unique() if not df_history.empty else []
+            bw = df_history[(df_history['customerEmail'].isin(tcust))&(df_history['Material']!=tm)] if not df_history.empty else pd.DataFrame()
+            fdf = bw['Material'].value_counts().reset_index() if not bw.empty else pd.DataFrame(columns=['NID', 'Frequency'])
+            if not fdf.empty:
+                fdf.columns = ['NID', 'Frequency']
+                series_books = series_books.merge(fdf, left_on='Material', right_on='NID', how='left')
+                series_books['Sales_Score'] = series_books['Frequency'].fillna(0)
+            else:
+                series_books['Sales_Score'] = 0
+
+        # 🟢 DETERMINE LOGIC (Ordered/Mixed vs Standalone)
+        t_series_lower = t_series.lower()
+        if is_harry_potter_series(t_series) or is_dog_man_series(t_series) or is_mikroi_kyrioi_series(t_series):
+            order_logic = 'Ordered'
+        else:
+            order_logic = SERIES_ORDER_MAP.get(t_series_lower, 'Standalone')
+        
+        series_notes.append(f"Logic applied: {order_logic}")
+
+        series_books_sorted = pd.DataFrame()
+        
+        if trigger_is_box_set and not trigger_is_complete_box:
+            box_sets_in_series = series_books[series_books['Title'].apply(is_box_set)]
+            if not box_sets_in_series.empty:
+                for _, row in box_sets_in_series.head(2).iterrows():
+                    if row['Material'] not in used_materials:
+                        row_copy = row.copy()
+                        row_copy['Assigned_Slot'] = series_count + 1
+                        row_copy['Slot_Role'] = 'Other Box Set'
+                        row_copy['Item_Rank'] = 1
+                        all_recs.append(row_copy)
+                        used_materials.add(row['Material'])
+                        used_titles.add(get_canonical_book_name(row['Title'], row.get('Τίτλος πρωτοτύπου', '')))
+                        series_count += 1
+                series_notes.append(f"Added other box sets: {series_count}")
+
+        if series_count < max_series and not series_books.empty:
+            if order_logic in ['Ordered', 'Mixed']:
+                if is_harry_potter_series(t_series):
+                    trigger_order = get_hp_order(tt)
+                    series_books['_order'] = series_books['Title'].apply(get_hp_order)
+                elif is_dog_man_series(t_series):
+                    trigger_order = get_dog_man_order(tt)
+                    series_books['_order'] = series_books['Title'].apply(get_dog_man_order)
+                elif is_mikroi_kyrioi_series(t_series):
+                    trigger_order = get_mikroi_kyrioi_order(tt)
+                    series_books['_order'] = series_books['Title'].apply(get_mikroi_kyrioi_order)
+                else:
+                    trigger_order = t_pub_date_parsed
+                    series_books['_order'] = series_books['Pub_Date']
+                
+                if pd.isna(trigger_order):
+                    series_books_sorted = series_books.sort_values(['_order', 'Final_Score'], ascending=[True, False])
+                else:
+                    books_after = series_books[series_books['_order'] > trigger_order].sort_values(['_order', 'Final_Score'], ascending=[True, False])
+                    books_before = series_books[series_books['_order'] < trigger_order].sort_values(['_order', 'Final_Score'], ascending=[True, False])
+                    books_same = series_books[series_books['_order'] == trigger_order].sort_values('Final_Score', ascending=False)
+                    series_books_sorted = pd.concat([books_after, books_before, books_same])
+            else:
+                # Standalone Logic: Sales first, fallback to Publish Date (Newest)
+                series_books_sorted = series_books.sort_values(['Sales_Score', 'Pub_Date', 'Final_Score'], ascending=[False, False, False])
+            
+            for _, row in series_books_sorted.iterrows():
+                if series_count >= max_series: break
+                row_canonical = get_canonical_book_name(row['Title'], row.get('Τίτλος πρωτοτύπου', ''))
+                
+                if row['Material'] not in used_materials and row_canonical not in used_titles:
+                    row_copy = row.copy()
+                    row_copy['Assigned_Slot'] = series_count + 1
+                    row_copy['Slot_Role'] = 'Series Book'
+                    row_copy['Item_Rank'] = 1
+                    all_recs.append(row_copy)
+                    used_materials.add(row['Material'])
+                    used_titles.add(row_canonical)
+                    series_count += 1
+            
+            series_notes.append(f"Filled {series_count} Series Books slots.")
+    else:
+        series_notes.append("No valid series found on trigger")
+    
+    slot_notes[1] = series_notes
+    diag.append(("1. Series Engine", series_count, f"Filled {series_count} slots"))
+    
+    # ══════════════════════════════════════════════════════════
+    # PRIORITY 2: CROSS-SELL (Toys & Stationery)
+    # ══════════════════════════════════════════════════════════
+    crosssell_notes = ["=== PRIORITY 2: CROSS-SELL ==="]
+    crosssell_count = 0
+    max_crosssell = min(4, 10 - series_count)
+    crosssell_notes.append(f"Cross-sell: {max_crosssell} slots available")
+    
+    if max_crosssell > 0:
+        toys = df_all[df_all['Level 1'] == 'Toys'].copy()
+        stationery = df_all[df_all['Level 1'] == 'Stationery'].copy()
+        
+        age_bracket = get_age_bracket(t_age)
+        def get_allowed_toy_ages(bracket):
+            if bracket == 1: return ['0+ μηνών', '0+ ετών', '3+ μηνών', '5+ μηνών', '6+ μηνών', '']
+            elif bracket == 2: return ['6+ μηνών', '9+ μηνών', '12+ μηνών', '1+ ετών', '']
+            elif bracket == 3: return ['9+ μηνών', '12+ μηνών', '1+ ετών', '1.5+ ετών', '24+ μηνών', '2+ ετών', '']
+            elif bracket == 4: return ['1.5+ ετών', '24+ μηνών', '2+ ετών', '3+ ετών', '']
+            elif bracket == 5: return ['3+ ετών', '4+ ετών', '5+ ετών', '6+ ετών', '7+ ετών', '8+ ετών', '']
+            elif bracket == 6: return ['6+ ετών', '7+ ετών', '8+ ετών', '9+ ετών', '10+ ετών', '11+ ετών', '12+ ετών', '13+ ετών', '14+ ετών', '']
+            elif bracket == 7: return ['10+ ετών', '11+ ετών', '12+ ετών', '13+ ετών', '14+ ετών', '15+ ετών', '16+ ετών', '17+ ετών', '18+ ετών', '']
+            return ['']
+        bracket_allowed_ages = get_allowed_toy_ages(age_bracket)
+        
+        def detect_gender(trigger_row, series_name, title, hierarchy):
+            series_lower = str(series_name).lower().strip()
+            if series_lower in SERIES_GENDER_MAP: return SERIES_GENDER_MAP[series_lower]
+            gender_field = str(trigger_row.get('Φύλο', '')).lower().strip()
+            if gender_field:
+                if any(x in gender_field for x in ['κορίτσι', 'girl', 'θηλυκό', 'female']): return 'girl'
+                elif any(x in gender_field for x in ['αγόρι', 'boy', 'αρσενικό', 'male']): return 'boy'
+            hier_lower = str(hierarchy).lower()
+            if any(x in hier_lower for x in ['barbie', 'princess', 'πριγκίπισσα']): return 'girl'
+            text = (str(series_name) + ' ' + str(title)).lower()
+            girl_keywords = ['fairy', 'magic', 'princess', 'rainbow', 'unicorn', 'ballerina', 'barbie', 'frozen', 'elsa', 'anna', 'mermaid', 'kitty', 'doll', 'sparkle', 'glitter', 'flower', 'νεράιδα', 'πριγκίπισσα', 'κούκλα']
+            boy_keywords = ['quest', 'warrior', 'beast', 'dragon', 'dinosaur', 'dino', 'monster', 'ninja', 'pirate', 'superhero', 'hero', 'battle', 'fight', 'soldier', 'robot', 'car', 'truck', 'spider-man', 'batman', 'marvel', 'avengers', 'star wars', 'minecraft', 'pokemon', 'δεινόσαυρος', 'πειρατής', 'ήρωας']
+            if any(kw in text for kw in girl_keywords): return 'girl'
+            elif any(kw in text for kw in boy_keywords): return 'boy'
+            return 'neutral'
+        
+        detected_gender = detect_gender(trigger, t_series, tt, t_hierarchy)
+        
+        def get_hierarchy_category(hierarchy):
+            hier_lower = str(hierarchy).lower()
+            if any(x in hier_lower for x in ['ζωγραφικη', 'χειροτεχνι', 'αυτοκολλητ', 'δραστηριοτητ', 'τεχνη', 'μουσικ']): return 'arts'
+            elif any(x in hier_lower for x in ['εφευρεσ', 'πειραμ', 'αστρονομ', 'φυσικ', 'χημ', 'βιολογ', 'επιστημ', 'τεχνολογ', 'γνωσ', 'εγκυκλοπαιδ', 'περιβαλλον', 'οικολογ', 'ζωα', 'ιστορ', 'γεωγραφ', 'ατλαντ', 'μυθολογ']): return 'stem'
+            elif any(x in hier_lower for x in ['προσχολικ', 'χρωματα', 'σχηματα', 'αντιθετ', 'αναγνωση', 'γραφη']): return 'preschool'
+            elif any(x in hier_lower for x in ['λογοτεχν', 'παραμυθ', 'μυθ', 'κομικ', 'χιουμορ', 'παιδικ']): return 'fiction'
+            elif any(x in hier_lower for x in ['παζλ', 'σπαζοκεφαλ', 'αινιγμ', 'παιχνιδ', 'διαδραστικ']): return 'activity'
+            return 'general'
+        
+        hierarchy_category = get_hierarchy_category(t_hierarchy)
+        
+        adult_brands = ['moleskine', 'leuchtturm', 'rhodia', 'field notes', 'midori']
+        def is_adult_brand(title, brand=''):
+            text = (str(title) + ' ' + str(brand)).lower()
+            return any(ab in text for ab in adult_brands)
+        stationery = stationery[~stationery.apply(lambda r: is_adult_brand(r.get('Title', ''), r.get('Brand', '')), axis=1)]
+        
+        adult_toy_hierarchies = ['TECHNIC', 'LEGO ICONS', 'ICONS', 'CREATOR EXPERT', 'ARCHITECTURE', 'LEGO ART', 'IDEAS', 'BOTANICS', 'LEGO BOTANICAL']
+        toys = toys[~toys['Hierarchy'].str.upper().str.strip().isin([h.upper() for h in adult_toy_hierarchies])]
+        
+        if 'Προτεινόμενη Ηλικία' in toys.columns:
+            if age_bracket <= 5: 
+                toys = toys[toys['Προτεινόμενη Ηλικία'].fillna('').astype(str).str.strip().isin(bracket_allowed_ages)]
+            else: 
+                toys = toys[toys['Προτεινόμενη Ηλικία'].fillna('').astype(str).str.strip().isin(bracket_allowed_ages) | (toys['Προτεινόμενη Ηλικία'].fillna('') == '') | (toys['Προτεινόμενη Ηλικία'].fillna('').astype(str) == '0')]
+        
+        def toy_matches_gender(title, brand, gender):
+            text = (str(title) + ' ' + str(brand)).lower()
+            if gender == 'girl':
+                boy_only = ['spider-man', 'batman', 'avengers', 'marvel', 'dinosaur', 'dino', 'monster truck', 'transformers', 'ninja', 'nerf', 'army', 'soldier']
+                return not any(b in text for b in boy_only)
+            elif gender == 'boy':
+                girl_only = ['barbie', 'princess', 'frozen', 'elsa', 'anna', 'fairy', 'unicorn', 'my little pony', 'hello kitty', 'ballerina']
+                return not any(g in text for g in girl_only)
+            return True
+        
+        def stationery_matches_gender(title, brand, gender):
+            text = (str(title) + ' ' + str(brand)).lower()
+            if gender == 'girl':
+                boy_only = ['spider-man', 'batman', 'avengers', 'marvel', 'dinosaur', 'cars', 'minecraft']
+                return not any(b in text for b in boy_only)
+            elif gender == 'boy':
+                girl_only = ['barbie', 'princess', 'frozen', 'fairy', 'unicorn', 'hello kitty']
+                return not any(g in text for g in girl_only)
+            return True
+        
+        toys['Final_Score'] = 0
+        stationery['Final_Score'] = 0
+        if 'AVAILABILITY' in toys.columns: toys.loc[toys['AVAILABILITY'] == 'Άμεσα Διαθέσιμο', 'Final_Score'] += AVAIL_BOOST
+        if 'AVAILABILITY' in stationery.columns: stationery.loc[stationery['AVAILABILITY'] == 'Άμεσα Διαθέσιμο', 'Final_Score'] += AVAIL_BOOST
+        
+        if has_series:
+            for idx in toys.index:
+                if ip_matches(t_series, str(toys.loc[idx, 'Brand']) if 'Brand' in toys.columns else '', str(toys.loc[idx, 'Ήρωες Παιχνιδιών']) if 'Ήρωες Παιχνιδιών' in toys.columns else '') or normalize_ip_name(t_series) in normalize_ip_name(str(toys.loc[idx, 'Title']) if 'Title' in toys.columns else ''):
+                    toys.loc[idx, 'Final_Score'] += SMART_BOOST * 5
+            for idx in stationery.index:
+                if ip_matches(t_series, str(stationery.loc[idx, 'Brand']) if 'Brand' in stationery.columns else '', str(stationery.loc[idx, 'Ήρωες Παιχνιδιών']) if 'Ήρωες Παιχνιδιών' in stationery.columns else '') or normalize_ip_name(t_series) in normalize_ip_name(str(stationery.loc[idx, 'Title']) if 'Title' in stationery.columns else ''):
+                    stationery.loc[idx, 'Final_Score'] += SMART_BOOST * 5
+                    
+        # Cross-Sell Slot 1: IP Toy or Age-Appropriate Fallback
+        if crosssell_count < max_crosssell:
+            item1_found = False
+            ip_toys = toys[toys['Final_Score'] >= SMART_BOOST * 5].copy()
+            if not ip_toys.empty:
+                selected = get_rotated_selection(ip_toys, tm, 'ip_toy', n=1)
+                if not selected.empty:
+                    best = selected.iloc[0]
+                    if best['Material'] not in used_materials:
+                        row_copy = best.copy()
+                        row_copy['Assigned_Slot'] = series_count + crosssell_count + 1
+                        row_copy['Slot_Role'] = 'Cross-Sell: IP Toy'
+                        row_copy['Item_Rank'] = 1
+                        all_recs.append(row_copy)
+                        used_materials.add(best['Material'])
+                        crosssell_count += 1
+                        item1_found = True
+            
+            if not item1_found:
+                if age_bracket <= 4:
+                    plush = toys[toys['Hierarchy'].isin(TOY_HIERARCHIES_ACTUAL['plush'])].copy()
+                    plush = plush[plush.apply(lambda r: toy_matches_gender(r.get('Title',''), r.get('Brand',''), detected_gender), axis=1)]
+                    if not plush.empty:
+                        selected = get_rotated_selection(plush, tm, 'plush', n=1)
+                        if not selected.empty:
+                            best = selected.iloc[0]
+                            if best['Material'] not in used_materials:
+                                row_copy = best.copy()
+                                row_copy['Assigned_Slot'] = series_count + crosssell_count + 1
+                                row_copy['Slot_Role'] = 'Cross-Sell: Plush'
+                                row_copy['Item_Rank'] = 1
+                                all_recs.append(row_copy)
+                                used_materials.add(best['Material'])
+                                crosssell_count += 1
+                                item1_found = True
+                elif age_bracket == 5 and not item1_found:
+                    if detected_gender == 'girl':
+                        dolls = toys[toys['Hierarchy'].isin(TOY_HIERARCHIES_ACTUAL.get('dolls', []))].copy()
+                        dolls = dolls[dolls.apply(lambda r: toy_matches_gender(r.get('Title',''), r.get('Brand',''), detected_gender), axis=1)]
+                        if not dolls.empty:
+                            selected = get_rotated_selection(dolls, tm, 'dolls', n=1)
+                            if not selected.empty:
+                                best = selected.iloc[0]
+                                if best['Material'] not in used_materials:
+                                    row_copy = best.copy()
+                                    row_copy['Assigned_Slot'] = series_count + crosssell_count + 1
+                                    row_copy['Slot_Role'] = 'Cross-Sell: Doll'
+                                    row_copy['Item_Rank'] = 1
+                                    all_recs.append(row_copy)
+                                    used_materials.add(best['Material'])
+                                    crosssell_count += 1
+                                    item1_found = True
+                    else:
+                        figures = toys[toys['Hierarchy'].isin(TOY_HIERARCHIES_ACTUAL.get('action_figures', []))].copy()
+                        figures = figures[figures.apply(lambda r: toy_matches_gender(r.get('Title',''), r.get('Brand',''), detected_gender), axis=1)]
+                        if not figures.empty:
+                            selected = get_rotated_selection(figures, tm, 'figures', n=1)
+                            if not selected.empty:
+                                best = selected.iloc[0]
+                                if best['Material'] not in used_materials:
+                                    row_copy = best.copy()
+                                    row_copy['Assigned_Slot'] = series_count + crosssell_count + 1
+                                    row_copy['Slot_Role'] = 'Cross-Sell: Action Figure'
+                                    row_copy['Item_Rank'] = 1
+                                    all_recs.append(row_copy)
+                                    used_materials.add(best['Material'])
+                                    crosssell_count += 1
+                                    item1_found = True
+                elif age_bracket >= 6 and not item1_found:
+                    games = toys[toys['Hierarchy'].isin(TOY_HIERARCHIES_ACTUAL.get('board_puzzles', []))].copy()
+                    games = games[games.apply(lambda r: toy_matches_gender(r.get('Title',''), r.get('Brand',''), detected_gender), axis=1)]
+                    if not games.empty:
+                        selected = get_rotated_selection(games, tm, 'games', n=1)
+                        if not selected.empty:
+                            best = selected.iloc[0]
+                            if best['Material'] not in used_materials:
+                                row_copy = best.copy()
+                                row_copy['Assigned_Slot'] = series_count + crosssell_count + 1
+                                row_copy['Slot_Role'] = 'Cross-Sell: Board Game'
+                                row_copy['Item_Rank'] = 1
+                                all_recs.append(row_copy)
+                                used_materials.add(best['Material'])
+                                crosssell_count += 1
+                                item1_found = True
+                if not item1_found:
+                    plush = toys[toys['Hierarchy'].isin(TOY_HIERARCHIES_ACTUAL['plush'])].copy()
+                    plush = plush[plush.apply(lambda r: toy_matches_gender(r.get('Title',''), r.get('Brand',''), detected_gender), axis=1)]
+                    if not plush.empty:
+                        selected = get_rotated_selection(plush, tm, 'plush_fallback', n=1)
+                        if not selected.empty:
+                            best = selected.iloc[0]
+                            if best['Material'] not in used_materials:
+                                row_copy = best.copy()
+                                row_copy['Assigned_Slot'] = series_count + crosssell_count + 1
+                                row_copy['Slot_Role'] = 'Cross-Sell: Plush'
+                                row_copy['Item_Rank'] = 1
+                                all_recs.append(row_copy)
+                                used_materials.add(best['Material'])
+                                crosssell_count += 1
+
+        # Cross-Sell Slot 2: Hierarchy-Based Creative
+        if crosssell_count < max_crosssell:
+            item2_found = False
+            if hierarchy_category == 'arts' and not item2_found:
+                arts = stationery[stationery['Hierarchy'].isin(STATIONERY_HIERARCHIES_ACTUAL.get('arts_crafts', []))].copy()
+                arts = arts[arts.apply(lambda r: stationery_matches_gender(r.get('Title',''), r.get('Brand',''), detected_gender), axis=1)]
+                if not arts.empty:
+                    selected = get_rotated_selection(arts, tm, 'arts_direct', n=1)
+                    if not selected.empty:
+                        best = selected.iloc[0]
+                        if best['Material'] not in used_materials:
+                            row_copy = best.copy()
+                            row_copy['Assigned_Slot'] = series_count + crosssell_count + 1
+                            row_copy['Slot_Role'] = 'Cross-Sell: Arts Supplies'
+                            row_copy['Item_Rank'] = 1
+                            all_recs.append(row_copy)
+                            used_materials.add(best['Material'])
+                            crosssell_count += 1
+                            item2_found = True
+            if hierarchy_category == 'fiction' and not item2_found:
+                building = toys[toys['Hierarchy'].isin(TOY_HIERARCHIES_ACTUAL.get('building', []))].copy()
+                building = building[building.apply(lambda r: toy_matches_gender(r.get('Title',''), r.get('Brand',''), detected_gender), axis=1)]
+                if not building.empty:
+                    selected = get_rotated_selection(building, tm, 'building', n=1)
+                    if not selected.empty:
+                        best = selected.iloc[0]
+                        if best['Material'] not in used_materials:
+                            row_copy = best.copy()
+                            row_copy['Assigned_Slot'] = series_count + crosssell_count + 1
+                            row_copy['Slot_Role'] = 'Cross-Sell: Building Set'
+                            row_copy['Item_Rank'] = 1
+                            all_recs.append(row_copy)
+                            used_materials.add(best['Material'])
+                            crosssell_count += 1
+                            item2_found = True
+            if hierarchy_category == 'stem' and not item2_found:
+                educational = toys[toys['Hierarchy'].isin(TOY_HIERARCHIES_ACTUAL.get('creative', []))].copy()
+                educational = educational[educational.apply(lambda r: toy_matches_gender(r.get('Title',''), r.get('Brand',''), detected_gender), axis=1)]
+                if not educational.empty:
+                    selected = get_rotated_selection(educational, tm, 'educational', n=1)
+                    if not selected.empty:
+                        best = selected.iloc[0]
+                        if best['Material'] not in used_materials:
+                            row_copy = best.copy()
+                            row_copy['Assigned_Slot'] = series_count + crosssell_count + 1
+                            row_copy['Slot_Role'] = 'Cross-Sell: Educational'
+                            row_copy['Item_Rank'] = 1
+                            all_recs.append(row_copy)
+                            used_materials.add(best['Material'])
+                            crosssell_count += 1
+                            item2_found = True
+            if not item2_found:
+                if age_bracket <= 6:
+                    paper = stationery[stationery['Hierarchy'].str.contains('ΜΠΛΟΚ|ΧΑΡΤ', case=False, na=False)].copy()
+                    paper = paper[paper.apply(lambda r: stationery_matches_gender(r.get('Title',''), r.get('Brand',''), detected_gender), axis=1)]
+                    if not paper.empty:
+                        selected = get_rotated_selection(paper, tm, 'paper', n=1)
+                        if not selected.empty:
+                            best = selected.iloc[0]
+                            if best['Material'] not in used_materials:
+                                row_copy = best.copy()
+                                row_copy['Assigned_Slot'] = series_count + crosssell_count + 1
+                                row_copy['Slot_Role'] = 'Cross-Sell: Drawing Paper'
+                                row_copy['Item_Rank'] = 1
+                                all_recs.append(row_copy)
+                                used_materials.add(best['Material'])
+                                crosssell_count += 1
+                                item2_found = True
+                else:
+                    squish = toys[toys['Title'].str.contains('SQUISHMALLOW|SQUISH', case=False, na=False)].copy()
+                    if not squish.empty:
+                        selected = get_rotated_selection(squish, tm, 'squish', n=1)
+                        if not selected.empty:
+                            best = selected.iloc[0]
+                            if best['Material'] not in used_materials:
+                                row_copy = best.copy()
+                                row_copy['Assigned_Slot'] = series_count + crosssell_count + 1
+                                row_copy['Slot_Role'] = 'Cross-Sell: Squishmallow'
+                                row_copy['Item_Rank'] = 1
+                                all_recs.append(row_copy)
+                                used_materials.add(best['Material'])
+                                crosssell_count += 1
+
+        # Cross-Sell Slot 3: Puzzles/Games
+        if crosssell_count < max_crosssell:
+            item3_found = False
+            if hierarchy_category == 'activity' and not item3_found:
+                puzzles = toys[toys['Hierarchy'].isin(TOY_HIERARCHIES_ACTUAL.get('board_puzzles', []))].copy()
+                puzzles = puzzles[puzzles.apply(lambda r: toy_matches_gender(r.get('Title',''), r.get('Brand',''), detected_gender), axis=1)]
+                if not puzzles.empty:
+                    selected = get_rotated_selection(puzzles, tm, 'puzzles_activity', n=1)
+                    if not selected.empty:
+                        best = selected.iloc[0]
+                        if best['Material'] not in used_materials:
+                            row_copy = best.copy()
+                            row_copy['Assigned_Slot'] = series_count + crosssell_count + 1
+                            row_copy['Slot_Role'] = 'Cross-Sell: Puzzle'
+                            row_copy['Item_Rank'] = 1
+                            all_recs.append(row_copy)
+                            used_materials.add(best['Material'])
+                            crosssell_count += 1
+                            item3_found = True
+            if not item3_found:
+                puzzles = toys[toys['Hierarchy'].isin(TOY_HIERARCHIES_ACTUAL.get('board_puzzles', []))].copy()
+                puzzles = puzzles[puzzles.apply(lambda r: toy_matches_gender(r.get('Title',''), r.get('Brand',''), detected_gender), axis=1)]
+                if not puzzles.empty:
+                    selected = get_rotated_selection(puzzles, tm, 'puzzles_fallback', n=1)
+                    if not selected.empty:
+                        best = selected.iloc[0]
+                        if best['Material'] not in used_materials:
+                            row_copy = best.copy()
+                            row_copy['Assigned_Slot'] = series_count + crosssell_count + 1
+                            row_copy['Slot_Role'] = 'Cross-Sell: Puzzle'
+                            row_copy['Item_Rank'] = 1
+                            all_recs.append(row_copy)
+                            used_materials.add(best['Material'])
+                            crosssell_count += 1
+
+        # Cross-Sell Slot 4: Lifestyle
+        if crosssell_count < max_crosssell:
+            item4_found = False
+            if age_bracket <= 6:
+                lifestyle = stationery[stationery['Hierarchy'].str.contains('ΠΑΓΟΥΡ|ΦΑΓΗΤΟΔΟΧ', case=False, na=False)].copy()
+                lifestyle = lifestyle[lifestyle.apply(lambda r: stationery_matches_gender(r.get('Title',''), r.get('Brand',''), detected_gender), axis=1)]
+                if not lifestyle.empty:
+                    selected = get_rotated_selection(lifestyle, tm, 'waterbottle', n=1)
+                    if not selected.empty:
+                        best = selected.iloc[0]
+                        if best['Material'] not in used_materials:
+                            row_copy = best.copy()
+                            row_copy['Assigned_Slot'] = series_count + crosssell_count + 1
+                            row_copy['Slot_Role'] = 'Cross-Sell: Water Bottle'
+                            row_copy['Item_Rank'] = 1
+                            all_recs.append(row_copy)
+                            used_materials.add(best['Material'])
+                            crosssell_count += 1
+                            item4_found = True
+            else:
+                notebooks = stationery[stationery['Hierarchy'].str.contains('ΣΗΜΕΙΩΜΑΤ', case=False, na=False)].copy()
+                notebooks = notebooks[notebooks.apply(lambda r: stationery_matches_gender(r.get('Title',''), r.get('Brand',''), detected_gender), axis=1)]
+                if not notebooks.empty:
+                    selected = get_rotated_selection(notebooks, tm, 'notebook', n=1)
+                    if not selected.empty:
+                        best = selected.iloc[0]
+                        if best['Material'] not in used_materials:
+                            row_copy = best.copy()
+                            row_copy['Assigned_Slot'] = series_count + crosssell_count + 1
+                            row_copy['Slot_Role'] = 'Cross-Sell: Notebook'
+                            row_copy['Item_Rank'] = 1
+                            all_recs.append(row_copy)
+                            used_materials.add(best['Material'])
+                            crosssell_count += 1
+                            item4_found = True
+    
+    slot_notes[2] = crosssell_notes
+    diag.append(("2. Cross-Sell", crosssell_count, f"Filled {crosssell_count} slots"))
+    
+    # ══════════════════════════════════════════════════════════
+    # PRIORITY 3: CATEGORY DISCOVERY (Fill remaining slots)
+    # ══════════════════════════════════════════════════════════
+    discovery_notes = ["=== PRIORITY 3: CATEGORY DISCOVERY ==="]
+    total_filled = series_count + crosssell_count
+    remaining = 10 - total_filled
+    discovery_count = 0
+    
+    if not trigger_is_complete_box and remaining > 0:
+        books_only = df_all[df_all['Level 1'] == 'Books'].copy()
+        
+        # Priority A: HP Spinoffs (keep hardcoded feature)
+        if has_series and is_harry_potter_series(t_series):
+            series_col = 'Σειρά βιβλίου'
+            if series_col in books_only.columns:
+                hp_all = books_only[books_only[series_col].fillna('').astype(str).str.strip() == t_series].copy()
+                if t_level2: hp_all = hp_all[hp_all['Level 2'] == t_level2]
+                hp_all['_hp_order'] = hp_all['Title'].apply(get_hp_order)
+                spinoffs = hp_all[hp_all['_hp_order'] > 7].copy()
+                spinoffs = spinoffs[~spinoffs['Material'].isin(used_materials)]
+                spinoffs = spinoffs[spinoffs['Material'] != tm]
+                if not trigger_is_box_set: spinoffs = spinoffs[~spinoffs['Title'].apply(is_box_set)]
+                
+                if not spinoffs.empty:
+                    spinoffs['Final_Score'] = 0
+                    if 'AVAILABILITY' in spinoffs.columns:
+                        spinoffs.loc[spinoffs['AVAILABILITY'] == 'Άμεσα Διαθέσιμο', 'Final_Score'] += AVAIL_BOOST
+                    spinoffs = spinoffs.sort_values('Final_Score', ascending=False)
+                    for _, row in spinoffs.iterrows():
+                        if discovery_count >= remaining: break
+                        row_canonical = get_canonical_book_name(row['Title'], row.get('Τίτλος πρωτοτύπου', ''))
+                        if row['Material'] not in used_materials and row_canonical not in used_titles:
+                            row_copy = row.copy()
+                            row_copy['Assigned_Slot'] = total_filled + discovery_count + 1
+                            row_copy['Slot_Role'] = 'Explore Series' 
+                            row_copy['Item_Rank'] = 1
+                            all_recs.append(row_copy)
+                            used_materials.add(row['Material'])
+                            used_titles.add(row_canonical)
+                            discovery_count += 1
+        
+        remaining_after_spinoffs = remaining - discovery_count
+        
+        # Priority B: Same category/hierarchy
+        if remaining_after_spinoffs > 0:
+            discovery_pool = books_only[books_only['Hierarchy'] == t_hierarchy].copy()
+            discovery_pool = discovery_pool[~discovery_pool['Material'].isin(used_materials)]
+            discovery_pool = discovery_pool[discovery_pool['Material'] != tm]
+            if t_level2: discovery_pool = discovery_pool[discovery_pool['Level 2'] == t_level2]
+            
+            discovery_pool['_canonical'] = discovery_pool.apply(lambda r: get_canonical_book_name(r.get('Title', ''), r.get('Τίτλος πρωτοτύπου', '')), axis=1)
+            discovery_pool = discovery_pool[discovery_pool['_canonical'] != trigger_canonical]
+            discovery_pool = discovery_pool[~discovery_pool['_canonical'].isin(used_titles)]
+            
+            if not trigger_is_box_set: discovery_pool = discovery_pool[~discovery_pool['Title'].apply(is_box_set)]
+            
+            if 'Ηλικία' in discovery_pool.columns and allowed_ages:
+                discovery_pool = discovery_pool[discovery_pool['Ηλικία'].fillna('').astype(str).str.strip().isin(allowed_ages) | (discovery_pool['Ηλικία'].fillna('') == '') | (discovery_pool['Ηλικία'].fillna('').astype(str) == '0')]
+            
+            discovery_pool['Final_Score'] = 0
+            if 'AVAILABILITY' in discovery_pool.columns:
+                discovery_pool.loc[discovery_pool['AVAILABILITY'] == 'Άμεσα Διαθέσιμο', 'Final_Score'] += AVAIL_BOOST
+            discovery_pool = discovery_pool.sort_values('Final_Score', ascending=False)
+            
+            for _, row in discovery_pool.head(remaining_after_spinoffs).iterrows():
+                row_canonical = get_canonical_book_name(row['Title'], row.get('Τίτλος πρωτοτύπου', ''))
+                if row['Material'] not in used_materials and row_canonical not in used_titles:
+                    row_copy = row.copy()
+                    row_copy['Assigned_Slot'] = total_filled + discovery_count + 1
+                    row_copy['Slot_Role'] = 'Category Discovery'
+                    row_copy['Item_Rank'] = 1
+                    all_recs.append(row_copy)
+                    used_materials.add(row['Material'])
+                    used_titles.add(row_canonical)
+                    discovery_count += 1
+    
+    slot_notes[3] = discovery_notes
+    diag.append(("3. Discovery", discovery_count, f"Filled {discovery_count} slots"))
+    diag.append(("TOTAL", series_count + crosssell_count + discovery_count, f"out of 10"))
+    
+    if all_recs:
+        recs_df = pd.DataFrame(all_recs)
+        recs_df['Draft_Score'] = recs_df['Assigned_Slot']
+        recs_df = recs_df.sort_values('Assigned_Slot').reset_index(drop=True)
+        return recs_df, diag, slot_notes, recs_df
+    else:
+        return pd.DataFrame(), diag, slot_notes, pd.DataFrame()
 
 
 # ─────────────────────────────────────────────────────────────
@@ -1068,8 +1907,7 @@ def run_engine(trigger, df_products, df_history, df_slots):
 if active_cluster == "Smartphones":
     recs, diag, slot_diag, slot_notes, full_candidates = run_engine(trigger, df_products, df_history, df_slots)
 else:
-    books_mode = st.session_state.get('books_mode', 'A')
-    recs, diag, slot_notes, full_candidates = run_books_engine(trigger, df_books, df_history, mode=books_mode)
+    recs, diag, slot_notes, full_candidates = run_books_engine(trigger, df_books, df_history)
     slot_diag = []
 
 MARKETING_COPY = {
