@@ -719,7 +719,7 @@ def run_engine(trigger, df_products, df_history, df_slots):
         c.loc[c['Μοντέλο'].fillna('').astype(str).str.contains(strict_tmod, case=False, regex=True, na=False), 'Smart_Boost'] += SMART_BOOST
 
     # 🟢 NEW: Premium phone price & best-seller preference (Brand agnostic)
-    PREMIUM_PRICE_THRESHOLD = 900
+    PREMIUM_PRICE_THRESHOLD = 850
     PREMIUM_ACC_MIN_PRICE = 25.0
     
     is_premium = tprice >= PREMIUM_PRICE_THRESHOLD
