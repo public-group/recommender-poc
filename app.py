@@ -75,7 +75,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v16.6 — Dynamic Charger Wattage Logic Fix
+        🟢 Engine v16.8 — Universal Wearable Brand & Structural Charger Looping
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -894,50 +894,71 @@ def run_engine(trigger, df_products, df_history, df_slots):
             FAST_CHARGE_BOOST = 20000 
             HIGH_WATT_BOOST = 15000 
             
-            if has_wireless_charging or has_fast_charging or is_premium:
-                for idx in sc.index:
-                    item_title = str(sc.loc[idx, 'Title']).lower()
-                    item_watt = str(sc.loc[idx, 'Ισχύς (Watt)']) if 'Ισχύς (Watt)' in sc.columns else ''
-                    
-                    if has_wireless_charging:
-                        if 'wireless' in item_title or 'ασύρματ' in item_title or 'magsafe' in item_title:
-                            sc.loc[idx, 'Final_Score'] += WIRELESS_BOOST
-                    
-                    if has_fast_charging or is_premium:
-                        watt_match = re.search(r'(\d+)\s*w', item_title)
-                        watt_from_col = re.search(r'(\d+)', str(item_watt)) if item_watt else None
-                        
-                        wattage = 0
-                        if watt_match: wattage = int(watt_match.group(1))
-                        elif watt_from_col: wattage = int(watt_from_col.group(1))
-                        elif '21 - 60' in str(item_watt): wattage = 45 
-                        
-                        if is_premium:
-                            if wattage >= 45: sc.loc[idx, 'Final_Score'] += FAST_CHARGE_BOOST + HIGH_WATT_BOOST
-                            elif wattage >= 25: sc.loc[idx, 'Final_Score'] += FAST_CHARGE_BOOST
-                            elif wattage >= 20: sc.loc[idx, 'Final_Score'] += FAST_CHARGE_BOOST // 2
-                        else: # Lower-end phone with fast charge
-                            if 20 <= wattage <= 35: 
-                                sc.loc[idx, 'Final_Score'] += FAST_CHARGE_BOOST + HIGH_WATT_BOOST
-                            elif wattage >= 45: 
-                                sc.loc[idx, 'Final_Score'] += FAST_CHARGE_BOOST // 2
-                            elif wattage >= 15:
-                                sc.loc[idx, 'Final_Score'] += FAST_CHARGE_BOOST // 3
+            # Apply dynamic wattage boosts
+            for idx in sc.index:
+                item_title = str(sc.loc[idx, 'Title']).lower()
+                item_watt = str(sc.loc[idx, 'Ισχύς (Watt)']) if 'Ισχύς (Watt)' in sc.columns else ''
                 
-                sc = sc.sort_values('Final_Score', ascending=False)
+                if has_fast_charging or is_premium:
+                    watt_match = re.search(r'(\d+)\s*w', item_title)
+                    watt_from_col = re.search(r'(\d+)', str(item_watt)) if item_watt else None
+                    
+                    wattage = 0
+                    if watt_match: wattage = int(watt_match.group(1))
+                    elif watt_from_col: wattage = int(watt_from_col.group(1))
+                    elif '21 - 60' in str(item_watt): wattage = 45 
+                    
+                    if is_premium:
+                        if wattage >= 45: sc.loc[idx, 'Final_Score'] += FAST_CHARGE_BOOST + HIGH_WATT_BOOST
+                        elif wattage >= 25: sc.loc[idx, 'Final_Score'] += FAST_CHARGE_BOOST
+                        elif wattage >= 20: sc.loc[idx, 'Final_Score'] += FAST_CHARGE_BOOST // 2
+                    else: # Lower-end phone with fast charge
+                        if 20 <= wattage <= 35: 
+                            sc.loc[idx, 'Final_Score'] += FAST_CHARGE_BOOST + HIGH_WATT_BOOST
+                        elif wattage >= 45: 
+                            sc.loc[idx, 'Final_Score'] += FAST_CHARGE_BOOST // 2
+                        elif wattage >= 15:
+                            sc.loc[idx, 'Final_Score'] += FAST_CHARGE_BOOST // 3
+
+            # 🟢 STRICT STRUCTURAL LOOPING FOR WALL_CHARGER 
+            if lk == "WALL_CHARGER":
+                is_cable = sc['Title'].fillna('').str.lower().str.contains(r'καλώδιο|cable') & ~sc['Title'].fillna('').str.lower().str.contains(r'φορτισ|charger|adapt|αντάπτ')
+                is_wireless_item = sc['Title'].fillna('').str.lower().str.contains(r'wireless|ασύρματ|magsafe')
+                is_brick = (~is_cable) & (~is_wireless_item)
                 
-                features = []
-                if has_wireless_charging: features.append("Wireless")
-                if has_fast_charging: features.append("FastCharge")
-                if is_premium:
-                    notes.append(f"Phone features: {', '.join(features)} (Premium 45W+ preferred)")
+                if has_wireless_charging:
+                    # 1. Wireless, 2. Brick, 3. Cable
+                    sc.loc[is_wireless_item, 'Final_Score'] += 3000000.0
+                    sc.loc[is_brick, 'Final_Score'] += 2000000.0
+                    sc.loc[is_cable, 'Final_Score'] += 1000000.0
+                    notes.append("Charger Order: 1st Wireless, 2nd Brick, 3rd Cable")
                 else:
-                    notes.append(f"Phone features: {', '.join(features)} (Standard 25W preferred)")
+                    # 1. Brick, 2. Cable
+                    sc.loc[is_brick, 'Final_Score'] += 3000000.0
+                    sc.loc[is_cable, 'Final_Score'] += 2000000.0
+                    sc.loc[is_wireless_item, 'Final_Score'] -= 1000000.0
+                    notes.append("Charger Order: 1st Brick, 2nd Cable (No Wireless)")
+                
+                # Filter strictly for cable port match
+                if tport:
+                    wrong_port = is_cable & ~sc['Title'].fillna('').str.lower().str.contains(tport.lower())
+                    sc.loc[wrong_port, 'Final_Score'] -= 5000000.0
+
+            sc = sc.sort_values('Final_Score', ascending=False)
+            
+            features = []
+            if has_wireless_charging: features.append("Wireless")
+            if has_fast_charging: features.append("FastCharge")
+            if is_premium:
+                notes.append(f"Phone features: {', '.join(features)} (Premium 45W+ preferred)")
+            else:
+                notes.append(f"Phone features: {', '.join(features)} (Standard 25W preferred)")
 
         year_match_slots = ["EARBUDS", "SMARTWATCH"]
         ULTRA_PREMIUM_THRESHOLD = 1700 
         
         if lk in year_match_slots and not sc.empty:
+            # 1. Price Threshold Logic
             if lk == "EARBUDS":
                 if tprice >= 1500: min_price = 100
                 elif tprice >= 1000: min_price = 60
@@ -960,8 +981,13 @@ def run_engine(trigger, df_products, df_history, df_slots):
                     notes.append(f"Price tier (€{tprice:.0f} phone): min €{min_price} → {b4_price}→{len(sc)}")
                 else:
                     notes.append(f"Price tier: No items ≥€{min_price}, keeping all {b4_price}")
-        
-        if lk in year_match_slots and is_premium and not sc.empty:
+            
+            # 2. UNIVERSAL BRAND PRIORITY
+            is_same_brand_wearable = sc['Κατασκευαστής'].fillna('').str.strip().str.upper() == tb
+            sc.loc[is_same_brand_wearable, 'Final_Score'] += 5000000.0
+            notes.append(f"Universal Wearable Brand Priority (+5M for {tb})")
+            
+            # 3. Ultra-Premium Filter (>= 1700€)
             is_ultra_premium = tprice >= ULTRA_PREMIUM_THRESHOLD
             if is_ultra_premium:
                 b4_ultra = len(sc)
@@ -974,6 +1000,7 @@ def run_engine(trigger, df_products, df_history, df_slots):
                 else:
                     notes.append(f"Ultra-premium filter: No Pro/Ultra found, keeping all {b4_ultra}")
             
+            # 4. Universal Year Matching
             if phone_year:
                 sc['Accessory_Year'] = sc.apply(lambda r: extract_year_from_accessory(str(r.get('Title', '')), str(r.get('Μοντέλο', ''))), axis=1)
                 
@@ -1009,7 +1036,7 @@ def run_engine(trigger, df_products, df_history, df_slots):
         slot_notes[sn] = notes
 
         if not sc.empty:
-            skip_resort = (lk == "HOLDER")
+            skip_resort = (lk == "HOLDER" or lk == "WALL_CHARGER")
             if not skip_resort:
                 sc = sc.sort_values('Final_Score', ascending=False).copy()
             else:
