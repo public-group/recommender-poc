@@ -99,6 +99,43 @@ COMPAT_COLS = ["Συμβατό με", "Συμβατή συσκευή"]
 CC = "_Compatible"
 ANDROID_OEMS = {"SAMSUNG", "XIAOMI", "HUAWEI", "MOTOROLA", "HONOR", "POCO", "REALME", "ONEPLUS", "NOTHING", "OPPO", "VIVO", "TCL", "NOKIA", "ASUS", "GOOGLE"}
 
+# ═════════════════════════════════════════════════════════════
+# 🟢 LAPTOPS CONFIGURATION (Mainstream / Road Warrior)
+# ═════════════════════════════════════════════════════════════
+LAPTOP_L2_VALUES = {"Notebooks", "Laptops"}
+ 
+# (slot_num, role_label, [hierarchies], logic_key)
+LAPTOP_MAINSTREAM_SLOTS = [
+    (1,  'Τσάντα Laptop',    ['NB BAGS'],                                    'BAG_SIZE'),
+    (2,  'Θήκη Laptop',      ['ΘΗΚΕΣ SLEEVE LAPTOP'],                        'SLEEVE_SIZE'),
+    (3,  'Φορτιστής',        ['NB POWER SUPPLIERS'],                         'CHARGER_PORT'),
+    (4,  'Powerbank',        ['POWER STATIONS'],                             'HIGH_WATT_PB'),
+    (5,  'Ασύρματο Mouse',   ['MOUSE WIRELESS'],                             'BUDGET_MOUSE'),
+    (6,  'Mousepad',         ['MOUSE PADS'],                                 'GENERIC'),
+    (7,  'Βάση / Cooler',    ['NOTEBOOK COOLERS', 'ΒΑΣΕΙΣ ΓΡΑΦΕΙΟΥ'],        'STAND_SIZE'),
+    (8,  'Οθόνη',            ['TFT MONITOR'],                                'BUDGET_MONITOR'),
+    (9,  'Αποθήκευση',       ['USB FLASH', 'EXTERNAL HDD USB'],              'GENERIC'),
+    (10, 'Headset / Office', ['PC HEADSET/MICROPHONE', 'OFFICE SUITES'],     'GENERIC'),
+]
+ 
+LAPTOP_MARKETING_COPY = {
+    "Τσάντα Laptop": "Άνετη μεταφορά παντού.",
+    "Θήκη Laptop": "Slim προστασία.",
+    "Φορτιστής": "Γρήγορη, ασφαλής φόρτιση.",
+    "Powerbank": "Ενέργεια για όλη τη μέρα.",
+    "Ασύρματο Mouse": "Ελευθερία κινήσεων.",
+    "Mousepad": "Ομαλή κίνηση, σταθερή βάση.",
+    "Βάση / Cooler": "Ιδανική στάση & ψύξη.",
+    "Οθόνη": "Περισσότερο workspace.",
+    "Αποθήκευση": "Κράτα τα αρχεία σου ασφαλή.",
+    "Headset / Office": "Ολοκλήρωσε το setup σου.",
+}
+
+
+
+
+
+
 # ─────────────────────────────────────────────────────────────
 # 🟢 KIDS BOOKS CONFIGURATION
 # ─────────────────────────────────────────────────────────────
@@ -309,6 +346,27 @@ def price_ok(tp, np, l1):
 
 def title_sim(a, b): return SequenceMatcher(None, a.lower(), b.lower()).ratio() * 100
 def safe(v): return html_lib.escape(str(v))
+
+# ═════════════════════════════════════════════════════════════
+# 🟢 LAPTOPS HELPERS
+# ═════════════════════════════════════════════════════════════
+
+ 
+def parse_screen_size(val):
+    """Parse screen size string to float inches. E.g. '15.6\"' -> 15.6"""
+    s = str(val).strip()
+    if not s or s.lower() == 'nan': return 0.0
+    s = s.replace(',', '.').replace('"', '').replace("''", '').replace('inch', '').replace('ίντσες', '')
+    m = re.search(r'(\d+\.?\d*)', s)
+    return float(m.group(1)) if m else 0.0
+ 
+def extract_wattage_from_text(text):
+    """Extract wattage number from title/field like '65W Charger'."""
+    s = str(text).lower()
+    m = re.search(r'(\d+)\s*w(?:att)?\b', s)
+    return int(m.group(1)) if m else 0
+
+
 
 # ─────────────────────────────────────────────────────────────
 # DATA
@@ -1915,6 +1973,259 @@ def run_engine(trigger, df_products, df_history, df_slots):
 
     diag.append(("6. Final", len(sel), "Hierarchy cap=2"))
     return (pd.DataFrame(sel) if sel else pd.DataFrame()), diag, slot_diag, slot_notes, full
+
+# ═════════════════════════════════════════════════════════════
+# 🟢 LAPTOPS ENGINE — Mainstream / Road Warrior
+# ═════════════════════════════════════════════════════════════
+
+def run_laptops_engine(trigger, df_products, df_history):
+    diag = []
+    slot_notes = {}
+    all_recs = []
+ 
+    tm = trigger['Material']
+    tt = str(trigger.get('Title', ''))
+    tb = str(trigger.get('Κατασκευαστής', '')).strip().upper()
+    tprice = parse_euro_price(trigger.get('LIST PRICE', 0))
+    tscreen = parse_screen_size(trigger.get('Μέγεθος οθόνης', ''))
+    tports = str(trigger.get('Θύρες', '')).lower()
+    tusage = str(trigger.get('Προτεινόμενη χρήση', '')).lower()
+ 
+    diag.append(("0. Trigger", f"Brand={tb}, €{tprice:.0f}", f"Screen={tscreen}\", Ports={tports[:60]}"))
+ 
+    # ── Build candidate pool ──
+    c = df_products[df_products['Material'] != tm].copy()
+    b4 = len(c)
+    # Remove laptops/notebooks themselves from candidates
+    c = c[~((c['Level 1'] == 'IT') & (c['Level 2'].isin(LAPTOP_L2_VALUES)))]
+    diag.append(("1. Excl laptops", len(c), f"Removed {b4 - len(c)}"))
+ 
+    # Remove smartphones from candidates
+    b4 = len(c)
+    c = c[~((c['Level 2'] == 'Mobiles') & (c['Hierarchy'] == 'Smartphones'))]
+    diag.append(("1b. Excl phones", len(c), f"Removed {b4 - len(c)}"))
+ 
+    # Stock filter
+    if 'CW Stock Units' in c.columns:
+        stv = pd.to_numeric(c['CW Stock Units'], errors='coerce').fillna(0)
+        pct = (stv > 0).sum() / len(c) if len(c) > 0 else 0
+        if pct >= 0.10:
+            c = c[stv > 0]
+            diag.append(("2. Stock filter", len(c), f"Applied ({pct:.0%})"))
+        else:
+            diag.append(("2. Stock filter", len(c), f"⚠ SKIPPED ({pct:.0%})"))
+    else:
+        diag.append(("2. Stock filter", len(c), "⚠ SKIPPED (no col)"))
+ 
+    # Macro wall — no appliances
+    b4 = len(c)
+    if 'Level 1' in c.columns:
+        c = c[~c['Level 1'].isin(APPL_CATS)]
+    diag.append(("3. Macro wall", len(c), f"Removed {b4 - len(c)}"))
+ 
+    # Sales tiebreaker
+    if 'Sum of Sales' in c.columns:
+        c['Sales_Tiebreaker'] = pd.to_numeric(c['Sum of Sales'], errors='coerce').fillna(0)
+    else:
+        c['Sales_Tiebreaker'] = 0
+ 
+    # ── Iterate slots ──
+    used_materials = {tm}
+    used_hierarchies_count = {}
+ 
+    for slot_num, role, hierarchies, logic_key in LAPTOP_MAINSTREAM_SLOTS:
+        notes = [f"Logic: {logic_key}", f"Target: {hierarchies}"]
+ 
+        # Hierarchy match — exact first, substring fallback
+        hier_upper = [h.upper().strip() for h in hierarchies]
+        pool = c[c['Hierarchy'].fillna('').astype(str).str.upper().str.strip().isin(hier_upper)].copy()
+ 
+        if pool.empty:
+            hier_col = c['Hierarchy'].fillna('').astype(str).str.upper().str.strip()
+            mask = pd.Series(False, index=c.index)
+            for hk in hier_upper:
+                if hk:
+                    mask |= hier_col.str.contains(re.escape(hk), regex=True, na=False)
+            pool = c[mask].copy()
+            if not pool.empty:
+                notes.append(f"⚠ Substring fallback: {len(pool)}")
+ 
+        notes.append(f"Pool: {len(pool)}")
+        pool = pool[~pool['Material'].isin(used_materials)]
+ 
+        if pool.empty:
+            notes.append("❌ Empty after dedup")
+            slot_notes[slot_num] = notes
+            diag.append((f"Slot {slot_num} ({role})", 0, "Empty"))
+            continue
+ 
+        # Base scoring
+        pool['Final_Score'] = 0.0
+        if 'AVAILABILITY' in pool.columns:
+            pool.loc[pool['AVAILABILITY'] == 'Άμεσα Διαθέσιμο', 'Final_Score'] += AVAIL_BOOST * 100
+        pool['Final_Score'] += pool['Sales_Tiebreaker'].fillna(0) * 0.1
+ 
+        # ══════════════════════════════════════════════════════
+        # SLOT-SPECIFIC LOGIC
+        # ══════════════════════════════════════════════════════
+ 
+        # ── Logic 1: Bag/Sleeve Size (Cinderella Fit) ──
+        if logic_key in ('BAG_SIZE', 'SLEEVE_SIZE'):
+            if tscreen > 0:
+                size_col = None
+                for candidate_col in ['Μέγεθος', 'Μέγεθος οθόνης']:
+                    if candidate_col in pool.columns:
+                        size_col = candidate_col
+                        break
+                if size_col:
+                    pool['_acc_size'] = pool[size_col].apply(parse_screen_size)
+                    fit = pool[(pool['_acc_size'] >= tscreen - 0.2) & (pool['_acc_size'] <= tscreen + 1.5)]
+                    if not fit.empty:
+                        pool = fit
+                        notes.append(f"Size fit {tscreen}\" ± 1.5\": {len(pool)}")
+                    else:
+                        notes.append(f"⚠ No size match for {tscreen}\", keeping all")
+                else:
+                    notes.append("⚠ No size column found in pool")
+ 
+            # Logic 4: Mainstream → Backpack preference
+            if logic_key == 'BAG_SIZE' and 'mainstream' in tusage:
+                if 'Τύπος τσάντας' in pool.columns:
+                    backpack = pool[pool['Τύπος τσάντας'].fillna('').astype(str).str.contains('Πλάτης|Backpack', case=False, regex=True, na=False)]
+                    if not backpack.empty:
+                        pool.loc[backpack.index, 'Final_Score'] += 50000
+                        notes.append(f"Mainstream → Backpack boost: {len(backpack)}")
+ 
+        # ── Logic 2: Charger Port Compatibility ──
+        elif logic_key == 'CHARGER_PORT':
+            has_usbc = any(k in tports for k in ['usb-c', 'type-c', 'usb c', 'thunderbolt', 'usb 4'])
+            has_dcin_only = 'dc' in tports and not has_usbc
+ 
+            if has_usbc:
+                usbc_mask = pool['Title'].fillna('').str.lower().str.contains('usb-c|type-c|usb c|pd|power delivery', regex=True, na=False)
+                if 'Υποδοχές' in pool.columns:
+                    usbc_mask |= pool['Υποδοχές'].fillna('').astype(str).str.lower().str.contains('usb-c|type-c', regex=True, na=False)
+                pool.loc[usbc_mask, 'Final_Score'] += 100000
+                notes.append("USB-C trigger → USB-C charger boost")
+ 
+                # Wattage ≥ 45W for laptop chargers (avoid phone chargers)
+                watts = pool['Title'].fillna('').apply(extract_wattage_from_text)
+                pool.loc[watts >= 45, 'Final_Score'] += 50000
+                pool.loc[(watts > 0) & (watts < 45), 'Final_Score'] -= 20000
+                notes.append("≥45W boost, <45W deprioritized")
+            elif has_dcin_only:
+                universal = pool['Title'].fillna('').str.lower().str.contains('universal|γενικής|πολλαπλ', regex=True, na=False)
+                pool.loc[universal, 'Final_Score'] += 50000
+                notes.append("DC-in → Universal charger boost")
+ 
+        # ── Logic: High-Wattage Powerbank ──
+        elif logic_key == 'HIGH_WATT_PB':
+            watts = pool['Title'].fillna('').apply(extract_wattage_from_text)
+            high = pool[watts >= 45]
+            if not high.empty:
+                pool = high
+                notes.append(f"Laptop PD (≥45W): {len(pool)}")
+            else:
+                pd_mask = pool['Title'].fillna('').str.lower().str.contains('pd|power delivery|laptop', regex=True, na=False)
+                if pd_mask.any():
+                    pool = pool[pd_mask]
+                    notes.append(f"PD fallback: {len(pool)}")
+                else:
+                    notes.append("⚠ No ≥45W or PD powerbanks, keeping all")
+ 
+        # ── Logic 3: Budget Mouse (< €40, no gaming) ──
+        elif logic_key == 'BUDGET_MOUSE':
+            if tprice < 600:
+                pool['_p'] = pool['LIST PRICE'].apply(parse_euro_price)
+                cheap = pool[pool['_p'] < 40]
+                if not cheap.empty:
+                    pool = cheap
+                    notes.append(f"Budget <€40: {len(pool)}")
+            ng = ~pool['Title'].fillna('').str.lower().str.contains('rgb|gaming', regex=True, na=False)
+            if ng.any():
+                pool = pool[ng]
+                notes.append("Filtered gaming/RGB mice")
+ 
+        # ── Logic 5: Cooling based on screen size ──
+        elif logic_key == 'STAND_SIZE':
+            if tscreen >= 15.6:
+                cool = pool[pool['Hierarchy'].fillna('').str.upper().str.contains('COOLER', na=False)]
+                if not cool.empty:
+                    pool = cool
+                    notes.append(f"≥15.6\" → Coolers only: {len(pool)}")
+            elif tscreen > 0 and tscreen <= 14:
+                stands = pool[pool['Hierarchy'].fillna('').str.upper().str.contains('ΒΑΣΕΙΣ|STAND', regex=True, na=False)]
+                if not stands.empty:
+                    pool.loc[stands.index, 'Final_Score'] += 20000
+                    notes.append("≤14\" → Stand/Portable boosted")
+ 
+        # ── Logic 3: Budget Monitor (< €250 if laptop < €600) ──
+        elif logic_key == 'BUDGET_MONITOR':
+            if tprice < 600:
+                pool['_p'] = pool['LIST PRICE'].apply(parse_euro_price)
+                cheap = pool[pool['_p'] <= 250]
+                if not cheap.empty:
+                    pool = cheap
+                    notes.append(f"Budget ≤€250: {len(pool)}")
+ 
+            # Logic 6: Monitor port matching
+            if 'hdmi' in tports or 'monitor' in tports:
+                notes.append("Laptop has HDMI/Monitor port → monitors OK")
+            elif 'usb-c' in tports or 'thunderbolt' in tports or 'type-c' in tports:
+                usbc_mon = pool['Title'].fillna('').str.lower().str.contains('usb-c|type-c', regex=True, na=False)
+                pool.loc[usbc_mon, 'Final_Score'] += 30000
+                notes.append("USB-C monitors boosted")
+ 
+        # ── GENERIC: just sales + availability ──
+        # logic_key == 'GENERIC' — no extra filtering needed
+ 
+        # ══════════════════════════════════════════════════════
+        # PICK BEST ITEM
+        # ══════════════════════════════════════════════════════
+        if pool.empty:
+            notes.append("❌ No items after logic")
+            slot_notes[slot_num] = notes
+            diag.append((f"Slot {slot_num} ({role})", 0, "Empty after logic"))
+            continue
+ 
+        pool = pool.sort_values('Final_Score', ascending=False)
+ 
+        # Hierarchy cap: max 2 per hierarchy across all slots
+        chosen = None
+        for _, row in pool.iterrows():
+            h = row['Hierarchy']
+            if used_hierarchies_count.get(h, 0) < 2:
+                chosen = row
+                break
+ 
+        if chosen is None:
+            notes.append("❌ Hierarchy cap blocks all")
+            slot_notes[slot_num] = notes
+            diag.append((f"Slot {slot_num} ({role})", 0, "Hier cap"))
+            continue
+ 
+        row_copy = chosen.copy()
+        row_copy['Assigned_Slot'] = slot_num
+        row_copy['Slot_Role'] = role
+        row_copy['Item_Rank'] = 1
+        all_recs.append(row_copy)
+        used_materials.add(chosen['Material'])
+        used_hierarchies_count[chosen['Hierarchy']] = used_hierarchies_count.get(chosen['Hierarchy'], 0) + 1
+        notes.append(f"✅ {str(chosen.get('Title',''))[:60]}")
+        slot_notes[slot_num] = notes
+        diag.append((f"Slot {slot_num} ({role})", 1, f"Score: {chosen.get('Final_Score', 0):.0f}"))
+ 
+    diag.append(("TOTAL", len(all_recs), f"out of {len(LAPTOP_MAINSTREAM_SLOTS)}"))
+ 
+    if all_recs:
+        recs_df = pd.DataFrame(all_recs)
+        recs_df['Draft_Score'] = recs_df['Assigned_Slot']
+        return recs_df, diag, slot_notes, recs_df
+    return pd.DataFrame(), diag, slot_notes, pd.DataFrame()
+ 
+
+
+
 
 
 # ─────────────────────────────────────────────────────────────
