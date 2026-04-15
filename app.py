@@ -75,7 +75,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v18.6 — Laptops: Visual Workstation (Taxonomy-Driven Audio & Scales)
+        🟢 Engine v18.7 — Laptops: Visual Workstation (Conditional Brand Pricing)
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -2396,11 +2396,11 @@ def run_laptops_engine(trigger, df_products, df_history):
                 
             # ── Logic: Stand / Cooler ──
         elif logic_key == 'STAND_SIZE':
-            arms = pool['Title'].fillna('').str.lower().str.contains('βραχίονας|arm|dual monitor|triple monitor|οθόνης|monitor support|υπολογιστή|desktop|εκτυπωτή|σταθερού|rack|cable|cablerack', regex=True, na=False)
+            arms = pool['Title'].fillna('').str.lower().str.contains('βραχίονας|arm|dual monitor|triple monitor|οθόνης|monitor support|υπολογιστή|desktop|εκτυπωτή|σταθερού|rack|cable|cablerack|στήριξης monitor|βάση monitor|monitor stand', regex=True, na=False)
             pool = pool[~arms]
             notes.append("Visual Workstation: Removed desktop/monitor risers, arms, and IT racks")
 
-            if tscreen >= 15.6:
+            if tscreen >= 15.0: # Updated to 15.0 to properly catch 15.3" MacBooks
                 cool = pool[pool['Hierarchy'].fillna('').str.upper().str.contains('COOLER', na=False)]
                 if not cool.empty: pool = cool
             elif tscreen > 0 and tscreen <= 14:
@@ -2429,18 +2429,18 @@ def run_laptops_engine(trigger, df_products, df_history):
                 pool = pool[~fhd_mon]
                 notes.append("Visual Workstation: Banned FHD monitors for Premium/Mac laptop")
 
-            # --- Sane Price Tiering (20-30% ratios) & Brand Loyalty Override ---
+            # --- Sane Price Tiering (20-30% ratios) ---
             pool['_p'] = pool['LIST PRICE'].apply(parse_euro_price)
             apple_monitors = pool['Κατασκευαστής'].fillna('').str.upper() == 'APPLE'
             
             if tprice >= 2000:
                 pool.loc[(pool['_p'] >= 400) & (pool['_p'] <= 700), 'Final_Score'] += 60000
                 pool.loc[(pool['_p'] > 750) & ~apple_monitors, 'Final_Score'] -= 200000
-                notes.append("Price Tiering: Boosted €400-€700, penalized >€750 (except Apple)")
+                notes.append("Price Tiering: Boosted €400-€700, penalized >€750")
             elif tprice >= 1000:
                 pool.loc[(pool['_p'] >= 200) & (pool['_p'] <= 400), 'Final_Score'] += 60000
                 pool.loc[(pool['_p'] > 450) & ~apple_monitors, 'Final_Score'] -= 200000
-                notes.append("Price Tiering: Boosted €200-€400, penalized >€450 (except Apple)")
+                notes.append("Price Tiering: Boosted €200-€400, penalized >€450")
             elif tprice > 0:
                 max_price = max(150, tprice * 0.30)
                 pool.loc[pool['_p'] <= max_price, 'Final_Score'] += 60000
@@ -2455,8 +2455,14 @@ def run_laptops_engine(trigger, df_products, df_history):
                 # Strict cable protocol matching 
                 usbc_mon = pool['Title'].fillna('').str.lower().str.contains('usb-c|type-c|thunderbolt|mac', regex=True, na=False)
                 pool.loc[usbc_mon, 'Final_Score'] += 100000
-                pool.loc[apple_monitors, 'Final_Score'] += 500000 
-                notes.append("Visual Workstation (Ecosystem): Boosted USB-C protocols & Apple Brand Loyalty")
+                
+                # --- NEW: Conditional Apple Ecosystem Override ---
+                if tprice >= 1400:
+                    pool.loc[apple_monitors, 'Final_Score'] += 500000 
+                    notes.append("Visual Workstation: Boosted Apple displays for Premium Mac")
+                else:
+                    pool.loc[apple_monitors, 'Final_Score'] -= 300000 
+                    notes.append("Visual Workstation: Blocked expensive Apple displays for standard Mac")
 
 
                 
