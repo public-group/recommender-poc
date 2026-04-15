@@ -2610,7 +2610,9 @@ def run_laptops_engine(trigger, df_products, df_history):
 if active_cluster == "Smartphones":
     recs, diag, slot_diag, slot_notes, full_candidates = run_engine(trigger, df_products, df_history, df_slots)
 elif active_cluster == "Laptops":
-    recs, diag, slot_notes, full_candidates = run_laptops_engine(trigger, df_products, df_history)
+    # --- FIX: Combine both sheets so it finds Bags/Mice (Laptops sheet) AND Headsets (Products sheet) ---
+    combined_pool = pd.concat([df_products, df_laptops], ignore_index=True)
+    recs, diag, slot_notes, full_candidates = run_laptops_engine(trigger, combined_pool, df_history)
     slot_diag = []
 else:
     recs, diag, slot_notes, full_candidates = run_books_engine(trigger, df_books, df_history)
