@@ -2415,7 +2415,8 @@ def run_laptops_engine(trigger, df_products, df_history):
 if active_cluster == "Smartphones":
     recs, diag, slot_diag, slot_notes, full_candidates = run_engine(trigger, df_products, df_history, df_slots)
 elif active_cluster == "Laptops":
-    recs, diag, slot_notes, full_candidates = run_laptops_engine(trigger, df_laptops, df_history)    slot_diag = []
+    recs, diag, slot_notes, full_candidates = run_laptops_engine(trigger, df_laptops, df_history)   
+    slot_diag = []
 else:
     recs, diag, slot_notes, full_candidates = run_books_engine(trigger, df_books, df_history)
     slot_diag = []
