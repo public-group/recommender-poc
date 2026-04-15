@@ -114,7 +114,7 @@ LAPTOP_MAINSTREAM_SLOTS = [
     (6,  'Βάση / Cooler',    ['NOTEBOOK COOLERS', 'ΒΑΣΕΙΣ ΓΡΑΦΕΙΟΥ'],        'STAND_SIZE'),
     (7,  'Οθόνη',            ['TFT MONITOR'],                                'MONITOR_LOGIC'),
     (8,  'Αποθήκευση',       ['USB FLASH', 'EXTERNAL HDD USB'],              'GENERIC'),
-    (9,  'Headset / Office', ['PC HEADSET/MICROPHONE', 'OFFICE SUITES'],     'OFFICE_HEADSET_LOGIC'),
+    (9,  'Headset / Office', ['OVERHEAD', 'OFFICE SUITES'],     'OFFICE_HEADSET_LOGIC'),
     (10, 'Θήκη Laptop',      ['ΘΗΚΕΣ SLEEVE LAPTOP'],                        'SLEEVE_SIZE'),
 ]
  
