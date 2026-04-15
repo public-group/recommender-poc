@@ -107,15 +107,15 @@ LAPTOP_L2_VALUES = {"Notebooks", "Laptops"}
 # (slot_num, role_label, [hierarchies], logic_key)
 LAPTOP_MAINSTREAM_SLOTS = [
     (1,  'Τσάντα Laptop',    ['NB BAGS'],                                    'BAG_SIZE'),
-    (2,  'Θήκη Laptop',      ['ΘΗΚΕΣ SLEEVE LAPTOP'],                        'SLEEVE_SIZE'),
-    (3,  'Φορτιστής',        ['NB POWER SUPPLIERS'],                         'CHARGER_PORT'),
-    (4,  'Powerbank',        ['POWER STATIONS'],                             'HIGH_WATT_PB'),
-    (5,  'Ασύρματο Mouse',   ['MOUSE WIRELESS'],                             'BUDGET_MOUSE'),
-    (6,  'Mousepad',         ['MOUSE PADS'],                                 'GENERIC'),
-    (7,  'Βάση / Cooler',    ['NOTEBOOK COOLERS', 'ΒΑΣΕΙΣ ΓΡΑΦΕΙΟΥ'],        'STAND_SIZE'),
-    (8,  'Οθόνη',            ['TFT MONITOR'],                                'BUDGET_MONITOR'),
-    (9,  'Αποθήκευση',       ['USB FLASH', 'EXTERNAL HDD USB'],              'GENERIC'),
-    (10, 'Headset / Office', ['PC HEADSET/MICROPHONE', 'OFFICE SUITES'],     'GENERIC'),
+    (2,  'Φορτιστής',        ['NB POWER SUPPLIERS'],                         'CHARGER_PORT'),
+    (3,  'Powerbank',        ['POWER STATIONS'],                             'HIGH_WATT_PB'),
+    (4,  'Ασύρματο Mouse',   ['MOUSE WIRELESS'],                             'MOUSE_LOGIC'),
+    (5,  'Mousepad',         ['MOUSE PADS'],                                 'MOUSEPAD_LOGIC'),
+    (6,  'Βάση / Cooler',    ['NOTEBOOK COOLERS', 'ΒΑΣΕΙΣ ΓΡΑΦΕΙΟΥ'],        'STAND_SIZE'),
+    (7,  'Οθόνη',            ['TFT MONITOR'],                                'MONITOR_LOGIC'),
+    (8,  'Αποθήκευση',       ['USB FLASH', 'EXTERNAL HDD USB'],              'GENERIC'),
+    (9,  'Headset / Office', ['PC HEADSET/MICROPHONE', 'OFFICE SUITES'],     'GENERIC'),
+    (10, 'Θήκη Laptop',      ['ΘΗΚΕΣ SLEEVE LAPTOP'],                        'SLEEVE_SIZE'),
 ]
  
 LAPTOP_MARKETING_COPY = {
@@ -2163,6 +2163,11 @@ def run_laptops_engine(trigger, df_products, df_history):
     tscreen = parse_screen_size(trigger.get('Μέγεθος οθόνης', ''))
     tports = str(trigger.get('Θύρες', '')).lower()
     tusage = str(trigger.get('Προτεινόμενη χρήση', '')).lower()
+    
+    # --- ADD THESE PERSONA VARIABLES ---
+    is_premium = tprice >= 1000 or 'premium' in tusage
+    is_apple = tb == 'APPLE'
+    is_gaming = 'gaming' in tusage or 'gamer' in tusage
  
     diag.append(("0. Trigger", f"Brand={tb}, €{tprice:.0f}", f"Screen={tscreen}\", Ports={tports[:60]}"))
  
@@ -2252,14 +2257,13 @@ def run_laptops_engine(trigger, df_products, df_history):
                         break
                 if size_col:
                     pool['_acc_size'] = pool[size_col].apply(parse_screen_size)
-                    fit = pool[(pool['_acc_size'] >= tscreen - 0.2) & (pool['_acc_size'] <= tscreen + 1.5)]
+                    # Tightened fit: Laptop screen up to +0.8 inches larger max
+                    fit = pool[(pool['_acc_size'] >= tscreen - 0.2) & (pool['_acc_size'] <= tscreen + 0.8)]
                     if not fit.empty:
                         pool = fit
-                        notes.append(f"Size fit {tscreen}\" ± 1.5\": {len(pool)}")
+                        notes.append(f"Strict size fit {tscreen}\" (+0.8\"): {len(pool)}")
                     else:
                         notes.append(f"⚠ No size match for {tscreen}\", keeping all")
-                else:
-                    notes.append("⚠ No size column found in pool")
  
             # Logic 4: Mainstream → Backpack preference
             if logic_key == 'BAG_SIZE' and 'mainstream' in tusage:
@@ -2306,48 +2310,73 @@ def run_laptops_engine(trigger, df_products, df_history):
                 else:
                     notes.append("⚠ No ≥45W or PD powerbanks, keeping all")
  
-        # ── Logic 3: Budget Mouse (< €40, no gaming) ──
-        elif logic_key == 'BUDGET_MOUSE':
-            if tprice < 600:
+
+         # ── Logic: Smart Mouse Selection ──
+        elif logic_key == 'MOUSE_LOGIC':
+            if not is_gaming:
+                ng = ~pool['Title'].fillna('').str.lower().str.contains('rgb|gaming', regex=True, na=False)
+                if ng.any(): pool = pool[ng]
+                notes.append("Persona: Excluded gaming/RGB mice")
+
+            if is_apple:
+                apple_mice = pool['Κατασκευαστής'].fillna('').str.upper() == 'APPLE'
+                mac_logi = pool['Title'].fillna('').str.lower().str.contains('mac|mx master|mx anywhere')
+                pool.loc[apple_mice, 'Final_Score'] += 100000
+                pool.loc[mac_logi, 'Final_Score'] += 80000
+                notes.append("Brand Ecosystem: Boosted Apple & Premium Mac mice")
+            elif tprice < 600:
                 pool['_p'] = pool['LIST PRICE'].apply(parse_euro_price)
                 cheap = pool[pool['_p'] < 40]
-                if not cheap.empty:
-                    pool = cheap
-                    notes.append(f"Budget <€40: {len(pool)}")
-            ng = ~pool['Title'].fillna('').str.lower().str.contains('rgb|gaming', regex=True, na=False)
-            if ng.any():
-                pool = pool[ng]
-                notes.append("Filtered gaming/RGB mice")
- 
-        # ── Logic 5: Cooling based on screen size ──
+                if not cheap.empty: pool = cheap
+
+        # ── Logic: Smart Mousepad ──
+        elif logic_key == 'MOUSEPAD_LOGIC':
+            if not is_gaming:
+                ng = ~pool['Title'].fillna('').str.lower().str.contains('rgb|gaming', regex=True, na=False)
+                if ng.any(): pool = pool[ng]
+
+            if is_premium or is_apple:
+                # Boost pads over 15 euros for premium laptops
+                pool['_p'] = pool['LIST PRICE'].apply(parse_euro_price)
+                pool.loc[pool['_p'] >= 15, 'Final_Score'] += 50000
+                notes.append("Premium matched with premium mousepads (≥€15)")
+                
+        # ── Logic: Stand / Cooler ──
         elif logic_key == 'STAND_SIZE':
+            # Strictly ban monitor arms from laptop stand recommendations
+            arms = pool['Title'].fillna('').str.lower().str.contains('βραχίονας|arm|dual monitor', regex=True, na=False)
+            pool = pool[~arms]
+            notes.append("Visual Workstation: Removed monitor arms from laptop stands")
+
             if tscreen >= 15.6:
                 cool = pool[pool['Hierarchy'].fillna('').str.upper().str.contains('COOLER', na=False)]
-                if not cool.empty:
-                    pool = cool
-                    notes.append(f"≥15.6\" → Coolers only: {len(pool)}")
+                if not cool.empty: pool = cool
             elif tscreen > 0 and tscreen <= 14:
                 stands = pool[pool['Hierarchy'].fillna('').str.upper().str.contains('ΒΑΣΕΙΣ|STAND', regex=True, na=False)]
-                if not stands.empty:
-                    pool.loc[stands.index, 'Final_Score'] += 20000
-                    notes.append("≤14\" → Stand/Portable boosted")
- 
-        # ── Logic 3: Budget Monitor (< €250 if laptop < €600) ──
-        elif logic_key == 'BUDGET_MONITOR':
-            if tprice < 600:
+                if not stands.empty: pool.loc[stands.index, 'Final_Score'] += 20000
+            
+            if is_apple:
+                mac_stands = pool['Title'].fillna('').str.lower().str.contains('satechi|macbook|αλουμιν')
+                pool.loc[mac_stands, 'Final_Score'] += 50000
+
+        # ── Logic: Persona-Driven Monitor ──
+        elif logic_key == 'MONITOR_LOGIC':
+            if not is_gaming:
+                # Gamer vs Office split
+                gaming_mon = pool['Title'].fillna('').str.lower().str.contains('gaming|odyssey|predator|144hz|165hz|180hz|240hz', regex=True, na=False)
+                pool = pool[~gaming_mon]
+                notes.append("Visual Workstation (Persona): Excluded gaming monitors")
+
+            if is_apple:
+                # Cable protocol & Brand Ecosystem
+                usbc_mon = pool['Title'].fillna('').str.lower().str.contains('usb-c|type-c|thunderbolt|mac', regex=True, na=False)
+                pool.loc[usbc_mon, 'Final_Score'] += 100000
+                notes.append("Visual Workstation (Ecosystem): Boosted USB-C/Mac displays")
+            elif tprice < 600:
                 pool['_p'] = pool['LIST PRICE'].apply(parse_euro_price)
                 cheap = pool[pool['_p'] <= 250]
-                if not cheap.empty:
-                    pool = cheap
-                    notes.append(f"Budget ≤€250: {len(pool)}")
+                if not cheap.empty: pool = cheap
  
-            # Logic 6: Monitor port matching
-            if 'hdmi' in tports or 'monitor' in tports:
-                notes.append("Laptop has HDMI/Monitor port → monitors OK")
-            elif 'usb-c' in tports or 'thunderbolt' in tports or 'type-c' in tports:
-                usbc_mon = pool['Title'].fillna('').str.lower().str.contains('usb-c|type-c', regex=True, na=False)
-                pool.loc[usbc_mon, 'Final_Score'] += 30000
-                notes.append("USB-C monitors boosted")
  
         # ── GENERIC: just sales + availability ──
         # logic_key == 'GENERIC' — no extra filtering needed
