@@ -75,7 +75,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v17.1 — Best-Selling Hierarchy Discovery for Books
+        🟢 Engine v18.0 — Laptops: The Road Warrior (Mainstream)
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -483,6 +483,7 @@ if 'active_cluster' not in st.session_state:
 active_cluster = st.session_state.active_cluster
 smartphones_border = "2px solid #ff5e00" if active_cluster == "Smartphones" else "1px solid #eaeaea"
 books_border = "2px solid #ff5e00" if active_cluster == "Kids Books" else "1px solid #eaeaea"
+laptops_border = "2px solid #ff5e00" if active_cluster == "Laptops" else "1px solid #eaeaea"
 
 st.sidebar.markdown(f"""
 <style>
@@ -493,34 +494,44 @@ st.sidebar.markdown(f"""
     }}
     [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] > div:first-child button {{ border: {smartphones_border} !important; }}
     [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] > div:last-child button {{ border: {books_border} !important; }}
+    [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] > div:nth-child(3) button {{ border: {laptops_border} !important; }}
     [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] button p {{ font-size: 11px !important; margin-top: 5px !important; }}
 </style>
 """, unsafe_allow_html=True)
 
-col1, col2 = st.sidebar.columns(2)
+col1, col2, col3 = st.sidebar.columns(3)
 with col1:
-    if st.button("Smartphones", key="btn_smartphones", use_container_width=True):
+    if st.button("Smart-\nphones", key="btn_smartphones", use_container_width=True):
         st.session_state.active_cluster = "Smartphones"
         st.rerun()
-
 with col2:
     if st.button("Παιδικά\nΒιβλία", key="btn_kids_books", use_container_width=True):
         st.session_state.active_cluster = "Kids Books"
         st.rerun()
+with col3:
+    if st.button("Laptops", key="btn_laptops", use_container_width=True):
+        st.session_state.active_cluster = "Laptops"
+        st.rerun()
 
 st.sidebar.markdown("""
 <style>
-    [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] > div:first-child button::before {
+    [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] > div:nth-child(1) button::before {
         content: ''; display: block; width: 28px; height: 28px; margin: 0 auto 8px auto;
         background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='5' y='2' width='14' height='20' rx='2' ry='2'%3E%3C/rect%3E%3Cline x1='12' y1='18' x2='12.01' y2='18'%3E%3C/line%3E%3C/svg%3E");
         background-size: contain; background-repeat: no-repeat; background-position: center;
-        position: absolute; top: 15px; left: 50%; transform: translateX(-50%);
+        position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
     }
-    [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] > div:last-child button::before {
+    [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] > div:nth-child(2) button::before {
         content: ''; display: block; width: 28px; height: 28px; margin: 0 auto 8px auto;
         background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 19.5A2.5 2.5 0 0 1 6.5 17H20'%3E%3C/path%3E%3Cpath d='M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z'%3E%3C/path%3E%3C/svg%3E");
         background-size: contain; background-repeat: no-repeat; background-position: center;
-        position: absolute; top: 15px; left: 50%; transform: translateX(-50%);
+        position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
+    }
+    [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] > div:nth-child(3) button::before {
+        content: ''; display: block; width: 28px; height: 28px; margin: 0 auto 8px auto;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='2' y='4' width='20' height='12' rx='1' ry='1'%3E%3C/rect%3E%3Cline x1='6' y1='20' x2='18' y2='20'%3E%3C/line%3E%3Cline x1='12' y1='16' x2='12' y2='20'%3E%3C/line%3E%3C/svg%3E");
+        background-size: contain; background-repeat: no-repeat; background-position: center;
+        position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
     }
     [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] button { position: relative !important; }
 </style>
@@ -541,6 +552,21 @@ if active_cluster == "Smartphones":
     sel = st.sidebar.selectbox("", phones['Title'].unique(), label_visibility="collapsed")
     trigger = phones[phones['Title']==sel].iloc[0] if sel else None
 
+elif active_cluster == "Laptops":
+    if df_products.empty: st.stop()
+    laptops = df_products[(df_products['Level 1']=='IT') & (df_products['Level 2'].isin(LAPTOP_L2_VALUES))]
+    if laptops.empty:
+        laptops = df_products[df_products['Hierarchy'].fillna('').astype(str).str.upper().str.contains('NOTEBOOK|LAPTOP', regex=True, na=False)]
+    if laptops.empty:
+        st.warning("No laptops found in Products sheet.")
+        st.stop()
+
+    st.sidebar.markdown('<p class="sidebar-section">Επιλέξτε Laptop</p>', unsafe_allow_html=True)
+    laptop_titles = laptops['Title'].unique()
+    if len(laptop_titles) == 0: st.stop()
+    sel = st.sidebar.selectbox("", laptop_titles, label_visibility="collapsed", key="laptop_title")
+    trigger = laptops[laptops['Title']==sel].iloc[0] if sel else None
+    
 elif active_cluster == "Kids Books":
     if df_books.empty: st.stop()
     kids_books = df_books[(df_books['Level 1'] == 'Books') & (df_books['Level 2'].isin(KIDS_BOOKS_LEVEL2))]
@@ -588,6 +614,9 @@ if trigger is None: st.stop()
 if active_cluster == "Smartphones":
     st.markdown('<div class="public-header">Επιλογές για εσένα</div>', unsafe_allow_html=True)
     st.markdown(f"<p style='color: #555; font-size: 14px; margin-top: -15px; margin-bottom: 25px;'>Συμβατά αξεσουάρ για το <b>{sel}</b></p>", unsafe_allow_html=True)
+elif active_cluster == "Laptops":
+    st.markdown('<div class="public-header">Ολοκλήρωσε το setup σου</div>', unsafe_allow_html=True)
+    st.markdown(f"<p style='color: #555; font-size: 14px; margin-top: -15px; margin-bottom: 25px;'>Αξεσουάρ & εξοπλισμός για το <b>{sel}</b></p>", unsafe_allow_html=True)
 else:
     st.markdown('<div class="public-header">Διάλεξε κι άλλα!</div>', unsafe_allow_html=True)
     st.markdown(f"<p style='color: #555; font-size: 14px; margin-top: -15px; margin-bottom: 25px;'>Προτάσεις με βάση το <b>{sel}</b></p>", unsafe_allow_html=True)
@@ -2233,6 +2262,9 @@ def run_laptops_engine(trigger, df_products, df_history):
 # ─────────────────────────────────────────────────────────────
 if active_cluster == "Smartphones":
     recs, diag, slot_diag, slot_notes, full_candidates = run_engine(trigger, df_products, df_history, df_slots)
+elif active_cluster == "Laptops":
+    recs, diag, slot_notes, full_candidates = run_laptops_engine(trigger, df_products, df_history)
+    slot_diag = []
 else:
     recs, diag, slot_notes, full_candidates = run_books_engine(trigger, df_books, df_history)
     slot_diag = []
@@ -2278,6 +2310,8 @@ if not recs.empty:
         if active_cluster == "Smartphones":
             lk = detect_logic_key(raw_role)
             marketing_text = MARKETING_COPY.get(lk, "Ιδανική επιλογή!")
+        elif active_cluster == "Laptops":
+            marketing_text = LAPTOP_MARKETING_COPY.get(raw_role, "Ιδανική επιλογή!")
         else:
             marketing_text = MARKETING_COPY.get(raw_role, "Μια εξαιρετική επιλογή!")
         
@@ -2297,7 +2331,12 @@ if not recs.empty:
             </button>
         </div>"""
 
-    header_text = "Μαζί με αυτό αγοράζουν" if active_cluster == "Smartphones" else "Συνέχισε την περιπέτεια"
+    if active_cluster == "Smartphones":
+        header_text = "Μαζί με αυτό αγοράζουν"
+    elif active_cluster == "Laptops":
+        header_text = "Ολοκλήρωσε το setup σου"
+    else:
+        header_text = "Συνέχισε την περιπέτεια"
 
     css="""
     *{margin:0;padding:0;box-sizing:border-box}
@@ -2396,6 +2435,8 @@ with st.expander("⚙️ System Diagnostics"):
     st.markdown("### Trigger Attributes")
     if active_cluster == "Kids Books":
         cols = ['Material','Title','Level 2','Hierarchy','Σειρά βιβλίου','Ηλικία','Εξώφυλλο','Brand','LIST PRICE']
+    elif active_cluster == "Laptops":
+        cols = ['Material','Title','Level 1','Level 2','Hierarchy','Κατασκευαστής','Μοντέλο','Προτεινόμενη χρήση','Μέγεθος οθόνης','Θύρες','LIST PRICE']
     else:
         cols = ['Material','Title','Level 2','Hierarchy','Κατασκευαστής','Μοντέλο','LIST PRICE']
     for col in cols:
