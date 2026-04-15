@@ -2484,7 +2484,7 @@ def run_laptops_engine(trigger, df_products, df_history):
 
 
                 
-         # ── Logic: Office / Headset Ecosystem ──
+        # ── Logic: Office / Headset Ecosystem ──
         elif logic_key == 'OFFICE_HEADSET_LOGIC':
             if is_apple:
                 office_software = pool['Hierarchy'].fillna('').str.upper() == 'OFFICE SUITES'
@@ -2495,14 +2495,18 @@ def run_laptops_engine(trigger, df_products, df_history):
             pool['_p'] = pool['LIST PRICE'].apply(parse_euro_price)
 
             if is_headset.any():
-                if is_premium or is_apple:
-                    prem_use = pool['Προτεινόμενη χρήση'].fillna('').str.lower().str.contains('premium|επαγγελματική', regex=True, na=False)
-                    pool.loc[is_headset & prem_use, 'Final_Score'] += 50000
-                    notes.append("Persona: Boosted Premium/Professional headsets")
+                # Safely check if the column exists in the products DataFrame
+                if 'Προτεινόμενη χρήση' in pool.columns:
+                    if is_premium or is_apple:
+                        prem_use = pool['Προτεινόμενη χρήση'].fillna('').str.lower().str.contains('premium|επαγγελματική', regex=True, na=False)
+                        pool.loc[is_headset & prem_use, 'Final_Score'] += 50000
+                        notes.append("Persona: Boosted Premium/Professional headsets")
+                    else:
+                        standard_use = pool['Προτεινόμενη χρήση'].fillna('').str.lower().str.contains('ομιλία|καθημερινή', regex=True, na=False)
+                        pool.loc[is_headset & standard_use, 'Final_Score'] += 50000
+                        notes.append("Persona: Boosted standard Voice/Daily headsets")
                 else:
-                    standard_use = pool['Προτεινόμενη χρήση'].fillna('').str.lower().str.contains('ομιλία|καθημερινή', regex=True, na=False)
-                    pool.loc[is_headset & standard_use, 'Final_Score'] += 50000
-                    notes.append("Persona: Boosted standard Voice/Daily headsets")
+                    notes.append("Persona: Boost skipped ('Προτεινόμενη χρήση' column missing from candidates)")
 
                 # --- Strict Taxonomy Audio Size Matching ---
                 is_earbud = pool['Hierarchy'].fillna('').str.upper().str.contains('BLUETOOTH')
