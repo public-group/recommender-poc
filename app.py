@@ -1746,14 +1746,6 @@ def run_engine(trigger, df_products, df_history, df_slots):
 
     c = c[c['Title']!=tt]; diag.append(("1. Title dedup", len(c), ""))
 
-    if 'CW Stock Units' in c.columns:
-        st_col = pd.to_numeric(c['CW Stock Units'], errors='coerce')
-        pct = (st_col>0).sum()/len(c) if len(c)>0 else 0
-        if pct >= 0.10:
-            c['CW Stock Units']=st_col.fillna(0); c=c[c['CW Stock Units']>0]
-            diag.append(("2. Stock filter", len(c), f"Applied ({pct:.0%})"))
-        else: diag.append(("2. Stock filter", len(c), f"⚠ SKIPPED ({pct:.0%})"))
-    else: diag.append(("2. Stock filter", len(c), "⚠ SKIPPED (no col)"))
 
     mask = (c['Hierarchy']==thier) & (c['Κατασκευαστής'].fillna('').str.strip().str.upper()==tb)
     ns = mask.sum()
