@@ -114,7 +114,7 @@ LAPTOP_MAINSTREAM_SLOTS = [
     (6,  'Βάση / Cooler',    ['NOTEBOOK COOLERS', 'ΒΑΣΕΙΣ ΓΡΑΦΕΙΟΥ'],        'STAND_SIZE'),
     (7,  'Οθόνη',            ['TFT MONITOR'],                                'MONITOR_LOGIC'),
     (8,  'Αποθήκευση',       ['USB FLASH', 'EXTERNAL HDD USB'],              'GENERIC'),
-    (9,  'Headset / Office', ['PC HEADSET/MICROPHONE', 'OFFICE SUITES'],     'GENERIC'),
+    (9,  'Headset / Office', ['PC HEADSET/MICROPHONE', 'OFFICE SUITES'],     'OFFICE_HEADSET_LOGIC'),
     (10, 'Θήκη Laptop',      ['ΘΗΚΕΣ SLEEVE LAPTOP'],                        'SLEEVE_SIZE'),
 ]
  
@@ -363,7 +363,21 @@ def extract_wattage_from_text(text):
     m = re.search(r'(\d+)\s*w(?:att)?\b', s)
     return int(m.group(1)) if m else 0
 
-
+def get_resolution_tier(res_str):
+    """Maps screen resolution text to a numeric tier for easy comparison."""
+    s = str(res_str).lower()
+    if not s or s == 'nan': return 0
+    
+    # Tier 4: 4K / 5K / UHD
+    if any(x in s for x in ['5k', '4k', 'uhd', 'ultra hd']): return 4
+    # Tier 3: QHD / 2K
+    if any(x in s for x in ['qhd', 'quad hd', 'wqxga']): return 3
+    # Tier 2: FHD / 1080p
+    if any(x in s for x in ['fhd', 'full hd', 'wuxga', '1080']): return 2
+    # Tier 1: HD / <1080p
+    if any(x in s for x in ['hd', 'sxga', '720']): return 1
+    
+    return 0
 
 # ─────────────────────────────────────────────────────────────
 # DATA
@@ -2164,10 +2178,14 @@ def run_laptops_engine(trigger, df_products, df_history):
     tports = str(trigger.get('Θύρες', '')).lower()
     tusage = str(trigger.get('Προτεινόμενη χρήση', '')).lower()
     
-    # --- ADD THESE PERSONA VARIABLES ---
+    # ---PERSONA VARIABLES ---
     is_premium = tprice >= 1000 or 'premium' in tusage
     is_apple = tb == 'APPLE'
     is_gaming = 'gaming' in tusage or 'gamer' in tusage
+
+    # --- Get Laptop Resolution Tier ---
+    tres_str = str(trigger.get('Ανάλυση Οθόνης', ''))
+    tres_tier = get_resolution_tier(tres_str)
  
     diag.append(("0. Trigger", f"Brand={tb}, €{tprice:.0f}", f"Screen={tscreen}\", Ports={tports[:60]}"))
  
@@ -2367,6 +2385,14 @@ def run_laptops_engine(trigger, df_products, df_history):
                 pool = pool[~gaming_mon]
                 notes.append("Visual Workstation (Persona): Excluded gaming monitors")
 
+            if tres_tier > 0:
+                pool['_res_tier'] = pool['Ανάλυση Οθόνης'].apply(get_resolution_tier)
+                b4_res = len(pool)
+                # Keep monitors where resolution is ≥ laptop resolution (or unknown/0 to be safe)
+                pool = pool[(pool['_res_tier'] >= tres_tier) | (pool['_res_tier'] == 0)]
+                notes.append(f"Resolution Match (≥ Tier {tres_tier}): {b4_res}→{len(pool)}")
+
+            
             if is_apple:
                 # Cable protocol & Brand Ecosystem
                 usbc_mon = pool['Title'].fillna('').str.lower().str.contains('usb-c|type-c|thunderbolt|mac', regex=True, na=False)
@@ -2376,7 +2402,27 @@ def run_laptops_engine(trigger, df_products, df_history):
                 pool['_p'] = pool['LIST PRICE'].apply(parse_euro_price)
                 cheap = pool[pool['_p'] <= 250]
                 if not cheap.empty: pool = cheap
- 
+
+         # ── Logic: Office / Headset Ecosystem ──
+        elif logic_key == 'OFFICE_HEADSET_LOGIC':
+            if is_apple:
+                office_software = pool['Hierarchy'].fillna('').str.upper() == 'OFFICE SUITES'
+                pool = pool[~office_software]
+                notes.append("Brand Ecosystem: Banned Microsoft Office for Mac users")
+            
+            # Headset Persona matching
+            headsets = pool['Hierarchy'].fillna('').str.upper() == 'PC HEADSET/MICROPHONE'
+            if headsets.any():
+                if is_premium or is_apple:
+                    # Business/Premium persona
+                    prem_use = pool['Προτεινόμενη χρήση'].fillna('').str.lower().str.contains('premium|επαγγελματική', regex=True, na=False)
+                    pool.loc[headsets & prem_use, 'Final_Score'] += 50000
+                    notes.append("Persona: Boosted Premium/Professional headsets")
+                else:
+                    # Mainstream/Office persona
+                    standard_use = pool['Προτεινόμενη χρήση'].fillna('').str.lower().str.contains('ομιλία|καθημερινή', regex=True, na=False)
+                    pool.loc[headsets & standard_use, 'Final_Score'] += 50000
+                    notes.append("Persona: Boosted standard Voice/Daily headsets")
  
         # ── GENERIC: just sales + availability ──
         # logic_key == 'GENERIC' — no extra filtering needed
