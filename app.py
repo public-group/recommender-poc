@@ -75,7 +75,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v18.0 — Laptops: The Road Warrior (Mainstream)
+        🟢 Engine v18.2 — Laptops: Visual Workstation (Price Tiering & Ecosystem)
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -2329,23 +2329,38 @@ def run_laptops_engine(trigger, df_products, df_history):
                     notes.append("⚠ No ≥45W or PD powerbanks, keeping all")
  
 
-         # ── Logic: Smart Mouse Selection ──
+        # ── Logic: Smart Mouse Selection ──
         elif logic_key == 'MOUSE_LOGIC':
             if not is_gaming:
                 ng = ~pool['Title'].fillna('').str.lower().str.contains('rgb|gaming', regex=True, na=False)
                 if ng.any(): pool = pool[ng]
                 notes.append("Persona: Excluded gaming/RGB mice")
 
+            pool['_p'] = pool['LIST PRICE'].apply(parse_euro_price)
+
             if is_apple:
                 apple_mice = pool['Κατασκευαστής'].fillna('').str.upper() == 'APPLE'
                 mac_logi = pool['Title'].fillna('').str.lower().str.contains('mac|mx master|mx anywhere')
-                pool.loc[apple_mice, 'Final_Score'] += 100000
-                pool.loc[mac_logi, 'Final_Score'] += 80000
-                notes.append("Brand Ecosystem: Boosted Apple & Premium Mac mice")
-            elif tprice < 600:
-                pool['_p'] = pool['LIST PRICE'].apply(parse_euro_price)
-                cheap = pool[pool['_p'] < 40]
-                if not cheap.empty: pool = cheap
+                
+                # --- NEW: Apple Price Tiering ---
+                if tprice >= 1200:
+                    # Expensive Mac -> Push Premium Mice (Magic Mouse, MX Master)
+                    pool.loc[apple_mice, 'Final_Score'] += 100000
+                    pool.loc[mac_logi & (pool['_p'] >= 70), 'Final_Score'] += 80000
+                    notes.append("Price Tiering: Boosted Apple & Premium Logitech (≥€70)")
+                else:
+                    # Budget/Older Mac -> Push Affordable Mac Mice
+                    pool.loc[mac_logi & (pool['_p'] < 70), 'Final_Score'] += 100000
+                    pool.loc[apple_mice, 'Final_Score'] += 50000 # Still acceptable, but secondary
+                    notes.append("Price Tiering: Boosted affordable Mac-compatible mice (<€70)")
+            else:
+                # Windows Laptops Price Tiering
+                if tprice >= 1000:
+                    pool.loc[pool['_p'] >= 50, 'Final_Score'] += 50000
+                    notes.append("Price Tiering: Boosted Premium mice (≥€50)")
+                elif tprice < 600 and tprice > 0:
+                    cheap = pool[pool['_p'] < 40]
+                    if not cheap.empty: pool = cheap
 
         # ── Logic: Smart Mousepad ──
         elif logic_key == 'MOUSEPAD_LOGIC':
@@ -2380,7 +2395,6 @@ def run_laptops_engine(trigger, df_products, df_history):
         # ── Logic: Persona-Driven Monitor ──
         elif logic_key == 'MONITOR_LOGIC':
             if not is_gaming:
-                # Gamer vs Office split
                 gaming_mon = pool['Title'].fillna('').str.lower().str.contains('gaming|odyssey|predator|144hz|165hz|180hz|240hz', regex=True, na=False)
                 pool = pool[~gaming_mon]
                 notes.append("Visual Workstation (Persona): Excluded gaming monitors")
@@ -2388,21 +2402,33 @@ def run_laptops_engine(trigger, df_products, df_history):
             if tres_tier > 0:
                 pool['_res_tier'] = pool['Ανάλυση Οθόνης'].apply(get_resolution_tier)
                 b4_res = len(pool)
-                # Keep monitors where resolution is ≥ laptop resolution (or unknown/0 to be safe)
                 pool = pool[(pool['_res_tier'] >= tres_tier) | (pool['_res_tier'] == 0)]
                 notes.append(f"Resolution Match (≥ Tier {tres_tier}): {b4_res}→{len(pool)}")
 
-            
+            if is_apple or is_premium:
+                fhd_mon = pool['Title'].fillna('').str.lower().str.contains('fhd|1080p|1920x1080', regex=True, na=False)
+                pool = pool[~fhd_mon]
+                notes.append("Visual Workstation: Banned FHD monitors for Premium/Mac laptop")
+
+            # --- NEW: Dynamic Price Tiering ---
+            pool['_p'] = pool['LIST PRICE'].apply(parse_euro_price)
+            if tprice >= 2000:
+                # Ultra-Premium Laptops -> Boost Monitors €600+
+                pool.loc[pool['_p'] >= 600, 'Final_Score'] += 60000
+                notes.append("Price Tiering: Boosted Ultra-Premium monitors (≥€600)")
+            elif tprice >= 1000:
+                # Premium Laptops -> Boost Monitors €250 - €800
+                pool.loc[(pool['_p'] >= 250) & (pool['_p'] <= 800), 'Final_Score'] += 60000
+                notes.append("Price Tiering: Boosted Premium monitors (€250-€800)")
+            elif tprice > 0:
+                # Standard Laptops -> Boost Budget Monitors ≤ €350
+                pool.loc[pool['_p'] <= 350, 'Final_Score'] += 60000
+                notes.append("Price Tiering: Boosted Standard monitors (≤€350)")
+
             if is_apple:
-                # Cable protocol & Brand Ecosystem
                 usbc_mon = pool['Title'].fillna('').str.lower().str.contains('usb-c|type-c|thunderbolt|mac', regex=True, na=False)
                 pool.loc[usbc_mon, 'Final_Score'] += 100000
                 notes.append("Visual Workstation (Ecosystem): Boosted USB-C/Mac displays")
-            elif tprice < 600:
-                pool['_p'] = pool['LIST PRICE'].apply(parse_euro_price)
-                cheap = pool[pool['_p'] <= 250]
-                if not cheap.empty: pool = cheap
-
          # ── Logic: Office / Headset Ecosystem ──
         elif logic_key == 'OFFICE_HEADSET_LOGIC':
             if is_apple:
