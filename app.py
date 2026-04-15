@@ -75,7 +75,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v18.4 — Laptops: Visual Workstation (Strict Guardrails & Price Ceilings)
+        🟢 Engine v18.6 — Laptops: Visual Workstation (Taxonomy-Driven Audio & Scales)
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -114,7 +114,7 @@ LAPTOP_MAINSTREAM_SLOTS = [
     (6,  'Βάση / Cooler',    ['NOTEBOOK COOLERS', 'ΒΑΣΕΙΣ ΓΡΑΦΕΙΟΥ'],        'STAND_SIZE'),
     (7,  'Οθόνη',            ['TFT MONITOR'],                                'MONITOR_LOGIC'),
     (8,  'Αποθήκευση',       ['USB FLASH', 'EXTERNAL HDD USB'],              'GENERIC'),
-    (9,  'Headset / Office', ['OVERHEAD', 'OFFICE SUITES'],     'OFFICE_HEADSET_LOGIC'),
+    (9,  'Headset / Office', ['OVERHEAD', 'BLUETOOTH', 'OFFICE SUITES'],     'OFFICE_HEADSET_LOGIC'),
     (10, 'Θήκη Laptop',      ['ΘΗΚΕΣ SLEEVE LAPTOP'],                        'SLEEVE_SIZE'),
 ]
  
@@ -2394,12 +2394,11 @@ def run_laptops_engine(trigger, df_products, df_history):
                 pool.loc[pool['_p'] >= 15, 'Final_Score'] += 50000
                 notes.append("Premium matched with premium mousepads (≥€15)")
                 
-# ── Logic: Stand / Cooler ──
+            # ── Logic: Stand / Cooler ──
         elif logic_key == 'STAND_SIZE':
-            # Strictly ban monitor arms, desktop tower stands, and printer stands
-            arms = pool['Title'].fillna('').str.lower().str.contains('βραχίονας|arm|dual monitor|triple monitor|οθόνης|monitor support|vesa|υπολογιστή|desktop|εκτυπωτή|σταθερού', regex=True, na=False)
+            arms = pool['Title'].fillna('').str.lower().str.contains('βραχίονας|arm|dual monitor|triple monitor|οθόνης|monitor support|υπολογιστή|desktop|εκτυπωτή|σταθερού|rack|cable|cablerack', regex=True, na=False)
             pool = pool[~arms]
-            notes.append("Visual Workstation: Removed desktop/monitor risers and arms")
+            notes.append("Visual Workstation: Removed desktop/monitor risers, arms, and IT racks")
 
             if tscreen >= 15.6:
                 cool = pool[pool['Hierarchy'].fillna('').str.upper().str.contains('COOLER', na=False)]
@@ -2430,30 +2429,34 @@ def run_laptops_engine(trigger, df_products, df_history):
                 pool = pool[~fhd_mon]
                 notes.append("Visual Workstation: Banned FHD monitors for Premium/Mac laptop")
 
-           # --- NEW: Dynamic Price Tiering (With Hard Penalties) ---
+            # --- Sane Price Tiering (20-30% ratios) & Brand Loyalty Override ---
             pool['_p'] = pool['LIST PRICE'].apply(parse_euro_price)
+            apple_monitors = pool['Κατασκευαστής'].fillna('').str.upper() == 'APPLE'
+            
             if tprice >= 2000:
-                # Ultra-Premium Laptops -> Boost Monitors €600+
-                pool.loc[pool['_p'] >= 600, 'Final_Score'] += 60000
-                notes.append("Price Tiering: Boosted Ultra-Premium monitors (≥€600)")
+                pool.loc[(pool['_p'] >= 400) & (pool['_p'] <= 700), 'Final_Score'] += 60000
+                pool.loc[(pool['_p'] > 750) & ~apple_monitors, 'Final_Score'] -= 200000
+                notes.append("Price Tiering: Boosted €400-€700, penalized >€750 (except Apple)")
             elif tprice >= 1000:
-                # Premium Laptops -> Boost €250-€800, PENALIZE >€800
-                pool.loc[(pool['_p'] >= 250) & (pool['_p'] <= 800), 'Final_Score'] += 60000
-                pool.loc[pool['_p'] > 800, 'Final_Score'] -= 200000
-                notes.append("Price Tiering: Boosted €250-€800, penalized >€800")
+                pool.loc[(pool['_p'] >= 200) & (pool['_p'] <= 400), 'Final_Score'] += 60000
+                pool.loc[(pool['_p'] > 450) & ~apple_monitors, 'Final_Score'] -= 200000
+                notes.append("Price Tiering: Boosted €200-€400, penalized >€450 (except Apple)")
             elif tprice > 0:
-                # Standard Laptops -> Boost ≤€300, PENALIZE expensive monitors
-                pool.loc[pool['_p'] <= 300, 'Final_Score'] += 60000
-                # Dynamic Ceiling: Max €300 or 45% of the laptop price, whichever is higher
-                max_price = max(300, tprice * 0.45)
-                pool.loc[pool['_p'] > max_price, 'Final_Score'] -= 200000
-                notes.append(f"Price Tiering: Boosted ≤€300, heavily penalized >€{max_price:.0f}")
+                max_price = max(150, tprice * 0.30)
+                pool.loc[pool['_p'] <= max_price, 'Final_Score'] += 60000
+                pool.loc[(pool['_p'] > max_price) & ~apple_monitors, 'Final_Score'] -= 200000
+                notes.append(f"Price Tiering: Boosted ≤€{max_price:.0f}, heavily penalized >€{max_price:.0f}")
 
+            # Visual Workstation: Ergonomics (VESA Match)
+            vesa_mon = pool['Title'].fillna('').str.lower().str.contains('vesa|ergonomic|pivot', regex=True, na=False)
+            pool.loc[vesa_mon, 'Final_Score'] += 10000
+            
             if is_apple:
-                # Cable protocol & Brand Ecosystem
+                # Strict cable protocol matching 
                 usbc_mon = pool['Title'].fillna('').str.lower().str.contains('usb-c|type-c|thunderbolt|mac', regex=True, na=False)
                 pool.loc[usbc_mon, 'Final_Score'] += 100000
-                notes.append("Visual Workstation (Ecosystem): Boosted USB-C/Mac displays")
+                pool.loc[apple_monitors, 'Final_Score'] += 500000 
+                notes.append("Visual Workstation (Ecosystem): Boosted USB-C protocols & Apple Brand Loyalty")
 
 
                 
@@ -2464,19 +2467,48 @@ def run_laptops_engine(trigger, df_products, df_history):
                 pool = pool[~office_software]
                 notes.append("Brand Ecosystem: Banned Microsoft Office for Mac users")
             
-            # Headset Persona matching
-            headsets = pool['Hierarchy'].fillna('').str.upper() == 'OVERHEAD'
-            if headsets.any():
+            is_headset = ~pool['Hierarchy'].fillna('').str.upper().str.contains('OFFICE')
+            pool['_p'] = pool['LIST PRICE'].apply(parse_euro_price)
+
+            if is_headset.any():
                 if is_premium or is_apple:
-                    # Business/Premium persona
                     prem_use = pool['Προτεινόμενη χρήση'].fillna('').str.lower().str.contains('premium|επαγγελματική', regex=True, na=False)
-                    pool.loc[headsets & prem_use, 'Final_Score'] += 50000
+                    pool.loc[is_headset & prem_use, 'Final_Score'] += 50000
                     notes.append("Persona: Boosted Premium/Professional headsets")
                 else:
-                    # Mainstream/Office persona
                     standard_use = pool['Προτεινόμενη χρήση'].fillna('').str.lower().str.contains('ομιλία|καθημερινή', regex=True, na=False)
-                    pool.loc[headsets & standard_use, 'Final_Score'] += 50000
+                    pool.loc[is_headset & standard_use, 'Final_Score'] += 50000
                     notes.append("Persona: Boosted standard Voice/Daily headsets")
+
+                # --- Strict Taxonomy Audio Size Matching ---
+                is_earbud = pool['Hierarchy'].fillna('').str.upper().str.contains('BLUETOOTH')
+                
+                if 'Τύπος ακουστικών' in pool.columns:
+                    type_col = pool['Τύπος ακουστικών'].fillna('').str.upper()
+                else:
+                    type_col = pd.Series('', index=pool.index)
+                    
+                is_overhead = pool['Hierarchy'].fillna('').str.upper().str.contains('OVERHEAD') | type_col.str.contains('OVER EAR|ON EAR')
+
+                # Portability vs Workstation
+                if tscreen > 0 and tscreen <= 14:
+                    pool.loc[is_headset & is_earbud, 'Final_Score'] += 30000
+                    notes.append("Visual Workstation: Boosted Bluetooth/Earbuds for ≤14\" portability")
+                elif tscreen >= 15:
+                    pool.loc[is_headset & is_overhead, 'Final_Score'] += 30000
+                    notes.append("Visual Workstation: Boosted Overhead/On-Ear for ≥15\" workstation")
+
+                # Headset Sane Price Tiering (Max ~15% of laptop price)
+                if tprice >= 2000:
+                    pass 
+                elif tprice >= 1000:
+                    pool.loc[is_headset & (pool['_p'] > 250), 'Final_Score'] -= 100000
+                elif tprice > 0:
+                    max_hs_price = max(50, tprice * 0.15)
+                    pool.loc[is_headset & (pool['_p'] > max_hs_price), 'Final_Score'] -= 100000
+                    notes.append(f"Price Tiering: Penalized headsets >€{max_hs_price:.0f}")
+
+                    
  
         # ── GENERIC: just sales + availability ──
         # logic_key == 'GENERIC' — no extra filtering needed
