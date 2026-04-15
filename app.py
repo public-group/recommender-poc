@@ -75,7 +75,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v18.7 — Laptops: Visual Workstation (Conditional Brand Pricing)
+        🟢 Engine v18.8 — Laptops: Performance Pairing & Tiered Budgets
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -2314,6 +2314,13 @@ def run_laptops_engine(trigger, df_products, df_history):
                 pool.loc[usbc_mask, 'Final_Score'] += 100000
                 notes.append("USB-C trigger → USB-C charger boost")
 
+                # --- NEW: Prioritize Matching Brand Charger ---
+                if tb:
+                    is_same_brand_charger = pool['Κατασκευαστής'].fillna('').str.strip().str.upper() == tb
+                    pool.loc[is_same_brand_charger & usbc_mask, 'Final_Score'] += 200000
+                    notes.append(f"Brand Priority: Boosted exact match {tb} chargers")
+
+                    
                 # Wattage ≥ 45W for laptop chargers (avoid phone chargers)
                 watts = pool['Title'].fillna('').apply(extract_wattage_from_text)
                 pool.loc[watts >= 45, 'Final_Score'] += 50000
@@ -2382,36 +2389,56 @@ def run_laptops_engine(trigger, df_products, df_history):
                     cheap = pool[pool['_p'] < 40]
                     if not cheap.empty: pool = cheap
 
-        # ── Logic: Smart Mousepad ──
+        # ── Logic: Smart Mouse Selection (Performance Pairing) ──
+        elif logic_key == 'MOUSE_LOGIC':
+            if not is_gaming:
+                ng = ~pool['Title'].fillna('').str.lower().str.contains('rgb|gaming', regex=True, na=False)
+                if ng.any(): pool = pool[ng]
+                notes.append("Persona: Excluded gaming/RGB mice")
+
+            pool['_p'] = pool['LIST PRICE'].apply(parse_euro_price)
+            apple_mice = pool['Κατασκευαστής'].fillna('').str.upper() == 'APPLE'
+            mac_logi = pool['Title'].fillna('').str.lower().str.contains('mac|mx master|mx anywhere')
+
+            # Tiered Performance Budgets
+            if tprice >= 2000:
+                pool.loc[(pool['_p'] >= 60) & (pool['_p'] <= 150), 'Final_Score'] += 60000
+                pool.loc[pool['_p'] < 40, 'Final_Score'] -= 100000 # Anti-cheap trap
+                notes.append("Tier 4 (Pro): Boosted €60-€150 mice, penalized cheap")
+            elif tprice >= 1000:
+                pool.loc[(pool['_p'] >= 35) & (pool['_p'] <= 60), 'Final_Score'] += 60000
+                notes.append("Tier 3 (Mid-High): Boosted €35-€60 mice")
+            elif tprice >= 500:
+                pool.loc[(pool['_p'] >= 15) & (pool['_p'] <= 35), 'Final_Score'] += 60000
+                notes.append("Tier 2 (Mid): Boosted €15-€35 mice")
+            else:
+                pool.loc[(pool['_p'] >= 10) & (pool['_p'] <= 20), 'Final_Score'] += 60000
+                notes.append("Tier 1 (Budget): Boosted €10-€20 mice")
+
+            if is_apple:
+                if tprice >= 1200:
+                    pool.loc[apple_mice, 'Final_Score'] += 100000
+                    pool.loc[mac_logi & (pool['_p'] >= 70), 'Final_Score'] += 80000
+                else:
+                    pool.loc[mac_logi & (pool['_p'] < 70), 'Final_Score'] += 100000
+                    pool.loc[apple_mice, 'Final_Score'] += 50000 
+
+        # ── Logic: Smart Mousepad (Flat Rate) ──
         elif logic_key == 'MOUSEPAD_LOGIC':
             if not is_gaming:
                 ng = ~pool['Title'].fillna('').str.lower().str.contains('rgb|gaming', regex=True, na=False)
                 if ng.any(): pool = pool[ng]
 
+            # Flat Rate Logic (Mousepads do not scale infinitely)
+            pool['_p'] = pool['LIST PRICE'].apply(parse_euro_price)
             if is_premium or is_apple:
-                # Boost pads over 15 euros for premium laptops
-                pool['_p'] = pool['LIST PRICE'].apply(parse_euro_price)
-                pool.loc[pool['_p'] >= 15, 'Final_Score'] += 50000
-                notes.append("Premium matched with premium mousepads (≥€15)")
-                
-            # ── Logic: Stand / Cooler ──
-        elif logic_key == 'STAND_SIZE':
-            arms = pool['Title'].fillna('').str.lower().str.contains('βραχίονας|arm|dual monitor|triple monitor|οθόνης|monitor support|υπολογιστή|desktop|εκτυπωτή|σταθερού|rack|cable|cablerack|στήριξης monitor|βάση monitor|monitor stand', regex=True, na=False)
-            pool = pool[~arms]
-            notes.append("Visual Workstation: Removed desktop/monitor risers, arms, and IT racks")
+                pool.loc[(pool['_p'] >= 15) & (pool['_p'] <= 30), 'Final_Score'] += 50000
+                notes.append("Flat Rate: Premium laptops matched with €15-€30 pads")
+            else:
+                pool.loc[pool['_p'] <= 15, 'Final_Score'] += 50000
+                notes.append("Flat Rate: Standard laptops matched with ≤€15 pads")
 
-            if tscreen >= 15.0: # Updated to 15.0 to properly catch 15.3" MacBooks
-                cool = pool[pool['Hierarchy'].fillna('').str.upper().str.contains('COOLER', na=False)]
-                if not cool.empty: pool = cool
-            elif tscreen > 0 and tscreen <= 14:
-                stands = pool[pool['Hierarchy'].fillna('').str.upper().str.contains('ΒΑΣΕΙΣ|STAND', regex=True, na=False)]
-                if not stands.empty: pool.loc[stands.index, 'Final_Score'] += 20000
-            
-            if is_apple:
-                mac_stands = pool['Title'].fillna('').str.lower().str.contains('satechi|macbook|αλουμιν')
-                pool.loc[mac_stands, 'Final_Score'] += 50000
-
-        # ── Logic: Persona-Driven Monitor ──
+        # ── Logic: Persona-Driven Monitor (10-15% of Laptop Value) ──
         elif logic_key == 'MONITOR_LOGIC':
             if not is_gaming:
                 gaming_mon = pool['Title'].fillna('').str.lower().str.contains('gaming|odyssey|predator|144hz|165hz|180hz|240hz', regex=True, na=False)
@@ -2420,49 +2447,40 @@ def run_laptops_engine(trigger, df_products, df_history):
 
             if tres_tier > 0:
                 pool['_res_tier'] = pool['Ανάλυση Οθόνης'].apply(get_resolution_tier)
-                b4_res = len(pool)
                 pool = pool[(pool['_res_tier'] >= tres_tier) | (pool['_res_tier'] == 0)]
-                notes.append(f"Resolution Match (≥ Tier {tres_tier}): {b4_res}→{len(pool)}")
 
             if is_apple or is_premium:
                 fhd_mon = pool['Title'].fillna('').str.lower().str.contains('fhd|1080p|1920x1080', regex=True, na=False)
                 pool = pool[~fhd_mon]
-                notes.append("Visual Workstation: Banned FHD monitors for Premium/Mac laptop")
 
-            # --- Sane Price Tiering (20-30% ratios) ---
+            # Tiered Performance Budgets (Strict 10-15% Ratios)
             pool['_p'] = pool['LIST PRICE'].apply(parse_euro_price)
             apple_monitors = pool['Κατασκευαστής'].fillna('').str.upper() == 'APPLE'
             
-            if tprice >= 2000:
-                pool.loc[(pool['_p'] >= 400) & (pool['_p'] <= 700), 'Final_Score'] += 60000
-                pool.loc[(pool['_p'] > 750) & ~apple_monitors, 'Final_Score'] -= 200000
-                notes.append("Price Tiering: Boosted €400-€700, penalized >€750")
-            elif tprice >= 1000:
-                pool.loc[(pool['_p'] >= 200) & (pool['_p'] <= 400), 'Final_Score'] += 60000
-                pool.loc[(pool['_p'] > 450) & ~apple_monitors, 'Final_Score'] -= 200000
-                notes.append("Price Tiering: Boosted €200-€400, penalized >€450")
-            elif tprice > 0:
-                max_price = max(150, tprice * 0.30)
-                pool.loc[pool['_p'] <= max_price, 'Final_Score'] += 60000
-                pool.loc[(pool['_p'] > max_price) & ~apple_monitors, 'Final_Score'] -= 200000
-                notes.append(f"Price Tiering: Boosted ≤€{max_price:.0f}, heavily penalized >€{max_price:.0f}")
+            if tprice >= 2500:
+                pool.loc[(pool['_p'] >= 500) & (pool['_p'] <= 800), 'Final_Score'] += 60000
+                pool.loc[(pool['_p'] < 300), 'Final_Score'] -= 100000 # Anti-cheap trap
+                notes.append("Tier 4 (Pro): Boosted €500-€800 monitors, penalized cheap")
+            elif tprice >= 1200:
+                pool.loc[(pool['_p'] >= 250) & (pool['_p'] <= 400), 'Final_Score'] += 60000
+                notes.append("Tier 3 (Mid-High): Boosted €250-€400 monitors")
+            elif tprice >= 700:
+                pool.loc[(pool['_p'] >= 120) & (pool['_p'] <= 200), 'Final_Score'] += 60000
+                notes.append("Tier 2 (Mid): Boosted €120-€200 monitors")
+            else:
+                pool.loc[(pool['_p'] >= 60) & (pool['_p'] <= 120), 'Final_Score'] += 60000
+                notes.append("Tier 1 (Budget): Boosted €60-€120 monitors")
 
-            # Visual Workstation: Ergonomics (VESA Match)
             vesa_mon = pool['Title'].fillna('').str.lower().str.contains('vesa|ergonomic|pivot', regex=True, na=False)
             pool.loc[vesa_mon, 'Final_Score'] += 10000
             
             if is_apple:
-                # Strict cable protocol matching 
                 usbc_mon = pool['Title'].fillna('').str.lower().str.contains('usb-c|type-c|thunderbolt|mac', regex=True, na=False)
                 pool.loc[usbc_mon, 'Final_Score'] += 100000
-                
-                # --- NEW: Conditional Apple Ecosystem Override ---
                 if tprice >= 1400:
                     pool.loc[apple_monitors, 'Final_Score'] += 500000 
-                    notes.append("Visual Workstation: Boosted Apple displays for Premium Mac")
                 else:
-                    pool.loc[apple_monitors, 'Final_Score'] -= 300000 
-                    notes.append("Visual Workstation: Blocked expensive Apple displays for standard Mac")
+                    pool.loc[apple_monitors, 'Final_Score'] -= 300000
 
 
                 
@@ -2547,6 +2565,19 @@ def run_laptops_engine(trigger, df_products, df_history):
         row_copy = chosen.copy()
         row_copy['Assigned_Slot'] = slot_num
         row_copy['Slot_Role'] = role
+        # --- NEW: Dynamic Marketing Copy ---
+        if logic_key == 'MONITOR_LOGIC':
+            if tprice >= 2000: row_copy['Marketing_Copy'] = "Elite performance for your GPU."
+            elif tprice >= 1000: row_copy['Marketing_Copy'] = "144Hz+ to match your system speed."
+            else: row_copy['Marketing_Copy'] = "Περισσότερο workspace."
+        elif logic_key == 'MOUSE_LOGIC':
+            if tprice >= 1000: row_copy['Marketing_Copy'] = "High-DPI sensor for flawless precision."
+            else: row_copy['Marketing_Copy'] = "Ελευθερία κινήσεων."
+        elif logic_key == 'BAG_SIZE' or logic_key == 'SLEEVE_SIZE':
+            if tprice >= 1500: row_copy['Marketing_Copy'] = "Premium protection for premium gear."
+            else: row_copy['Marketing_Copy'] = "Άνετη μεταφορά παντού."
+        else:
+            row_copy['Marketing_Copy'] = LAPTOP_MARKETING_COPY.get(role, "Ιδανική επιλογή!")
         row_copy['Item_Rank'] = 1
         all_recs.append(row_copy)
         used_materials.add(chosen['Material'])
@@ -2574,7 +2605,8 @@ def run_laptops_engine(trigger, df_products, df_history):
 if active_cluster == "Smartphones":
     recs, diag, slot_diag, slot_notes, full_candidates = run_engine(trigger, df_products, df_history, df_slots)
 elif active_cluster == "Laptops":
-    recs, diag, slot_notes, full_candidates = run_laptops_engine(trigger, df_laptops, df_history)   
+            # Fetches the dynamic text we created, falls back to the dictionary
+            marketing_text = str(r.get('Marketing_Copy', LAPTOP_MARKETING_COPY.get(raw_role, "Ιδανική επιλογή!")))
     slot_diag = []
 else:
     recs, diag, slot_notes, full_candidates = run_books_engine(trigger, df_books, df_history)
