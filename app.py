@@ -2605,8 +2605,8 @@ def run_laptops_engine(trigger, df_products, df_history):
 if active_cluster == "Smartphones":
     recs, diag, slot_diag, slot_notes, full_candidates = run_engine(trigger, df_products, df_history, df_slots)
 elif active_cluster == "Laptops":
-            # Fetches the dynamic text we created, falls back to the dictionary
-            marketing_text = str(r.get('Marketing_Copy', LAPTOP_MARKETING_COPY.get(raw_role, "Ιδανική επιλογή!")))
+    # Fetches the dynamic text we created, falls back to the dictionary
+    marketing_text = str(r.get('Marketing_Copy', LAPTOP_MARKETING_COPY.get(raw_role, "Ιδανική επιλογή!")))
     slot_diag = []
 else:
     recs, diag, slot_notes, full_candidates = run_books_engine(trigger, df_books, df_history)
