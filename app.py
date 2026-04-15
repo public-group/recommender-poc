@@ -75,7 +75,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v18.2 — Laptops: Visual Workstation (Price Tiering & Ecosystem)
+        🟢 Engine v18.3 — Laptops: Visual Workstation (Strict Fits & Power Protocols)
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -2275,14 +2275,24 @@ def run_laptops_engine(trigger, df_products, df_history):
                         break
                 if size_col:
                     pool['_acc_size'] = pool[size_col].apply(parse_screen_size)
-                    # Tightened fit: Laptop screen up to +0.8 inches larger max
-                    fit = pool[(pool['_acc_size'] >= tscreen - 0.2) & (pool['_acc_size'] <= tscreen + 0.8)]
-                    if not fit.empty:
-                        pool = fit
+                    
+                    # Target 1: Strict fit (up to +0.8 inches larger)
+                    strict_fit = pool[(pool['_acc_size'] >= tscreen - 0.2) & (pool['_acc_size'] <= tscreen + 0.8)]
+                    if not strict_fit.empty:
+                        pool = strict_fit
                         notes.append(f"Strict size fit {tscreen}\" (+0.8\"): {len(pool)}")
                     else:
-                        notes.append(f"⚠ No size match for {tscreen}\", keeping all")
- 
+                        # Target 2: Loose fit (up to +1.5 inches larger)
+                        loose_fit = pool[(pool['_acc_size'] >= tscreen - 0.5) & (pool['_acc_size'] <= tscreen + 1.5)]
+                        if not loose_fit.empty:
+                            pool = loose_fit
+                            notes.append(f"Loose size fit {tscreen}\" (+1.5\"): {len(pool)}")
+                        else:
+                            # Target 3: Only keep sizeless bags. Ban known wrong sizes!
+                            sizeless = pool[pool['_acc_size'] == 0]
+                            pool = sizeless
+                            notes.append(f"⚠ No size match for {tscreen}\", keeping ONLY sizeless items")
+
             # Logic 4: Mainstream → Backpack preference
             if logic_key == 'BAG_SIZE' and 'mainstream' in tusage:
                 if 'Τύπος τσάντας' in pool.columns:
@@ -2293,21 +2303,31 @@ def run_laptops_engine(trigger, df_products, df_history):
  
         # ── Logic 2: Charger Port Compatibility ──
         elif logic_key == 'CHARGER_PORT':
-            has_usbc = any(k in tports for k in ['usb-c', 'type-c', 'usb c', 'thunderbolt', 'usb 4'])
+            # NEW: Apple implies USB-C/PD even if the Ports column is empty
+            has_usbc = is_apple or any(k in tports for k in ['usb-c', 'type-c', 'usb c', 'thunderbolt', 'usb 4'])
             has_dcin_only = 'dc' in tports and not has_usbc
- 
+
             if has_usbc:
                 usbc_mask = pool['Title'].fillna('').str.lower().str.contains('usb-c|type-c|usb c|pd|power delivery', regex=True, na=False)
                 if 'Υποδοχές' in pool.columns:
                     usbc_mask |= pool['Υποδοχές'].fillna('').astype(str).str.lower().str.contains('usb-c|type-c', regex=True, na=False)
                 pool.loc[usbc_mask, 'Final_Score'] += 100000
                 notes.append("USB-C trigger → USB-C charger boost")
- 
+
                 # Wattage ≥ 45W for laptop chargers (avoid phone chargers)
                 watts = pool['Title'].fillna('').apply(extract_wattage_from_text)
                 pool.loc[watts >= 45, 'Final_Score'] += 50000
                 pool.loc[(watts > 0) & (watts < 45), 'Final_Score'] -= 20000
                 notes.append("≥45W boost, <45W deprioritized")
+                
+                # NEW: Brand Ecosystem for Chargers
+                if is_apple:
+                    apple_chargers = pool['Κατασκευαστής'].fillna('').str.upper() == 'APPLE'
+                    premium_pd = pool['Κατασκευαστής'].fillna('').str.upper().isin(['ANKER', 'BELKIN', 'UGREEN'])
+                    pool.loc[apple_chargers, 'Final_Score'] += 300000
+                    pool.loc[premium_pd, 'Final_Score'] += 80000
+                    notes.append("Brand Ecosystem: Boosted Apple & Premium PD chargers")
+
             elif has_dcin_only:
                 universal = pool['Title'].fillna('').str.lower().str.contains('universal|γενικής|πολλαπλ', regex=True, na=False)
                 pool.loc[universal, 'Final_Score'] += 50000
@@ -2376,8 +2396,8 @@ def run_laptops_engine(trigger, df_products, df_history):
                 
         # ── Logic: Stand / Cooler ──
         elif logic_key == 'STAND_SIZE':
-            # Strictly ban monitor arms from laptop stand recommendations
-            arms = pool['Title'].fillna('').str.lower().str.contains('βραχίονας|arm|dual monitor', regex=True, na=False)
+            # Strictly ban monitor arms/stands from laptop stand recommendations
+            arms = pool['Title'].fillna('').str.lower().str.contains('βραχίονας|arm|dual monitor|triple monitor|οθόνης|monitor support|vesa', regex=True, na=False)
             pool = pool[~arms]
             notes.append("Visual Workstation: Removed monitor arms from laptop stands")
 
