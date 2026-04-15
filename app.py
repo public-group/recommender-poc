@@ -133,9 +133,6 @@ LAPTOP_MARKETING_COPY = {
 
 
 
-
-
-
 # ─────────────────────────────────────────────────────────────
 # 🟢 KIDS BOOKS CONFIGURATION
 # ─────────────────────────────────────────────────────────────
@@ -397,6 +394,11 @@ def load_all_data():
         db = pd.read_excel(excel_file, sheet_name='Books')
         db.columns = db.columns.str.strip()
     else: db = pd.DataFrame()
+
+    if 'Laptops' in available_sheets:
+        dl = pd.read_excel(excel_file, sheet_name='Laptops')
+        dl.columns = dl.columns.str.strip()
+    else: dl = pd.DataFrame()
     
     if not dp.empty:
         parts = [dp[c].fillna('').astype(str).str.strip() for c in COMPAT_COLS if c in dp.columns]
@@ -413,200 +415,350 @@ def load_all_data():
     if not db.empty and CC not in db.columns:
         db[CC] = ''
     
-    return dp, dh, ds, db, available_sheets
+    return dp, dh, ds, db, dl, available_sheets
 
 try:
-    df_products, df_history, df_slots, df_books, sheets_loaded = load_all_data()
+    df_products, df_history, df_slots, df_books, df_laptops, sheets_loaded = load_all_data()
     compat_cols_found = [c for c in COMPAT_COLS if c in df_products.columns]
 except Exception as e:
     st.error(f"🚨 Error loading data: {e}")
     st.code(traceback.format_exc())
     st.stop()
 
-# 🟢 SIDEBAR STYLING
+
+# ═════════════════════════════════════════════════════════════
+# 🟢 NEW SIDEBAR — 2-Level Navigation (Level 1 → Level 2)
+# ═════════════════════════════════════════════════════════════
+# Replaces the entire existing sidebar block from:
+#   "# 🟢 SIDEBAR STYLING" 
+# down through:
+#   the trigger selection if/elif/elif chain
+#
+# This block also handles trigger selection internally (it sets `sel`
+# and `trigger` variables that the rest of your app uses).
+# ═════════════════════════════════════════════════════════════
+
+# ───── Navigation state ─────
+if 'nav_level' not in st.session_state:
+    st.session_state.nav_level = 1   # 1 = L1 grid, 2 = L2 grid + selector
+if 'selected_l1' not in st.session_state:
+    st.session_state.selected_l1 = None
+if 'active_cluster' not in st.session_state:
+    st.session_state.active_cluster = None
+
+# ───── Taxonomy: L1 → L2 mapping ─────
+# To add a new cluster later, add it here AND ensure its engine is wired up below.
+L1_CATEGORIES = [
+    {
+        "key": "Books",
+        "label": "Βιβλία",
+        "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 19.5A2.5 2.5 0 0 1 6.5 17H20'/%3E%3Cpath d='M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z'/%3E%3C/svg%3E",
+    },
+    {
+        "key": "Telephony",
+        "label": "Τηλεφωνία,\nTablets &\nWearables",
+        "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='5' y='2' width='14' height='20' rx='2' ry='2'/%3E%3Cline x1='12' y1='18' x2='12.01' y2='18'/%3E%3C/svg%3E",
+    },
+    {
+        "key": "IT",
+        "label": "Υπολογιστές\n& Περιφερειακά",
+        "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='2' y='4' width='20' height='12' rx='1' ry='1'/%3E%3Cline x1='6' y1='20' x2='18' y2='20'/%3E%3Cline x1='12' y1='16' x2='12' y2='20'/%3E%3C/svg%3E",
+    },
+]
+
+L2_CHILDREN = {
+    "Books":     [{"key": "Kids Books",  "label": "Παιδικά\nΒιβλία",
+                   "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 19.5A2.5 2.5 0 0 1 6.5 17H20'/%3E%3Cpath d='M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z'/%3E%3C/svg%3E"}],
+    "Telephony": [{"key": "Smartphones", "label": "Smart-\nphones",
+                   "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='5' y='2' width='14' height='20' rx='2' ry='2'/%3E%3Cline x1='12' y1='18' x2='12.01' y2='18'/%3E%3C/svg%3E"}],
+    "IT":        [{"key": "Laptops",     "label": "Laptops",
+                   "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='2' y='4' width='20' height='12' rx='1' ry='1'/%3E%3Cline x1='6' y1='20' x2='18' y2='20'/%3E%3Cline x1='12' y1='16' x2='12' y2='20'/%3E%3C/svg%3E"}],
+}
+
+# Reverse: L2 key → parent L1 key (used to highlight which L2 is active)
+L2_TO_L1 = {child["key"]: l1 for l1, children in L2_CHILDREN.items() for child in children}
+
+# ───── Sidebar base styling ─────
 st.sidebar.markdown("""
 <style>
     [data-testid="stSidebar"] > div:first-child { background-color: #f5f5f5 !important; }
     [data-testid="stSidebar"] { background-color: #f5f5f5 !important; }
     [data-testid="stSidebarCollapseButton"] { display: none !important; }
+
     .sidebar-header {
         background-color: #ff5e00; color: white; padding: 18px 20px;
         margin-left: -1rem; margin-right: -1rem; margin-top: -1rem; margin-bottom: 10px;
         font-family: -apple-system, BlinkMacSystemFont, sans-serif;
-        font-size: 18px; font-weight: 700; position: relative;
+        font-size: 18px; font-weight: 700;
         display: flex; align-items: center; justify-content: space-between;
         box-sizing: border-box;
     }
-    [data-testid="stSidebar"] .block-container { padding-top: 0 !important; }
-    [data-testid="stSidebar"] [data-testid="stVerticalBlockBorderWrapper"] { gap: 0.3rem !important; }
     .sidebar-close-btn {
         background: transparent; border: none; color: white; font-size: 22px;
         font-weight: 300; cursor: pointer; padding: 5px 10px; line-height: 1; border-radius: 4px;
-        transition: background 0.15s ease;
     }
     .sidebar-close-btn:hover { background: rgba(255,255,255,0.2); }
+
+    [data-testid="stSidebar"] .block-container { padding-top: 0 !important; }
+    [data-testid="stSidebar"] [data-testid="stVerticalBlockBorderWrapper"] { gap: 0.3rem !important; }
+
+    /* Tile buttons (L1 and L2 grids) */
     [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] button {
-        background: #ffffff !important; border: 1px solid #eaeaea !important;
-        border-radius: 12px !important; padding: 15px 8px !important; min-height: 100px !important;
+        background: #ffffff !important;
+        border: 1px solid #eaeaea !important;
+        border-radius: 12px !important;
+        padding: 55px 6px 12px 6px !important;
+        min-height: 105px !important;
         font-family: -apple-system, BlinkMacSystemFont, sans-serif !important;
         font-size: 11px !important; font-weight: 600 !important; color: #333 !important;
-        transition: all 0.15s ease !important; white-space: pre-line !important;
-        line-height: 1.3 !important; box-shadow: none !important;
+        white-space: pre-line !important; line-height: 1.3 !important;
+        box-shadow: none !important;
+        position: relative !important;
+        transition: all 0.15s ease !important;
     }
     [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] button:hover {
-        border-color: #ff5e00 !important; background: #ffffff !important;
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08) !important; transform: translateY(-1px);
+        border-color: #ff5e00 !important;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.08) !important;
+        transform: translateY(-1px);
     }
-    [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] button:focus {
-        border-color: #ff5e00 !important; border-width: 2px !important;
-        background: #fff !important; box-shadow: 0 4px 12px rgba(255, 94, 0, 0.15) !important;
+    [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] button p {
+        font-size: 11px !important; margin-top: 2px !important;
     }
+
     .section-divider { border: none; border-top: 1px solid #e0e0e0; margin: 8px 0 4px 0; }
     .sidebar-section {
         font-family: -apple-system, BlinkMacSystemFont, sans-serif;
         font-size: 11px; font-weight: 700; color: #888;
-        text-transform: uppercase; letter-spacing: 0.5px; margin: 4px 0 4px 0;
+        text-transform: uppercase; letter-spacing: 0.5px; margin: 8px 0 4px 0;
+    }
+
+    /* Back button row (L2 view) */
+    .l2-breadcrumb {
+        display: flex; align-items: center; gap: 10px;
+        margin: 4px 0 10px 0;
+    }
+    .l2-back-btn-wrap { width: 36px; flex-shrink: 0; }
+    .l2-back-btn-wrap button {
+        background: #ffffff !important;
+        border: 1px solid #eaeaea !important;
+        border-radius: 50% !important;
+        width: 36px !important; height: 36px !important;
+        min-height: 36px !important;
+        padding: 0 !important;
+        font-size: 16px !important; font-weight: 700 !important; color: #333 !important;
+        line-height: 1 !important;
+        white-space: nowrap !important;
+    }
+    .l2-back-btn-wrap button:hover { border-color: #ff5e00 !important; }
+    .l2-breadcrumb-label {
+        font-size: 15px; font-weight: 700; color: #111;
+        line-height: 1.2;
     }
 </style>
 """, unsafe_allow_html=True)
 
+# Header with close button
 st.sidebar.markdown('''
 <div class="sidebar-header">
-    <span>Κατηγορίες</span>
+    <span>Μενού</span>
     <button class="sidebar-close-btn" onclick="window.parent.document.querySelector('[data-testid=\\'stSidebarCollapsedControl\\'] button').click();" title="Κλείσιμο">✕</button>
 </div>
 ''', unsafe_allow_html=True)
 
-if 'active_cluster' not in st.session_state:
-    st.session_state.active_cluster = "Smartphones"
-
-active_cluster = st.session_state.active_cluster
-smartphones_border = "2px solid #ff5e00" if active_cluster == "Smartphones" else "1px solid #eaeaea"
-books_border = "2px solid #ff5e00" if active_cluster == "Kids Books" else "1px solid #eaeaea"
-laptops_border = "2px solid #ff5e00" if active_cluster == "Laptops" else "1px solid #eaeaea"
-
-st.sidebar.markdown(f"""
-<style>
-    [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] button {{
-        background: #ffffff !important; border-radius: 12px !important; min-height: 95px !important;
-        font-size: 11px !important; font-weight: 600 !important; color: #333 !important;
-        white-space: pre-line !important; line-height: 1.3 !important; padding-top: 45px !important;
-    }}
-    [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] > div:first-child button {{ border: {smartphones_border} !important; }}
-    [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] > div:last-child button {{ border: {books_border} !important; }}
-    [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] > div:nth-child(3) button {{ border: {laptops_border} !important; }}
-    [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] button p {{ font-size: 11px !important; margin-top: 5px !important; }}
-</style>
-""", unsafe_allow_html=True)
-
-col1, col2, col3 = st.sidebar.columns(3)
-with col1:
-    if st.button("Smart-\nphones", key="btn_smartphones", use_container_width=True):
-        st.session_state.active_cluster = "Smartphones"
-        st.rerun()
-with col2:
-    if st.button("Παιδικά\nΒιβλία", key="btn_kids_books", use_container_width=True):
-        st.session_state.active_cluster = "Kids Books"
-        st.rerun()
-with col3:
-    if st.button("Laptops", key="btn_laptops", use_container_width=True):
-        st.session_state.active_cluster = "Laptops"
-        st.rerun()
-
-st.sidebar.markdown("""
-<style>
-    [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] > div:nth-child(1) button::before {
-        content: ''; display: block; width: 28px; height: 28px; margin: 0 auto 8px auto;
-        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='5' y='2' width='14' height='20' rx='2' ry='2'%3E%3C/rect%3E%3Cline x1='12' y1='18' x2='12.01' y2='18'%3E%3C/line%3E%3C/svg%3E");
-        background-size: contain; background-repeat: no-repeat; background-position: center;
-        position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
-    }
-    [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] > div:nth-child(2) button::before {
-        content: ''; display: block; width: 28px; height: 28px; margin: 0 auto 8px auto;
-        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 19.5A2.5 2.5 0 0 1 6.5 17H20'%3E%3C/path%3E%3Cpath d='M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z'%3E%3C/path%3E%3C/svg%3E");
-        background-size: contain; background-repeat: no-repeat; background-position: center;
-        position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
-    }
-    [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] > div:nth-child(3) button::before {
-        content: ''; display: block; width: 28px; height: 28px; margin: 0 auto 8px auto;
-        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='2' y='4' width='20' height='12' rx='1' ry='1'%3E%3C/rect%3E%3Cline x1='6' y1='20' x2='18' y2='20'%3E%3C/line%3E%3Cline x1='12' y1='16' x2='12' y2='20'%3E%3C/line%3E%3C/svg%3E");
-        background-size: contain; background-repeat: no-repeat; background-position: center;
-        position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
-    }
-    [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] button { position: relative !important; }
-</style>
-""", unsafe_allow_html=True)
-
-st.sidebar.markdown('<hr class="section-divider">', unsafe_allow_html=True)
 
 # ─────────────────────────────────────────────────────────────
-# TRIGGER SELECTION
+# LEVEL 1 VIEW — Show top-level category tiles
 # ─────────────────────────────────────────────────────────────
-if active_cluster == "Smartphones":
-    if df_products.empty: st.stop()
-    phones = df_products[(df_products['Level 2']=='Mobiles')&(df_products['Hierarchy']=='Smartphones')]
-    if phones.empty: phones = df_products[df_products['Level 2']=='Mobiles']
-    if phones.empty: st.stop()
-    
-    st.sidebar.markdown('<p class="sidebar-section">Επιλέξτε Smartphone</p>', unsafe_allow_html=True)
-    sel = st.sidebar.selectbox("", phones['Title'].unique(), label_visibility="collapsed")
-    trigger = phones[phones['Title']==sel].iloc[0] if sel else None
+if st.session_state.nav_level == 1:
+    st.sidebar.markdown('<p class="sidebar-section">Προϊόντα</p>', unsafe_allow_html=True)
 
-elif active_cluster == "Laptops":
-    if df_products.empty: st.stop()
-    laptops = df_products[(df_products['Level 1']=='IT') & (df_products['Level 2'].isin(LAPTOP_L2_VALUES))]
-    if laptops.empty:
-        laptops = df_products[df_products['Hierarchy'].fillna('').astype(str).str.upper().str.contains('NOTEBOOK|LAPTOP', regex=True, na=False)]
-    if laptops.empty:
-        st.warning("No laptops found in Products sheet.")
-        st.stop()
+    # Render dynamic icon CSS for each L1 column position
+    icon_css = "<style>"
+    for i, l1 in enumerate(L1_CATEGORIES, start=1):
+        icon_css += f"""
+        [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] > div:nth-child({i}) button::before {{
+            content: ''; display: block; width: 32px; height: 32px;
+            background-image: url("data:image/svg+xml,{l1['icon_svg']}");
+            background-size: contain; background-repeat: no-repeat; background-position: center;
+            position: absolute; top: 14px; left: 50%; transform: translateX(-50%);
+        }}
+        """
+    icon_css += "</style>"
+    st.sidebar.markdown(icon_css, unsafe_allow_html=True)
 
-    st.sidebar.markdown('<p class="sidebar-section">Επιλέξτε Laptop</p>', unsafe_allow_html=True)
-    laptop_titles = laptops['Title'].unique()
-    if len(laptop_titles) == 0: st.stop()
-    sel = st.sidebar.selectbox("", laptop_titles, label_visibility="collapsed", key="laptop_title")
-    trigger = laptops[laptops['Title']==sel].iloc[0] if sel else None
-    
-elif active_cluster == "Kids Books":
-    if df_books.empty: st.stop()
-    kids_books = df_books[(df_books['Level 1'] == 'Books') & (df_books['Level 2'].isin(KIDS_BOOKS_LEVEL2))]
-    if kids_books.empty: kids_books = df_books[df_books['Level 1'] == 'Books']
-    if kids_books.empty: st.stop()
-    
-    if 'Σειρά βιβλίου' in kids_books.columns:
-        series_col = kids_books['Σειρά βιβλίου'].fillna('').astype(str)
-        series_col = series_col[(series_col != '0') & (series_col != '') & (series_col.str.lower() != 'nan') & (series_col.str.lower() != 'n/a')]
-        if len(series_col) > 0:
-            series_counts = series_col.value_counts()
-            top_series = series_counts.head(200)
-            series_items = [(f"{name} ({count})", name) for name, count in top_series.items()]
-            
-            st.sidebar.markdown('<p class="sidebar-section">Φιλτράρισμα ανά Σειρά</p>', unsafe_allow_html=True)
-            series_search = st.sidebar.text_input("🔍 Αναζήτηση σειράς:", placeholder="π.χ. Harry Potter", label_visibility="collapsed")
-            if series_search:
-                matching = [(f"{name} ({count})", name) for name, count in series_counts.items() if series_search.lower() in name.lower()][:100]
-                series_options = ['Όλες οι σειρές'] + [m[0] for m in matching]
-                series_display = {m[0]: m[1] for m in matching}
+    # 2-column grid (3 categories: 2 in row 1, 1 in row 2... or use columns dynamically)
+    # We'll show pairs of 2 to match the screenshot
+    n_l1 = len(L1_CATEGORIES)
+    for row_start in range(0, n_l1, 2):
+        row_items = L1_CATEGORIES[row_start:row_start + 2]
+        cols = st.sidebar.columns(2)
+        for col, l1 in zip(cols, row_items):
+            with col:
+                if st.button(l1["label"], key=f"l1_{l1['key']}", use_container_width=True):
+                    st.session_state.nav_level = 2
+                    st.session_state.selected_l1 = l1["key"]
+                    # Auto-select the first L2 child if there's only one
+                    children = L2_CHILDREN.get(l1["key"], [])
+                    if len(children) == 1:
+                        st.session_state.active_cluster = children[0]["key"]
+                    else:
+                        st.session_state.active_cluster = None
+                    st.rerun()
+
+    # No active cluster yet → stop here, nothing to recommend
+    sel = None
+    trigger = None
+
+
+# ─────────────────────────────────────────────────────────────
+# LEVEL 2 VIEW — Show L2 tiles + product selector + trigger card
+# ─────────────────────────────────────────────────────────────
+else:
+    selected_l1_key = st.session_state.selected_l1
+    selected_l1 = next((x for x in L1_CATEGORIES if x["key"] == selected_l1_key), None)
+    children = L2_CHILDREN.get(selected_l1_key, [])
+
+    # Breadcrumb row: ‹ back arrow + parent label (matches screenshot)
+    bc_col1, bc_col2 = st.sidebar.columns([1, 6])
+    with bc_col1:
+        st.markdown('<div class="l2-back-btn-wrap">', unsafe_allow_html=True)
+        if st.button("‹", key="back_to_l1", help="Επιστροφή στο μενού"):
+            st.session_state.nav_level = 1
+            st.session_state.selected_l1 = None
+            st.session_state.active_cluster = None
+            st.rerun()
+        st.markdown('</div>', unsafe_allow_html=True)
+    with bc_col2:
+        label_clean = (selected_l1["label"] if selected_l1 else "").replace("\n", " ")
+        st.markdown(f'<div class="l2-breadcrumb-label">{label_clean}</div>', unsafe_allow_html=True)
+
+    # L2 tiles — render after the breadcrumb (in their own horizontal block)
+    st.sidebar.markdown('<hr class="section-divider">', unsafe_allow_html=True)
+
+    # Active border CSS for L2 tiles
+    active_cluster = st.session_state.active_cluster
+    border_css = "<style>"
+    for i, child in enumerate(children, start=1):
+        border = "2px solid #ff5e00" if child["key"] == active_cluster else "1px solid #eaeaea"
+        border_css += f"""
+        [data-testid="stSidebar"] [data-testid="stHorizontalBlock"]:not(:first-of-type) > div:nth-child({i}) button {{
+            border: {border} !important;
+        }}
+        [data-testid="stSidebar"] [data-testid="stHorizontalBlock"]:not(:first-of-type) > div:nth-child({i}) button::before {{
+            content: ''; display: block; width: 32px; height: 32px;
+            background-image: url("data:image/svg+xml,{child['icon_svg']}");
+            background-size: contain; background-repeat: no-repeat; background-position: center;
+            position: absolute; top: 14px; left: 50%; transform: translateX(-50%);
+        }}
+        """
+    border_css += "</style>"
+    st.sidebar.markdown(border_css, unsafe_allow_html=True)
+
+    # Render L2 tiles in pairs
+    n_l2 = len(children)
+    for row_start in range(0, n_l2, 2):
+        row_items = children[row_start:row_start + 2]
+        # Pad to 2 columns for consistent layout
+        if len(row_items) == 1:
+            cols = st.sidebar.columns(2)
+            with cols[0]:
+                child = row_items[0]
+                if st.button(child["label"], key=f"l2_{child['key']}", use_container_width=True):
+                    st.session_state.active_cluster = child["key"]
+                    st.rerun()
+            # cols[1] left empty
+        else:
+            cols = st.sidebar.columns(2)
+            for col, child in zip(cols, row_items):
+                with col:
+                    if st.button(child["label"], key=f"l2_{child['key']}", use_container_width=True):
+                        st.session_state.active_cluster = child["key"]
+                        st.rerun()
+
+    st.sidebar.markdown('<hr class="section-divider">', unsafe_allow_html=True)
+
+    # ───── Product selector + trigger setup based on active_cluster ─────
+    sel = None
+    trigger = None
+    active_cluster = st.session_state.active_cluster
+
+    if active_cluster == "Smartphones":
+        if df_products.empty: st.stop()
+        phones = df_products[(df_products['Level 2']=='Mobiles') & (df_products['Hierarchy']=='Smartphones')]
+        if phones.empty: phones = df_products[df_products['Level 2']=='Mobiles']
+        if not phones.empty:
+            st.sidebar.markdown('<p class="sidebar-section">Επιλέξτε Smartphone</p>', unsafe_allow_html=True)
+            sel = st.sidebar.selectbox("", phones['Title'].unique(), label_visibility="collapsed", key="sm_sel")
+            trigger = phones[phones['Title']==sel].iloc[0] if sel else None
+
+    elif active_cluster == "Laptops":
+        if df_laptops.empty:
+            st.sidebar.warning("Sheet 'Laptops' is empty or missing.")
+        else:
+            laptops = df_laptops[(df_laptops['Level 1']=='IT') & (df_laptops['Level 2'].isin(LAPTOP_L2_VALUES))]
+            if laptops.empty:
+                # Fallback: hierarchy-based
+                laptops = df_laptops[df_laptops['Hierarchy'].fillna('').astype(str).str.upper().str.contains('NOTEBOOK|LAPTOP', regex=True, na=False)]
+            if laptops.empty:
+                st.sidebar.warning("No laptop rows found in Laptops sheet.")
             else:
-                series_options = ['Όλες οι σειρές'] + [item[0] for item in series_items]
-                series_display = {item[0]: item[1] for item in series_items}
-            
-            selected_series_display = st.sidebar.selectbox("", series_options, label_visibility="collapsed")
-            if selected_series_display != 'Όλες οι σειρές':
-                actual_series = series_display.get(selected_series_display, selected_series_display)
-                kids_books = kids_books[kids_books['Σειρά βιβλίου'] == actual_series]
-    
-    st.sidebar.markdown('<p class="sidebar-section">Επιλέξτε Βιβλίο</p>', unsafe_allow_html=True)
-    sel = st.sidebar.selectbox("", kids_books['Title'].unique(), label_visibility="collapsed")
-    if sel:
-        matching_books = kids_books[kids_books['Title'] == sel].copy()
-        if len(matching_books) > 1 and 'Σειρά βιβλίου' in matching_books.columns:
-            matching_books['_has_series'] = matching_books['Σειρά βιβλίου'].apply(lambda x: 0 if (pd.isna(x) or str(x).strip().lower() in ['', '0', 'nan']) else 1)
-            matching_books = matching_books.sort_values('_has_series', ascending=False)
-        trigger = matching_books.iloc[0]
-    else: trigger = None
+                st.sidebar.markdown('<p class="sidebar-section">Επιλέξτε Laptop</p>', unsafe_allow_html=True)
+                sel = st.sidebar.selectbox("", laptops['Title'].unique(), label_visibility="collapsed", key="lt_sel")
+                trigger = laptops[laptops['Title']==sel].iloc[0] if sel else None
 
-if trigger is None: st.stop()
+    elif active_cluster == "Kids Books":
+        if df_books.empty: st.stop()
+        kids_books = df_books[(df_books['Level 1'] == 'Books') & (df_books['Level 2'].isin(KIDS_BOOKS_LEVEL2))]
+        if kids_books.empty: kids_books = df_books[df_books['Level 1'] == 'Books']
+        if not kids_books.empty:
+            if 'Σειρά βιβλίου' in kids_books.columns:
+                series_col = kids_books['Σειρά βιβλίου'].fillna('').astype(str)
+                series_col = series_col[(series_col != '0') & (series_col != '') & (series_col.str.lower() != 'nan') & (series_col.str.lower() != 'n/a')]
+                if len(series_col) > 0:
+                    series_counts = series_col.value_counts()
+                    top_series = series_counts.head(200)
+                    series_items = [(f"{name} ({count})", name) for name, count in top_series.items()]
+
+                    st.sidebar.markdown('<p class="sidebar-section">Φιλτράρισμα ανά Σειρά</p>', unsafe_allow_html=True)
+                    series_search = st.sidebar.text_input("🔍 Αναζήτηση σειράς:", placeholder="π.χ. Harry Potter", label_visibility="collapsed", key="kb_search")
+                    if series_search:
+                        matching = [(f"{name} ({count})", name) for name, count in series_counts.items() if series_search.lower() in name.lower()][:100]
+                        series_options = ['Όλες οι σειρές'] + [m[0] for m in matching]
+                        series_display = {m[0]: m[1] for m in matching}
+                    else:
+                        series_options = ['Όλες οι σειρές'] + [item[0] for item in series_items]
+                        series_display = {item[0]: item[1] for item in series_items}
+
+                    selected_series_display = st.sidebar.selectbox("", series_options, label_visibility="collapsed", key="kb_series")
+                    if selected_series_display != 'Όλες οι σειρές':
+                        actual_series = series_display.get(selected_series_display, selected_series_display)
+                        kids_books = kids_books[kids_books['Σειρά βιβλίου'] == actual_series]
+
+            st.sidebar.markdown('<p class="sidebar-section">Επιλέξτε Βιβλίο</p>', unsafe_allow_html=True)
+            sel = st.sidebar.selectbox("", kids_books['Title'].unique(), label_visibility="collapsed", key="kb_sel")
+            if sel:
+                matching_books = kids_books[kids_books['Title'] == sel].copy()
+                if len(matching_books) > 1 and 'Σειρά βιβλίου' in matching_books.columns:
+                    matching_books['_has_series'] = matching_books['Σειρά βιβλίου'].apply(lambda x: 0 if (pd.isna(x) or str(x).strip().lower() in ['', '0', 'nan']) else 1)
+                    matching_books = matching_books.sort_values('_has_series', ascending=False)
+                trigger = matching_books.iloc[0]
+
+
+# ───── Compatibility shim: rest of app expects `active_cluster` as a string ─────
+active_cluster = st.session_state.active_cluster or ""
+
+# If we're at L1 view OR no cluster selected yet → show prompt and stop
+if trigger is None:
+    st.markdown("""
+    <div style='margin-top:80px; padding:40px; background:#f8f9fa; border-radius:16px; text-align:center;'>
+        <h2 style='color:#333; font-family:-apple-system,BlinkMacSystemFont,sans-serif; font-weight:700; margin-bottom:10px;'>
+            Επίλεξε κατηγορία
+        </h2>
+        <p style='color:#666; font-size:14px;'>Πάτησε ένα εικονίδιο στο μενού αριστερά για να ξεκινήσεις.</p>
+    </div>
+    """, unsafe_allow_html=True)
+    st.stop()
+
 
 # ─────────────────────────────────────────────────────────────
 # DISPLAY HEADER & SIDEBAR CARD
