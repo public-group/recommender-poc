@@ -75,7 +75,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v19.4 — Laptops: Gaming persona (mouse/pad/headset/bag) + Monitor-stand exclusion + Title-size cooler fallback
+        🟢 Engine v19.8 — Laptops: Size-based headset hierarchy+type filter (&lt;15" BT/On-Ear, ≥15" Over-Ear)
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -113,7 +113,7 @@ LAPTOP_MAINSTREAM_SLOTS = [
     (5,  'Mousepad',         ['MOUSE PADS'],                                 'MOUSEPAD_LOGIC'),
     (6,  'Βάση / Cooler',    ['NOTEBOOK COOLERS', 'ΒΑΣΕΙΣ ΓΡΑΦΕΙΟΥ'],        'STAND_SIZE'),
     (7,  'Οθόνη',            ['TFT MONITOR'],                                'MONITOR_LOGIC'),
-    (8,  'Αποθήκευση',       ['USB FLASH', 'EXTERNAL HDD USB'],              'STORAGE_LOGIC'),
+    (8,  'Αποθήκευση',       ['USB FLASH', 'EXTERNAL HDD USB', 'EXTERNAL SSD USB', 'PORTABLE SSD', 'SSD EXTERNAL'],              'STORAGE_LOGIC'),
     (9,  'Headset / Office', ['OVERHEAD', 'BLUETOOTH', 'OFFICE SUITES'],     'OFFICE_HEADSET_LOGIC'),
     (10, 'Θήκη Laptop',      ['ΘΗΚΕΣ SLEEVE LAPTOP'],                        'SLEEVE_SIZE'),
 ]
@@ -2596,6 +2596,14 @@ def run_laptops_engine(trigger, df_products, df_history):
                 gaming_mon = pool['Title'].fillna('').str.lower().str.contains('gaming|odyssey|predator|144hz|165hz|180hz|240hz', regex=True, na=False)
                 pool = pool[~gaming_mon]
                 notes.append("Visual Workstation (Persona): Excluded gaming monitors")
+            else:
+                # 🎮 GAMING LAPTOP: positively boost gaming monitors (brand-line + high-refresh)
+                gaming_mon_mask = pool['Title'].fillna('').str.lower().str.contains(
+                    r'gaming|odyssey|predator|aorus|rog swift|rog strix|ultragear|nitro|mag\b|viewsonic elite',
+                    regex=True, na=False
+                )
+                pool.loc[gaming_mon_mask, 'Final_Score'] += 200000
+                notes.append(f"🎮 Gaming: Boosted gaming monitors +200k ({gaming_mon_mask.sum()} items)")
 
             if tres_tier > 0:
                 pool['_res_tier'] = pool['Ανάλυση Οθόνης'].apply(get_resolution_tier)
@@ -2684,19 +2692,70 @@ def run_laptops_engine(trigger, df_products, df_history):
             pool['_p'] = pool['LIST PRICE'].apply(parse_euro_price)
 
             if is_headset.any():
-                # 🎮 GAMING LAPTOP: gaming headsets trump everything else here.
-                # Office/lifestyle headsets make no sense for a gaming rig.
+                # ══════════════════════════════════════════════════════
+                # SIZE-BASED HIERARCHY + TYPE FILTER (HARD RULE)
+                #   <15": Bluetooth hierarchy  OR  Overhead hierarchy + ON EAR type
+                #   ≥15": Overhead hierarchy + OVER EAR type
+                # Office Suites are preserved regardless (they aren't headsets).
+                # ══════════════════════════════════════════════════════
+                hier_upper = pool['Hierarchy'].fillna('').str.upper()
+                is_bluetooth_hier = hier_upper.str.contains('BLUETOOTH')
+                is_overhead_hier  = hier_upper.str.contains('OVERHEAD')
+                is_office         = hier_upper.str.contains('OFFICE')
+
+                if 'Τύπος ακουστικών' in pool.columns:
+                    type_col = pool['Τύπος ακουστικών'].fillna('').str.upper()
+                else:
+                    type_col = pd.Series('', index=pool.index)
+
+                is_onear  = is_overhead_hier & type_col.str.contains('ON EAR')
+                is_overear = is_overhead_hier & type_col.str.contains('OVER EAR')
+
+                if tscreen > 0:
+                    if tscreen < 15:
+                        allowed_headset = is_bluetooth_hier | is_onear
+                        rule_label = f"<15\" rule: Bluetooth OR Overhead+ON-EAR only"
+                    else:
+                        allowed_headset = is_overear
+                        rule_label = f"≥15\" rule: Overhead+OVER-EAR only"
+
+                    keep_mask = allowed_headset | is_office
+                    b4 = len(pool)
+                    filtered = pool[keep_mask].copy()
+                    if not filtered.empty:
+                        pool = filtered
+                        notes.append(f"🎧 {rule_label}: {b4}→{len(pool)}")
+                        # Recompute masks on filtered pool for downstream boosts
+                        hier_upper = pool['Hierarchy'].fillna('').str.upper()
+                        is_bluetooth_hier = hier_upper.str.contains('BLUETOOTH')
+                        is_overhead_hier  = hier_upper.str.contains('OVERHEAD')
+                        is_office         = hier_upper.str.contains('OFFICE')
+                        is_headset        = ~is_office
+                        if 'Τύπος ακουστικών' in pool.columns:
+                            type_col = pool['Τύπος ακουστικών'].fillna('').str.upper()
+                        else:
+                            type_col = pd.Series('', index=pool.index)
+                        is_onear  = is_overhead_hier & type_col.str.contains('ON EAR')
+                        is_overear = is_overhead_hier & type_col.str.contains('OVER EAR')
+                        is_earbud = is_bluetooth_hier  # semantic alias for downstream boosts
+                        is_overhead = is_overhead_hier  # semantic alias for downstream boosts
+                    else:
+                        notes.append(f"⚠ {rule_label} would empty pool — rule skipped")
+                        is_earbud = is_bluetooth_hier
+                        is_overhead = is_overhead_hier
+                else:
+                    is_earbud = is_bluetooth_hier
+                    is_overhead = is_overhead_hier
+
+                # ── Persona boosts (all on top of the filtered pool) ──
                 if is_gaming:
                     gaming_mask = pool['Title'].fillna('').str.lower().str.contains(
                         r'gaming|razer|corsair|steelseries|hyperx|logitech g\b|astro|asus rog|rog delta|kraken|cloud ii|arctis|blackshark',
                         regex=True, na=False
                     )
                     pool.loc[is_headset & gaming_mask, 'Final_Score'] += 250000
-                    # Gaming laptops at ≥15" get overhead gaming headsets (not earbuds)
-                    is_overhead_check = pool['Hierarchy'].fillna('').str.upper().str.contains('OVERHEAD')
-                    pool.loc[is_headset & gaming_mask & is_overhead_check, 'Final_Score'] += 50000
+                    pool.loc[is_headset & gaming_mask & is_overhead, 'Final_Score'] += 50000
                     notes.append(f"🎮 Gaming: Boosted gaming headsets +250k ({(is_headset & gaming_mask).sum()} items)")
-                # Safely check if the column exists in the products DataFrame
                 elif 'Προτεινόμενη χρήση' in pool.columns:
                     if is_premium or is_apple:
                         prem_use = pool['Προτεινόμενη χρήση'].fillna('').str.lower().str.contains('premium|επαγγελματική', regex=True, na=False)
@@ -2709,28 +2768,15 @@ def run_laptops_engine(trigger, df_products, df_history):
                 else:
                     notes.append("Persona: Boost skipped ('Προτεινόμενη χρήση' column missing from candidates)")
 
-                # --- Strict Taxonomy Audio Size Matching ---
-                is_earbud = pool['Hierarchy'].fillna('').str.upper().str.contains('BLUETOOTH')
-                
-                if 'Τύπος ακουστικών' in pool.columns:
-                    type_col = pool['Τύπος ακουστικών'].fillna('').str.upper()
-                else:
-                    type_col = pd.Series('', index=pool.index)
-                    
-                is_overhead = pool['Hierarchy'].fillna('').str.upper().str.contains('OVERHEAD') | type_col.str.contains('OVER EAR|ON EAR')
-
-                # Portability vs Workstation vs Gaming
-                if is_gaming:
-                    # Gamers want full-size headsets regardless of laptop portability
-                    pool.loc[is_headset & is_overhead, 'Final_Score'] += 60000
-                    pool.loc[is_headset & is_earbud, 'Final_Score'] -= 40000
-                    notes.append("🎮 Gaming: Overhead boost, earbuds penalized")
-                elif tscreen > 0 and tscreen <= 14:
-                    pool.loc[is_headset & is_earbud, 'Final_Score'] += 30000
-                    notes.append("Visual Workstation: Boosted Bluetooth/Earbuds for ≤14\" portability")
-                elif tscreen >= 15:
-                    pool.loc[is_headset & is_overhead, 'Final_Score'] += 30000
-                    notes.append("Visual Workstation: Boosted Overhead/On-Ear for ≥15\" workstation")
+                # Apple Workstation ecosystem — applies when ≥15" (over-ear only now)
+                if tscreen >= 15 and is_apple:
+                    premium_overhead = pool['Title'].fillna('').str.lower().str.contains(
+                        r'airpods max|wh-1000xm|wh1000xm|quietcomfort|qc\d|momentum \d|bose 700|audio-technica|beats studio',
+                        regex=True, na=False
+                    )
+                    pool.loc[is_headset & premium_overhead, 'Final_Score'] += 100000
+                    if (is_headset & premium_overhead).any():
+                        notes.append(f"🍎 Apple Workstation: Premium overhead brands boosted +100k ({(is_headset & premium_overhead).sum()} items)")
 
                 # Headset Sane Price Tiering (Max ~15% of laptop price)
                 if tprice >= 2000:
@@ -2741,6 +2787,7 @@ def run_laptops_engine(trigger, df_products, df_history):
                     max_hs_price = max(50, tprice * 0.15)
                     pool.loc[is_headset & (pool['_p'] > max_hs_price), 'Final_Score'] -= 100000
                     notes.append(f"Price Tiering: Penalized headsets >€{max_hs_price:.0f}")
+ 
 
 
                     
@@ -2831,6 +2878,13 @@ def run_laptops_engine(trigger, df_products, df_history):
                     b4 = len(pool)
                     pool = pool[is_ssd].copy()
                     notes.append(f"Tier {laptop_tier}: SSD-only filter {b4}→{len(pool)}")
+                    # Recompute is_ssd/is_hdd on filtered pool
+                    is_ssd = pool['Title'].fillna('').str.lower().str.contains(r'\bssd\b|portable ssd|nvme|t7|t5|sandisk extreme', regex=True, na=False)
+                else:
+                    # No SSDs in pool → at minimum, penalise HDDs so flash drives win
+                    # over HDDs (flash is smaller but closer to SSD form factor).
+                    pool.loc[is_hdd, 'Final_Score'] -= 100000
+                    notes.append(f"⚠ Tier {laptop_tier}: No SSDs in pool — HDDs penalised -100k (check hierarchy taxonomy)")
                 pool.loc[pool['_p'] >= 100, 'Final_Score'] += 100000  # favour higher capacity / better brands
                 notes.append("Tier 3+: Boost ≥€100 SSDs (speed + capacity match)")
             elif laptop_tier == 2:
@@ -2843,11 +2897,19 @@ def run_laptops_engine(trigger, df_products, df_history):
                 pool.loc[(pool['_p'] >= 25) & (pool['_p'] <= 60), 'Final_Score'] += 40000
                 notes.append("Tier 1: Value storage (€25–€60 range)")
 
-            # Apple users: boost Samsung T7/T9 and SanDisk Extreme (well-known Mac-compatible SSDs)
+            # Apple users: boost Mac-compatible portable SSDs only (not HDDs!)
+            # LaCie makes BOTH the "Mobile Drive" (HDD) and the "Rugged/Mobile SSD",
+            # so we only match LaCie products whose title contains SSD indicators.
             if is_apple:
-                mac_ssd = pool['Title'].fillna('').str.lower().str.contains('samsung t7|samsung t9|sandisk extreme|lacie', regex=True, na=False)
-                pool.loc[mac_ssd, 'Final_Score'] += 50000
-                notes.append("Apple: Mac-friendly SSD brands boosted")
+                lacie_ssd = pool['Title'].fillna('').str.lower().str.contains(r'lacie', regex=True, na=False) & is_ssd
+                other_mac_ssd = pool['Title'].fillna('').str.lower().str.contains(
+                    r'samsung t7|samsung t9|sandisk extreme (portable )?ssd',
+                    regex=True, na=False
+                )
+                mac_ssd_mask = lacie_ssd | other_mac_ssd
+                pool.loc[mac_ssd_mask, 'Final_Score'] += 50000
+                if mac_ssd_mask.any():
+                    notes.append(f"🍎 Apple: Mac-friendly SSDs boosted +50k ({mac_ssd_mask.sum()} items)")
 
         # ── GENERIC: just sales + availability ──
         # logic_key == 'GENERIC' — no extra filtering needed
