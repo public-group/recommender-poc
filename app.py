@@ -75,7 +75,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v19.1 — Laptops: Apple-only chargers for Mac + Microsoft Surface Ecosystem Boost
+        🟢 Engine v19.2 — Laptops: Hard budget ceilings (anti-overbuy) + Tier-aware FHD rule
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -2491,13 +2491,19 @@ def run_laptops_engine(trigger, df_products, df_history):
             mouse_min, mouse_max = get_accessory_budget('MOUSE', laptop_tier)
             if laptop_tier > 0:
                 in_band = (pool['_p'] >= mouse_min) & (pool['_p'] <= mouse_max)
-                pool.loc[in_band, 'Final_Score'] += 60000
+                # Boost raised to 150k so it beats the ecosystem +100k
+                pool.loc[in_band, 'Final_Score'] += 150000
+
+                # ANTI-OVERBUY: a €150 mouse on a €798 laptop feels like upselling
+                overbuy_threshold = mouse_max * 2.0
+                pool.loc[pool['_p'] > overbuy_threshold, 'Final_Score'] -= 250000
+
                 # Tier 4 anti-cheap-trap penalty (don't pair €15 mouse with €4k laptop)
                 if laptop_tier == 4:
                     pool.loc[pool['_p'] < mouse_min * 0.5, 'Final_Score'] -= 100000
-                notes.append(f"Tier {laptop_tier} ({tier_label}): Boost €{mouse_min:.0f}–€{mouse_max:.0f} mice")
+                notes.append(f"Tier {laptop_tier} ({tier_label}): Boost €{mouse_min:.0f}–€{mouse_max:.0f} (+150k), overbuy >€{overbuy_threshold:.0f} (-250k)")
 
-            # Apple ecosystem priority (overrides tier within Apple lineage)
+            # Apple ecosystem priority (subordinate to tier budget now — tier boost +150k > ecosystem +100k)
             if is_apple:
                 apple_mice = pool['Κατασκευαστής'].fillna('').str.upper() == 'APPLE'
                 mac_logi = pool['Title'].fillna('').str.lower().str.contains('mac|mx master|mx anywhere')
@@ -2551,9 +2557,12 @@ def run_laptops_engine(trigger, df_products, df_history):
                 pool['_res_tier'] = pool['Ανάλυση Οθόνης'].apply(get_resolution_tier)
                 pool = pool[(pool['_res_tier'] >= tres_tier) | (pool['_res_tier'] == 0)]
 
-            if is_apple or is_premium:
+            # FHD exclusion ONLY at Tier 3+ (€1200+). A €798 MacBook doesn't
+            # need QHD/4K — FHD fits the budget band and is a legitimate pairing.
+            if (is_apple or is_premium) and laptop_tier >= 3:
                 fhd_mon = pool['Title'].fillna('').str.lower().str.contains('fhd|1080p|1920x1080', regex=True, na=False)
                 pool = pool[~fhd_mon]
+                notes.append("Tier 3+ premium: Excluded FHD monitors")
 
             # Tiered Performance Budgets (20% Rule: Monitor = 50% of bundle ≈ 10-15% of laptop)
             pool['_p'] = pool['LIST PRICE'].apply(parse_euro_price)
@@ -2566,11 +2575,20 @@ def run_laptops_engine(trigger, df_products, df_history):
             mon_min, mon_max = get_accessory_budget('MONITOR', laptop_tier)
             if laptop_tier > 0:
                 in_band = (pool['_p'] >= mon_min) & (pool['_p'] <= mon_max)
-                pool.loc[in_band, 'Final_Score'] += 60000
-                # Tier 4 anti-cheap trap — never pair €100 monitor with €3k laptop
+                # Boost is now +150k (was 60k) — has to outweigh ecosystem +100k boosts below
+                pool.loc[in_band, 'Final_Score'] += 150000
+
+                # ANTI-OVERBUY (NEW): hard penalty for monitors priced >2× the tier max.
+                # Fixes the case where a €798 Mac got paired with a €1k+ Dell UltraSharp.
+                # The 20% rule is a budget guide, not a suggestion.
+                overbuy_threshold = mon_max * 2.0
+                pool.loc[pool['_p'] > overbuy_threshold, 'Final_Score'] -= 250000
+
+                # Anti-cheap-trap — no €100 monitor on a €3k laptop
                 if laptop_tier >= 3:
                     pool.loc[pool['_p'] < mon_min * 0.5, 'Final_Score'] -= 100000
-                notes.append(f"Tier {laptop_tier} ({tier_label}): Boost €{mon_min:.0f}–€{mon_max:.0f} monitors")
+
+                notes.append(f"Tier {laptop_tier} ({tier_label}): Boost €{mon_min:.0f}–€{mon_max:.0f} (+150k), overbuy >€{overbuy_threshold:.0f} (-250k)")
 
             # High-refresh boost for Tier 3+ (RTX/AI-class laptops need 144Hz+)
             if laptop_tier >= 3 or is_gaming:
@@ -2581,10 +2599,12 @@ def run_laptops_engine(trigger, df_products, df_history):
 
             vesa_mon = pool['Title'].fillna('').str.lower().str.contains('vesa|ergonomic|pivot', regex=True, na=False)
             pool.loc[vesa_mon, 'Final_Score'] += 10000
-            
+
             if is_apple:
                 usbc_mon = pool['Title'].fillna('').str.lower().str.contains('usb-c|type-c|thunderbolt|mac', regex=True, na=False)
-                pool.loc[usbc_mon, 'Final_Score'] += 100000
+                # Ecosystem boost capped at 50k (was 100k) so it doesn't override
+                # tier budget enforcement. USB-C is a tiebreaker, not a bulldozer.
+                pool.loc[usbc_mon, 'Final_Score'] += 50000
                 if tprice >= 1400:
                     pool.loc[apple_monitors, 'Final_Score'] += 500000 
                 else:
@@ -2595,8 +2615,9 @@ def run_laptops_engine(trigger, df_products, df_history):
             elif is_surface:
                 usbc_mon = pool['Title'].fillna('').str.lower().str.contains('usb-c|type-c|thunderbolt', regex=True, na=False)
                 if usbc_mon.any():
-                    pool.loc[usbc_mon, 'Final_Score'] += 100000
+                    pool.loc[usbc_mon, 'Final_Score'] += 50000
                     notes.append("🪟 Surface: USB-C monitor boost (single-cable docking)")
+
 
 
                 
