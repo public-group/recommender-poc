@@ -75,7 +75,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v19.8 — Laptops: Size-based headset hierarchy+type filter (&lt;15" BT/On-Ear, ≥15" Over-Ear)
+        🟢 Engine v20.0 — Laptops: Unified "filter_or_penalize" fallback pattern across all slots
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -432,6 +432,28 @@ def apply_cheap_trap(pool, laptop_price, slot_role, price_col='_p'):
     filtered = pool[pool[price_col] >= CHEAP_TRAP_MIN_ACCESSORY_PRICE]
     if filtered.empty: return pool, f"⚠ Cheap-trap would empty pool — kept all {b4}"
     return filtered, f"Cheap-trap (€{laptop_price:.0f} laptop): ≥€{CHEAP_TRAP_MIN_ACCESSORY_PRICE:.0f} only ({b4}→{len(filtered)})"
+
+
+def filter_or_penalize(pool, keep_mask, label, penalty=150000):
+    """Try to filter pool down to keep_mask. If that would empty, fall back to
+    applying a penalty to the ~keep_mask items instead (so they can still appear
+    if nothing else does, but anything better will beat them).
+    Returns (new_pool, note_str).
+
+    Pattern used by: monitor gaming/FHD exclusions, mouse/pad gaming filters,
+    storage SSD-only filter — anywhere a "remove X" filter might empty the pool."""
+    b4 = len(pool)
+    kept = pool[keep_mask]
+    if not kept.empty:
+        return kept, f"{label}: filtered {b4}→{len(kept)}"
+    # Would empty → keep pool but penalise the items we wanted to drop
+    if keep_mask.all() or (~keep_mask).all():
+        # Every item is either kept or every item is dropped — nothing to penalise
+        return pool, f"⚠ {label}: all items on same side, no filter applied"
+    pool = pool.copy()
+    pool.loc[~keep_mask, 'Final_Score'] -= penalty
+    return pool, f"⚠ {label}: would empty pool → penalised {int((~keep_mask).sum())} items (-{penalty//1000}k)"
+
 
 # ─────────────────────────────────────────────────────────────
 # DATA
@@ -2444,20 +2466,15 @@ def run_laptops_engine(trigger, df_products, df_history):
 
                 # Brand Ecosystem fallback for chargers
                 if is_apple:
-                    # 🍎 STRICT: Apple laptops get Apple chargers ONLY.
-                    # MagSafe/Apple USB-C are the only ones Apple users expect
-                    # to see recommended; Anker/Belkin/UGREEN feel off-brand on
-                    # a Mac product page even if electrically compatible.
-                    apple_chargers_mask = pool['Κατασκευαστής'].fillna('').str.strip().str.upper() == 'APPLE'
-                    if apple_chargers_mask.any():
-                        b4 = len(pool)
-                        pool = pool[apple_chargers_mask].copy()
-                        notes.append(f"🍎 Apple-only charger filter: {b4}→{len(pool)}")
-                    else:
-                        # Fallback: no Apple chargers in catalog → allow premium PD brands rather than fail empty
-                        premium_pd = pool['Κατασκευαστής'].fillna('').str.upper().isin(['ANKER', 'BELKIN', 'UGREEN'])
-                        pool.loc[premium_pd & usbc_mask, 'Final_Score'] += 80000
-                        notes.append("⚠ No Apple chargers in catalog → fallback to premium PD brands")
+                    # 🍎 STRICT: Apple laptops get Apple chargers ONLY. If catalog
+                    # is empty, penalise non-Apple chargers (-150k) so premium PD
+                    # brands win over random cheapies — instead of going wide open.
+                    apple_mask = pool['Κατασκευαστής'].fillna('').str.strip().str.upper() == 'APPLE'
+                    pool, note = filter_or_penalize(pool, apple_mask, "🍎 Apple-only charger")
+                    notes.append(note)
+                    # Then still give premium PD brands a boost in case we fell back
+                    premium_pd = pool['Κατασκευαστής'].fillna('').str.upper().isin(['ANKER', 'BELKIN', 'UGREEN'])
+                    pool.loc[premium_pd & usbc_mask, 'Final_Score'] += 80000
 
             elif has_dcin_only:
                 universal = pool['Title'].fillna('').str.lower().str.contains('universal|γενικής|πολλαπλ', regex=True, na=False)
@@ -2494,9 +2511,9 @@ def run_laptops_engine(trigger, df_products, df_history):
         # ── Logic: Smart Mouse Selection (Performance Pairing — Tier-Driven) ──
         elif logic_key == 'MOUSE_LOGIC':
             if not is_gaming:
-                ng = ~pool['Title'].fillna('').str.lower().str.contains('rgb|gaming', regex=True, na=False)
-                if ng.any(): pool = pool[ng]
-                notes.append("Persona: Excluded gaming/RGB mice")
+                not_gaming_mask = ~pool['Title'].fillna('').str.lower().str.contains('rgb|gaming', regex=True, na=False)
+                pool, note = filter_or_penalize(pool, not_gaming_mask, "Persona: Exclude gaming/RGB mice")
+                notes.append(note)
             else:
                 # 🎮 GAMING LAPTOP: actively BOOST gaming mice (high-DPI sensors,
                 # low-latency wireless). Just not excluding them is not enough to
@@ -2564,8 +2581,9 @@ def run_laptops_engine(trigger, df_products, df_history):
         # ── Logic: Smart Mousepad (FLAT RATE — does NOT scale with laptop price) ──
         elif logic_key == 'MOUSEPAD_LOGIC':
             if not is_gaming:
-                ng = ~pool['Title'].fillna('').str.lower().str.contains('rgb|gaming', regex=True, na=False)
-                if ng.any(): pool = pool[ng]
+                not_gaming_mask = ~pool['Title'].fillna('').str.lower().str.contains('rgb|gaming', regex=True, na=False)
+                pool, note = filter_or_penalize(pool, not_gaming_mask, "Persona: Exclude gaming/RGB pads")
+                notes.append(note)
 
             pool['_p'] = pool['LIST PRICE'].apply(parse_euro_price)
 
@@ -2594,8 +2612,8 @@ def run_laptops_engine(trigger, df_products, df_history):
         elif logic_key == 'MONITOR_LOGIC':
             if not is_gaming:
                 gaming_mon = pool['Title'].fillna('').str.lower().str.contains('gaming|odyssey|predator|144hz|165hz|180hz|240hz', regex=True, na=False)
-                pool = pool[~gaming_mon]
-                notes.append("Visual Workstation (Persona): Excluded gaming monitors")
+                pool, note = filter_or_penalize(pool, ~gaming_mon, "Visual Workstation: Exclude gaming monitors")
+                notes.append(note)
             else:
                 # 🎮 GAMING LAPTOP: positively boost gaming monitors (brand-line + high-refresh)
                 gaming_mon_mask = pool['Title'].fillna('').str.lower().str.contains(
@@ -2607,14 +2625,16 @@ def run_laptops_engine(trigger, df_products, df_history):
 
             if tres_tier > 0:
                 pool['_res_tier'] = pool['Ανάλυση Οθόνης'].apply(get_resolution_tier)
-                pool = pool[(pool['_res_tier'] >= tres_tier) | (pool['_res_tier'] == 0)]
+                keep = (pool['_res_tier'] >= tres_tier) | (pool['_res_tier'] == 0)
+                pool, note = filter_or_penalize(pool, keep, f"Resolution ≥ tier {tres_tier}")
+                notes.append(note)
 
             # FHD exclusion ONLY at Tier 3+ (€1200+). A €798 MacBook doesn't
             # need QHD/4K — FHD fits the budget band and is a legitimate pairing.
             if (is_apple or is_premium) and laptop_tier >= 3:
                 fhd_mon = pool['Title'].fillna('').str.lower().str.contains('fhd|1080p|1920x1080', regex=True, na=False)
-                pool = pool[~fhd_mon]
-                notes.append("Tier 3+ premium: Excluded FHD monitors")
+                pool, note = filter_or_penalize(pool, ~fhd_mon, "Tier 3+ premium: Exclude FHD monitors")
+                notes.append(note)
 
             # Tiered Performance Budgets (20% Rule: Monitor = 50% of bundle ≈ 10-15% of laptop)
             pool['_p'] = pool['LIST PRICE'].apply(parse_euro_price)
@@ -2712,37 +2732,48 @@ def run_laptops_engine(trigger, df_products, df_history):
                 is_overear = is_overhead_hier & type_col.str.contains('OVER EAR')
 
                 if tscreen > 0:
-                    if tscreen < 15:
-                        allowed_headset = is_bluetooth_hier | is_onear
-                        rule_label = f"<15\" rule: Bluetooth OR Overhead+ON-EAR only"
-                    else:
-                        allowed_headset = is_overear
-                        rule_label = f"≥15\" rule: Overhead+OVER-EAR only"
+                    # Build the two rule masks up front
+                    under15_mask = is_bluetooth_hier | is_onear   # <15" rule
+                    over15_mask  = is_overear                      # ≥15" rule
 
-                    keep_mask = allowed_headset | is_office
-                    b4 = len(pool)
-                    filtered = pool[keep_mask].copy()
-                    if not filtered.empty:
-                        pool = filtered
-                        notes.append(f"🎧 {rule_label}: {b4}→{len(pool)}")
-                        # Recompute masks on filtered pool for downstream boosts
-                        hier_upper = pool['Hierarchy'].fillna('').str.upper()
-                        is_bluetooth_hier = hier_upper.str.contains('BLUETOOTH')
-                        is_overhead_hier  = hier_upper.str.contains('OVERHEAD')
-                        is_office         = hier_upper.str.contains('OFFICE')
-                        is_headset        = ~is_office
-                        if 'Τύπος ακουστικών' in pool.columns:
-                            type_col = pool['Τύπος ακουστικών'].fillna('').str.upper()
-                        else:
-                            type_col = pd.Series('', index=pool.index)
-                        is_onear  = is_overhead_hier & type_col.str.contains('ON EAR')
-                        is_overear = is_overhead_hier & type_col.str.contains('OVER EAR')
-                        is_earbud = is_bluetooth_hier  # semantic alias for downstream boosts
-                        is_overhead = is_overhead_hier  # semantic alias for downstream boosts
+                    if tscreen < 15:
+                        primary_mask, primary_label   = under15_mask, "<15\" rule: Bluetooth OR Overhead+ON-EAR"
+                        fallback_mask, fallback_label = over15_mask,  "fallback to Overhead+OVER-EAR"
                     else:
-                        notes.append(f"⚠ {rule_label} would empty pool — rule skipped")
-                        is_earbud = is_bluetooth_hier
-                        is_overhead = is_overhead_hier
+                        primary_mask, primary_label   = over15_mask,  "≥15\" rule: Overhead+OVER-EAR"
+                        # ≥15" fallback = the <15" rule itself (On-Ear OR Bluetooth)
+                        # — consistent with what a 14.9" laptop would get, instead of
+                        # leaving the pool unfiltered.
+                        fallback_mask, fallback_label = under15_mask, "fallback to Bluetooth OR Overhead+ON-EAR"
+
+                    # Cascade: primary → fallback → skip
+                    b4 = len(pool)
+                    primary_keep = pool[primary_mask | is_office]
+                    if not primary_keep[primary_mask].empty:
+                        pool = primary_keep
+                        notes.append(f"🎧 {primary_label}: {b4}→{len(pool)}")
+                    else:
+                        fallback_keep = pool[fallback_mask | is_office]
+                        if not fallback_keep[fallback_mask].empty:
+                            pool = fallback_keep
+                            notes.append(f"🎧 {primary_label} empty → {fallback_label}: {b4}→{len(pool)}")
+                        else:
+                            notes.append(f"⚠ Both primary and fallback headset rules empty — no filter applied")
+
+                    # Recompute masks on filtered pool for downstream boosts
+                    hier_upper = pool['Hierarchy'].fillna('').str.upper()
+                    is_bluetooth_hier = hier_upper.str.contains('BLUETOOTH')
+                    is_overhead_hier  = hier_upper.str.contains('OVERHEAD')
+                    is_office         = hier_upper.str.contains('OFFICE')
+                    is_headset        = ~is_office
+                    if 'Τύπος ακουστικών' in pool.columns:
+                        type_col = pool['Τύπος ακουστικών'].fillna('').str.upper()
+                    else:
+                        type_col = pd.Series('', index=pool.index)
+                    is_onear   = is_overhead_hier & type_col.str.contains('ON EAR')
+                    is_overear = is_overhead_hier & type_col.str.contains('OVER EAR')
+                    is_earbud  = is_bluetooth_hier
+                    is_overhead = is_overhead_hier
                 else:
                     is_earbud = is_bluetooth_hier
                     is_overhead = is_overhead_hier
@@ -2873,19 +2904,13 @@ def run_laptops_engine(trigger, df_products, df_history):
             is_hdd = pool['Title'].fillna('').str.lower().str.contains(r'\bhdd\b|hard drive|elements|my passport|canvio', regex=True, na=False)
 
             if laptop_tier >= 3:
-                # Premium/Pro: SSDs only. Period.
-                if is_ssd.any():
-                    b4 = len(pool)
-                    pool = pool[is_ssd].copy()
-                    notes.append(f"Tier {laptop_tier}: SSD-only filter {b4}→{len(pool)}")
-                    # Recompute is_ssd/is_hdd on filtered pool
-                    is_ssd = pool['Title'].fillna('').str.lower().str.contains(r'\bssd\b|portable ssd|nvme|t7|t5|sandisk extreme', regex=True, na=False)
-                else:
-                    # No SSDs in pool → at minimum, penalise HDDs so flash drives win
-                    # over HDDs (flash is smaller but closer to SSD form factor).
-                    pool.loc[is_hdd, 'Final_Score'] -= 100000
-                    notes.append(f"⚠ Tier {laptop_tier}: No SSDs in pool — HDDs penalised -100k (check hierarchy taxonomy)")
-                pool.loc[pool['_p'] >= 100, 'Final_Score'] += 100000  # favour higher capacity / better brands
+                # Premium/Pro: SSDs only. If catalog has none, penalise HDDs
+                # (-150k) instead of filtering — flash drives at least win over HDDs.
+                pool, note = filter_or_penalize(pool, is_ssd, f"Tier {laptop_tier}: SSD-only")
+                notes.append(note)
+                # Recompute is_ssd/is_hdd on possibly-filtered pool
+                is_ssd = pool['Title'].fillna('').str.lower().str.contains(r'\bssd\b|portable ssd|nvme|t7|t5|sandisk extreme', regex=True, na=False)
+                pool.loc[pool['_p'] >= 100, 'Final_Score'] += 100000
                 notes.append("Tier 3+: Boost ≥€100 SSDs (speed + capacity match)")
             elif laptop_tier == 2:
                 # Mid-range: prefer SSD but don't ban HDD
