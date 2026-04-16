@@ -75,7 +75,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v18.9 — Laptops: 4-Tier 2026 GR Market + 20% Rule Budgets + Brand-Port Charger Match
+        🟢 Engine v19.0 — Laptops: Global Apple-ban on non-Apple + Always-on Brand Match + Surface USB-C
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -2236,6 +2236,9 @@ def run_laptops_engine(trigger, df_products, df_history):
     is_premium = tprice >= 1000 or 'premium' in tusage
     is_apple = tb == 'APPLE'
     is_gaming = 'gaming' in tusage or 'gamer' in tusage
+    # Microsoft Surface devices all have USB-C + Surface Connect, but your
+    # Ports column sometimes only lists DisplayPort. Treat Surface as USB-C.
+    is_surface = tb == 'MICROSOFT' and 'surface' in tt.lower()
 
     # --- 2026 GR Market Tier (Performance Pairing) ---
     laptop_tier = get_laptop_tier(tprice)
@@ -2259,6 +2262,14 @@ def run_laptops_engine(trigger, df_products, df_history):
     b4 = len(c)
     c = c[~((c['Level 2'] == 'Mobiles') & (c['Hierarchy'] == 'Smartphones'))]
     diag.append(("1b. Excl phones", len(c), f"Removed {b4 - len(c)}"))
+
+    # 🚫 Global Apple-ban for non-Apple laptops. AirPods/Magic Mouse/Apple
+    # chargers should NEVER appear on a Windows/Microsoft/Dell/etc. laptop —
+    # wrong ecosystem, mostly wrong connector, and visually off-brand.
+    if not is_apple:
+        b4 = len(c)
+        c = c[c['Κατασκευαστής'].fillna('').astype(str).str.strip().str.upper() != 'APPLE']
+        diag.append(("1c. Apple ban", len(c), f"Removed {b4 - len(c)} Apple items (non-Apple trigger)"))
  
     # Stock filter
     if 'CW Stock Units' in c.columns:
@@ -2374,25 +2385,39 @@ def run_laptops_engine(trigger, df_products, df_history):
  
         # ── Logic 2: Charger Port Compatibility (Brand+Port = Top Priority) ──
         elif logic_key == 'CHARGER_PORT':
-            # NEW: Apple implies USB-C/PD even if the Ports column is empty
-            has_usbc = is_apple or any(k in tports for k in ['usb-c', 'type-c', 'usb c', 'thunderbolt', 'usb 4'])
+            # Apple & Microsoft Surface imply USB-C/PD even if the Ports column is empty.
+            has_usbc = is_apple or is_surface or any(k in tports for k in ['usb-c', 'type-c', 'usb c', 'thunderbolt', 'usb 4'])
             has_dcin_only = 'dc' in tports and not has_usbc
+
+            # ── ALWAYS-ON #1: Wattage filter (laptop chargers are ≥45W period) ──
+            # This fires regardless of port detection — a <45W brick is a phone
+            # charger, wrong tool for any laptop.
+            watts = pool['Title'].fillna('').apply(extract_wattage_from_text)
+            pool.loc[watts >= 45, 'Final_Score'] += 50000
+            pool.loc[(watts > 0) & (watts < 45), 'Final_Score'] -= 20000
+            notes.append("≥45W boost, <45W deprioritized (always-on)")
+
+            # ── ALWAYS-ON #2: Brand match (fires even with no port info) ──
+            # Rationale: if the user's laptop is a Microsoft Surface and a
+            # Microsoft charger exists in the catalog, it should beat Hama even
+            # if the Ports column is incomplete. Brand = correct connector by
+            # construction.
+            if tb:
+                is_same_brand = pool['Κατασκευαστής'].fillna('').str.strip().str.upper() == tb
+                same_brand_laptop_watt = is_same_brand & (watts >= 45)
+                pool.loc[same_brand_laptop_watt, 'Final_Score'] += 200000
+                if same_brand_laptop_watt.any():
+                    notes.append(f"Brand match (always-on): {tb} ≥45W → +200k, {same_brand_laptop_watt.sum()} items")
 
             if has_usbc:
                 usbc_mask = pool['Title'].fillna('').str.lower().str.contains('usb-c|type-c|usb c|pd|power delivery', regex=True, na=False)
                 if 'Υποδοχές' in pool.columns:
                     usbc_mask |= pool['Υποδοχές'].fillna('').astype(str).str.lower().str.contains('usb-c|type-c', regex=True, na=False)
                 pool.loc[usbc_mask, 'Final_Score'] += 100000
-                notes.append("USB-C trigger → USB-C charger boost")
-
-                # Wattage ≥ 45W for laptop chargers (avoid phone chargers)
-                watts = pool['Title'].fillna('').apply(extract_wattage_from_text)
-                pool.loc[watts >= 45, 'Final_Score'] += 50000
-                pool.loc[(watts > 0) & (watts < 45), 'Final_Score'] -= 20000
-                notes.append("≥45W boost, <45W deprioritized")
+                trig_label = "USB-C trigger" if not is_surface else "Surface (implicit USB-C)"
+                notes.append(f"{trig_label} → USB-C charger boost")
 
                 # ⭐ TOP PRIORITY: Same-brand charger AND matching port AND ≥45W
-                # This is the rule the user asked for: brand match only wins when port matches.
                 if tb:
                     is_same_brand = pool['Κατασκευαστής'].fillna('').str.strip().str.upper() == tb
                     brand_port_match = is_same_brand & usbc_mask & (watts >= 45)
@@ -2413,7 +2438,7 @@ def run_laptops_engine(trigger, df_products, df_history):
                 pool.loc[universal, 'Final_Score'] += 50000
                 notes.append("DC-in → Universal charger boost")
 
-                # ⭐ Same-brand DC charger wins if available (port = proprietary DC)
+                # ⭐ Same-brand DC charger wins if available
                 if tb:
                     is_same_brand = pool['Κατασκευαστής'].fillna('').str.strip().str.upper() == tb
                     dc_mask = pool['Title'].fillna('').str.lower().str.contains('dc|barrel|τροφοδοτικό', regex=True, na=False)
@@ -2421,6 +2446,8 @@ def run_laptops_engine(trigger, df_products, df_history):
                     pool.loc[brand_dc_match, 'Final_Score'] += 500000
                     if brand_dc_match.any():
                         notes.append(f"⭐ TOP: Same-brand ({tb}) DC charger → {brand_dc_match.sum()} items")
+            else:
+                notes.append("⚠ No port info detected → relying on brand+wattage only")
  
         # ── Logic: High-Wattage Powerbank ──
         elif logic_key == 'HIGH_WATT_PB':
