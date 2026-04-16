@@ -75,7 +75,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v19.3 — Laptops: Cooler size-matching + Tier-aware Storage (SSD/HDD)
+        🟢 Engine v19.4 — Laptops: Gaming persona (mouse/pad/headset/bag) + Monitor-stand exclusion + Title-size cooler fallback
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -2371,6 +2371,20 @@ def run_laptops_engine(trigger, df_products, df_history):
                         pool.loc[backpack.index, 'Final_Score'] += 50000
                         notes.append(f"Mainstream → Backpack boost: {len(backpack)}")
 
+            # 🎮 Gaming Laptop → Gaming bag boost. Gaming bags (padded, armored-look,
+            # gaming-brand) match the persona and are usually backpacks with GPU slots.
+            if logic_key == 'BAG_SIZE' and is_gaming:
+                gaming_bag_mask = pool['Title'].fillna('').str.lower().str.contains(
+                    r'gaming|razer|asus rog|rog ranger|rog backpack|msi|hp omen|lenovo legion|predator',
+                    regex=True, na=False
+                )
+                pool.loc[gaming_bag_mask, 'Final_Score'] += 200000
+                # Also boost backpack type
+                if 'Τύπος τσάντας' in pool.columns:
+                    backpack = pool['Τύπος τσάντας'].fillna('').astype(str).str.contains('Πλάτης|Backpack', case=False, regex=True, na=False)
+                    pool.loc[backpack, 'Final_Score'] += 60000
+                notes.append(f"🎮 Gaming: Boosted gaming bags/backpacks +200k ({gaming_bag_mask.sum()} items)")
+
             # FLAT-RATE BUDGET: Bags/sleeves are roughly static (€30-€80). Don't
             # show €200 leather sleeves with a €4k laptop — feels like upselling.
             pool['_p'] = pool['LIST PRICE'].apply(parse_euro_price)
@@ -2379,6 +2393,9 @@ def run_laptops_engine(trigger, df_products, df_history):
             if trap_note: notes.append(trap_note)
             if laptop_tier > 0:
                 bag_min, bag_max = get_accessory_budget(slot_role_key, laptop_tier)
+                # Gaming bags legitimately run €50-€120 even on mid-tier laptops
+                if is_gaming and logic_key == 'BAG_SIZE':
+                    bag_max = max(bag_max, 120)
                 in_band = (pool['_p'] >= bag_min) & (pool['_p'] <= bag_max)
                 pool.loc[in_band, 'Final_Score'] += 40000
                 notes.append(f"Flat budget: Boost €{bag_min:.0f}–€{bag_max:.0f} {slot_role_key.lower()}s")
@@ -2480,6 +2497,16 @@ def run_laptops_engine(trigger, df_products, df_history):
                 ng = ~pool['Title'].fillna('').str.lower().str.contains('rgb|gaming', regex=True, na=False)
                 if ng.any(): pool = pool[ng]
                 notes.append("Persona: Excluded gaming/RGB mice")
+            else:
+                # 🎮 GAMING LAPTOP: actively BOOST gaming mice (high-DPI sensors,
+                # low-latency wireless). Just not excluding them is not enough to
+                # win on sales volume vs. office mice.
+                gaming_mask = pool['Title'].fillna('').str.lower().str.contains(
+                    r'gaming|rgb|razer|logitech g\b|logitech g\d|g pro|g305|g502|viper|deathadder|basilisk|corsair|steelseries|hyperx|glorious|asus rog|rog gladius',
+                    regex=True, na=False
+                )
+                pool.loc[gaming_mask, 'Final_Score'] += 200000
+                notes.append(f"🎮 Gaming: Boosted gaming mice +200k ({gaming_mask.sum()} items)")
 
             pool['_p'] = pool['LIST PRICE'].apply(parse_euro_price)
 
@@ -2518,14 +2545,21 @@ def run_laptops_engine(trigger, df_products, df_history):
 
             # Microsoft Surface ecosystem — mirror the Apple pattern
             elif is_surface:
-                ms_mice = pool['Κατασκευαστής'].fillna('').str.upper() == 'MICROSOFT'
+                # Match by brand OR by title (Surface Arc, Microsoft Designer, Sculpt)
+                ms_mice = (pool['Κατασκευαστής'].fillna('').str.upper() == 'MICROSOFT') | \
+                          pool['Title'].fillna('').str.lower().str.contains(
+                              r'microsoft|surface (arc|mobile|precision)|designer mouse|sculpt ergonomic',
+                              regex=True, na=False
+                          )
                 if ms_mice.any():
                     if tprice >= 1200:
                         pool.loc[ms_mice, 'Final_Score'] += 100000
-                        notes.append("🪟 Surface Ecosystem (premium): Microsoft mice boosted +100k")
+                        notes.append(f"🪟 Surface Ecosystem (premium): Microsoft mice boosted +100k ({ms_mice.sum()} items)")
                     else:
                         pool.loc[ms_mice, 'Final_Score'] += 50000
-                        notes.append("🪟 Surface Ecosystem: Microsoft mice boosted +50k")
+                        notes.append(f"🪟 Surface Ecosystem: Microsoft mice boosted +50k ({ms_mice.sum()} items)")
+                else:
+                    notes.append("🪟 Surface: No Microsoft mice in pool — no boost applied")
 
         # ── Logic: Smart Mousepad (FLAT RATE — does NOT scale with laptop price) ──
         elif logic_key == 'MOUSEPAD_LOGIC':
@@ -2535,15 +2569,25 @@ def run_laptops_engine(trigger, df_products, df_history):
 
             pool['_p'] = pool['LIST PRICE'].apply(parse_euro_price)
 
-            # FLAT RATE: A €15-€25 desk mat is sufficient for ANY setup. Pushing
-            # a €100 mousepad with a €4k laptop = price gouging from customer POV.
-            mp_min, mp_max = get_accessory_budget('MOUSEPAD', laptop_tier or 1)
-            in_band = (pool['_p'] >= mp_min) & (pool['_p'] <= mp_max)
-            pool.loc[in_band, 'Final_Score'] += 50000
+            if is_gaming:
+                # 🎮 GAMING LAPTOP: boost XL/gaming pads, relax the €30 cap (XL pads run €25-50)
+                gaming_mask = pool['Title'].fillna('').str.lower().str.contains(
+                    r'gaming|rgb|xl|xxl|qck|mm\d|razer goliathus|corsair mm|steelseries|hyperx|glorious|logitech g',
+                    regex=True, na=False
+                )
+                pool.loc[gaming_mask, 'Final_Score'] += 200000
+                # For gaming: boost €15-€45 (covers XL/gaming range)
+                pool.loc[(pool['_p'] >= 15) & (pool['_p'] <= 45), 'Final_Score'] += 50000
+                notes.append(f"🎮 Gaming: Boosted gaming/XL pads +200k ({gaming_mask.sum()} items), price band €15-€45")
+            else:
+                # FLAT RATE: A €15-€25 desk mat is sufficient for ANY setup.
+                mp_min, mp_max = get_accessory_budget('MOUSEPAD', laptop_tier or 1)
+                in_band = (pool['_p'] >= mp_min) & (pool['_p'] <= mp_max)
+                pool.loc[in_band, 'Final_Score'] += 50000
+                # Hard cap: penalise anything above €30 regardless of laptop price
+                pool.loc[pool['_p'] > 30, 'Final_Score'] -= 80000
+                notes.append(f"Flat Rate: Boost €{mp_min:.0f}–€{mp_max:.0f}, penalty >€30 (anti-gouging)")
 
-            # Hard cap: penalise anything above €30 regardless of laptop price
-            pool.loc[pool['_p'] > 30, 'Final_Score'] -= 80000
-            notes.append(f"Flat Rate: Boost €{mp_min:.0f}–€{mp_max:.0f}, penalty >€30 (anti-gouging)")
 
 
         # ── Logic: Persona-Driven Monitor (10-15% of Laptop Value) ──
@@ -2640,8 +2684,20 @@ def run_laptops_engine(trigger, df_products, df_history):
             pool['_p'] = pool['LIST PRICE'].apply(parse_euro_price)
 
             if is_headset.any():
+                # 🎮 GAMING LAPTOP: gaming headsets trump everything else here.
+                # Office/lifestyle headsets make no sense for a gaming rig.
+                if is_gaming:
+                    gaming_mask = pool['Title'].fillna('').str.lower().str.contains(
+                        r'gaming|razer|corsair|steelseries|hyperx|logitech g\b|astro|asus rog|rog delta|kraken|cloud ii|arctis|blackshark',
+                        regex=True, na=False
+                    )
+                    pool.loc[is_headset & gaming_mask, 'Final_Score'] += 250000
+                    # Gaming laptops at ≥15" get overhead gaming headsets (not earbuds)
+                    is_overhead_check = pool['Hierarchy'].fillna('').str.upper().str.contains('OVERHEAD')
+                    pool.loc[is_headset & gaming_mask & is_overhead_check, 'Final_Score'] += 50000
+                    notes.append(f"🎮 Gaming: Boosted gaming headsets +250k ({(is_headset & gaming_mask).sum()} items)")
                 # Safely check if the column exists in the products DataFrame
-                if 'Προτεινόμενη χρήση' in pool.columns:
+                elif 'Προτεινόμενη χρήση' in pool.columns:
                     if is_premium or is_apple:
                         prem_use = pool['Προτεινόμενη χρήση'].fillna('').str.lower().str.contains('premium|επαγγελματική', regex=True, na=False)
                         pool.loc[is_headset & prem_use, 'Final_Score'] += 50000
@@ -2663,8 +2719,13 @@ def run_laptops_engine(trigger, df_products, df_history):
                     
                 is_overhead = pool['Hierarchy'].fillna('').str.upper().str.contains('OVERHEAD') | type_col.str.contains('OVER EAR|ON EAR')
 
-                # Portability vs Workstation
-                if tscreen > 0 and tscreen <= 14:
+                # Portability vs Workstation vs Gaming
+                if is_gaming:
+                    # Gamers want full-size headsets regardless of laptop portability
+                    pool.loc[is_headset & is_overhead, 'Final_Score'] += 60000
+                    pool.loc[is_headset & is_earbud, 'Final_Score'] -= 40000
+                    notes.append("🎮 Gaming: Overhead boost, earbuds penalized")
+                elif tscreen > 0 and tscreen <= 14:
                     pool.loc[is_headset & is_earbud, 'Final_Score'] += 30000
                     notes.append("Visual Workstation: Boosted Bluetooth/Earbuds for ≤14\" portability")
                 elif tscreen >= 15:
@@ -2681,38 +2742,62 @@ def run_laptops_engine(trigger, df_products, df_history):
                     pool.loc[is_headset & (pool['_p'] > max_hs_price), 'Final_Score'] -= 100000
                     notes.append(f"Price Tiering: Penalized headsets >€{max_hs_price:.0f}")
 
+
                     
  
         # ── Logic: Cooler / Stand Size Match ──
         # Coolers are printed with a supported size. A 15.6" cooler is too small
         # for a 16" laptop (overhangs) and ridiculous for a 13" laptop (wasted space).
         elif logic_key == 'STAND_SIZE':
+            # 🚫 EXCLUDE monitor mounts/arms/desk-mounts — they live in the same
+            # hierarchy (ΒΑΣΕΙΣ ΓΡΑΦΕΙΟΥ) but are NOT laptop stands. Titles like
+            # "Βάση Οθόνης Επιτραπέζια με Βραχίονα" (monitor desk mount with arm)
+            # or SBOX LCD-352 (monitor arm 17"-32") should never appear here.
+            title_lower = pool['Title'].fillna('').str.lower()
+            monitor_mount_mask = title_lower.str.contains(
+                r'βάση οθόν|monitor (arm|mount|stand)|βραχίον|lcd arm|desk mount|wall mount|επιτοίχι',
+                regex=True, na=False
+            )
+            b4 = len(pool)
+            pool = pool[~monitor_mount_mask]
+            if b4 > len(pool):
+                notes.append(f"🚫 Excluded monitor mounts/arms: {b4}→{len(pool)}")
+
             if tscreen > 0:
                 size_col = None
                 for candidate_col in ['Μέγεθος', 'Μέγεθος οθόνης']:
                     if candidate_col in pool.columns:
                         size_col = candidate_col
                         break
-                if size_col:
-                    pool['_acc_size'] = pool[size_col].apply(parse_screen_size)
 
-                    # Coolers can accommodate slightly larger laptops (universal pads),
-                    # so the cooler size should be ≥ laptop size. Tighter on the upper
-                    # end — don't give a 17.3" cooler to a 13" laptop.
-                    strict_fit = pool[(pool['_acc_size'] >= tscreen - 0.5) & (pool['_acc_size'] <= tscreen + 2.0)]
-                    if not strict_fit.empty:
-                        pool = strict_fit
-                        notes.append(f"Cooler strict size fit {tscreen}\" (-0.5/+2.0\"): {len(pool)}")
+                # Compute effective size: max of field value AND title-parsed size.
+                # Catches products where Μέγεθος=0 but title says "15.6 inch" — we
+                # want the title size to count so they can be correctly filtered.
+                title_size = pool['Title'].fillna('').apply(parse_screen_size)
+                if size_col:
+                    field_size = pool[size_col].apply(parse_screen_size)
+                    pool['_acc_size'] = pd.concat([field_size, title_size], axis=1).max(axis=1)
+                else:
+                    pool['_acc_size'] = title_size
+
+                # Coolers for laptops: size must be within reasonable fit range.
+                # Tightened from +2.0 to +1.5 so a 15.6" cooler can't win on a 12" laptop.
+                strict_fit = pool[(pool['_acc_size'] >= tscreen - 0.5) & (pool['_acc_size'] <= tscreen + 1.5)]
+                if not strict_fit.empty:
+                    pool = strict_fit
+                    notes.append(f"Cooler strict size fit {tscreen}\" (-0.5/+1.5\"): {len(pool)}")
+                else:
+                    loose_fit = pool[(pool['_acc_size'] >= tscreen - 1.0) & (pool['_acc_size'] <= tscreen + 3.0)]
+                    if not loose_fit.empty:
+                        pool = loose_fit
+                        notes.append(f"Cooler loose size fit {tscreen}\" (-1.0/+3.0\"): {len(pool)}")
                     else:
-                        loose_fit = pool[(pool['_acc_size'] >= tscreen - 1.0) & (pool['_acc_size'] <= tscreen + 3.0)]
-                        if not loose_fit.empty:
-                            pool = loose_fit
-                            notes.append(f"Cooler loose size fit {tscreen}\" (-1.0/+3.0\"): {len(pool)}")
-                        else:
-                            sizeless = pool[pool['_acc_size'] == 0]
-                            if not sizeless.empty:
-                                pool = sizeless
-                                notes.append(f"⚠ No cooler size match for {tscreen}\", kept {len(pool)} sizeless (universal)")
+                        # Only truly sizeless (universal) pass — products that claim a specific
+                        # size via title but don't match are NOT eligible.
+                        sizeless = pool[pool['_acc_size'] == 0]
+                        if not sizeless.empty:
+                            pool = sizeless
+                            notes.append(f"⚠ No cooler size match for {tscreen}\", kept {len(pool)} sizeless (universal)")
 
             # Gaming laptops benefit from active (fan) coolers; others lean to passive stands
             pool['_p'] = pool['LIST PRICE'].apply(parse_euro_price)
@@ -2724,6 +2809,7 @@ def run_laptops_engine(trigger, df_products, df_history):
                 stand_mask = pool['Title'].fillna('').str.lower().str.contains('stand|βάση|aluminum|αλουμίνιο|ergonomic', regex=True, na=False)
                 pool.loc[stand_mask, 'Final_Score'] += 40000
                 notes.append("Premium/Apple: Passive ergonomic stand boost")
+
 
         # ── Logic: Storage (SSD for premium, HDD for budget) ──
         # A 1TB portable HDD on a €2849 MacBook Pro is embarrassing. Premium
