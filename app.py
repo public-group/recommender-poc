@@ -75,7 +75,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v19.2 — Laptops: Hard budget ceilings (anti-overbuy) + Tier-aware FHD rule
+        🟢 Engine v19.3 — Laptops: Cooler size-matching + Tier-aware Storage (SSD/HDD)
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -113,7 +113,7 @@ LAPTOP_MAINSTREAM_SLOTS = [
     (5,  'Mousepad',         ['MOUSE PADS'],                                 'MOUSEPAD_LOGIC'),
     (6,  'Βάση / Cooler',    ['NOTEBOOK COOLERS', 'ΒΑΣΕΙΣ ΓΡΑΦΕΙΟΥ'],        'STAND_SIZE'),
     (7,  'Οθόνη',            ['TFT MONITOR'],                                'MONITOR_LOGIC'),
-    (8,  'Αποθήκευση',       ['USB FLASH', 'EXTERNAL HDD USB'],              'GENERIC'),
+    (8,  'Αποθήκευση',       ['USB FLASH', 'EXTERNAL HDD USB'],              'STORAGE_LOGIC'),
     (9,  'Headset / Office', ['OVERHEAD', 'BLUETOOTH', 'OFFICE SUITES'],     'OFFICE_HEADSET_LOGIC'),
     (10, 'Θήκη Laptop',      ['ΘΗΚΕΣ SLEEVE LAPTOP'],                        'SLEEVE_SIZE'),
 ]
@@ -2683,6 +2683,86 @@ def run_laptops_engine(trigger, df_products, df_history):
 
                     
  
+        # ── Logic: Cooler / Stand Size Match ──
+        # Coolers are printed with a supported size. A 15.6" cooler is too small
+        # for a 16" laptop (overhangs) and ridiculous for a 13" laptop (wasted space).
+        elif logic_key == 'STAND_SIZE':
+            if tscreen > 0:
+                size_col = None
+                for candidate_col in ['Μέγεθος', 'Μέγεθος οθόνης']:
+                    if candidate_col in pool.columns:
+                        size_col = candidate_col
+                        break
+                if size_col:
+                    pool['_acc_size'] = pool[size_col].apply(parse_screen_size)
+
+                    # Coolers can accommodate slightly larger laptops (universal pads),
+                    # so the cooler size should be ≥ laptop size. Tighter on the upper
+                    # end — don't give a 17.3" cooler to a 13" laptop.
+                    strict_fit = pool[(pool['_acc_size'] >= tscreen - 0.5) & (pool['_acc_size'] <= tscreen + 2.0)]
+                    if not strict_fit.empty:
+                        pool = strict_fit
+                        notes.append(f"Cooler strict size fit {tscreen}\" (-0.5/+2.0\"): {len(pool)}")
+                    else:
+                        loose_fit = pool[(pool['_acc_size'] >= tscreen - 1.0) & (pool['_acc_size'] <= tscreen + 3.0)]
+                        if not loose_fit.empty:
+                            pool = loose_fit
+                            notes.append(f"Cooler loose size fit {tscreen}\" (-1.0/+3.0\"): {len(pool)}")
+                        else:
+                            sizeless = pool[pool['_acc_size'] == 0]
+                            if not sizeless.empty:
+                                pool = sizeless
+                                notes.append(f"⚠ No cooler size match for {tscreen}\", kept {len(pool)} sizeless (universal)")
+
+            # Gaming laptops benefit from active (fan) coolers; others lean to passive stands
+            pool['_p'] = pool['LIST PRICE'].apply(parse_euro_price)
+            if is_gaming:
+                fan_mask = pool['Title'].fillna('').str.lower().str.contains('fan|cooler|ψύξη|rgb', regex=True, na=False)
+                pool.loc[fan_mask, 'Final_Score'] += 40000
+                notes.append("Gaming: Active cooler (fan) boost")
+            elif is_apple or is_premium:
+                stand_mask = pool['Title'].fillna('').str.lower().str.contains('stand|βάση|aluminum|αλουμίνιο|ergonomic', regex=True, na=False)
+                pool.loc[stand_mask, 'Final_Score'] += 40000
+                notes.append("Premium/Apple: Passive ergonomic stand boost")
+
+        # ── Logic: Storage (SSD for premium, HDD for budget) ──
+        # A 1TB portable HDD on a €2849 MacBook Pro is embarrassing. Premium
+        # laptops should pair with portable SSDs (speed + form factor match),
+        # budget laptops with HDDs or high-capacity flash.
+        elif logic_key == 'STORAGE_LOGIC':
+            pool['_p'] = pool['LIST PRICE'].apply(parse_euro_price)
+
+            # Cheap-trap: no €10 USB sticks with a €2k laptop
+            pool, trap_note = apply_cheap_trap(pool, tprice, 'STORAGE')
+            if trap_note: notes.append(trap_note)
+
+            is_ssd = pool['Title'].fillna('').str.lower().str.contains(r'\bssd\b|portable ssd|nvme|t7|t5|sandisk extreme', regex=True, na=False)
+            is_hdd = pool['Title'].fillna('').str.lower().str.contains(r'\bhdd\b|hard drive|elements|my passport|canvio', regex=True, na=False)
+
+            if laptop_tier >= 3:
+                # Premium/Pro: SSDs only. Period.
+                if is_ssd.any():
+                    b4 = len(pool)
+                    pool = pool[is_ssd].copy()
+                    notes.append(f"Tier {laptop_tier}: SSD-only filter {b4}→{len(pool)}")
+                pool.loc[pool['_p'] >= 100, 'Final_Score'] += 100000  # favour higher capacity / better brands
+                notes.append("Tier 3+: Boost ≥€100 SSDs (speed + capacity match)")
+            elif laptop_tier == 2:
+                # Mid-range: prefer SSD but don't ban HDD
+                pool.loc[is_ssd, 'Final_Score'] += 80000
+                pool.loc[is_hdd, 'Final_Score'] -= 20000
+                notes.append("Tier 2: SSD preferred over HDD")
+            else:
+                # Budget: HDDs fine, large flash drives fine
+                pool.loc[(pool['_p'] >= 25) & (pool['_p'] <= 60), 'Final_Score'] += 40000
+                notes.append("Tier 1: Value storage (€25–€60 range)")
+
+            # Apple users: boost Samsung T7/T9 and SanDisk Extreme (well-known Mac-compatible SSDs)
+            if is_apple:
+                mac_ssd = pool['Title'].fillna('').str.lower().str.contains('samsung t7|samsung t9|sandisk extreme|lacie', regex=True, na=False)
+                pool.loc[mac_ssd, 'Final_Score'] += 50000
+                notes.append("Apple: Mac-friendly SSD brands boosted")
+
         # ── GENERIC: just sales + availability ──
         # logic_key == 'GENERIC' — no extra filtering needed
  
