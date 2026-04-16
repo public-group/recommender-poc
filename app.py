@@ -75,7 +75,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v19.0 — Laptops: Global Apple-ban on non-Apple + Always-on Brand Match + Surface USB-C
+        🟢 Engine v19.1 — Laptops: Apple-only chargers for Mac + Microsoft Surface Ecosystem Boost
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -2425,13 +2425,22 @@ def run_laptops_engine(trigger, df_products, df_history):
                     if brand_port_match.any():
                         notes.append(f"⭐ TOP: Same-brand ({tb}) + USB-C + ≥45W → {brand_port_match.sum()} items")
 
-                # Brand Ecosystem fallback for chargers (Apple-specific)
+                # Brand Ecosystem fallback for chargers
                 if is_apple:
-                    apple_chargers = pool['Κατασκευαστής'].fillna('').str.upper() == 'APPLE'
-                    premium_pd = pool['Κατασκευαστής'].fillna('').str.upper().isin(['ANKER', 'BELKIN', 'UGREEN'])
-                    pool.loc[apple_chargers & usbc_mask, 'Final_Score'] += 300000
-                    pool.loc[premium_pd & usbc_mask, 'Final_Score'] += 80000
-                    notes.append("Brand Ecosystem: Boosted Apple & Premium PD chargers")
+                    # 🍎 STRICT: Apple laptops get Apple chargers ONLY.
+                    # MagSafe/Apple USB-C are the only ones Apple users expect
+                    # to see recommended; Anker/Belkin/UGREEN feel off-brand on
+                    # a Mac product page even if electrically compatible.
+                    apple_chargers_mask = pool['Κατασκευαστής'].fillna('').str.strip().str.upper() == 'APPLE'
+                    if apple_chargers_mask.any():
+                        b4 = len(pool)
+                        pool = pool[apple_chargers_mask].copy()
+                        notes.append(f"🍎 Apple-only charger filter: {b4}→{len(pool)}")
+                    else:
+                        # Fallback: no Apple chargers in catalog → allow premium PD brands rather than fail empty
+                        premium_pd = pool['Κατασκευαστής'].fillna('').str.upper().isin(['ANKER', 'BELKIN', 'UGREEN'])
+                        pool.loc[premium_pd & usbc_mask, 'Final_Score'] += 80000
+                        notes.append("⚠ No Apple chargers in catalog → fallback to premium PD brands")
 
             elif has_dcin_only:
                 universal = pool['Title'].fillna('').str.lower().str.contains('universal|γενικής|πολλαπλ', regex=True, na=False)
@@ -2500,6 +2509,17 @@ def run_laptops_engine(trigger, df_products, df_history):
                     pool.loc[mac_logi & (pool['_p'] < 70), 'Final_Score'] += 100000
                     pool.loc[apple_mice, 'Final_Score'] += 50000
                     notes.append("Apple Ecosystem (budget): Affordable Mac-compatible mice")
+
+            # Microsoft Surface ecosystem — mirror the Apple pattern
+            elif is_surface:
+                ms_mice = pool['Κατασκευαστής'].fillna('').str.upper() == 'MICROSOFT'
+                if ms_mice.any():
+                    if tprice >= 1200:
+                        pool.loc[ms_mice, 'Final_Score'] += 100000
+                        notes.append("🪟 Surface Ecosystem (premium): Microsoft mice boosted +100k")
+                    else:
+                        pool.loc[ms_mice, 'Final_Score'] += 50000
+                        notes.append("🪟 Surface Ecosystem: Microsoft mice boosted +50k")
 
         # ── Logic: Smart Mousepad (FLAT RATE — does NOT scale with laptop price) ──
         elif logic_key == 'MOUSEPAD_LOGIC':
@@ -2570,6 +2590,14 @@ def run_laptops_engine(trigger, df_products, df_history):
                 else:
                     pool.loc[apple_monitors, 'Final_Score'] -= 300000
 
+            # Microsoft Surface — favour USB-C monitors (Surface single-cable docking).
+            # Microsoft doesn't sell monitors, so no brand-match here — just USB-C preference.
+            elif is_surface:
+                usbc_mon = pool['Title'].fillna('').str.lower().str.contains('usb-c|type-c|thunderbolt', regex=True, na=False)
+                if usbc_mon.any():
+                    pool.loc[usbc_mon, 'Final_Score'] += 100000
+                    notes.append("🪟 Surface: USB-C monitor boost (single-cable docking)")
+
 
                 
         # ── Logic: Office / Headset Ecosystem ──
@@ -2578,7 +2606,15 @@ def run_laptops_engine(trigger, df_products, df_history):
                 office_software = pool['Hierarchy'].fillna('').str.upper() == 'OFFICE SUITES'
                 pool = pool[~office_software]
                 notes.append("Brand Ecosystem: Banned Microsoft Office for Mac users")
-            
+
+            # 🪟 Microsoft Surface: boost MS-branded Office & peripherals
+            if is_surface:
+                ms_brand = pool['Κατασκευαστής'].fillna('').str.strip().str.upper() == 'MICROSOFT'
+                office_software = pool['Hierarchy'].fillna('').str.upper() == 'OFFICE SUITES'
+                pool.loc[ms_brand | office_software, 'Final_Score'] += 80000
+                if (ms_brand | office_software).any():
+                    notes.append(f"🪟 Surface Ecosystem: Microsoft brand + Office suites boosted +80k")
+
             is_headset = ~pool['Hierarchy'].fillna('').str.upper().str.contains('OFFICE')
             pool['_p'] = pool['LIST PRICE'].apply(parse_euro_price)
 
