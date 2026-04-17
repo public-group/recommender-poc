@@ -35,6 +35,32 @@ st.markdown("""
     header[data-testid="stHeader"] span { color: #ffffff !important; }
     header[data-testid="stHeader"] svg { fill: #ffffff !important; color: #ffffff !important; }
     header[data-testid="stHeader"] svg rect { fill: transparent !important; }
+    /* Sidebar collapsed toggle → small round orange dot */
+    [data-testid="stSidebarCollapsedControl"] {
+        position: fixed !important;
+        top: 70px !important;
+        left: 8px !important;
+        z-index: 1000002 !important;
+    }
+    [data-testid="stSidebarCollapsedControl"] button {
+        width: 32px !important;
+        height: 32px !important;
+        min-height: 32px !important;
+        border-radius: 50% !important;
+        background-color: #ff5e00 !important;
+        border: 2px solid #ffffff !important;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.2) !important;
+        padding: 0 !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+    }
+    [data-testid="stSidebarCollapsedControl"] button svg {
+        width: 16px !important;
+        height: 16px !important;
+        fill: #ffffff !important;
+        color: #ffffff !important;
+    }
     .appview-container .main .block-container { padding-top: 300px !important; }
     .poc-header-wrapper {
         position: fixed; top: 0; left: 0; right: 0;
