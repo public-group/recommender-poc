@@ -3561,8 +3561,8 @@ GAMING_MOUSE_SLOTS = [
     ("Cleaning Kit",        ['CLEANING PRODUCTS'],            {}),
     ("USB Hub",             ['USB HUB DEVICES'],              {'title_boost': ['USB 3', 'SuperSpeed']}),
     ("Gaming Headset",      ['GAMING AUDIO'],                 {'brand_match': True}),
-    ("Streaming Audio",     ['STREAMING ACCESSORIES', 'PC MICROPHONES'], {'eidos_include': ['Μικρόφωνο', 'Microphone', 'Audio', 'Stand'], 'title_hide': ['Headset', 'Ακουστικά']}),
-    ("Streaming Video",     ['STREAMING ACCESSORIES', 'PC WEB CAMS', 'ΕΞΥΠΝΟΣ ΦΩΤΙΣΜΟΣ'], {'eidos_include': ['Κάμερα', 'Webcam', 'Φωτισμός', 'Light', 'Capture', 'Video', 'Ring', 'Prompter'], 'title_hide': ['Bulb', 'Λάμπα', 'GU10', 'E27', 'E14', 'Οροφής', 'Ceiling', 'Ταινία', 'Strip', 'Λεντοταινία', 'Smart Home', 'Tapo']}),    ("XXL Pad",             ['GAMING MOUSE PADS'],            {'xxl_only': True, 'dpi_pad_size': True, 'brand_match': True}),
+    ("Streaming Audio",     ['STREAMING ACCESSORIES'], {'eidos_include': ['Μικρόφωνο', 'Microphone', 'Audio', 'Stand'], 'title_hide': ['Headset', 'Ακουστικά']}),
+    ("Streaming Video",     ['STREAMING ACCESSORIES', 'ΕΞΥΠΝΟΣ ΦΩΤΙΣΜΟΣ'], {'eidos_include': ['Κάμερα', 'Webcam', 'Φωτισμός', 'Light', 'Capture', 'Video', 'Ring', 'Prompter'], 'title_hide': ['Bulb', 'Λάμπα', 'GU10', 'E27', 'E14', 'Οροφής', 'Ceiling', 'Ταινία', 'Strip', 'Λεντοταινία', 'Smart Home', 'Tapo']}),    ("XXL Pad",             ['GAMING MOUSE PADS'],            {'xxl_only': True, 'dpi_pad_size': True, 'brand_match': True}),
     ("Gaming Keyboard 2",   ['GAMING KEYBOARDS'],             {'brand_match': True, 'rgb_match': True}),
 ]
 
