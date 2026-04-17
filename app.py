@@ -4412,8 +4412,20 @@ with st.expander("⚙️ System Diagnostics"):
         cols = ['Material','Title','Level 1','Level 2','Hierarchy','Κατασκευαστής','Μοντέλο','Προτεινόμενη χρήση','Μέγεθος οθόνης','Θύρες','LIST PRICE']
     else:
         cols = ['Material','Title','Level 2','Hierarchy','Κατασκευαστής','Μοντέλο','LIST PRICE']
+        
     for col in cols:
-        val = trigger.get(col, 'N/A')
+        try:
+            # Safely handle duplicate column names in Pandas
+            if col in trigger.index:
+                val = trigger[col]
+                # If there are duplicate columns, Pandas returns a Series. We just take the first one.
+                if isinstance(val, pd.Series):
+                    val = val.iloc[0]
+            else:
+                val = 'N/A'
+        except Exception:
+            val = 'N/A'
+            
         st.text(f"{col}: {val}")
 
     if not recs.empty:
