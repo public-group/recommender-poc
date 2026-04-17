@@ -3906,12 +3906,18 @@ def run_peripherals_engine(trigger, df_products, df_history, cluster_key):
 
         # ── Universal Small Brand Boost & Color Match ──
         
-        # 1. Small Brand Tiebreaker (+15k)
+        # 1. Brand Tiebreaker (+15k) & Flag Boost (+80k)
         if tb:
-            is_same_brand = pool['Κατασκευαστής'].fillna('').str.strip().str.upper() == tb
+            target_brands = pool['Κατασκευαστής'].fillna('').str.strip().str.upper()
+            
+            # Treat LOGITECH and LOGITECH G as the exact same brand to prevent mismatches
+            if tb in ['LOGITECH', 'LOGITECH G']:
+                is_same_brand = target_brands.isin(['LOGITECH', 'LOGITECH G'])
+            else:
+                is_same_brand = target_brands == tb
+                
             pool.loc[is_same_brand, 'Final_Score'] += 15000
             
-            # If the slot explicitly required a brand match via flags, give it the massive boost
             if flags.get('brand_match'):
                 pool.loc[is_same_brand, 'Final_Score'] += 80000
                 
@@ -4356,7 +4362,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 with st.expander("⚙️ System Diagnostics"):
-# ─────────────────────────────────────────────────────────────
+    # ─────────────────────────────────────────────────────────────
     # ONE-CLICK COPYABLE DIAGNOSTICS
     # ─────────────────────────────────────────────────────────────
     st.markdown("### 📋 Copy Diagnostics")
@@ -4366,7 +4372,14 @@ with st.expander("⚙️ System Diagnostics"):
     
     diag_export += "--- TRIGGER ATTRIBUTES ---\n"
     for col in cols:
-        val = trigger.get(col, 'N/A')
+        try:
+            if col in trigger.index:
+                val = trigger[col]
+                if isinstance(val, pd.Series): val = val.iloc[0]
+            else:
+                val = 'N/A'
+        except Exception:
+            val = 'N/A'
         diag_export += f"{col}: {val}\n"
         
     diag_export += "\n--- ENGINE FUNNEL ---\n"
