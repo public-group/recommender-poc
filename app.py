@@ -516,20 +516,28 @@ except Exception as e:
     st.stop()
 
 
-
 # ═════════════════════════════════════════════════════════════
 # 🟢 NEW SIDEBAR — 2-Level Navigation (Level 1 → Level 2)
+# ═════════════════════════════════════════════════════════════
+# Replaces the entire existing sidebar block from:
+#   "# 🟢 SIDEBAR STYLING" 
+# down through:
+#   the trigger selection if/elif/elif chain
+#
+# This block also handles trigger selection internally (it sets `sel`
+# and `trigger` variables that the rest of your app uses).
 # ═════════════════════════════════════════════════════════════
 
 # ───── Navigation state ─────
 if 'nav_level' not in st.session_state:
-    st.session_state.nav_level = 1   
+    st.session_state.nav_level = 1   # 1 = L1 grid, 2 = L2 grid + selector
 if 'selected_l1' not in st.session_state:
     st.session_state.selected_l1 = None
 if 'active_cluster' not in st.session_state:
     st.session_state.active_cluster = None
 
 # ───── Taxonomy: L1 → L2 mapping ─────
+# To add a new cluster later, add it here AND ensure its engine is wired up below.
 L1_CATEGORIES = [
     {
         "key": "Books",
@@ -548,120 +556,138 @@ L1_CATEGORIES = [
     },
 ]
 
-# Kept ONLY Laptops in the IT category
 L2_CHILDREN = {
     "Books":     [{"key": "Kids Books",  "label": "Παιδικά\nΒιβλία",
                    "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 19.5A2.5 2.5 0 0 1 6.5 17H20'/%3E%3Cpath d='M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z'/%3E%3C/svg%3E"}],
     "Telephony": [{"key": "Smartphones", "label": "Smart-\nphones",
                    "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='5' y='2' width='14' height='20' rx='2' ry='2'/%3E%3Cline x1='12' y1='18' x2='12.01' y2='18'/%3E%3C/svg%3E"}],
-    "IT":        [{"key": "Laptops",     "label": "Laptops", 
-                   "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%231a73e8' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='2' y='4' width='20' height='12' rx='2' ry='2'/%3E%3Cpath d='M2 16h20M6 20h12'/%3E%3C/svg%3E"}],
+    "IT":        [{"key": "Laptops",     "label": "Laptops",
+                   "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='2' y='4' width='20' height='12' rx='1' ry='1'/%3E%3Cline x1='6' y1='20' x2='18' y2='20'/%3E%3Cline x1='12' y1='16' x2='12' y2='20'/%3E%3C/svg%3E"}],
 }
 
+# Reverse: L2 key → parent L1 key (used to highlight which L2 is active)
 L2_TO_L1 = {child["key"]: l1 for l1, children in L2_CHILDREN.items() for child in children}
 
-# ───── Safe & Bulletproof Sidebar Base Styling ─────
+# ───── Sidebar base styling ─────
 st.sidebar.markdown("""
 <style>
-    /* 1. Global sidebar background */
-    [data-testid="stSidebar"] > div:first-child { background-color: #f4f5f7 !important; }
-    [data-testid="stSidebar"] { background-color: #f4f5f7 !important; border-right: 1px solid #eaeaea; }
+    [data-testid="stSidebar"] > div:first-child { background-color: #f5f5f5 !important; }
+    [data-testid="stSidebar"] { background-color: #f5f5f5 !important; }
     [data-testid="stSidebarCollapseButton"] { display: none !important; }
-    
-    /* Adjust content padding so it renders perfectly above the absolute backgrounds */
-    [data-testid="stSidebar"] .block-container { position: relative; z-index: 1; padding-top: 3rem !important; }
-    [data-testid="stSidebar"] [data-testid="stVerticalBlockBorderWrapper"] { gap: 0.8rem !important; }
 
-    /* 2. Base Tile Styles (Targets ONLY columns that have a hidden marker class starting with "tile-marker") */
-    [data-testid="column"]:has([class^="tile-marker"]) [data-testid="stButton"] > button {
+    .sidebar-header {
+        background-color: #ff5e00; color: white; padding: 18px 20px;
+        margin-left: -1rem; margin-right: -1rem; margin-top: -1rem; margin-bottom: 10px;
+        font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+        font-size: 18px; font-weight: 700;
+        display: flex; align-items: center; justify-content: space-between;
+        box-sizing: border-box;
+    }
+    .sidebar-close-btn {
+        background: transparent; border: none; color: white; font-size: 22px;
+        font-weight: 300; cursor: pointer; padding: 5px 10px; line-height: 1; border-radius: 4px;
+    }
+    .sidebar-close-btn:hover { background: rgba(255,255,255,0.2); }
+
+    [data-testid="stSidebar"] .block-container { padding-top: 0 !important; }
+    [data-testid="stSidebar"] [data-testid="stVerticalBlockBorderWrapper"] { gap: 0.3rem !important; }
+
+    /* Tile buttons (L1 and L2 grids) */
+    [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] button {
         background: #ffffff !important;
         border: 1px solid #eaeaea !important;
         border-radius: 12px !important;
-        padding: 65px 4px 14px 4px !important;
-        min-height: 115px !important;
-        width: 100% !important;
+        padding: 55px 6px 12px 6px !important;
+        min-height: 105px !important;
         font-family: -apple-system, BlinkMacSystemFont, sans-serif !important;
-        font-size: 13px !important; font-weight: 700 !important; color: #111 !important;
-        line-height: 1.3 !important;
-        box-shadow: 0 2px 6px rgba(0,0,0,0.02) !important;
+        font-size: 11px !important; font-weight: 600 !important; color: #333 !important;
+        white-space: pre-line !important; line-height: 1.3 !important;
+        box-shadow: none !important;
         position: relative !important;
         transition: all 0.15s ease !important;
-        display: flex; flex-direction: column; align-items: center; justify-content: flex-end;
     }
-    [data-testid="column"]:has([class^="tile-marker"]) [data-testid="stButton"] > button:hover {
-        border-color: #1a73e8 !important;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.06) !important;
+    [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] button:hover {
+        border-color: #ff5e00 !important;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.08) !important;
         transform: translateY(-1px);
     }
-    [data-testid="column"]:has([class^="tile-marker"]) [data-testid="stButton"] > button p {
-        font-size: 13px !important; margin: 0 !important; font-weight: 700 !important; white-space: pre-line !important; text-align: center;
+    [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] button p {
+        font-size: 11px !important; margin-top: 2px !important;
     }
 
-    /* 3. Back Button Styles (Targets ONLY the column that has the "back-btn-marker") */
-    [data-testid="column"]:has(.back-btn-marker) [data-testid="stButton"] > button {
-        background-color: #f4f5f7 !important;
-        border: none !important;
+    .section-divider { border: none; border-top: 1px solid #e0e0e0; margin: 8px 0 4px 0; }
+    .sidebar-section {
+        font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+        font-size: 11px; font-weight: 700; color: #888;
+        text-transform: uppercase; letter-spacing: 0.5px; margin: 8px 0 4px 0;
+    }
+
+    /* Back button row (L2 view) */
+    .l2-breadcrumb {
+        display: flex; align-items: center; gap: 10px;
+        margin: 4px 0 10px 0;
+    }
+    .l2-back-btn-wrap { width: 36px; flex-shrink: 0; }
+    .l2-back-btn-wrap button {
+        background: #ffffff !important;
+        border: 1px solid #eaeaea !important;
         border-radius: 50% !important;
-        width: 36px !important; max-width: 36px !important;
-        height: 36px !important; min-height: 36px !important;
+        width: 36px !important; height: 36px !important;
+        min-height: 36px !important;
         padding: 0 !important;
-        display: flex !important; justify-content: center !important; align-items: center !important;
-        box-shadow: none !important;
+        font-size: 16px !important; font-weight: 700 !important; color: #333 !important;
+        line-height: 1 !important;
+        white-space: nowrap !important;
     }
-    [data-testid="column"]:has(.back-btn-marker) [data-testid="stButton"] > button:hover {
-        background-color: #e0e4e8 !important;
+    .l2-back-btn-wrap button:hover { border-color: #ff5e00 !important; }
+    .l2-breadcrumb-label {
+        font-size: 15px; font-weight: 700; color: #111;
+        line-height: 1.2;
     }
-    [data-testid="column"]:has(.back-btn-marker) [data-testid="stButton"] > button p {
-        font-size: 22px !important; margin: 0 !important; font-weight: 400 !important; color: #111 !important; line-height: 1 !important;
-    }
-
-    /* Utils */
-    .sidebar-close-btn { background: transparent; border: none; color: white; font-size: 22px; font-weight: 300; cursor: pointer; padding: 0 5px; line-height: 1; border-radius: 4px; }
-    .sidebar-close-btn:hover { background: rgba(255,255,255,0.2); }
-    .sidebar-section { font-family: -apple-system, BlinkMacSystemFont, sans-serif; font-size: 11px; font-weight: 700; color: #888; text-transform: uppercase; letter-spacing: 0.5px; margin: 10px 0 5px 0; }
 </style>
 """, unsafe_allow_html=True)
 
+# Header with close button
+st.sidebar.markdown('''
+<div class="sidebar-header">
+    <span>Μενού</span>
+    <button class="sidebar-close-btn" onclick="window.parent.document.querySelector('[data-testid=\\'stSidebarCollapsedControl\\'] button').click();" title="Κλείσιμο">✕</button>
+</div>
+''', unsafe_allow_html=True)
+
+
 # ─────────────────────────────────────────────────────────────
-# LEVEL 1 VIEW
+# LEVEL 1 VIEW — Show top-level category tiles
 # ─────────────────────────────────────────────────────────────
 if st.session_state.nav_level == 1:
-    # Orange Header Background (Absolute positioned to stretch edge to edge)
-    st.sidebar.markdown('''
-    <div style="position: absolute; top: 0; left: 0; right: 0; height: 80px; background-color: #ff5e00; z-index: 0;"></div>
-    <div style="position: relative; z-index: 1; display: flex; justify-content: space-between; align-items: center; margin-top: -20px; margin-bottom: 25px; padding: 0 5px;">
-        <span style="font-size: 18px; font-weight: 700; color: white; font-family: -apple-system, BlinkMacSystemFont, sans-serif;">Μενού</span>
-        <button class="sidebar-close-btn" onclick="window.parent.document.querySelector('[data-testid=\\'stSidebarCollapsedControl\\'] button').click();" title="Κλείσιμο">✕</button>
-    </div>
-    <p class="sidebar-section">ΠΡΟΪΟΝΤΑ</p>
-    ''', unsafe_allow_html=True)
+    st.sidebar.markdown('<p class="sidebar-section">Προϊόντα</p>', unsafe_allow_html=True)
 
-    # Inject icon SVGs securely using markers
+    # Render dynamic icon CSS for each L1 column position
     icon_css = "<style>"
-    for l1 in L1_CATEGORIES:
+    for i, l1 in enumerate(L1_CATEGORIES, start=1):
         icon_css += f"""
-        [data-testid="column"]:has(.tile-marker-{l1['key']}) [data-testid="stButton"] > button::before {{
-            content: ''; display: block; width: 44px; height: 44px;
-            background-color: #f4f5f7; border-radius: 50%;
+        [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] > div:nth-child({i}) button::before {{
+            content: ''; display: block; width: 32px; height: 32px;
             background-image: url("data:image/svg+xml,{l1['icon_svg']}");
-            background-size: 24px; background-repeat: no-repeat; background-position: center;
+            background-size: contain; background-repeat: no-repeat; background-position: center;
             position: absolute; top: 14px; left: 50%; transform: translateX(-50%);
         }}
         """
     icon_css += "</style>"
     st.sidebar.markdown(icon_css, unsafe_allow_html=True)
 
-    # Render Grid safely using hidden marker divs
+    # 2-column grid (3 categories: 2 in row 1, 1 in row 2... or use columns dynamically)
+    # We'll show pairs of 2 to match the screenshot
     n_l1 = len(L1_CATEGORIES)
     for row_start in range(0, n_l1, 2):
         row_items = L1_CATEGORIES[row_start:row_start + 2]
         cols = st.sidebar.columns(2)
         for col, l1 in zip(cols, row_items):
             with col:
-                st.markdown(f'<div class="tile-marker-{l1["key"]}" style="display:none;"></div>', unsafe_allow_html=True)
                 if st.button(l1["label"], key=f"l1_{l1['key']}", use_container_width=True):
                     st.session_state.nav_level = 2
                     st.session_state.selected_l1 = l1["key"]
+                    # Auto-select the first L2 child if there's only one
                     children = L2_CHILDREN.get(l1["key"], [])
                     if len(children) == 1:
                         st.session_state.active_cluster = children[0]["key"]
@@ -669,89 +695,82 @@ if st.session_state.nav_level == 1:
                         st.session_state.active_cluster = None
                     st.rerun()
 
+    # No active cluster yet → stop here, nothing to recommend
     sel = None
     trigger = None
 
+
 # ─────────────────────────────────────────────────────────────
-# LEVEL 2 VIEW
+# LEVEL 2 VIEW — Show L2 tiles + product selector + trigger card
 # ─────────────────────────────────────────────────────────────
 else:
     selected_l1_key = st.session_state.selected_l1
     selected_l1 = next((x for x in L1_CATEGORIES if x["key"] == selected_l1_key), None)
     children = L2_CHILDREN.get(selected_l1_key, [])
 
-    # White Header Background (Absolute positioned to stretch edge to edge perfectly)
-    st.sidebar.markdown('''
-    <div style="position: absolute; top: 0; left: 0; right: 0; height: 110px; background-color: #ffffff; border-bottom: 1px solid #eaeaea; z-index: 0;"></div>
-    <div style="position: relative; z-index: 1; display: flex; justify-content: flex-end; margin-top: -20px; margin-bottom: -15px; padding: 0 5px;">
-        <button class="sidebar-close-btn" style="color: #888;" onclick="window.parent.document.querySelector('[data-testid=\\'stSidebarCollapsedControl\\'] button').click();" title="Κλείσιμο">✕</button>
-    </div>
-    ''', unsafe_allow_html=True)
-
-    # Breadcrumb Layout
-    bc_cols = st.sidebar.columns([1, 4])
-    with bc_cols[0]:
-        st.markdown('<div class="back-btn-marker" style="display:none;"></div>', unsafe_allow_html=True)
-        if st.button("‹", key="back_to_l1", help="Επιστροφή"):
+    # Breadcrumb row: ‹ back arrow + parent label (matches screenshot)
+    bc_col1, bc_col2 = st.sidebar.columns([1, 6])
+    with bc_col1:
+        st.markdown('<div class="l2-back-btn-wrap">', unsafe_allow_html=True)
+        if st.button("‹", key="back_to_l1", help="Επιστροφή στο μενού"):
             st.session_state.nav_level = 1
             st.session_state.selected_l1 = None
             st.session_state.active_cluster = None
             st.rerun()
-    with bc_cols[1]:
+        st.markdown('</div>', unsafe_allow_html=True)
+    with bc_col2:
         label_clean = (selected_l1["label"] if selected_l1 else "").replace("\n", " ")
-        st.markdown(f'<div style="font-size: 16px; font-weight: 700; color: #111; line-height: 1.2; margin-top: 8px;">{label_clean}</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="l2-breadcrumb-label">{label_clean}</div>', unsafe_allow_html=True)
 
-    # Push tiles below the white header background
-    st.sidebar.markdown('<div style="height: 25px;"></div>', unsafe_allow_html=True)
+    # L2 tiles — render after the breadcrumb (in their own horizontal block)
+    st.sidebar.markdown('<hr class="section-divider">', unsafe_allow_html=True)
 
-    # Dynamic CSS mapping for L2 Tiles (Laptops icon + border active state)
+    # Active border CSS for L2 tiles
     active_cluster = st.session_state.active_cluster
-    l2_css = "<style>"
-    for child in children:
-        is_active = child["key"] == active_cluster
-        border_color = "#1a73e8" if is_active else "#eaeaea"
-        
-        l2_css += f"""
-        [data-testid="column"]:has(.tile-marker-{child['key']}) [data-testid="stButton"] > button {{
-            border-color: {border_color} !important;
+    border_css = "<style>"
+    for i, child in enumerate(children, start=1):
+        border = "2px solid #ff5e00" if child["key"] == active_cluster else "1px solid #eaeaea"
+        border_css += f"""
+        [data-testid="stSidebar"] [data-testid="stHorizontalBlock"]:not(:first-of-type) > div:nth-child({i}) button {{
+            border: {border} !important;
         }}
-        [data-testid="column"]:has(.tile-marker-{child['key']}) [data-testid="stButton"] > button::before {{
-            content: ''; display: block; width: 44px; height: 44px;
-            background-color: #f4f5f7; border-radius: 50%;
+        [data-testid="stSidebar"] [data-testid="stHorizontalBlock"]:not(:first-of-type) > div:nth-child({i}) button::before {{
+            content: ''; display: block; width: 32px; height: 32px;
             background-image: url("data:image/svg+xml,{child['icon_svg']}");
-            background-size: 24px; background-repeat: no-repeat; background-position: center;
+            background-size: contain; background-repeat: no-repeat; background-position: center;
             position: absolute; top: 14px; left: 50%; transform: translateX(-50%);
         }}
         """
-    l2_css += "</style>"
-    st.sidebar.markdown(l2_css, unsafe_allow_html=True)
+    border_css += "</style>"
+    st.sidebar.markdown(border_css, unsafe_allow_html=True)
 
-    # Render L2 Tiles safely using hidden marker divs
+    # Render L2 tiles in pairs
     n_l2 = len(children)
     for row_start in range(0, n_l2, 2):
         row_items = children[row_start:row_start + 2]
+        # Pad to 2 columns for consistent layout
         if len(row_items) == 1:
             cols = st.sidebar.columns(2)
             with cols[0]:
                 child = row_items[0]
-                st.markdown(f'<div class="tile-marker-{child["key"]}" style="display:none;"></div>', unsafe_allow_html=True)
                 if st.button(child["label"], key=f"l2_{child['key']}", use_container_width=True):
                     st.session_state.active_cluster = child["key"]
                     st.rerun()
+            # cols[1] left empty
         else:
             cols = st.sidebar.columns(2)
             for col, child in zip(cols, row_items):
                 with col:
-                    st.markdown(f'<div class="tile-marker-{child["key"]}" style="display:none;"></div>', unsafe_allow_html=True)
                     if st.button(child["label"], key=f"l2_{child['key']}", use_container_width=True):
                         st.session_state.active_cluster = child["key"]
                         st.rerun()
 
-    st.sidebar.markdown('<hr style="border-top: 1px solid #e0e0e0; margin: 15px 0;">', unsafe_allow_html=True)
+    st.sidebar.markdown('<hr class="section-divider">', unsafe_allow_html=True)
 
     # ───── Product selector + trigger setup based on active_cluster ─────
     sel = None
     trigger = None
+    active_cluster = st.session_state.active_cluster
 
     if active_cluster == "Smartphones":
         if df_products.empty: st.stop()
@@ -768,6 +787,7 @@ else:
         else:
             laptops = df_laptops[(df_laptops['Level 1']=='IT') & (df_laptops['Level 2'].isin(LAPTOP_L2_VALUES))]
             if laptops.empty:
+                # Fallback: hierarchy-based
                 laptops = df_laptops[df_laptops['Hierarchy'].fillna('').astype(str).str.upper().str.contains('NOTEBOOK|LAPTOP', regex=True, na=False)]
             if laptops.empty:
                 st.sidebar.warning("No laptop rows found in Laptops sheet.")
@@ -812,6 +832,7 @@ else:
                     matching_books['_has_series'] = matching_books['Σειρά βιβλίου'].apply(lambda x: 0 if (pd.isna(x) or str(x).strip().lower() in ['', '0', 'nan']) else 1)
                     matching_books = matching_books.sort_values('_has_series', ascending=False)
                 trigger = matching_books.iloc[0]
+
 
 # ───── Compatibility shim: rest of app expects `active_cluster` as a string ─────
 active_cluster = st.session_state.active_cluster or ""
