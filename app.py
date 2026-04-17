@@ -3556,16 +3556,15 @@ KEYBOARD_SLOTS = [
 
 GAMING_MOUSE_SLOTS = [
     ("Gaming Pad",          ['GAMING MOUSE PADS'],            {'title_hide': ['Gel', 'Wrist'], 'sensor_surface': True, 'brand_match': True}),
-    ("Gaming Keyboard",     ['GAMING KEYBOARDS'],             {'brand_match': True, 'rgb_match': True, 'button_kb_size': True}),
+    ("Gaming Keyboard",     ['GAMING KEYBOARDS'],             {'brand_match': True, 'rgb_match': True, 'button_kb_size': True, 'connectivity_mirror': True}),
     ("Batteries/Cable",     ['ΑΛΚΑΛΙΚΕΣ'],                    {'skip_if': 'no_battery', 'fallback_hier': ['USB CABLES']}),
-    ("Gaming Headset",      ['GAMING AUDIO'],                 {'brand_match': True}),
-    ("USB Hub",             ['USB HUB DEVICES'],              {'title_boost': ['USB 3', 'SuperSpeed']}),
     ("Cleaning Kit",        ['CLEANING PRODUCTS'],            {}),
-    ("Webcam/Stand",        ['PC WEB CAMS'],                  {'title_boost': ['Stand', 'Holder']}),
-    ("XXL Pad",             ['GAMING MOUSE PADS'],            {'xxl_only': True, 'dpi_pad_size': True, 'brand_match': False}),
+    ("USB Hub",             ['USB HUB DEVICES'],              {'title_boost': ['USB 3', 'SuperSpeed']}),
+    ("Gaming Headset",      ['GAMING AUDIO'],                 {'brand_match': True}),
+    ("Streaming Audio",     ['STREAMING ACCESSORIES', 'PC MICROPHONES'], {'eidos_include': ['Μικρόφωνο', 'Microphone', 'Audio', 'Stand']}),
+    ("Streaming Video",     ['STREAMING ACCESSORIES', 'PC WEB CAMS', 'ΕΞΥΠΝΟΣ ΦΩΤΙΣΜΟΣ'], {'eidos_include': ['Κάμερα', 'Webcam', 'Φωτισμός', 'Light', 'Capture', 'Video', 'Ring']}),
+    ("XXL Pad",             ['GAMING MOUSE PADS'],            {'xxl_only': True, 'dpi_pad_size': True, 'brand_match': True}),
     ("Gaming Keyboard 2",   ['GAMING KEYBOARDS'],             {'brand_match': True, 'rgb_match': True}),
-    ("Gaming Headset",      ['GAMING AUDIO'],                 {'brand_match': False}),
-
 ]
 
 # ── Monitor sub-personas (detected from Χρήση or hierarchy) ──
@@ -3762,6 +3761,7 @@ def run_peripherals_engine(trigger, df_products, df_history, cluster_key):
     # Color match - allow black and white to color match!
     do_color_match = tcolor and tcolor.lower() not in ('', 'nan', 'n/a', '0')
 
+    
     # ── Determine slot config ──
     if cluster_key == "Monitors":
         if 'gaming' in tusage:
@@ -3999,6 +3999,23 @@ def run_peripherals_engine(trigger, df_products, df_history, cluster_key):
             m = pool['Title'].fillna('').str.contains(pat, case=False, regex=True, na=False)
             pool.loc[m, 'Final_Score'] -= 100000
 
+        # ── Eidos (Type) Include Match ──
+        if flags.get('eidos_include') and 'Είδος' in pool.columns:
+            pat = '|'.join(flags['eidos_include'])
+            # Search in both Είδος and Title to be safe against bad data entry
+            m_eidos = pool['Είδος'].fillna('').str.contains(pat, case=False, regex=True, na=False)
+            m_title = pool['Title'].fillna('').str.contains(pat, case=False, regex=True, na=False)
+            
+            m_combined = m_eidos | m_title
+            
+            if m_combined.any():
+                b4_eidos = len(pool)
+                pool = pool[m_combined]
+                notes.append(f"Eidos/Title filter ({pat}): {b4_eidos} → {len(pool)}")
+            else:
+                notes.append(f"⚠ Eidos filter ({pat}) would empty pool, skipped")
+
+                
         # ── Wrist rest / XXL filters ──
         if flags.get('wrist_rest_only'):
             m = pool['Title'].fillna('').str.contains(r'Gel|Wrist|Καρπού|Μαξιλαράκι|Rest', case=False, regex=True, na=False)
@@ -4420,18 +4437,16 @@ with st.expander("⚙️ System Diagnostics"):
 
     st.markdown("### Trigger Attributes")
     if active_cluster == "Kids Books":
-        cols = ['Material','Title','Level 2','Hierarchy','Σειρά βιβλίου','Ηλικία','Εξώφυλλο','Brand','LIST PRICE']
+        diag_cols = ['Material','Title','Level 2','Hierarchy','Σειρά βιβλίου','Ηλικία','Εξώφυλλο','Brand','LIST PRICE']
     elif active_cluster == "Laptops":
-        cols = ['Material','Title','Level 1','Level 2','Hierarchy','Κατασκευαστής','Μοντέλο','Προτεινόμενη χρήση','Μέγεθος οθόνης','Θύρες','LIST PRICE']
+        diag_cols = ['Material','Title','Level 1','Level 2','Hierarchy','Κατασκευαστής','Μοντέλο','Προτεινόμενη χρήση','Μέγεθος οθόνης','Θύρες','LIST PRICE']
     else:
-        cols = ['Material','Title','Level 2','Hierarchy','Κατασκευαστής','Μοντέλο','LIST PRICE']
+        diag_cols = ['Material','Title','Level 2','Hierarchy','Κατασκευαστής','Μοντέλο','LIST PRICE']
         
-    for col in cols:
+    for d_col in diag_cols:
         try:
-            # Safely handle duplicate column names in Pandas
-            if col in trigger.index:
-                val = trigger[col]
-                # If there are duplicate columns, Pandas returns a Series. We just take the first one.
+            if d_col in trigger.index:
+                val = trigger[d_col]
                 if isinstance(val, pd.Series):
                     val = val.iloc[0]
             else:
@@ -4439,9 +4454,45 @@ with st.expander("⚙️ System Diagnostics"):
         except Exception:
             val = 'N/A'
             
-        st.text(f"{col}: {val}")
+        st.text(f"{d_col}: {val}")
 
     if not recs.empty:
         st.markdown("### Final Recommendations")
         dc = ['Title','Hierarchy','Assigned_Slot','Slot_Role','Final_Score'] if 'Final_Score' in recs.columns else ['Title','Hierarchy','Assigned_Slot','Slot_Role']
         st.dataframe(recs[[c for c in dc if c in recs.columns]], use_container_width=True, hide_index=True)
+
+    # ─────────────────────────────────────────────────────────────
+    # ONE-CLICK COPYABLE DIAGNOSTICS (COLLAPSED)
+    # ─────────────────────────────────────────────────────────────
+    with st.expander("📋 Click here to view & copy Raw Diagnostics text", expanded=False):
+        diag_export = f"Active Cluster: {active_cluster}\n\n"
+        
+        diag_export += "--- TRIGGER ATTRIBUTES ---\n"
+        for d_col in diag_cols:
+            try:
+                if d_col in trigger.index:
+                    val = trigger[d_col]
+                    if isinstance(val, pd.Series): val = val.iloc[0]
+                else:
+                    val = 'N/A'
+            except Exception:
+                val = 'N/A'
+            diag_export += f"{d_col}: {val}\n"
+            
+        diag_export += "\n--- ENGINE FUNNEL ---\n"
+        for step in diag:
+            diag_export += f"{step[0]} | Count: {step[1]} | Note: {step[2]}\n"
+            
+        diag_export += "\n--- SLOT DETAILS ---\n"
+        for sn, notes in sorted(slot_notes.items()):
+            if notes:
+                diag_export += f"\nPriority {sn}\n"
+                for n in notes: 
+                    diag_export += f"{n}\n"
+                    
+        if not recs.empty:
+            diag_export += "\n--- FINAL RECOMMENDATIONS ---\n"
+            for _, r in recs.iterrows():
+                diag_export += f"Slot {r.get('Assigned_Slot', '?')}: {r.get('Title', 'Unknown')} (Score: {r.get('Final_Score', 0)})\n"
+
+        st.code(diag_export, language="text")
