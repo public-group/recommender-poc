@@ -3561,8 +3561,8 @@ GAMING_MOUSE_SLOTS = [
     ("Cleaning Kit",        ['CLEANING PRODUCTS'],            {}),
     ("USB Hub",             ['USB HUB DEVICES'],              {'title_boost': ['USB 3', 'SuperSpeed']}),
     ("Gaming Headset",      ['GAMING AUDIO'],                 {'brand_match': True}),
-    ("Streaming Audio",     ['STREAMING ACCESSORIES', 'PC MICROPHONES'], {'eidos_include': ['Μικρόφωνο', 'Microphone', 'Audio', 'Stand']}),
-    ("Streaming Video",     ['STREAMING ACCESSORIES', 'PC WEB CAMS', 'ΕΞΥΠΝΟΣ ΦΩΤΙΣΜΟΣ'], {'eidos_include': ['Κάμερα', 'Webcam', 'Φωτισμός', 'Light', 'Capture', 'Video', 'Ring']}),
+    ("Streaming Audio",     ['STREAMING ACCESSORIES', 'PC MICROPHONES'], {'eidos_include': ['Μικρόφωνο', 'Microphone', 'Audio', 'Stand'], 'title_hide': ['Headset', 'Ακουστικά']}),
+    ("Streaming Video",     ['STREAMING ACCESSORIES', 'PC WEB CAMS', 'ΕΞΥΠΝΟΣ ΦΩΤΙΣΜΟΣ'], {'eidos_include': ['Κάμερα', 'Webcam', 'Φωτισμός', 'Light', 'Capture', 'Video', 'Ring', 'Prompter'], 'title_hide': ['Bulb', 'Λάμπα', 'GU10', 'E27', 'E14', 'Οροφής', 'Ceiling', 'Ταινία', 'Strip', 'Λεντοταινία']}),
     ("XXL Pad",             ['GAMING MOUSE PADS'],            {'xxl_only': True, 'dpi_pad_size': True, 'brand_match': True}),
     ("Gaming Keyboard 2",   ['GAMING KEYBOARDS'],             {'brand_match': True, 'rgb_match': True}),
 ]
@@ -3905,24 +3905,25 @@ def run_peripherals_engine(trigger, df_products, df_history, cluster_key):
             notes.append(f"Pricing [{cat_key}]: Target €{min_p:.0f}-€{max_p:.0f} (Anchor: €{tprice:.0f}). In band: {in_band.sum()}")
 
         # ── Universal Small Brand Boost & Color Match ──
-        
-        # 1. Brand Tiebreaker (+15k) & Flag Boost (+80k)
+                
+        # 1. Brand Tiebreaker (+30k) & Flag Boost (+250k)
         if tb:
             target_brands = pool['Κατασκευαστής'].fillna('').str.strip().str.upper()
             
-            # Treat LOGITECH and LOGITECH G as the exact same brand to prevent mismatches
+            # Treat LOGITECH and LOGITECH G as the exact same brand
             if tb in ['LOGITECH', 'LOGITECH G']:
                 is_same_brand = target_brands.isin(['LOGITECH', 'LOGITECH G'])
             else:
                 is_same_brand = target_brands == tb
                 
-            pool.loc[is_same_brand, 'Final_Score'] += 15000
+            pool.loc[is_same_brand, 'Final_Score'] += 30000
             
             if flags.get('brand_match'):
-                pool.loc[is_same_brand, 'Final_Score'] += 80000
-                
-            if is_same_brand.any():
-                notes.append(f"Brand Match ({tb}): Boosted {is_same_brand.sum()} items")
+                pool.loc[is_same_brand, 'Final_Score'] += 250000
+                if is_same_brand.any():
+                    notes.append(f"⭐ STRICT BRAND MATCH ({tb}): +250k points to {is_same_brand.sum()} items")
+            elif is_same_brand.any():
+                notes.append(f"Base Brand Match ({tb}): +30k points to {is_same_brand.sum()} items")
 
         # 2. Color Tiebreaker (+200k) - Eligible for Keyboards and Mousepads/Mats
         r_lower = role.lower()
@@ -4436,25 +4437,25 @@ with st.expander("⚙️ System Diagnostics"):
                 st.text(n)
 
     st.markdown("### Trigger Attributes")
+    
+    # Using a unique variable name (diag_attr_keys) so it doesn't collide with UI columns!
+    diag_attr_keys = []
     if active_cluster == "Kids Books":
-        diag_cols = ['Material','Title','Level 2','Hierarchy','Σειρά βιβλίου','Ηλικία','Εξώφυλλο','Brand','LIST PRICE']
+        diag_attr_keys = ['Material','Title','Level 2','Hierarchy','Σειρά βιβλίου','Ηλικία','Εξώφυλλο','Brand','LIST PRICE']
     elif active_cluster == "Laptops":
-        diag_cols = ['Material','Title','Level 1','Level 2','Hierarchy','Κατασκευαστής','Μοντέλο','Προτεινόμενη χρήση','Μέγεθος οθόνης','Θύρες','LIST PRICE']
+        diag_attr_keys = ['Material','Title','Level 1','Level 2','Hierarchy','Κατασκευαστής','Μοντέλο','Προτεινόμενη χρήση','Μέγεθος οθόνης','Θύρες','LIST PRICE']
     else:
-        diag_cols = ['Material','Title','Level 2','Hierarchy','Κατασκευαστής','Μοντέλο','LIST PRICE']
+        diag_attr_keys = ['Material','Title','Level 2','Hierarchy','Κατασκευαστής','Μοντέλο','LIST PRICE']
         
-    for d_col in diag_cols:
+    for d_key in diag_attr_keys:
         try:
-            if d_col in trigger.index:
-                val = trigger[d_col]
-                if isinstance(val, pd.Series):
-                    val = val.iloc[0]
-            else:
-                val = 'N/A'
+            if d_key in trigger.index:
+                val = trigger[d_key]
+                if isinstance(val, pd.Series): val = val.iloc[0]
+            else: val = 'N/A'
         except Exception:
             val = 'N/A'
-            
-        st.text(f"{d_col}: {val}")
+        st.text(f"{d_key}: {val}")
 
     if not recs.empty:
         st.markdown("### Final Recommendations")
@@ -4462,37 +4463,53 @@ with st.expander("⚙️ System Diagnostics"):
         st.dataframe(recs[[c for c in dc if c in recs.columns]], use_container_width=True, hide_index=True)
 
     # ─────────────────────────────────────────────────────────────
-    # ONE-CLICK COPYABLE DIAGNOSTICS (COLLAPSED)
+    # ONE-CLICK COPYABLE DIAGNOSTICS (HIDDEN JS BUTTON)
     # ─────────────────────────────────────────────────────────────
-    with st.expander("📋 Click here to view & copy Raw Diagnostics text", expanded=False):
-        diag_export = f"Active Cluster: {active_cluster}\n\n"
+    import json
+    
+    diag_export = f"Active Cluster: {active_cluster}\n\n--- TRIGGER ATTRIBUTES ---\n"
+    for d_key in diag_attr_keys:
+        try:
+            val = trigger[d_key].iloc[0] if isinstance(trigger.get(d_key), pd.Series) else trigger.get(d_key, 'N/A')
+        except: val = 'N/A'
+        diag_export += f"{d_key}: {val}\n"
         
-        diag_export += "--- TRIGGER ATTRIBUTES ---\n"
-        for d_col in diag_cols:
-            try:
-                if d_col in trigger.index:
-                    val = trigger[d_col]
-                    if isinstance(val, pd.Series): val = val.iloc[0]
-                else:
-                    val = 'N/A'
-            except Exception:
-                val = 'N/A'
-            diag_export += f"{d_col}: {val}\n"
-            
-        diag_export += "\n--- ENGINE FUNNEL ---\n"
-        for step in diag:
-            diag_export += f"{step[0]} | Count: {step[1]} | Note: {step[2]}\n"
-            
-        diag_export += "\n--- SLOT DETAILS ---\n"
-        for sn, notes in sorted(slot_notes.items()):
-            if notes:
-                diag_export += f"\nPriority {sn}\n"
-                for n in notes: 
-                    diag_export += f"{n}\n"
-                    
-        if not recs.empty:
-            diag_export += "\n--- FINAL RECOMMENDATIONS ---\n"
-            for _, r in recs.iterrows():
-                diag_export += f"Slot {r.get('Assigned_Slot', '?')}: {r.get('Title', 'Unknown')} (Score: {r.get('Final_Score', 0)})\n"
+    diag_export += "\n--- ENGINE FUNNEL ---\n"
+    for step in diag:
+        diag_export += f"{step[0]} | Count: {step[1]} | Note: {step[2]}\n"
+        
+    diag_export += "\n--- SLOT DETAILS ---\n"
+    for sn, notes in sorted(slot_notes.items()):
+        if notes:
+            diag_export += f"\nPriority {sn}\n" + "\n".join(notes) + "\n"
+                
+    if not recs.empty:
+        diag_export += "\n--- FINAL RECOMMENDATIONS ---\n"
+        for _, r in recs.iterrows():
+            diag_export += f"Slot {r.get('Assigned_Slot', '?')}: {r.get('Title', 'Unknown')} (Score: {r.get('Final_Score', 0)})\n"
 
-        st.code(diag_export, language="text")
+    # Safely escape the text for JavaScript
+    safe_text = json.dumps(diag_export)
+    
+    # Render a tiny, clean HTML button (removes the giant grey box completely)
+    copy_html = f"""
+    <div style="margin-top: 20px;">
+        <button id="copyBtn" style="background:#111; color:#fff; border:none; padding:10px 20px; border-radius:8px; cursor:pointer; font-family:sans-serif; font-size:14px; font-weight:bold; box-shadow: 0 4px 6px rgba(0,0,0,0.1); transition: 0.2s;">
+            📋 Copy Full Diagnostics
+        </button>
+    </div>
+    <script>
+    document.getElementById("copyBtn").addEventListener("click", function() {{
+        navigator.clipboard.writeText({safe_text}).then(function() {{
+            var btn = document.getElementById("copyBtn");
+            btn.style.background = "#00897b";
+            btn.innerText = "✅ Copied to Clipboard!";
+            setTimeout(() => {{
+                btn.style.background = "#111";
+                btn.innerText = "📋 Copy Full Diagnostics";
+            }}, 2000);
+        }});
+    }});
+    </script>
+    """
+    components.html(copy_html, height=70)
