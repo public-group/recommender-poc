@@ -3516,13 +3516,14 @@ MOUSE_SLOTS = [
     ("Mouse Pad",           ['MOUSE PADS'],                   {'title_hide': ['Gel', 'Wrist', 'Μαξιλαράκι']}),
     ("Keyboard",            ['KEYBOARDS WIRELESS', 'KEYBOARDS WIRED'], {'connectivity_mirror': True, 'brand_match': True, 'apple_force': 'APPLE ORIGINAL WIRELESS KEYBOARD', 'silent_match': True, 'ergo_match': True}),
     ("Batteries",           ['ΑΛΚΑΛΙΚΕΣ'],                    {'skip_if': 'no_battery'}),
-    ("Wrist Rest",          ['MOUSE PADS'],                   {'wrist_rest_only': True}),
     ("Screen Cleaner",      ['CLEANING PRODUCTS'],            {}),
     ("USB Hub",             ['USB HUB DEVICES'],              {}),
     ("Headset",             ['PC HEADSET/MICROPHONE', 'OVERHEAD'], {}),
     ("Desk Lamp",           ['ΕΞΥΠΝΟΣ ΦΩΤΙΣΜΟΣ'],            {'title_boost': ['Desk', 'Γραφείου', 'Table', 'Επιτραπέζιο'], 'title_hide': ['Ceiling', 'Bulb', 'Strip', 'Οροφής']}),
-    ("Mouse Pad 2",         ['MOUSE PADS'],                   {'title_hide': ['Gel', 'Wrist', 'Μαξιλαράκι']}),
+    ("Wrist Rest",          ['MOUSE PADS'],                   {'wrist_rest_only': True}),
     ("Keyboard 2",          ['KEYBOARDS WIRELESS', 'KEYBOARDS WIRED'], {'connectivity_mirror': True, 'brand_match': True, 'apple_force': 'APPLE ORIGINAL WIRELESS KEYBOARD'}),
+    ("Mouse Pad 2",         ['MOUSE PADS'],                   {'title_hide': ['Gel', 'Wrist', 'Μαξιλαράκι']}),
+
 ]
 
 KEYBOARD_SLOTS = [
@@ -3657,7 +3658,39 @@ PERIPHERAL_CLUSTER_SLOTS = {
     "USB Hub":        USB_HUB_SLOTS,
 }
 
-
+def get_peripheral_budget(anchor_price, category):
+    """
+    Returns (min_price, max_price) based on the anchor product price and category.
+    Implements the custom segment logic and 0.5x to 2.5x guardrails.
+    """
+    # Budget Tier
+    if anchor_price < 20:
+        if category == 'KEYBOARD': return (15, 25)
+        if category == 'HEADSET': return (15, 30)
+        if category == 'MOUSEPAD': return (5, 10)
+        return (5, anchor_price * 0.30) # 30% rule for general accessories
+        
+    # Sweet Spot Tier
+    elif anchor_price < 80:
+        if category == 'KEYBOARD': return (40, 70)
+        if category == 'HEADSET': return (40, 80)
+        if category == 'MOUSEPAD': return (15, 25)
+        return (10, anchor_price * 0.30)
+        
+    # High-End Tier
+    elif anchor_price < 150:
+        if category == 'KEYBOARD': return (120, 180)
+        if category == 'HEADSET': return (100, 150)
+        if category == 'MOUSEPAD': return (30, 50)
+        return (15, anchor_price * 0.30)
+        
+    # Ultra/Pro Tier (>= 150)
+    else:
+        if category == 'KEYBOARD': return (200, 350)
+        if category == 'HEADSET': return (200, 400)
+        if category == 'MOUSEPAD': return (50, 100)
+        return (25, anchor_price * 0.50) # Loosened 30% rule for flagship buyers
+        
 def run_peripherals_engine(trigger, df_products, df_history, cluster_key):
     """Unified peripheral engine for all IT clusters."""
     diag = []
@@ -3826,6 +3859,46 @@ def run_peripherals_engine(trigger, df_products, df_history, cluster_key):
             pool.loc[pool['AVAILABILITY'] == 'Άμεσα Διαθέσιμο', 'Final_Score'] += 100000
         pool['Final_Score'] += pool['Sales_Tiebreaker'].fillna(0) * 0.1
 
+
+# ── Price Proportionality & Tier Logic ──
+        if 'LIST PRICE' in pool.columns and tprice > 0:
+            pool['_p'] = pool['LIST PRICE'].apply(parse_euro_price)
+            
+            # Identify the category for the current slot
+            r_lower = role.lower()
+            if 'keyboard' in r_lower: cat_key = 'KEYBOARD'
+            elif 'headset' in r_lower: cat_key = 'HEADSET'
+            elif 'pad' in r_lower or 'mat' in r_lower or 'rest' in r_lower: cat_key = 'MOUSEPAD'
+            else: cat_key = 'ACCESSORY'
+
+            min_p, max_p = get_peripheral_budget(tprice, cat_key)
+            
+            # Find items in the sweet spot band
+            in_band = (pool['_p'] >= min_p) & (pool['_p'] <= max_p)
+            pool.loc[in_band, 'Final_Score'] += 150000
+            
+            # Apply penalties for breaking the tier bounds
+            overbuy = pool['_p'] > max_p
+            underbuy = pool['_p'] < min_p
+            
+            # Heavy penalty for upselling too aggressively
+            pool.loc[overbuy, 'Final_Score'] -= 200000
+            # Moderate penalty for showing cheap gear to premium buyers
+            pool.loc[underbuy, 'Final_Score'] -= 80000 
+            
+            notes.append(f"Pricing [{cat_key}]: Target €{min_p:.0f}-€{max_p:.0f} (Anchor: €{tprice:.0f}). In band: {in_band.sum()}")
+
+            # ── Tier Locking (Intent Matching) ──
+            # Ensure Gaming items aren't pushed to non-gaming anchors, and vice-versa
+            is_pool_gaming = pool['Title'].fillna('').str.lower().str.contains('gaming|rgb|razer|rog', regex=True, na=False)
+            is_anchor_gaming = 'gaming' in _tt_lower or 'rgb' in _tt_lower
+            
+            if is_anchor_gaming:
+                pool.loc[is_pool_gaming, 'Final_Score'] += 40000
+            else:
+                pool.loc[is_pool_gaming, 'Final_Score'] -= 100000
+
+                
         # ── Connectivity mirror ──
         if flags.get('connectivity_mirror'):
             pool_hier = pool['Hierarchy'].fillna('').str.upper()
