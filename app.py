@@ -3759,7 +3759,7 @@ def run_peripherals_engine(trigger, df_products, df_history, cluster_key):
     hub_interface = str(trigger.get('Interface', '')).lower()
 
     # Color match
-    do_color_match = tcolor and tcolor.lower() not in ('', 'nan', 'black', 'μαύρο', 'white', 'λευκό', 'n/a')
+    do_color_match = tcolor and tcolor.lower() not in ('', 'nan', 'black', 'μαύρο', 'n/a')
 
     # ── Determine slot config ──
     if cluster_key == "Monitors":
