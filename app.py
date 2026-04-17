@@ -3917,16 +3917,21 @@ def run_peripherals_engine(trigger, df_products, df_history, cluster_key):
             if is_same_brand.any():
                 notes.append(f"Brand Match ({tb}): Boosted {is_same_brand.sum()} items")
 
-        # 2. Color Tiebreaker (+10k) - STRICTLY FOR KEYBOARDS AND MICE
+        # 2. Color Tiebreaker (+10k) - STRICTLY FOR KEYBOARDS AND MICE (Attribute-Driven)
         r_lower = role.lower()
         is_color_eligible = 'keyboard' in r_lower or ('mouse' in r_lower and 'pad' not in r_lower)
         
         if do_color_match and is_color_eligible and 'Χρώμα' in pool.columns:
-            is_same_color = pool['Χρώμα'].fillna('').astype(str).str.strip().str.upper() == tcolor.upper()
+            # Clean the anchor color (lowercase, remove extra spaces)
+            clean_tcolor = str(tcolor).strip().lower()
+            
+            # Compare directly against the cleaned 'Χρώμα' column in the pool
+            is_same_color = pool['Χρώμα'].fillna('').astype(str).str.strip().str.lower() == clean_tcolor
+            
             pool.loc[is_same_color, 'Final_Score'] += 10000
             
             if is_same_color.any():
-                notes.append(f"Color Match ({tcolor}): Boosted {is_same_color.sum()} items (+10k)")
+                notes.append(f"Color Match (Attribute '{tcolor}'): Boosted {is_same_color.sum()} items (+10k)")
 
 
                 
