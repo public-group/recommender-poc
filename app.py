@@ -101,7 +101,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v20.2 — Floor Care: 10-slot "Perfect Fit" Ecosystem (bags/filters/brand-model match/cascade)
+        🟢 Engine v21.0 — Peripherals: Mouse/KB/Gaming Mouse deep attrs + Monitors (3 personas) + Printers (Inkjet/Laser) + Webcam + USB Hub
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -557,6 +557,11 @@ def load_all_data():
         dv = pd.read_excel(excel_file, sheet_name='Vacuums')
         dv.columns = dv.columns.str.strip()
     else: dv = pd.DataFrame()
+
+    if 'Peripherals' in available_sheets:
+        dper = pd.read_excel(excel_file, sheet_name='Peripherals')
+        dper.columns = dper.columns.str.strip()
+    else: dper = pd.DataFrame()
     
     if not dp.empty:
         parts = [dp[c].fillna('').astype(str).str.strip() for c in COMPAT_COLS if c in dp.columns]
@@ -573,10 +578,10 @@ def load_all_data():
     if not db.empty and CC not in db.columns:
         db[CC] = ''
     
-    return dp, dh, ds, db, dl, dv, available_sheets
+    return dp, dh, ds, db, dl, dv, dper, available_sheets
 
 try:
-    df_products, df_history, df_slots, df_books, df_laptops, df_vacuums, sheets_loaded = load_all_data()
+    df_products, df_history, df_slots, df_books, df_laptops, df_vacuums, df_peripherals, sheets_loaded = load_all_data()
     compat_cols_found = [c for c in COMPAT_COLS if c in df_products.columns]
 except Exception as e:
     st.error(f"🚨 Error loading data: {e}")
@@ -635,7 +640,22 @@ L2_CHILDREN = {
     "Telephony": [{"key": "Smartphones", "label": "Smart-\nphones",
                    "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='5' y='2' width='14' height='20' rx='2' ry='2'/%3E%3Cline x1='12' y1='18' x2='12.01' y2='18'/%3E%3C/svg%3E"}],
     "IT":        [{"key": "Laptops",     "label": "Laptops",
-                   "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='2' y='4' width='20' height='12' rx='1' ry='1'/%3E%3Cline x1='6' y1='20' x2='18' y2='20'/%3E%3Cline x1='12' y1='16' x2='12' y2='20'/%3E%3C/svg%3E"}],
+                   "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='2' y='4' width='20' height='12' rx='1' ry='1'/%3E%3Cline x1='6' y1='20' x2='18' y2='20'/%3E%3Cline x1='12' y1='16' x2='12' y2='20'/%3E%3C/svg%3E"},
+                  {"key": "Mouse",      "label": "Mouse",
+                   "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='6' y='3' width='12' height='18' rx='6'/%3E%3Cline x1='12' y1='7' x2='12' y2='11'/%3E%3C/svg%3E"},
+                  {"key": "Keyboard",   "label": "Keyboard",
+                   "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='2' y='6' width='20' height='12' rx='2'/%3E%3Cline x1='6' y1='10' x2='6.01' y2='10'/%3E%3Cline x1='10' y1='10' x2='10.01' y2='10'/%3E%3Cline x1='14' y1='10' x2='14.01' y2='10'/%3E%3Cline x1='18' y1='10' x2='18.01' y2='10'/%3E%3Cline x1='8' y1='14' x2='16' y2='14'/%3E%3C/svg%3E"},
+                  {"key": "Gaming Mouse", "label": "Gaming\nMouse",
+                   "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='6' y='3' width='12' height='18' rx='6'/%3E%3Cline x1='12' y1='7' x2='12' y2='11'/%3E%3Cpath d='M6 12h12'/%3E%3C/svg%3E"},
+                  {"key": "Monitors",     "label": "Οθόνες",
+                   "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='2' y='3' width='20' height='14' rx='2'/%3E%3Cline x1='8' y1='21' x2='16' y2='21'/%3E%3Cline x1='12' y1='17' x2='12' y2='21'/%3E%3C/svg%3E"},
+                  {"key": "Printers",     "label": "Εκτυπωτές",
+                   "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9V2h12v7'/%3E%3Crect x='6' y='14' width='12' height='8'/%3E%3Cpath d='M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2'/%3E%3C/svg%3E"},
+                  {"key": "Webcam",       "label": "Webcam",
+                   "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='10' r='7'/%3E%3Ccircle cx='12' cy='10' r='3'/%3E%3Cline x1='12' y1='17' x2='12' y2='21'/%3E%3Cline x1='8' y1='21' x2='16' y2='21'/%3E%3C/svg%3E"},
+                  {"key": "USB Hub",      "label": "USB Hub",
+                   "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='4' y='8' width='16' height='8' rx='2'/%3E%3Cline x1='8' y1='12' x2='8.01' y2='12'/%3E%3Cline x1='12' y1='12' x2='12.01' y2='12'/%3E%3Cline x1='16' y1='12' x2='16.01' y2='12'/%3E%3C/svg%3E"},
+                 ],
     "SDA":       [{"key": "Floor Care", "label": "Σκούπες",
                    "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 2v8l4-2'/%3E%3Cpath d='M12 10l-4-2'/%3E%3Ccircle cx='12' cy='18' r='4'/%3E%3Cline x1='12' y1='10' x2='12' y2='14'/%3E%3C/svg%3E"}],
 }
@@ -891,6 +911,77 @@ else:
                 st.sidebar.markdown('<p class="sidebar-section">Επιλέξτε Σκούπα</p>', unsafe_allow_html=True)
                 sel = st.sidebar.selectbox("", vacuums['Title'].unique(), label_visibility="collapsed", key="fc_sel")
                 trigger = vacuums[vacuums['Title']==sel].iloc[0] if sel else None
+
+    elif active_cluster in ("Mouse", "Keyboard", "Gaming Mouse"):
+        if df_peripherals.empty:
+            st.sidebar.warning("Sheet 'Peripherals' is empty or missing.")
+        else:
+            pconfig = PERIPHERAL_TRIGGERS.get(active_cluster, {})
+            p_hiers = {h.upper().strip() for h in pconfig.get('hierarchies', set())}
+            periph = df_peripherals[df_peripherals['Hierarchy'].fillna('').astype(str).str.upper().str.strip().isin(p_hiers)].copy()
+            if periph.empty:
+                st.sidebar.warning(f"Δεν βρέθηκαν {active_cluster} products.")
+            else:
+                label = {"Mouse": "Ποντίκι", "Keyboard": "Πληκτρολόγιο", "Gaming Mouse": "Gaming Mouse"}.get(active_cluster, active_cluster)
+                st.sidebar.markdown(f'<p class="sidebar-section">Επιλέξτε {label}</p>', unsafe_allow_html=True)
+                sel = st.sidebar.selectbox("", periph['Title'].unique(), label_visibility="collapsed", key=f"periph_{active_cluster}_sel")
+                trigger = periph[periph['Title']==sel].iloc[0] if sel else None
+
+    elif active_cluster == "Monitors":
+        if df_peripherals.empty:
+            st.sidebar.warning("Sheet 'Peripherals' is empty or missing.")
+        else:
+            monitors = df_peripherals[df_peripherals['Hierarchy'].fillna('').astype(str).str.upper().str.strip().isin({'TFT MONITOR', 'MONITORS'})].copy()
+            if monitors.empty:
+                monitors = df_peripherals[df_peripherals['Level 2'].fillna('').str.strip() == 'Monitors'].copy()
+            if monitors.empty:
+                st.sidebar.warning("Δεν βρέθηκαν οθόνες.")
+            else:
+                st.sidebar.markdown('<p class="sidebar-section">Επιλέξτε Οθόνη</p>', unsafe_allow_html=True)
+                sel = st.sidebar.selectbox("", monitors['Title'].unique(), label_visibility="collapsed", key="mon_sel")
+                trigger = monitors[monitors['Title']==sel].iloc[0] if sel else None
+
+    elif active_cluster == "Printers":
+        if df_peripherals.empty:
+            st.sidebar.warning("Sheet 'Peripherals' is empty or missing.")
+        else:
+            printer_hiers = {'INKJET', 'MULTIFUNCTION INKJET', 'MULTIFUCTION LASER', 'LASER', 'LASER A4 MONO',
+                             'LASER A4 COLOR', 'LASER A3 MONO', 'LASER A3 COLOR', 'FAX LASER',
+                             'MULTIFUCTION LASER A4 COLOR', 'MULTIFUCTION LASER A4 MONO',
+                             'MULTIFUCTION LASER A3 COLOR', 'MULTIFUCTION LASER A3 MONO'}
+            printers = df_peripherals[df_peripherals['Hierarchy'].fillna('').astype(str).str.upper().str.strip().isin(printer_hiers)].copy()
+            if printers.empty:
+                printers = df_peripherals[df_peripherals['Level 2'].fillna('').str.strip() == 'Printers'].copy()
+            if printers.empty:
+                st.sidebar.warning("Δεν βρέθηκαν εκτυπωτές.")
+            else:
+                st.sidebar.markdown('<p class="sidebar-section">Επιλέξτε Εκτυπωτή</p>', unsafe_allow_html=True)
+                sel = st.sidebar.selectbox("", printers['Title'].unique(), label_visibility="collapsed", key="print_sel")
+                trigger = printers[printers['Title']==sel].iloc[0] if sel else None
+
+    elif active_cluster == "Webcam":
+        if df_peripherals.empty:
+            st.sidebar.warning("Sheet 'Peripherals' is empty or missing.")
+        else:
+            webcams = df_peripherals[df_peripherals['Hierarchy'].fillna('').astype(str).str.upper().str.strip().isin({'PC WEB CAMS', 'WEB CAMS', 'NOTEBOOK WEB CAMS'})].copy()
+            if webcams.empty:
+                st.sidebar.warning("Δεν βρέθηκαν webcams.")
+            else:
+                st.sidebar.markdown('<p class="sidebar-section">Επιλέξτε Webcam</p>', unsafe_allow_html=True)
+                sel = st.sidebar.selectbox("", webcams['Title'].unique(), label_visibility="collapsed", key="wc_sel")
+                trigger = webcams[webcams['Title']==sel].iloc[0] if sel else None
+
+    elif active_cluster == "USB Hub":
+        if df_peripherals.empty:
+            st.sidebar.warning("Sheet 'Peripherals' is empty or missing.")
+        else:
+            hubs = df_peripherals[df_peripherals['Hierarchy'].fillna('').astype(str).str.upper().str.strip().isin({'USB HUB DEVICES'})].copy()
+            if hubs.empty:
+                st.sidebar.warning("Δεν βρέθηκαν USB Hubs.")
+            else:
+                st.sidebar.markdown('<p class="sidebar-section">Επιλέξτε USB Hub</p>', unsafe_allow_html=True)
+                sel = st.sidebar.selectbox("", hubs['Title'].unique(), label_visibility="collapsed", key="hub_sel")
+                trigger = hubs[hubs['Title']==sel].iloc[0] if sel else None
 
     elif active_cluster == "Kids Books":
         if df_books.empty: st.stop()
@@ -3150,8 +3241,10 @@ def run_floor_care_engine(trigger, df_products, df_history):
     if not is_pet:
         is_pet = 'pet' in _tt_lower or 'κατοικίδι' in _tt_lower
 
+    is_stick = 'stick' in thier.lower() or 'stick' in _tt_lower
+
     diag.append(("0. Trigger", f"Brand={tb}, €{tprice:.0f}",
-                 f"Model={tmodel}, Robot={is_robot}, Bagged={is_bagged}, Pet={is_pet}"))
+                 f"Model={tmodel}, Robot={is_robot}, Bagged={is_bagged}, Pet={is_pet}, Stick={is_stick}"))
 
     # ── Build candidate pool ──
     c = df_products[df_products['Material'] != tm].copy()
@@ -3280,6 +3373,14 @@ def run_floor_care_engine(trigger, df_products, df_history):
     for comp_role, comp_hiers in COMPANIONS:
         slot_num += 1
         notes = [f"Companion: {comp_role}"]
+
+        # 🚫 Pet Care ONLY for pet-friendly triggers
+        if comp_role == 'Pet Care' and not is_pet:
+            notes.append("🚫 Trigger is NOT pet-friendly → skipping Pet Care slot")
+            slot_notes[slot_num] = notes
+            diag.append((f"Slot {slot_num} ({comp_role})", 0, "Skipped (no pet)"))
+            continue
+
         hier_upper = [h.upper().strip() for h in comp_hiers]
         pool = c[c['Hierarchy'].fillna('').astype(str).str.upper().str.strip().isin(hier_upper)].copy()
 
@@ -3292,13 +3393,43 @@ def run_floor_care_engine(trigger, df_products, df_history):
             if not pool.empty: notes.append(f"⚠ Substring fallback: {len(pool)}")
 
         notes.append(f"Pool: {len(pool)}")
+
+        # 🧹 Stick vacuums: handhelds are redundant (stick IS a handheld).
+        # Only show same-brand handheld (ecosystem sell) or skip entirely.
+        if comp_role == 'Σκουπάκι' and is_stick and not pool.empty and tb:
+            same_brand_mask = pool['Κατασκευαστής'].fillna('').str.strip().str.upper() == tb
+            brand_pool = pool[same_brand_mask]
+            if not brand_pool.empty:
+                pool = brand_pool
+                notes.append(f"🧹 Stick trigger → same-brand handhelds only ({tb}): {len(pool)}")
+            else:
+                notes.append(f"🧹 Stick trigger → no {tb} handhelds → skipping slot")
+                slot_notes[slot_num] = notes
+                diag.append((f"Slot {slot_num} ({comp_role})", 0, "Skipped (stick, no brand match)"))
+                continue
+
         pool = pool[~pool['Material'].isin(used_materials)]
 
+        # ↩ Universal fallback: if companion pool is empty, try universal
+        # accessories (Εξαρτήματα) as a last resort rather than showing nothing
         if pool.empty:
-            notes.append("❌ Empty")
-            slot_notes[slot_num] = notes
-            diag.append((f"Slot {slot_num} ({comp_role})", 0, "Empty"))
-            continue
+            hier_col = c['Hierarchy'].fillna('').astype(str).str.upper().str.strip()
+            universal_pool = c[hier_col.str.contains('ΕΞΑΡΤΗΜΑΤΑ', na=False)].copy()
+            if 'Είδος' in universal_pool.columns and not universal_pool.empty:
+                uni_mask = universal_pool['Είδος'].fillna('').str.contains(
+                    r'Universal|Ακροφύσιο|Nozzle|Αρωματικ|sticks|Πέρλες',
+                    case=False, regex=True, na=False
+                )
+                universal_pool = universal_pool[uni_mask]
+            universal_pool = universal_pool[~universal_pool['Material'].isin(used_materials)]
+            if not universal_pool.empty:
+                pool = universal_pool
+                notes.append(f"↩ Universal fallback: {len(pool)} accessories")
+            else:
+                notes.append("❌ Empty (no companions, no universal fallback)")
+                slot_notes[slot_num] = notes
+                diag.append((f"Slot {slot_num} ({comp_role})", 0, "Empty"))
+                continue
 
         pool['Final_Score'] = 0.0
         if 'AVAILABILITY' in pool.columns:
@@ -3350,6 +3481,12 @@ elif active_cluster == "Floor Care":
     # Combine both sheets: triggers are in Vacuums, accessories may be in either
     combined_pool = pd.concat([df_products, df_vacuums], ignore_index=True)
     recs, diag, slot_notes, full_candidates = run_floor_care_engine(trigger, combined_pool, df_history)
+    slot_diag = []
+elif active_cluster in ("Mouse", "Keyboard", "Gaming Mouse"):
+    recs, diag, slot_notes, full_candidates = run_peripherals_engine(trigger, df_peripherals, df_history, active_cluster)
+    slot_diag = []
+elif active_cluster in ("Monitors", "Printers", "Webcam", "USB Hub"):
+    recs, diag, slot_notes, full_candidates = run_peripherals_engine(trigger, df_peripherals, df_history, active_cluster)
     slot_diag = []
 else:
     recs, diag, slot_notes, full_candidates = run_books_engine(trigger, df_books, df_history)
@@ -3534,3 +3671,585 @@ with st.expander("⚙️ System Diagnostics"):
         st.markdown("### Final Recommendations")
         dc = ['Title','Hierarchy','Assigned_Slot','Slot_Role','Final_Score'] if 'Final_Score' in recs.columns else ['Title','Hierarchy','Assigned_Slot','Slot_Role']
         st.dataframe(recs[[c for c in dc if c in recs.columns]], use_container_width=True, hide_index=True)
+
+# ═════════════════════════════════════════════════════════════
+# 🟢 PERIPHERALS ENGINE — All IT Peripheral Clusters
+# Config-driven: each cluster is a dict of slot definitions
+# ═════════════════════════════════════════════════════════════
+
+# ── Trigger detection ──
+PERIPHERAL_TRIGGERS = {
+    "Mouse":        {"hierarchies": {"MOUSE WIRELESS", "MOUSE WIRED", "APPLE ORIGINAL WIRELESS MOUSE"}},
+    "Keyboard":     {"hierarchies": {"KEYBOARDS WIRELESS", "KEYBOARDS WIRED", "APPLE ORIGINAL WIRELESS KEYBOARD"}},
+    "Gaming Mouse": {"hierarchies": {"MOUSE WIRELESS"}},
+}
+
+# ── Slot configs per cluster ──
+# (role, hierarchies, flags)
+# flags keys:
+#   title_boost/title_hide: [str] — keyword boost/penalty
+#   brand_match: bool — same brand as trigger +80k
+#   connectivity_mirror: bool — match wired/wireless
+#   wrist_rest_only/xxl_only: bool — filter to specific pad types
+#   apple_force: str — force hierarchy for Apple
+#   skip_if: str — skip slot condition ('no_battery')
+#   fallback_hier: [str] — fallback if primary empty
+#   silent_match/ergo_match/rgb_match: bool — attribute matching
+#   dpi_pad_size: bool — DPI-based pad size selection
+#   sensor_surface: bool — laser→hard, optical→cloth
+#   button_kb_size: bool — button count → keyboard size
+#   vesa_match: bool — VESA mount matching
+#   cable_port_match: str — match cable to trigger port column
+#   cable_length_boost: bool — prefer 1.5-2m cables
+#   ups_min_va: int — minimum UPS VA
+#   ink_model_match: bool — match ink cartridge to printer
+#   toner_model_match: bool — match toner to printer
+#   paper_weight_max/paper_weight_min: int — paper weight filter
+#   resolution_match: bool — match webcam to monitor resolution
+#   usb_version_match: bool — match USB speed
+#   port_count_storage: bool — port count → storage capacity
+#   hub_cable_type: bool — match cable to hub input type
+#   powered_hub_only: bool — only for powered hubs
+#   exclude_if_has_feature: str — hide if trigger already has this
+
+MOUSE_SLOTS = [
+    ("Mouse Pad",           ['MOUSE PADS'],                   {'title_hide': ['Gel', 'Wrist', 'Μαξιλαράκι']}),
+    ("Keyboard",            ['KEYBOARDS WIRELESS', 'KEYBOARDS WIRED'], {'connectivity_mirror': True, 'brand_match': True, 'apple_force': 'APPLE ORIGINAL WIRELESS KEYBOARD', 'silent_match': True, 'ergo_match': True}),
+    ("Batteries",           ['ΑΛΚΑΛΙΚΕΣ'],                    {'skip_if': 'no_battery'}),
+    ("Wrist Rest",          ['MOUSE PADS'],                   {'wrist_rest_only': True}),
+    ("USB Hub",             ['USB HUB DEVICES'],              {}),
+    ("Headset",             ['PC HEADSET/MICROPHONE'],        {}),
+    ("Mouse Pad 2",         ['MOUSE PADS'],                   {'title_hide': ['Gel', 'Wrist', 'Μαξιλαράκι']}),
+    ("Keyboard 2",          ['KEYBOARDS WIRELESS', 'KEYBOARDS WIRED'], {'connectivity_mirror': True, 'brand_match': True, 'apple_force': 'APPLE ORIGINAL WIRELESS KEYBOARD'}),
+    ("Screen Cleaner",      ['CLEANING PRODUCTS'],            {}),
+    ("Desk Lamp",           ['ΕΞΥΠΝΟΣ ΦΩΤΙΣΜΟΣ'],            {'title_boost': ['Desk', 'Γραφείου', 'Table', 'Επιτραπέζιο'], 'title_hide': ['Ceiling', 'Bulb', 'Strip', 'Οροφής']}),
+]
+
+KEYBOARD_SLOTS = [
+    ("Mouse",               ['MOUSE WIRELESS', 'MOUSE WIRED', 'APPLE ORIGINAL WIRELESS MOUSE'], {'connectivity_mirror': True, 'brand_match': True, 'apple_force': 'APPLE ORIGINAL WIRELESS MOUSE', 'silent_match': True}),
+    ("Desk Mat",            ['MOUSE PADS'],                   {'xxl_only': True}),
+    ("Batteries",           ['ΑΛΚΑΛΙΚΕΣ'],                    {'skip_if': 'no_battery', 'fallback_hier': ['USB HUB DEVICES']}),
+    ("Cleaning",            ['CLEANING PRODUCTS'],            {}),
+    ("PC Speakers",         ['PC SPEAKERS 2.0'],              {}),
+    ("PC Headset",          ['PC HEADSET/MICROPHONE'],        {}),
+    ("USB Hub",             ['USB HUB DEVICES'],              {}),
+    ("Mouse 2",             ['MOUSE WIRELESS', 'MOUSE WIRED', 'APPLE ORIGINAL WIRELESS MOUSE'], {'connectivity_mirror': True, 'brand_match': True, 'apple_force': 'APPLE ORIGINAL WIRELESS MOUSE'}),
+    ("Wrist Rest",          ['MOUSE PADS'],                   {'wrist_rest_only': True}),
+    ("USB Cable",           ['USB CABLES'],                   {}),
+]
+
+GAMING_MOUSE_SLOTS = [
+    ("Gaming Pad",          ['MOUSE WIRELESS PADS'],          {'title_hide': ['Gel', 'Wrist'], 'sensor_surface': True}),
+    ("Gaming Keyboard",     ['KEYBOARDS WIRELESS'],           {'connectivity_mirror': True, 'brand_match': True, 'rgb_match': True, 'button_kb_size': True}),
+    ("Batteries/Cable",     ['ΑΛΚΑΛΙΚΕΣ'],                    {'skip_if': 'no_battery', 'fallback_hier': ['USB CABLES']}),
+    ("XXL Pad",             ['MOUSE WIRELESS PADS'],          {'xxl_only': True, 'dpi_pad_size': True}),
+    ("USB Hub",             ['USB HUB DEVICES'],              {'title_boost': ['USB 3', 'SuperSpeed']}),
+    ("Gaming Headset",      ['PC HEADSET/MICROPHONE'],        {'title_boost': ['Gaming', 'RGB'], 'brand_match': True}),
+    ("Gaming Pad 2",        ['MOUSE WIRELESS PADS'],          {'title_hide': ['Gel', 'Wrist'], 'sensor_surface': True}),
+    ("Gaming Keyboard 2",   ['KEYBOARDS WIRELESS'],           {'connectivity_mirror': True, 'brand_match': True, 'rgb_match': True}),
+    ("Webcam/Stand",        ['PC WEB CAMS'],                  {'title_boost': ['Stand', 'Holder']}),
+    ("Cleaning Kit",        ['CLEANING PRODUCTS'],            {}),
+]
+
+# ── Monitor sub-personas (detected from Χρήση or hierarchy) ──
+MONITOR_GAMING_SLOTS = [
+    ("DisplayPort Cable",   ['DISPLAY-PORT CABLES'],          {'cable_port_match': 'DisplayPort'}),
+    ("Monitor Arm",         ['PC CASE STANDS'],               {'vesa_match': True, 'title_hide': ['Wall Mount']}),
+    ("LED Strip",           ['ΕΞΥΠΝΟΣ ΦΩΤΙΣΜΟΣ'],            {'title_boost': ['Strip', 'LED', 'Bias', 'Backlight']}),
+    ("Gaming Mouse",        ['MOUSE WIRELESS'],               {'title_boost': ['Gaming', 'RGB']}),
+    ("Gaming Keyboard",     ['KEYBOARDS WIRELESS'],           {'title_boost': ['Gaming', 'Mechanical', 'Μηχανικό', 'RGB']}),
+    ("Gaming Mousepad",     ['MOUSE WIRELESS PADS'],          {}),
+    ("Gaming Headset",      ['PC HEADSET/MICROPHONE'],        {'title_boost': ['Gaming', 'RGB']}),
+    ("Gaming Headset 2",    ['PC HEADSET/MICROPHONE'],        {'title_boost': ['Gaming', '7.1']}),
+    ("Screen Cleaner",      ['CLEANING PRODUCTS'],            {}),
+    ("UPS",                 ['UPS'],                          {}),
+]
+
+MONITOR_PRO_SLOTS = [
+    ("USB-C Cable",         ['USB CABLES'],                   {'cable_port_match': 'USB-C', 'title_boost': ['Thunderbolt', 'USB-C']}),
+    ("Ergonomic Mouse",     ['MOUSE WIRELESS'],               {'ergo_match': True, 'title_hide': ['Gaming', 'RGB']}),
+    ("Wireless Keyboard",   ['KEYBOARDS WIRELESS'],           {'title_hide': ['Gaming', 'RGB']}),
+    ("Webcam",              ['PC WEB CAMS'],                  {'resolution_match': True}),
+    ("Monitor Arm",         ['PC CASE STANDS'],               {'vesa_match': True, 'title_boost': ['Heavy', 'UltraWide']}),
+    ("ScreenBar",           ['ΕΞΥΠΝΟΣ ΦΩΤΙΣΜΟΣ'],            {'title_boost': ['ScreenBar', 'Monitor Light', 'Desk', 'Γραφείου']}),
+    ("USB-C Hub",           ['USB HUB DEVICES', 'DOCKING STATIONS LAPTOP'], {'title_boost': ['USB-C', 'Thunderbolt', 'Dock']}),
+    ("PC Speakers",         ['PC SPEAKERS 2.0'],              {}),
+    ("Screen Cleaner",      ['CLEANING PRODUCTS'],            {}),
+    ("UPS",                 ['UPS'],                          {}),
+]
+
+MONITOR_MAINSTREAM_SLOTS = [
+    ("HDMI Cable",          ['MONITOR CABLES'],               {'cable_length_boost': True}),
+    ("Mouse+KB Combo",      ['DESKTOP KEYBOARDS/MOUSE WIRELESS'], {}),
+    ("Wireless Mouse",      ['MOUSE WIRELESS'],               {'title_hide': ['Gaming', 'RGB']}),
+    ("Mouse Pad",           ['MOUSE PADS'],                   {'title_boost': ['Gel', 'Wrist', 'Ergonomic'], 'title_hide': ['XXL', 'Extended']}),
+    ("Monitor Riser",       ['PC CASE STANDS'],               {'title_boost': ['Riser', 'Stand', 'Drawer', 'Organizer'], 'title_hide': ['Wall Mount', 'Gas Spring', 'VESA']}),
+    ("PC Speakers",         ['PC SPEAKERS 2.0'],              {}),
+    ("Webcam",              ['PC WEB CAMS'],                  {}),
+    ("USB Hub",             ['USB HUB DEVICES'],              {}),
+    ("Screen Cleaner",      ['CLEANING PRODUCTS'],            {}),
+    ("USB Cable",           ['USB CABLES'],                   {}),
+]
+
+# ── Printer sub-personas (Inkjet vs Laser) ──
+PRINTER_INKJET_SLOTS = [
+    ("Ink Cartridge 1",     ['INK CARTRIDGES', 'COMPATIBLE INK CARTRIDGES'], {'ink_model_match': True, 'brand_match': True}),
+    ("Ink Cartridge 2",     ['INK CARTRIDGES', 'COMPATIBLE INK CARTRIDGES'], {'ink_model_match': True, 'brand_match': True}),
+    ("Ink Cartridge 3",     ['INK CARTRIDGES', 'COMPATIBLE INK CARTRIDGES'], {'ink_model_match': True, 'brand_match': True}),
+    ("Ink Cartridge 4",     ['INK CARTRIDGES', 'COMPATIBLE INK CARTRIDGES'], {'ink_model_match': True, 'brand_match': True}),
+    ("A4 Paper",            ['INKJET PAPER', 'COPIERS PAPER'],{'paper_weight_max': 90}),
+    ("Photo Paper",         ['SPECIAL PAPERS'],               {'paper_weight_min': 150, 'title_boost': ['Gloss', 'Matte', 'Photo']}),
+    ("USB Printer Cable",   ['USB CABLES'],                   {'title_boost': ['USB-B', 'Printer', 'Type-B']}),
+    ("Surge Protector",     ['UPS'],                          {}),
+    ("Cleaning",            ['CLEANING PRODUCTS'],            {}),
+    ("Cleaning 2",          ['CLEANING PRODUCTS'],            {}),
+]
+
+PRINTER_LASER_SLOTS = [
+    ("Toner",               ['TONER CARTRIDGES', 'COMPATIBLE TONERS'], {'toner_model_match': True, 'brand_match': True}),
+    ("Drum Unit",           ['DRUMS CATRIDGES'],              {'brand_match': True}),
+    ("A4 Paper",            ['LASER PAPERS', 'COPIERS PAPER'],{}),
+    ("Network Cable",       ['NETWORK CABLES'],               {'title_boost': ['Cat6', 'Cat 6']}),
+    ("Shredder",            ['ΚΑΤΑΣΤΡΟΦΕΙΣ ΕΓΓΡΑΦΩΝ'],        {}),
+    ("UPS",                 ['UPS'],                          {'ups_min_va': 1000}),
+    ("Laminator",           ['ΠΛΑΣΤΙΚΟΠΟΙΗΤΕΣ'],              {}),
+    ("A3 Paper",            ['LASER PAPERS', 'COPIERS PAPER'],{'title_boost': ['A3']}),
+    ("Cleaning",            ['CLEANING PRODUCTS'],            {}),
+    ("Calculator",          ['CALCULATORS'],                  {}),
+]
+
+# ── Webcam ──
+WEBCAM_SLOTS = [
+    ("Ring Light",          ['ΕΞΥΠΝΟΣ ΦΩΤΙΣΜΟΣ', 'ΦΩΤΙΣΤΙΚΑ'],{'title_boost': ['Ring', 'LED Panel', 'Video Light', 'Streaming'], 'title_hide': ['Ceiling', 'Bulb', 'Strip']}),
+    ("Microphone",          ['PC MICROPHONES'],               {'title_boost': ['USB', 'Condenser', 'Streaming', 'Podcast']}),
+    ("Webcam Mount",        ['PC CASE STANDS'],               {'title_boost': ['Desktop', 'Mini', 'Webcam', 'Clip', 'Monitor Mount'], 'title_hide': ['Full Size', 'DSLR', 'Heavy Duty']}),
+    ("USB Extension",       ['USB CABLES'],                   {'title_boost': ['Extension', 'Extender', '3m', '5m'], 'title_hide': ['DisplayPort', 'Charging']}),
+    ("Lens Cleaner",        ['CLEANING PRODUCTS'],            {'title_boost': ['Lens', 'Screen', 'Camera', 'Microfiber', 'Wipes']}),
+    ("PC Headset",          ['PC HEADSET/MICROPHONE'],        {'title_boost': ['Noise Cancelling', 'Teams', 'Zoom', 'Conference']}),
+    ("Desk Lamp",           ['ΕΞΥΠΝΟΣ ΦΩΤΙΣΜΟΣ'],            {'title_boost': ['Desk', 'Γραφείου', 'Table', 'Επιτραπέζιο']}),
+    ("Cable Organizer",     ['CLEANING PRODUCTS', 'USB CABLES'], {}),
+    ("USB Hub",             ['USB HUB DEVICES'],              {'title_boost': ['Desk Mount', 'Clamp']}),
+    ("PC Speakers",         ['PC SPEAKERS 2.0', 'PC SPEAKERS 1'], {'title_boost': ['Desktop', 'USB Powered', 'Compact', '2.0'], 'title_hide': ['Soundbar', '5.1', 'Subwoofer', 'Gaming RGB']}),
+]
+
+# ── USB Hub ──
+USB_HUB_SLOTS = [
+    ("USB Cable 1",         ['USB CABLES'],                   {'hub_cable_type': True}),
+    ("USB Cable 2",         ['USB CABLES'],                   {'title_boost': ['USB-C to USB-A', 'Type-C to USB-A', 'USB-A to USB-C']}),
+    ("USB Cable 3",         ['USB CABLES'],                   {}),
+    ("Power Supply",        ['DESKTOP POWER SUPPLIERS'],      {'powered_hub_only': True}),
+    ("Cable Organizer",     ['CLEANING PRODUCTS'],            {}),
+    ("USB Flash Drive",     ['USB FLASH DISK'],               {'port_count_storage': True, 'usb_version_match': True}),
+    ("External Storage",    ['EXTERNAL HDD USB', 'EXTERNAL SSD USB'], {'port_count_storage': True, 'usb_version_match': True}),
+    ("Card Reader",         ['CARD READERS'],                 {'exclude_if_has_feature': 'SD'}),
+    ("USB Gadget",          ['USB INPUT/OUTPUT DEVICES'],     {}),
+    ("Cleaning/Case",       ['CLEANING PRODUCTS', 'NB ACCESSORIES'], {}),
+]
+
+# Map cluster key → slot list
+PERIPHERAL_CLUSTER_SLOTS = {
+    "Mouse":          MOUSE_SLOTS,
+    "Keyboard":       KEYBOARD_SLOTS,
+    "Gaming Mouse":   GAMING_MOUSE_SLOTS,
+    "Monitors":       None,  # Detected dynamically from Χρήση
+    "Printers":       None,  # Detected dynamically from Hierarchy
+    "Webcam":         WEBCAM_SLOTS,
+    "USB Hub":        USB_HUB_SLOTS,
+}
+
+
+def run_peripherals_engine(trigger, df_products, df_history, cluster_key):
+    """Unified peripheral engine for all IT clusters."""
+    diag = []
+    slot_notes = {}
+    all_recs = []
+
+    tm = trigger['Material']
+    tt = str(trigger.get('Title', ''))
+    tb = str(trigger.get('Κατασκευαστής', '')).strip().upper()
+    thier = str(trigger.get('Hierarchy', '')).strip().upper()
+    tprice = parse_euro_price(trigger.get('LIST PRICE', 0))
+    tcolor = str(trigger.get('Χρώμα', '')).strip()
+
+    # Connectivity
+    is_wireless = 'WIRELESS' in thier or 'ΑΣΥΡΜΑΤ' in tt.upper()
+    is_wired = 'WIRED' in thier and not is_wireless
+    is_apple = tb == 'APPLE' or 'APPLE' in thier
+
+    # Features
+    _tt_lower = tt.lower()
+    is_silent = str(trigger.get('Αθόρυβο', '')).lower() in ('ναι', 'yes', 'true') or 'silent' in _tt_lower
+    is_ergo = str(trigger.get('Εργονομικό', '')).lower() in ('ναι', 'yes', 'true')
+    has_rgb = 'rgb' in str(trigger.get('Πρόσθετα χαρακτηριστικά', '')).lower() or 'rgb' in _tt_lower
+    no_battery = is_wired or is_apple
+
+    # Gaming mouse deep attributes
+    dpi_str = str(trigger.get('Ανάλυση κίνησης', ''))
+    button_count = 0
+    try:
+        button_count = int(trigger.get('Αριθμός κουμπιών', 0))
+    except: pass
+    sensor_type = str(trigger.get('Τύπος Αισθητήρα', '')).lower()
+
+    # Monitor attributes
+    tusage = str(trigger.get('Χρήση', trigger.get('Προτεινόμενη χρήση', ''))).lower()
+    tports = str(trigger.get('Θύρες', trigger.get('Βύσμα(τα)', ''))).lower()
+    tvesa = str(trigger.get('Πρότυπο VESA', trigger.get('Συμβατότητα VESA', ''))).strip()
+    tinches = parse_screen_size(trigger.get('Ιντσες', trigger.get('Μέγεθος οθόνης', '')))
+    tres = str(trigger.get('Ανάλυση Οθόνης', '')).lower()
+
+    # Printer attributes
+    tink = str(trigger.get('Αναλώσιμο υλικό', '')).strip()
+    ttech = str(trigger.get('Τεχνολογία', '')).lower()
+    is_laser = 'laser' in thier.lower() or 'laser' in ttech
+
+    # Hub attributes
+    hub_input = str(trigger.get('Συμβατή συσκευή', '')).lower()
+    hub_ports_str = str(trigger.get('Αριθμός Θυρών', trigger.get('Αριθμός θυρών8', '')))
+    hub_expansion = str(trigger.get('Θύρες επέκτασης', '')).lower()
+    hub_power = str(trigger.get('Τροφοδοσία', trigger.get('Τροφοδοσία15', ''))).lower()
+    hub_interface = str(trigger.get('Interface', '')).lower()
+
+    # Color match
+    do_color_match = tcolor and tcolor.lower() not in ('', 'nan', 'black', 'μαύρο', 'white', 'λευκό', 'n/a')
+
+    # ── Determine slot config ──
+    if cluster_key == "Monitors":
+        if 'gaming' in tusage:
+            slots = MONITOR_GAMING_SLOTS
+            persona = "Gaming"
+        elif 'business' in tusage or 'professional' in tusage or 'επαγγελματικ' in tusage:
+            slots = MONITOR_PRO_SLOTS
+            persona = "Professional"
+        else:
+            slots = MONITOR_MAINSTREAM_SLOTS
+            persona = "Mainstream"
+        diag.append(("0. Monitor Persona", persona, f"Usage='{tusage}'"))
+    elif cluster_key == "Printers":
+        if is_laser:
+            slots = PRINTER_LASER_SLOTS
+            persona = "Laser"
+        else:
+            slots = PRINTER_INKJET_SLOTS
+            persona = "Inkjet"
+        diag.append(("0. Printer Persona", persona, f"Hierarchy='{thier}'"))
+    else:
+        slots = PERIPHERAL_CLUSTER_SLOTS.get(cluster_key, [])
+
+    diag.append(("0. Trigger", f"Brand={tb}, €{tprice:.0f}",
+                 f"Cluster={cluster_key}, Wireless={is_wireless}, Apple={is_apple}"))
+
+    # ── Build candidate pool ──
+    c = df_products[df_products['Material'] != tm].copy()
+
+    if 'CW Stock Units' in c.columns:
+        stv = pd.to_numeric(c['CW Stock Units'], errors='coerce').fillna(0)
+        pct = (stv > 0).sum() / len(c) if len(c) > 0 else 0
+        if pct >= 0.10:
+            c = c[stv > 0]
+            diag.append(("1. Stock", len(c), f"({pct:.0%})"))
+
+    if 'Sum of Sales' in c.columns:
+        c['Sales_Tiebreaker'] = pd.to_numeric(c['Sum of Sales'], errors='coerce').fillna(0)
+    else:
+        c['Sales_Tiebreaker'] = 0
+
+    # Apple ban for non-Apple
+    if not is_apple and cluster_key in ("Mouse", "Keyboard", "Gaming Mouse"):
+        b4 = len(c)
+        c = c[c['Κατασκευαστής'].fillna('').astype(str).str.strip().str.upper() != 'APPLE']
+        if b4 > len(c):
+            diag.append(("1b. Apple ban", len(c), f"-{b4 - len(c)}"))
+
+    used_materials = {tm}
+
+    for idx, (role, hierarchies, flags) in enumerate(slots, start=1):
+        notes = [f"Slot {idx}: {role}"]
+
+        # ── Skip conditions ──
+        skip = flags.get('skip_if', '')
+        if skip == 'no_battery' and no_battery:
+            fb = flags.get('fallback_hier')
+            if fb:
+                hierarchies = fb
+                notes.append(f"↩ No-battery fallback → {fb}")
+            else:
+                notes.append("🚫 Skipped")
+                slot_notes[idx] = notes
+                diag.append((f"Slot {idx} ({role})", 0, "Skipped"))
+                continue
+
+        # Powered hub only
+        if flags.get('powered_hub_only'):
+            if 'εξωτερική' not in hub_power and 'external' not in hub_power:
+                notes.append("🚫 Bus-powered hub → skip power supply")
+                slot_notes[idx] = notes
+                diag.append((f"Slot {idx} ({role})", 0, "Skipped (bus-powered)"))
+                continue
+
+        # Exclude if trigger has feature (e.g. hub has SD → skip card reader)
+        excl_feat = flags.get('exclude_if_has_feature', '')
+        if excl_feat and excl_feat.lower() in hub_expansion:
+            notes.append(f"🚫 Hub already has {excl_feat} → skipped")
+            slot_notes[idx] = notes
+            diag.append((f"Slot {idx} ({role})", 0, f"Skipped (has {excl_feat})"))
+            continue
+
+        # Apple walled garden
+        if is_apple and 'apple_force' in flags:
+            hierarchies = [flags['apple_force']]
+            notes.append(f"🍎 Apple → {hierarchies}")
+
+        # ── Build pool ──
+        hier_upper = [h.upper().strip() for h in hierarchies]
+        pool = c[c['Hierarchy'].fillna('').astype(str).str.upper().str.strip().isin(hier_upper)].copy()
+        if pool.empty:
+            hier_col = c['Hierarchy'].fillna('').astype(str).str.upper().str.strip()
+            mask = pd.Series(False, index=c.index)
+            for hk in hier_upper:
+                if hk: mask |= hier_col.str.contains(re.escape(hk), regex=True, na=False)
+            pool = c[mask].copy()
+            if not pool.empty: notes.append(f"⚠ Substring: {len(pool)}")
+
+        notes.append(f"Pool: {len(pool)}")
+        pool = pool[~pool['Material'].isin(used_materials)]
+
+        if pool.empty:
+            notes.append("❌ Empty")
+            slot_notes[idx] = notes
+            diag.append((f"Slot {idx} ({role})", 0, "Empty"))
+            continue
+
+        # ── Scoring ──
+        pool['Final_Score'] = 0.0
+        if 'AVAILABILITY' in pool.columns:
+            pool.loc[pool['AVAILABILITY'] == 'Άμεσα Διαθέσιμο', 'Final_Score'] += 100000
+        pool['Final_Score'] += pool['Sales_Tiebreaker'].fillna(0) * 0.1
+
+        # ── Connectivity mirror ──
+        if flags.get('connectivity_mirror'):
+            pool_hier = pool['Hierarchy'].fillna('').str.upper()
+            if is_wireless:
+                w_mask = pool_hier.str.contains('WIRELESS')
+                pool, note = filter_or_penalize(pool, w_mask, "Connectivity: wireless")
+                notes.append(note)
+            elif is_wired:
+                w_mask = pool_hier.str.contains('WIRED') | (~pool_hier.str.contains('WIRELESS'))
+                pool, note = filter_or_penalize(pool, w_mask, "Connectivity: wired")
+                notes.append(note)
+
+        # ── Brand match ──
+        if flags.get('brand_match') and tb:
+            same = pool['Κατασκευαστής'].fillna('').str.strip().str.upper() == tb
+            pool.loc[same, 'Final_Score'] += 80000
+            if same.any(): notes.append(f"Brand ({tb}): {same.sum()}")
+
+        # ── Apple filter ──
+        if is_apple and 'apple_force' in flags:
+            am = pool['Κατασκευαστής'].fillna('').str.strip().str.upper() == 'APPLE'
+            if am.any():
+                pool = pool[am]
+                notes.append(f"🍎 Apple-only: {len(pool)}")
+
+        # ── Title boost/hide ──
+        if flags.get('title_boost'):
+            pat = '|'.join(flags['title_boost'])
+            m = pool['Title'].fillna('').str.contains(pat, case=False, regex=True, na=False)
+            pool.loc[m, 'Final_Score'] += 60000
+
+        if flags.get('title_hide'):
+            pat = '|'.join(flags['title_hide'])
+            m = pool['Title'].fillna('').str.contains(pat, case=False, regex=True, na=False)
+            pool.loc[m, 'Final_Score'] -= 100000
+
+        # ── Wrist rest / XXL filters ──
+        if flags.get('wrist_rest_only'):
+            m = pool['Title'].fillna('').str.contains(r'Gel|Wrist|Καρπού|Μαξιλαράκι|Rest', case=False, regex=True, na=False)
+            pool, note = filter_or_penalize(pool, m, "Wrist rest")
+            notes.append(note)
+
+        if flags.get('xxl_only'):
+            m = pool['Title'].fillna('').str.contains(r'XXL|XL|Extended|Desk Mat', case=False, regex=True, na=False)
+            if 'Μέγεθος16' in pool.columns:
+                m |= pool['Μέγεθος16'].fillna('').str.contains(r'XXL|XL|Extended', case=False, regex=True, na=False)
+            pool, note = filter_or_penalize(pool, m, "XXL/Desk Mat")
+            notes.append(note)
+
+        # ── Silent / Ergo / RGB matching ──
+        if flags.get('silent_match') and is_silent:
+            sm = pool['Title'].fillna('').str.lower().str.contains('silent|αθόρυβ')
+            if 'Αθόρυβο' in pool.columns:
+                sm |= pool['Αθόρυβο'].fillna('').astype(str).str.lower().isin(['ναι', 'yes'])
+            pool.loc[sm, 'Final_Score'] += 60000
+
+        if flags.get('ergo_match') and is_ergo:
+            em = pool['Title'].fillna('').str.lower().str.contains('ergonomic|εργονομικ')
+            if 'Εργονομικό' in pool.columns:
+                em |= pool['Εργονομικό'].fillna('').astype(str).str.lower().isin(['ναι', 'yes'])
+            pool.loc[em, 'Final_Score'] += 60000
+
+        if flags.get('rgb_match'):
+            rm = pool['Title'].fillna('').str.lower().str.contains('rgb|chroma|aura|lightsync')
+            if has_rgb:
+                pool.loc[rm, 'Final_Score'] += 40000
+            else:
+                pool.loc[rm, 'Final_Score'] -= 20000
+
+        # ── Color match ──
+        if do_color_match and flags.get('brand_match'):
+            if 'Χρώμα' in pool.columns:
+                cm = pool['Χρώμα'].fillna('').astype(str).str.upper() == tcolor.upper()
+                pool.loc[cm, 'Final_Score'] += 30000
+
+        # ── DPI-based pad size (Gaming Mouse #17 L3) ──
+        if flags.get('dpi_pad_size') and dpi_str:
+            high_dpi = any(x in dpi_str for x in ['6401', '12801', '25600'])
+            if high_dpi:
+                m = pool['Title'].fillna('').str.contains(r'Medium|Small', case=False, regex=True, na=False)
+                pool.loc[m, 'Final_Score'] += 40000
+                notes.append("High DPI → Medium/Small pad boost")
+            else:
+                m = pool['Title'].fillna('').str.contains(r'Large|XL', case=False, regex=True, na=False)
+                pool.loc[m, 'Final_Score'] += 40000
+                notes.append("Low DPI → Large pad boost")
+
+        # ── Sensor → Surface (Gaming Mouse #17 L6) ──
+        if flags.get('sensor_surface') and sensor_type:
+            if 'laser' in sensor_type:
+                m = pool['Title'].fillna('').str.lower().str.contains('hard|hybrid|plastic')
+                pool.loc[m, 'Final_Score'] += 30000
+            elif 'optical' in sensor_type:
+                m = pool['Title'].fillna('').str.lower().str.contains('cloth|fabric|control')
+                pool.loc[m, 'Final_Score'] += 30000
+
+        # ── Button count → keyboard size (Gaming Mouse #17 L5) ──
+        if flags.get('button_kb_size') and button_count > 0:
+            if 'Μέγεθος πληκτρολογίου' in pool.columns:
+                if button_count >= 9:
+                    m = pool['Μέγεθος πληκτρολογίου'].fillna('').str.contains('Full', case=False, na=False)
+                    pool.loc[m, 'Final_Score'] += 30000
+                    notes.append(f"MMO ({button_count} buttons) → Full-size KB")
+                elif button_count <= 6:
+                    m = pool['Μέγεθος πληκτρολογίου'].fillna('').str.contains(r'Tenkeyless|60%|65%|TKL', case=False, regex=True, na=False)
+                    pool.loc[m, 'Final_Score'] += 30000
+                    notes.append(f"FPS ({button_count} buttons) → TKL/60% KB")
+
+        # ── VESA match (Monitors) ──
+        if flags.get('vesa_match') and tvesa and tvesa.lower() not in ('', 'nan', 'n/a'):
+            if 'Πρότυπο VESA' in pool.columns:
+                vm = pool['Πρότυπο VESA'].fillna('').astype(str).str.upper().str.contains(tvesa.upper(), na=False)
+                pool.loc[vm, 'Final_Score'] += 80000
+                notes.append(f"VESA match ({tvesa}): {vm.sum()}")
+
+        # ── Cable port match (Monitors) ──
+        if flags.get('cable_port_match'):
+            port_keyword = flags['cable_port_match'].lower()
+            if port_keyword in tports:
+                m = pool['Title'].fillna('').str.lower().str.contains(port_keyword, na=False)
+                pool.loc[m, 'Final_Score'] += 80000
+                notes.append(f"Port match ({port_keyword})")
+
+        # ── Cable length boost (Monitors mainstream) ──
+        if flags.get('cable_length_boost'):
+            if 'Μήκος Καλωδίου6' in pool.columns:
+                length = pool['Μήκος Καλωδίου6'].fillna('').astype(str)
+                m = length.str.contains(r'1\.[5-9]|2\.0|2m|1\.8', regex=True, na=False)
+                pool.loc[m, 'Final_Score'] += 30000
+
+        # ── Resolution match (Webcam→Monitor res) ──
+        if flags.get('resolution_match') and tres:
+            if '4k' in tres or 'uhd' in tres or '5k' in tres:
+                m = pool['Title'].fillna('').str.lower().str.contains('4k', na=False)
+                pool.loc[m, 'Final_Score'] += 60000
+                notes.append("4K monitor → 4K webcam boost")
+
+        # ── UPS min VA (Laser printers) ──
+        if flags.get('ups_min_va'):
+            min_va = flags['ups_min_va']
+            if 'Ισχύς' in pool.columns:
+                va_vals = pd.to_numeric(pool['Ισχύς'].astype(str).str.extract(r'(\d+)', expand=False), errors='coerce').fillna(0)
+                m = va_vals >= min_va
+                pool.loc[m, 'Final_Score'] += 60000
+                notes.append(f"UPS ≥{min_va}VA: {m.sum()}")
+
+        # ── Ink/Toner model match (Printers) ──
+        if flags.get('ink_model_match') or flags.get('toner_model_match'):
+            if tink and tink.lower() not in ('', 'nan', 'n/a'):
+                # Try matching cartridge model to printer's consumable spec
+                for mcol in ['Μοντέλο', 'Συμβατό μοντέλο', 'Συμβατό μοντέλο2']:
+                    if mcol in pool.columns:
+                        ink_parts = [p.strip() for p in re.split(r'[,;/]', tink) if p.strip()]
+                        for part in ink_parts:
+                            m = pool[mcol].fillna('').astype(str).str.upper().str.contains(
+                                re.escape(part.upper()), regex=True, na=False
+                            )
+                            pool.loc[m, 'Final_Score'] += 200000
+                notes.append(f"Consumable match: '{tink[:40]}'")
+
+        # ── Paper weight filters ──
+        if flags.get('paper_weight_max') and 'Βάρος' in pool.columns:
+            max_w = flags['paper_weight_max']
+            w_vals = pd.to_numeric(pool['Βάρος'].astype(str).str.extract(r'(\d+)', expand=False), errors='coerce').fillna(80)
+            m = w_vals <= max_w
+            pool.loc[m, 'Final_Score'] += 30000
+
+        if flags.get('paper_weight_min') and 'Βάρος' in pool.columns:
+            min_w = flags['paper_weight_min']
+            w_vals = pd.to_numeric(pool['Βάρος'].astype(str).str.extract(r'(\d+)', expand=False), errors='coerce').fillna(80)
+            m = w_vals >= min_w
+            pool.loc[m, 'Final_Score'] += 30000
+
+        # ── USB version match (Hub) ──
+        if flags.get('usb_version_match') and hub_interface:
+            if 'usb 3' in hub_interface or 'usb 4' in hub_interface:
+                m = pool['Title'].fillna('').str.lower().str.contains(r'usb 3|superspeed|usb 4', regex=True, na=False)
+                pool.loc[m, 'Final_Score'] += 40000
+
+        # ── Port count → storage sizing (Hub) ──
+        if flags.get('port_count_storage'):
+            try:
+                port_n = int(re.search(r'(\d+)', hub_ports_str).group(1)) if hub_ports_str else 4
+            except: port_n = 4
+            if port_n >= 7:
+                if 'Χωρητικότητα' in pool.columns:
+                    m = pool['Χωρητικότητα'].fillna('').astype(str).str.contains(r'1\s*TB|2\s*TB|4\s*TB|128\s*GB|256\s*GB', regex=True, na=False)
+                    pool.loc[m, 'Final_Score'] += 30000
+                    notes.append("7+ port hub → large storage boost")
+
+        # ── Hub cable type match ──
+        if flags.get('hub_cable_type'):
+            if 'usb-c' in hub_input or 'type-c' in hub_input:
+                m = pool['Title'].fillna('').str.lower().str.contains('usb-c|type-c', regex=True, na=False)
+                pool.loc[m, 'Final_Score'] += 80000
+                notes.append("USB-C hub → USB-C cable boost")
+            elif 'usb-a' in hub_input or 'type-a' in hub_input:
+                m = pool['Title'].fillna('').str.lower().str.contains('usb-a|type-a|extension', regex=True, na=False)
+                pool.loc[m, 'Final_Score'] += 80000
+
+        # ── Pick best ──
+        if pool.empty:
+            notes.append("❌ Empty after filters")
+            slot_notes[idx] = notes
+            diag.append((f"Slot {idx} ({role})", 0, "Empty"))
+            continue
+
+        pool = pool.sort_values('Final_Score', ascending=False)
+        chosen = pool.iloc[0]
+        rc = chosen.copy()
+        rc['Assigned_Slot'] = idx
+        rc['Slot_Role'] = role
+        rc['Marketing_Copy'] = "Ταιριάζει τέλεια στο setup σου."
+        rc['Item_Rank'] = 1
+        all_recs.append(rc)
+        used_materials.add(chosen['Material'])
+        notes.append(f"✅ {str(chosen.get('Title',''))[:60]}")
+        slot_notes[idx] = notes
+        diag.append((f"Slot {idx} ({role})", 1, f"Score: {chosen.get('Final_Score',0):.0f}"))
+
+    diag.append(("TOTAL", len(all_recs), f"out of {len(slots)}"))
+
+    if all_recs:
+        recs_df = pd.DataFrame(all_recs)
+        recs_df['Draft_Score'] = recs_df['Assigned_Slot']
+        return recs_df, diag, slot_notes, recs_df
+    return pd.DataFrame(), diag, slot_notes, pd.DataFrame()
