@@ -608,6 +608,28 @@ except Exception as e:
 # and `trigger` variables that the rest of your app uses).
 # ═════════════════════════════════════════════════════════════
 
+# ─────────────────────────────────────────────────────────────
+# 🧪 DEBUG TOOLS: SKU FILTER
+# ─────────────────────────────────────────────────────────────
+with st.sidebar.expander("🧪 Debug: Filter by SKU", expanded=False):
+    st.markdown("<span style='font-size:12px;'>Paste SKUs (comma or newline separated) to restrict the entire catalog.</span>", unsafe_allow_html=True)
+    sku_input = st.text_area("SKU List:", label_visibility="collapsed")
+    
+    if sku_input.strip():
+        # Split by commas or newlines and clean up whitespace
+        target_skus = [s.strip() for s in re.split(r'[,\n]+', sku_input) if s.strip()]
+        
+        if target_skus:
+            # Filter all core dataframes to only include these SKUs
+            df_products = df_products[df_products['Material'].astype(str).isin(target_skus)]
+            df_peripherals = df_peripherals[df_peripherals['Material'].astype(str).isin(target_skus)]
+            df_laptops = df_laptops[df_laptops['Material'].astype(str).isin(target_skus)]
+            df_vacuums = df_vacuums[df_vacuums['Material'].astype(str).isin(target_skus)]
+            df_books = df_books[df_books['Material'].astype(str).isin(target_skus)]
+            
+            st.success(f"Filtered catalog to {len(target_skus)} SKUs.")
+
+
 # ───── Navigation state ─────
 if 'nav_level' not in st.session_state:
     st.session_state.nav_level = 1   # 1 = L1 grid, 2 = L2 grid + selector
