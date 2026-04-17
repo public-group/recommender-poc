@@ -3555,16 +3555,17 @@ KEYBOARD_SLOTS = [
 ]
 
 GAMING_MOUSE_SLOTS = [
-    ("Gaming Pad",          ['GAMING MOUSE PADS'],          {'title_hide': ['Gel', 'Wrist'], 'sensor_surface': True}),
+    ("Gaming Pad",          ['GAMING MOUSE PADS'],            {'title_hide': ['Gel', 'Wrist'], 'sensor_surface': True, 'brand_match': True}),
     ("Gaming Keyboard",     ['GAMING KEYBOARDS'],             {'brand_match': True, 'rgb_match': True, 'button_kb_size': True}),
     ("Batteries/Cable",     ['ΑΛΚΑΛΙΚΕΣ'],                    {'skip_if': 'no_battery', 'fallback_hier': ['USB CABLES']}),
-    ("XXL Pad",             ['GAMING MOUSE PADS'],          {'xxl_only': True, 'dpi_pad_size': True}),
-    ("USB Hub",             ['USB HUB DEVICES'],              {'title_boost': ['USB 3', 'SuperSpeed']}),
     ("Gaming Headset",      ['GAMING AUDIO'],                 {'brand_match': True}),
-    ("Gaming Pad 2",        ['GAMING MOUSE PADS'],          {'title_hide': ['Gel', 'Wrist'], 'sensor_surface': True}),
-    ("Gaming Keyboard 2",   ['GAMING KEYBOARDS'],             {'brand_match': True, 'rgb_match': True}),
-    ("Webcam/Stand",        ['PC WEB CAMS'],                  {'title_boost': ['Stand', 'Holder']}),
+    ("USB Hub",             ['USB HUB DEVICES'],              {'title_boost': ['USB 3', 'SuperSpeed']}),
     ("Cleaning Kit",        ['CLEANING PRODUCTS'],            {}),
+    ("Webcam/Stand",        ['PC WEB CAMS'],                  {'title_boost': ['Stand', 'Holder']}),
+    ("XXL Pad",             ['GAMING MOUSE PADS'],            {'xxl_only': True, 'dpi_pad_size': True, 'brand_match': False}),
+    ("Gaming Keyboard 2",   ['GAMING KEYBOARDS'],             {'brand_match': True, 'rgb_match': True}),
+    ("Gaming Headset",      ['GAMING AUDIO'],                 {'brand_match': False}),
+
 ]
 
 # ── Monitor sub-personas (detected from Χρήση or hierarchy) ──
