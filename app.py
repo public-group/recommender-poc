@@ -600,6 +600,14 @@ st.sidebar.markdown("""
     [data-testid="stSidebar"] > div:first-child { background-color: #f5f5f5 !important; }
     [data-testid="stSidebar"] { background-color: #f5f5f5 !important; }
     [data-testid="stSidebarCollapseButton"] { display: none !important; }
+    /* Hide Streamlit's default sidebar page nav and resize handle */
+    [data-testid="stSidebarNav"] { display: none !important; }
+    [data-testid="stSidebarNavItems"] { display: none !important; }
+    [data-testid="stSidebarNavSeparator"] { display: none !important; }
+    [data-testid="stSidebarResizeHandle"] { display: none !important; }
+    /* Kill any remaining tall vertical strip in sidebar */
+    [data-testid="stSidebar"] > div:first-child > div:first-child > div:first-child > nav { display: none !important; }
+    [data-testid="stSidebar"] nav { display: none !important; }
 
     .sidebar-header {
         background-color: #ff5e00; color: white; padding: 18px 20px;
