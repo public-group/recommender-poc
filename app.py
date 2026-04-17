@@ -608,26 +608,6 @@ except Exception as e:
 # and `trigger` variables that the rest of your app uses).
 # ═════════════════════════════════════════════════════════════
 
-# ─────────────────────────────────────────────────────────────
-# 🧪 DEBUG TOOLS: SKU FILTER
-# ─────────────────────────────────────────────────────────────
-with st.sidebar.expander("🧪 Debug: Filter by SKU", expanded=False):
-    st.markdown("<span style='font-size:12px;'>Paste SKUs (comma or newline separated) to restrict the entire catalog.</span>", unsafe_allow_html=True)
-    sku_input = st.text_area("SKU List:", label_visibility="collapsed")
-    
-    if sku_input.strip():
-        # Split by commas or newlines and clean up whitespace
-        target_skus = [s.strip() for s in re.split(r'[,\n]+', sku_input) if s.strip()]
-        
-        if target_skus:
-            # Filter all core dataframes to only include these SKUs
-            df_products = df_products[df_products['Material'].astype(str).isin(target_skus)]
-            df_peripherals = df_peripherals[df_peripherals['Material'].astype(str).isin(target_skus)]
-            df_laptops = df_laptops[df_laptops['Material'].astype(str).isin(target_skus)]
-            df_vacuums = df_vacuums[df_vacuums['Material'].astype(str).isin(target_skus)]
-            df_books = df_books[df_books['Material'].astype(str).isin(target_skus)]
-            
-            st.success(f"Filtered catalog to {len(target_skus)} SKUs.")
 
 
 # ───── Navigation state ─────
@@ -948,6 +928,20 @@ else:
             pconfig = PERIPHERAL_TRIGGERS.get(active_cluster, {})
             p_hiers = {h.upper().strip() for h in pconfig.get('hierarchies', set())}
             periph = df_peripherals[df_peripherals['Hierarchy'].fillna('').astype(str).str.upper().str.strip().isin(p_hiers)].copy()
+            
+            # ─────────────────────────────────────────────────────────────
+            # 🧪 TEST LIST: Restrict the dropdown to specific SKUs
+            # ─────────────────────────────────────────────────────────────
+            if active_cluster in ("Mouse", "Gaming Mouse"):
+                target_skus = {
+                    "1148597", "1200734", "1986598", "2092896", "1533714", 
+                    "2064103", "1736727", "1576681", "1974266", "1981199", 
+                    "1334843", "1334845", "1566188", "1571956", "1574806", 
+                    "1585918", "1611810", "1646794", "1646827", "1663975"
+                }
+                periph = periph[periph['Material'].astype(str).str.strip().isin(target_skus)]
+            # ─────────────────────────────────────────────────────────────
+
             if periph.empty:
                 st.sidebar.warning(f"Δεν βρέθηκαν {active_cluster} products.")
             else:
