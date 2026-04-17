@@ -517,13 +517,15 @@ except Exception as e:
 
 
 
+
+
 # ═════════════════════════════════════════════════════════════
 # 🟢 NEW SIDEBAR — 2-Level Navigation (Level 1 → Level 2)
 # ═════════════════════════════════════════════════════════════
 
 # ───── Navigation state ─────
 if 'nav_level' not in st.session_state:
-    st.session_state.nav_level = 1   # 1 = L1 grid, 2 = L2 grid + selector
+    st.session_state.nav_level = 1   
 if 'selected_l1' not in st.session_state:
     st.session_state.selected_l1 = None
 if 'active_cluster' not in st.session_state:
@@ -548,7 +550,7 @@ L1_CATEGORIES = [
     },
 ]
 
-# Keep ONLY Laptops in the IT category as requested
+# Kept ONLY Laptops in the IT category as requested
 L2_CHILDREN = {
     "Books":     [{"key": "Kids Books",  "label": "Παιδικά\nΒιβλία",
                    "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 19.5A2.5 2.5 0 0 1 6.5 17H20'/%3E%3Cpath d='M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z'/%3E%3C/svg%3E"}],
@@ -558,56 +560,65 @@ L2_CHILDREN = {
                    "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%231a73e8' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='2' y='4' width='20' height='12' rx='2' ry='2'/%3E%3Cpath d='M2 16h20M6 20h12'/%3E%3C/svg%3E"}],
 }
 
-L2_TO_L1 = {child["key"]: l1 for l1, children in L2_CHILDREN.items() for child in children}
-
-# ───── Sidebar base styling ─────
+# ───── Safe Base Styling ─────
 st.sidebar.markdown("""
 <style>
-    /* Make the whole sidebar background slightly gray */
+    /* 1. Set global sidebar gray background */
     [data-testid="stSidebar"] > div:first-child { background-color: #f4f5f7 !important; }
     [data-testid="stSidebar"] { background-color: #f4f5f7 !important; border-right: 1px solid #eaeaea; }
     [data-testid="stSidebarCollapseButton"] { display: none !important; }
+    
+    /* Ensure content renders correctly over absolute backgrounds */
+    [data-testid="stSidebar"] .block-container { position: relative; z-index: 1; padding-top: 2rem !important; }
 
-    .sidebar-header {
-        background-color: #ff5e00; color: white; padding: 18px 20px;
-        margin-left: -1rem; margin-right: -1rem; margin-top: -1rem; margin-bottom: 10px;
-        font-family: -apple-system, BlinkMacSystemFont, sans-serif;
-        font-size: 18px; font-weight: 700;
-        display: flex; align-items: center; justify-content: space-between;
-        box-sizing: border-box;
-    }
-    .sidebar-close-btn {
-        background: transparent; border: none; color: white; font-size: 22px;
-        font-weight: 300; cursor: pointer; padding: 5px 10px; line-height: 1; border-radius: 4px;
-    }
-    .sidebar-close-btn:hover { background: rgba(255,255,255,0.2); }
-
-    [data-testid="stSidebar"] .block-container { padding-top: 0 !important; }
-    [data-testid="stSidebar"] [data-testid="stVerticalBlockBorderWrapper"] { gap: 0.5rem !important; }
-
-    /* Tile buttons (White on gray background) */
-    [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] button {
+    /* 2. Base Tile Styles for ALL standard buttons */
+    [data-testid="stSidebar"] .stButton > button {
         background: #ffffff !important;
         border: 1px solid #eaeaea !important;
         border-radius: 12px !important;
         padding: 70px 4px 14px 4px !important;
         min-height: 120px !important;
+        width: 100% !important;
         font-family: -apple-system, BlinkMacSystemFont, sans-serif !important;
         font-size: 13px !important; font-weight: 700 !important; color: #111 !important;
-        white-space: pre-line !important; line-height: 1.3 !important;
+        line-height: 1.3 !important;
         box-shadow: 0 2px 6px rgba(0,0,0,0.02) !important;
-        position: relative !important;
         transition: all 0.15s ease !important;
+        position: relative;
     }
-    [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] button:hover {
+    [data-testid="stSidebar"] .stButton > button:hover {
         border-color: #1a73e8 !important;
         box-shadow: 0 4px 12px rgba(0,0,0,0.06) !important;
         transform: translateY(-1px);
     }
-    [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] button p {
+    [data-testid="stSidebar"] .stButton > button p {
         font-size: 13px !important; margin-top: 2px !important; font-weight: 700 !important;
     }
 
+    /* 3. ISOLATED BACK BUTTON CSS (Prevents hitting the Laptops button) */
+    div[data-testid="column"]:has(#target-back-btn) .stButton > button {
+        background: #f4f5f7 !important;
+        border: none !important;
+        border-radius: 50% !important;
+        width: 36px !important; height: 36px !important;
+        min-height: 36px !important; padding: 0 !important;
+        display: flex !important; justify-content: center !important; align-items: center !important;
+        box-shadow: none !important;
+        transform: none !important;
+    }
+    div[data-testid="column"]:has(#target-back-btn) .stButton > button:hover {
+        background: #e0e4e8 !important;
+    }
+    div[data-testid="column"]:has(#target-back-btn) .stButton > button p {
+        font-size: 24px !important; font-weight: 400 !important; color: #111 !important; margin: 0 !important; line-height: 0.9 !important;
+    }
+
+    /* Miscellaneous Utility */
+    .sidebar-close-btn {
+        background: transparent; border: none; color: white; font-size: 22px;
+        font-weight: 300; cursor: pointer; padding: 0 5px; line-height: 1; border-radius: 4px;
+    }
+    .sidebar-close-btn:hover { background: rgba(255,255,255,0.2); }
     .section-divider { border: none; border-top: 1px solid #e0e0e0; margin: 8px 0 4px 0; }
     .sidebar-section {
         font-family: -apple-system, BlinkMacSystemFont, sans-serif;
@@ -617,23 +628,26 @@ st.sidebar.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
+
 # ─────────────────────────────────────────────────────────────
 # LEVEL 1 VIEW
 # ─────────────────────────────────────────────────────────────
 if st.session_state.nav_level == 1:
+    # Absolute background block for edge-to-edge Orange Header
     st.sidebar.markdown('''
-    <div class="sidebar-header">
-        <span>Μενού</span>
+    <div style="position: absolute; top: 0; left: 0; right: 0; height: 100px; background-color: #ff5e00; z-index: 0;"></div>
+    <div style="position: relative; z-index: 1; color: white; display: flex; justify-content: space-between; align-items: center; margin-top: -15px; margin-bottom: 30px;">
+        <span style="font-size: 18px; font-weight: 700; font-family: -apple-system, BlinkMacSystemFont, sans-serif;">Μενού</span>
         <button class="sidebar-close-btn" onclick="window.parent.document.querySelector('[data-testid=\\'stSidebarCollapsedControl\\'] button').click();" title="Κλείσιμο">✕</button>
     </div>
+    <p class="sidebar-section">Προϊόντα</p>
     ''', unsafe_allow_html=True)
-    
-    st.sidebar.markdown('<p class="sidebar-section">Προϊόντα</p>', unsafe_allow_html=True)
 
+    # Dynamic CSS mapping for L1 icons safely bound to target ids
     icon_css = "<style>"
-    for i, l1 in enumerate(L1_CATEGORIES, start=1):
+    for l1 in L1_CATEGORIES:
         icon_css += f"""
-        [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] > div:nth-child({i}) button::before {{
+        div[data-testid="column"]:has(#target-l1-{l1['key']}) .stButton > button::before {{
             content: ''; display: block; width: 44px; height: 44px;
             background-color: #f4f5f7; border-radius: 50%;
             background-image: url("data:image/svg+xml,{l1['icon_svg']}");
@@ -644,12 +658,14 @@ if st.session_state.nav_level == 1:
     icon_css += "</style>"
     st.sidebar.markdown(icon_css, unsafe_allow_html=True)
 
+    # Render L1 grid
     n_l1 = len(L1_CATEGORIES)
     for row_start in range(0, n_l1, 2):
         row_items = L1_CATEGORIES[row_start:row_start + 2]
         cols = st.sidebar.columns(2)
         for col, l1 in zip(cols, row_items):
             with col:
+                st.markdown(f'<div id="target-l1-{l1["key"]}"></div>', unsafe_allow_html=True)
                 if st.button(l1["label"], key=f"l1_{l1['key']}", use_container_width=True):
                     st.session_state.nav_level = 2
                     st.session_state.selected_l1 = l1["key"]
@@ -671,50 +687,15 @@ else:
     selected_l1 = next((x for x in L1_CATEGORIES if x["key"] == selected_l1_key), None)
     children = L2_CHILDREN.get(selected_l1_key, [])
 
-    # 🟢 LEVEL 2 CSS INJECTION: Styles the Breadcrumb Row and Back Button precisely
-    st.sidebar.markdown("""
-    <style>
-        /* Transform the first row (Breadcrumb) into a white header */
-        [data-testid="stSidebar"] [data-testid="stHorizontalBlock"]:first-of-type {
-            background-color: #ffffff !important;
-            margin: -4rem -1rem 1rem -1rem !important;
-            padding: 4.5rem 1rem 1rem 1.5rem !important;
-            border-bottom: 1px solid #eaeaea !important;
-            align-items: center !important;
-        }
-        
-        /* Transform the back button in the first column into a perfect circle */
-        [data-testid="stSidebar"] [data-testid="stHorizontalBlock"]:first-of-type > div:nth-child(1) button {
-            background-color: #f4f5f7 !important;
-            border: none !important;
-            border-radius: 50% !important;
-            width: 36px !important;
-            height: 36px !important;
-            min-height: 36px !important;
-            padding: 0 !important;
-            font-size: 22px !important;
-            font-weight: 500 !important;
-            color: #111 !important;
-            display: flex !important;
-            justify-content: center !important;
-            align-items: center !important;
-            box-shadow: none !important;
-        }
-        [data-testid="stSidebar"] [data-testid="stHorizontalBlock"]:first-of-type > div:nth-child(1) button:hover {
-            background-color: #e0e4e8 !important;
-        }
-        
-        /* Breadcrumb Text Styling */
-        .l2-breadcrumb-label {
-            font-size: 16px; font-weight: 700; color: #111; line-height: 1.2;
-            margin-left: -5px;
-        }
-    </style>
-    """, unsafe_allow_html=True)
+    # Absolute background block for edge-to-edge White Header
+    st.sidebar.markdown('''
+    <div style="position: absolute; top: 0; left: 0; right: 0; height: 100px; background-color: #ffffff; border-bottom: 1px solid #eaeaea; z-index: 0;"></div>
+    ''', unsafe_allow_html=True)
 
-    # Breadcrumb row (Renders inside the white header defined above)
+    # Breadcrumb structure rendered over the white background
     bc_cols = st.sidebar.columns([1, 4])
     with bc_cols[0]:
+        st.markdown('<div id="target-back-btn"></div>', unsafe_allow_html=True)
         if st.button("‹", key="back_to_l1", help="Επιστροφή"):
             st.session_state.nav_level = 1
             st.session_state.selected_l1 = None
@@ -722,44 +703,40 @@ else:
             st.rerun()
     with bc_cols[1]:
         label_clean = (selected_l1["label"] if selected_l1 else "").replace("\n", " ")
-        st.markdown(f'<div class="l2-breadcrumb-label">{label_clean}</div>', unsafe_allow_html=True)
+        st.markdown(f'<div style="font-size: 16px; font-weight: 700; color: #111; line-height: 1.2; margin-top: 8px; margin-left: 5px; font-family: -apple-system, BlinkMacSystemFont, sans-serif;">{label_clean}</div>', unsafe_allow_html=True)
+    
+    st.sidebar.markdown('<div style="height: 15px;"></div>', unsafe_allow_html=True)
 
-
+    # Dynamic CSS mapping for L2 icons + active border state securely bound
     active_cluster = st.session_state.active_cluster
     border_css = "<style>"
-    
-    n_l2 = len(children)
-    for row_start in range(0, n_l2, 2):
-        row_items = children[row_start:row_start + 2]
-        block_idx = (row_start // 2) + 2 
-        
-        for col_index, child in enumerate(row_items):
-            col_child_idx = col_index + 1
-            is_active = child["key"] == active_cluster
-            border = "1px solid #1a73e8" if is_active else "1px solid #eaeaea"
-            
-            border_css += f"""
-            [data-testid="stSidebar"] [data-testid="stHorizontalBlock"]:nth-of-type({block_idx}) > div:nth-child({col_child_idx}) button {{
-                border: {border} !important;
-            }}
-            [data-testid="stSidebar"] [data-testid="stHorizontalBlock"]:nth-of-type({block_idx}) > div:nth-child({col_child_idx}) button::before {{
-                content: ''; display: block; width: 44px; height: 44px;
-                background-color: #f4f5f7; border-radius: 50%;
-                background-image: url("data:image/svg+xml,{child['icon_svg']}");
-                background-size: 24px; background-repeat: no-repeat; background-position: center;
-                position: absolute; top: 14px; left: 50%; transform: translateX(-50%);
-            }}
-            """
+    for child in children:
+        is_active = child["key"] == active_cluster
+        border = "1px solid #1a73e8" if is_active else "1px solid #eaeaea"
+        border_css += f"""
+        div[data-testid="column"]:has(#target-l2-{child['key']}) .stButton > button {{
+            border: {border} !important;
+        }}
+        div[data-testid="column"]:has(#target-l2-{child['key']}) .stButton > button::before {{
+            content: ''; display: block; width: 44px; height: 44px;
+            background-color: #f4f5f7; border-radius: 50%;
+            background-image: url("data:image/svg+xml,{child['icon_svg']}");
+            background-size: 24px; background-repeat: no-repeat; background-position: center;
+            position: absolute; top: 14px; left: 50%; transform: translateX(-50%);
+        }}
+        """
     border_css += "</style>"
     st.sidebar.markdown(border_css, unsafe_allow_html=True)
 
-    # Render L2 tiles
+    # Render L2 grid
+    n_l2 = len(children)
     for row_start in range(0, n_l2, 2):
         row_items = children[row_start:row_start + 2]
         if len(row_items) == 1:
             cols = st.sidebar.columns(2)
             with cols[0]:
                 child = row_items[0]
+                st.markdown(f'<div id="target-l2-{child["key"]}"></div>', unsafe_allow_html=True)
                 if st.button(child["label"], key=f"l2_{child['key']}", use_container_width=True):
                     st.session_state.active_cluster = child["key"]
                     st.rerun()
@@ -767,6 +744,7 @@ else:
             cols = st.sidebar.columns(2)
             for col, child in zip(cols, row_items):
                 with col:
+                    st.markdown(f'<div id="target-l2-{child["key"]}"></div>', unsafe_allow_html=True)
                     if st.button(child["label"], key=f"l2_{child['key']}", use_container_width=True):
                         st.session_state.active_cluster = child["key"]
                         st.rerun()
