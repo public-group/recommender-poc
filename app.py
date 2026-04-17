@@ -2812,7 +2812,7 @@ def run_laptops_engine(trigger, df_products, df_history):
                 # should get the same premium headset recommendations.
                 if is_apple:
                     premium_overhead = pool['Title'].fillna('').str.lower().str.contains(
-                        r'airpods max|wh-1000xm|wh1000xm|quietcomfort|qc\d|momentum \d|bose 700|audio-technica|beats studio',
+                        r'airpods|wh-1000xm|wh1000xm|quietcomfort|qc\d|momentum \d|bose 700|audio-technica|beats studio',
                         regex=True, na=False
                     )
                     pool.loc[is_headset & premium_overhead, 'Final_Score'] += 100000
