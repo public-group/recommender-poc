@@ -194,6 +194,13 @@ FLOOR_CARE_MARKETING_COPY = {
     "Pet / Εξάρτημα 2": "Εργαλεία για τρίχες & αλλεργιογόνα.",
 }
 
+# ── Peripheral trigger detection (used by product selector AND engine) ──
+PERIPHERAL_TRIGGERS = {
+    "Mouse":        {"hierarchies": {"MOUSE WIRELESS", "MOUSE WIRED", "APPLE ORIGINAL WIRELESS MOUSE"}},
+    "Keyboard":     {"hierarchies": {"KEYBOARDS WIRELESS", "KEYBOARDS WIRED", "APPLE ORIGINAL WIRELESS KEYBOARD"}},
+    "Gaming Mouse": {"hierarchies": {"MOUSE WIRELESS"}},
+}
+
 
 
 # ─────────────────────────────────────────────────────────────
