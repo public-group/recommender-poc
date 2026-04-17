@@ -3517,12 +3517,12 @@ MOUSE_SLOTS = [
     ("Keyboard",            ['KEYBOARDS WIRELESS', 'KEYBOARDS WIRED'], {'connectivity_mirror': True, 'brand_match': True, 'apple_force': 'APPLE ORIGINAL WIRELESS KEYBOARD', 'silent_match': True, 'ergo_match': True}),
     ("Batteries",           ['ΑΛΚΑΛΙΚΕΣ'],                    {'skip_if': 'no_battery'}),
     ("Wrist Rest",          ['MOUSE PADS'],                   {'wrist_rest_only': True}),
+    ("Screen Cleaner",      ['CLEANING PRODUCTS'],            {}),
     ("USB Hub",             ['USB HUB DEVICES'],              {}),
     ("Headset",             ['PC HEADSET/MICROPHONE', 'OVERHEAD'], {}),
+    ("Desk Lamp",           ['ΕΞΥΠΝΟΣ ΦΩΤΙΣΜΟΣ'],            {'title_boost': ['Desk', 'Γραφείου', 'Table', 'Επιτραπέζιο'], 'title_hide': ['Ceiling', 'Bulb', 'Strip', 'Οροφής']}),
     ("Mouse Pad 2",         ['MOUSE PADS'],                   {'title_hide': ['Gel', 'Wrist', 'Μαξιλαράκι']}),
     ("Keyboard 2",          ['KEYBOARDS WIRELESS', 'KEYBOARDS WIRED'], {'connectivity_mirror': True, 'brand_match': True, 'apple_force': 'APPLE ORIGINAL WIRELESS KEYBOARD'}),
-    ("Screen Cleaner",      ['CLEANING PRODUCTS'],            {}),
-    ("Desk Lamp",           ['ΕΞΥΠΝΟΣ ΦΩΤΙΣΜΟΣ'],            {'title_boost': ['Desk', 'Γραφείου', 'Table', 'Επιτραπέζιο'], 'title_hide': ['Ceiling', 'Bulb', 'Strip', 'Οροφής']}),
 ]
 
 KEYBOARD_SLOTS = [
