@@ -656,27 +656,26 @@ st.sidebar.markdown("""
         text-transform: uppercase; letter-spacing: 0.5px; margin: 8px 0 4px 0;
     }
 
-    /* Back button row (L2 view) */
-    .l2-breadcrumb {
-        display: flex; align-items: center; gap: 10px;
-        margin: 4px 0 10px 0;
+    /* Back button dot (L2 view) */
+    .l2-back-dot {
+        display: inline-flex; align-items: center; justify-content: center;
+        width: 32px; height: 32px; min-width: 32px;
+        border-radius: 50%;
+        background: #ffffff;
+        border: 1px solid #eaeaea;
+        font-size: 18px; font-weight: 300; color: #333;
+        cursor: pointer; flex-shrink: 0;
+        transition: all 0.15s ease;
+        line-height: 1;
     }
-    .l2-back-btn-wrap { width: 36px; flex-shrink: 0; }
-    .l2-back-btn-wrap button {
-        background: #ffffff !important;
-        border: 1px solid #eaeaea !important;
-        border-radius: 50% !important;
-        width: 36px !important; height: 36px !important;
-        min-height: 36px !important;
-        padding: 0 !important;
-        font-size: 16px !important; font-weight: 700 !important; color: #333 !important;
-        line-height: 1 !important;
-        white-space: nowrap !important;
-    }
-    .l2-back-btn-wrap button:hover { border-color: #ff5e00 !important; }
+    .l2-back-dot:hover { border-color: #ff5e00; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
     .l2-breadcrumb-label {
         font-size: 15px; font-weight: 700; color: #111;
-        line-height: 1.2;
+        line-height: 1.2; cursor: default;
+    }
+    /* Style the back button as a subtle pill */
+    [data-testid="stSidebar"] button[data-testid="stBaseButton-secondary"] {
+        /* Default: keep normal tile styling (handled by other rules) */
     }
 </style>
 """, unsafe_allow_html=True)
@@ -742,19 +741,16 @@ else:
     selected_l1 = next((x for x in L1_CATEGORIES if x["key"] == selected_l1_key), None)
     children = L2_CHILDREN.get(selected_l1_key, [])
 
-    # Breadcrumb row: ‹ back arrow + parent label (matches screenshot)
-    bc_col1, bc_col2 = st.sidebar.columns([1, 6])
-    with bc_col1:
-        st.markdown('<div class="l2-back-btn-wrap">', unsafe_allow_html=True)
-        if st.button("‹", key="back_to_l1", help="Επιστροφή στο μενού"):
-            st.session_state.nav_level = 1
-            st.session_state.selected_l1 = None
-            st.session_state.active_cluster = None
-            st.rerun()
-        st.markdown('</div>', unsafe_allow_html=True)
-    with bc_col2:
-        label_clean = (selected_l1["label"] if selected_l1 else "").replace("\n", " ")
-        st.markdown(f'<div class="l2-breadcrumb-label">{label_clean}</div>', unsafe_allow_html=True)
+    # Breadcrumb row: ‹ back arrow + parent label
+    # Rendered as label first, then a small back button — avoiding st.columns
+    # which created a tall vertical strip for the narrow back column.
+    label_clean = (selected_l1["label"] if selected_l1 else "").replace("\n", " ")
+    st.sidebar.markdown(f'<div class="l2-breadcrumb-label" style="margin-bottom:6px;">‹&nbsp;&nbsp;{label_clean}</div>', unsafe_allow_html=True)
+    if st.sidebar.button("↩ Πίσω", key="back_to_l1", use_container_width=True):
+        st.session_state.nav_level = 1
+        st.session_state.selected_l1 = None
+        st.session_state.active_cluster = None
+        st.rerun()
 
     # L2 tiles — render after the breadcrumb (in their own horizontal block)
     st.sidebar.markdown('<hr class="section-divider">', unsafe_allow_html=True)
