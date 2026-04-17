@@ -552,6 +552,11 @@ def load_all_data():
         dl = pd.read_excel(excel_file, sheet_name='Laptops')
         dl.columns = dl.columns.str.strip()
     else: dl = pd.DataFrame()
+
+    if 'Vacuums' in available_sheets:
+        dv = pd.read_excel(excel_file, sheet_name='Vacuums')
+        dv.columns = dv.columns.str.strip()
+    else: dv = pd.DataFrame()
     
     if not dp.empty:
         parts = [dp[c].fillna('').astype(str).str.strip() for c in COMPAT_COLS if c in dp.columns]
@@ -568,10 +573,10 @@ def load_all_data():
     if not db.empty and CC not in db.columns:
         db[CC] = ''
     
-    return dp, dh, ds, db, dl, available_sheets
+    return dp, dh, ds, db, dl, dv, available_sheets
 
 try:
-    df_products, df_history, df_slots, df_books, df_laptops, sheets_loaded = load_all_data()
+    df_products, df_history, df_slots, df_books, df_laptops, df_vacuums, sheets_loaded = load_all_data()
     compat_cols_found = [c for c in COMPAT_COLS if c in df_products.columns]
 except Exception as e:
     st.error(f"🚨 Error loading data: {e}")
@@ -871,19 +876,21 @@ else:
                 trigger = laptops[laptops['Title']==sel].iloc[0] if sel else None
 
     elif active_cluster == "Floor Care":
-        if df_products.empty: st.stop()
-        hier_upper = df_products['Hierarchy'].fillna('').astype(str).str.upper().str.strip()
-        trigger_hiers_upper = {h.upper().strip() for h in FLOOR_CARE_TRIGGER_HIERARCHIES}
-        vacuums = df_products[hier_upper.isin(trigger_hiers_upper)].copy()
-        if vacuums.empty:
-            # Fallback: Level 2 = Floor Care
-            vacuums = df_products[df_products['Level 2'].fillna('').str.strip() == 'Floor Care'].copy()
-        if vacuums.empty:
-            st.sidebar.warning("Δεν βρέθηκαν σκούπες στο Products sheet.")
+        if df_vacuums.empty:
+            st.sidebar.warning("Sheet 'Vacuums' is empty or missing.")
         else:
-            st.sidebar.markdown('<p class="sidebar-section">Επιλέξτε Σκούπα</p>', unsafe_allow_html=True)
-            sel = st.sidebar.selectbox("", vacuums['Title'].unique(), label_visibility="collapsed", key="fc_sel")
-            trigger = vacuums[vacuums['Title']==sel].iloc[0] if sel else None
+            hier_upper = df_vacuums['Hierarchy'].fillna('').astype(str).str.upper().str.strip()
+            trigger_hiers_upper = {h.upper().strip() for h in FLOOR_CARE_TRIGGER_HIERARCHIES}
+            vacuums = df_vacuums[hier_upper.isin(trigger_hiers_upper)].copy()
+            if vacuums.empty:
+                # Fallback: all rows in Vacuums sheet
+                vacuums = df_vacuums.copy()
+            if vacuums.empty:
+                st.sidebar.warning("Δεν βρέθηκαν σκούπες.")
+            else:
+                st.sidebar.markdown('<p class="sidebar-section">Επιλέξτε Σκούπα</p>', unsafe_allow_html=True)
+                sel = st.sidebar.selectbox("", vacuums['Title'].unique(), label_visibility="collapsed", key="fc_sel")
+                trigger = vacuums[vacuums['Title']==sel].iloc[0] if sel else None
 
     elif active_cluster == "Kids Books":
         if df_books.empty: st.stop()
@@ -3143,6 +3150,13 @@ def run_floor_care_engine(trigger, df_products, df_history):
     # ── Build candidate pool (exclude the trigger itself) ──
     c = df_products[df_products['Material'] != tm].copy()
 
+    # Exclude other full-size vacuums from candidates (don't recommend another
+    # vacuum as an accessory — handhelds are a DIFFERENT hierarchy so they stay)
+    trigger_hiers_upper = {h.upper().strip() for h in FLOOR_CARE_TRIGGER_HIERARCHIES}
+    b4 = len(c)
+    c = c[~c['Hierarchy'].fillna('').astype(str).str.upper().str.strip().isin(trigger_hiers_upper)]
+    diag.append(("1a. Excl vacuums", len(c), f"Removed {b4 - len(c)}"))
+
     # Stock filter
     if 'CW Stock Units' in c.columns:
         stv = pd.to_numeric(c['CW Stock Units'], errors='coerce').fillna(0)
@@ -3186,20 +3200,29 @@ def run_floor_care_engine(trigger, df_products, df_history):
 
     # ── Helper: brand+model match for consumables ──
     def brand_model_match(pool, notes_list):
-        """Try to match consumables by brand AND model compatibility fields."""
+        """Try to match consumables by brand (Κατασκευαστής) AND model
+        compatibility (Συμβατό μοντέλο2) fields from the Vacuums sheet."""
         matched = pool.copy()
 
-        # Brand match via 'Για μάρκες ηλεκτρικής σκούπας' column
-        brand_col = 'Για μάρκες ηλεκτρικής σκούπας'
-        if brand_col in matched.columns and tb:
-            brand_mask = matched[brand_col].fillna('').astype(str).str.upper().str.contains(
+        # Brand match via Κατασκευαστής on the accessory
+        if tb:
+            brand_mask = matched['Κατασκευαστής'].fillna('').astype(str).str.upper().str.strip() == tb
+            # Also check if brand appears anywhere in Title (some accessories
+            # list the vacuum brand in the title rather than Κατασκευαστής)
+            title_brand = matched['Title'].fillna('').str.upper().str.contains(
                 re.escape(tb), regex=True, na=False
             )
-            matched = matched[brand_mask]
-            notes_list.append(f"Brand match ({tb}): {brand_mask.sum()} items")
+            brand_combined = brand_mask | title_brand
+            brand_filtered = matched[brand_combined]
+            if not brand_filtered.empty:
+                matched = brand_filtered
+                notes_list.append(f"Brand match ({tb}): {brand_combined.sum()} items")
+            else:
+                notes_list.append(f"⚠ Brand match ({tb}): 0 items — keeping all {len(matched)}")
+                return matched  # Can't narrow by brand → return what we have
 
-        # Model match via 'Συμβατό μοντέλο' column
-        model_col = 'Συμβατό μοντέλο'
+        # Model match via 'Συμβατό μοντέλο2' column
+        model_col = 'Συμβατό μοντέλο2'
         if model_col in matched.columns and tmodel and tmodel.lower() not in ('n/a', 'nan', ''):
             model_mask = matched[model_col].fillna('').astype(str).str.upper().str.contains(
                 re.escape(tmodel.upper()), regex=True, na=False
@@ -3392,7 +3415,9 @@ elif active_cluster == "Laptops":
     recs, diag, slot_notes, full_candidates = run_laptops_engine(trigger, combined_pool, df_history)
     slot_diag = []
 elif active_cluster == "Floor Care":
-    recs, diag, slot_notes, full_candidates = run_floor_care_engine(trigger, df_products, df_history)
+    # Combine both sheets: triggers are in Vacuums, accessories may be in either
+    combined_pool = pd.concat([df_products, df_vacuums], ignore_index=True)
+    recs, diag, slot_notes, full_candidates = run_floor_care_engine(trigger, combined_pool, df_history)
     slot_diag = []
 else:
     recs, diag, slot_notes, full_candidates = run_books_engine(trigger, df_books, df_history)
