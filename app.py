@@ -198,7 +198,7 @@ FLOOR_CARE_MARKETING_COPY = {
 PERIPHERAL_TRIGGERS = {
     "Mouse":        {"hierarchies": {"MOUSE WIRELESS", "MOUSE WIRED", "APPLE ORIGINAL WIRELESS MOUSE"}},
     "Keyboard":     {"hierarchies": {"KEYBOARDS WIRELESS", "KEYBOARDS WIRED", "APPLE ORIGINAL WIRELESS KEYBOARD"}},
-    "Gaming Mouse": {"hierarchies": {"MOUSE WIRELESS"}},
+    "Gaming Mouse": {"hierarchies": {"GAMING MOUSE"}},
 }
 
 
@@ -935,36 +935,33 @@ else:
                 trigger = periph[periph['Title']==sel].iloc[0] if sel else None
 
     elif active_cluster == "Monitors":
-        if df_peripherals.empty:
-            st.sidebar.warning("Sheet 'Peripherals' is empty or missing.")
+        # Monitor triggers may be in Products sheet or Peripherals
+        combined = pd.concat([df_products, df_peripherals], ignore_index=True) if not df_peripherals.empty else df_products
+        monitors = combined[combined['Hierarchy'].fillna('').astype(str).str.upper().str.strip().isin({'TFT MONITOR', 'MONITORS'})].copy()
+        if monitors.empty:
+            monitors = combined[combined['Level 2'].fillna('').str.strip().str.lower().isin(['monitors', 'οθόνες'])].copy()
+        if monitors.empty:
+            st.sidebar.warning("Δεν βρέθηκαν οθόνες.")
         else:
-            monitors = df_peripherals[df_peripherals['Hierarchy'].fillna('').astype(str).str.upper().str.strip().isin({'TFT MONITOR', 'MONITORS'})].copy()
-            if monitors.empty:
-                monitors = df_peripherals[df_peripherals['Level 2'].fillna('').str.strip() == 'Monitors'].copy()
-            if monitors.empty:
-                st.sidebar.warning("Δεν βρέθηκαν οθόνες.")
-            else:
-                st.sidebar.markdown('<p class="sidebar-section">Επιλέξτε Οθόνη</p>', unsafe_allow_html=True)
-                sel = st.sidebar.selectbox("", monitors['Title'].unique(), label_visibility="collapsed", key="mon_sel")
-                trigger = monitors[monitors['Title']==sel].iloc[0] if sel else None
+            st.sidebar.markdown('<p class="sidebar-section">Επιλέξτε Οθόνη</p>', unsafe_allow_html=True)
+            sel = st.sidebar.selectbox("", monitors['Title'].unique(), label_visibility="collapsed", key="mon_sel")
+            trigger = monitors[monitors['Title']==sel].iloc[0] if sel else None
 
     elif active_cluster == "Printers":
-        if df_peripherals.empty:
-            st.sidebar.warning("Sheet 'Peripherals' is empty or missing.")
+        combined = pd.concat([df_products, df_peripherals], ignore_index=True) if not df_peripherals.empty else df_products
+        printer_hiers = {'INKJET', 'MULTIFUNCTION INKJET', 'MULTIFUCTION LASER', 'LASER', 'LASER A4 MONO',
+                         'LASER A4 COLOR', 'LASER A3 MONO', 'LASER A3 COLOR', 'FAX LASER',
+                         'MULTIFUCTION LASER A4 COLOR', 'MULTIFUCTION LASER A4 MONO',
+                         'MULTIFUCTION LASER A3 COLOR', 'MULTIFUCTION LASER A3 MONO'}
+        printers = combined[combined['Hierarchy'].fillna('').astype(str).str.upper().str.strip().isin(printer_hiers)].copy()
+        if printers.empty:
+            printers = combined[combined['Level 2'].fillna('').str.strip().str.lower().isin(['printers', 'εκτυπωτές'])].copy()
+        if printers.empty:
+            st.sidebar.warning("Δεν βρέθηκαν εκτυπωτές.")
         else:
-            printer_hiers = {'INKJET', 'MULTIFUNCTION INKJET', 'MULTIFUCTION LASER', 'LASER', 'LASER A4 MONO',
-                             'LASER A4 COLOR', 'LASER A3 MONO', 'LASER A3 COLOR', 'FAX LASER',
-                             'MULTIFUCTION LASER A4 COLOR', 'MULTIFUCTION LASER A4 MONO',
-                             'MULTIFUCTION LASER A3 COLOR', 'MULTIFUCTION LASER A3 MONO'}
-            printers = df_peripherals[df_peripherals['Hierarchy'].fillna('').astype(str).str.upper().str.strip().isin(printer_hiers)].copy()
-            if printers.empty:
-                printers = df_peripherals[df_peripherals['Level 2'].fillna('').str.strip() == 'Printers'].copy()
-            if printers.empty:
-                st.sidebar.warning("Δεν βρέθηκαν εκτυπωτές.")
-            else:
-                st.sidebar.markdown('<p class="sidebar-section">Επιλέξτε Εκτυπωτή</p>', unsafe_allow_html=True)
-                sel = st.sidebar.selectbox("", printers['Title'].unique(), label_visibility="collapsed", key="print_sel")
-                trigger = printers[printers['Title']==sel].iloc[0] if sel else None
+            st.sidebar.markdown('<p class="sidebar-section">Επιλέξτε Εκτυπωτή</p>', unsafe_allow_html=True)
+            sel = st.sidebar.selectbox("", printers['Title'].unique(), label_visibility="collapsed", key="print_sel")
+            trigger = printers[printers['Title']==sel].iloc[0] if sel else None
 
     elif active_cluster == "Webcam":
         if df_peripherals.empty:
@@ -3474,210 +3471,6 @@ def run_floor_care_engine(trigger, df_products, df_history):
         return recs_df, diag, slot_notes, recs_df
     return pd.DataFrame(), diag, slot_notes, pd.DataFrame()
 
-# ─────────────────────────────────────────────────────────────
-# RUN ENGINE
-# ─────────────────────────────────────────────────────────────
-if active_cluster == "Smartphones":
-    recs, diag, slot_diag, slot_notes, full_candidates = run_engine(trigger, df_products, df_history, df_slots)
-elif active_cluster == "Laptops":
-    # --- FIX: Combine both sheets so it finds Bags/Mice (Laptops sheet) AND Headsets (Products sheet) ---
-    combined_pool = pd.concat([df_products, df_laptops], ignore_index=True)
-    recs, diag, slot_notes, full_candidates = run_laptops_engine(trigger, combined_pool, df_history)
-    slot_diag = []
-elif active_cluster == "Floor Care":
-    # Combine both sheets: triggers are in Vacuums, accessories may be in either
-    combined_pool = pd.concat([df_products, df_vacuums], ignore_index=True)
-    recs, diag, slot_notes, full_candidates = run_floor_care_engine(trigger, combined_pool, df_history)
-    slot_diag = []
-elif active_cluster in ("Mouse", "Keyboard", "Gaming Mouse"):
-    recs, diag, slot_notes, full_candidates = run_peripherals_engine(trigger, df_peripherals, df_history, active_cluster)
-    slot_diag = []
-elif active_cluster in ("Monitors", "Printers", "Webcam", "USB Hub"):
-    recs, diag, slot_notes, full_candidates = run_peripherals_engine(trigger, df_peripherals, df_history, active_cluster)
-    slot_diag = []
-else:
-    recs, diag, slot_notes, full_candidates = run_books_engine(trigger, df_books, df_history)
-    slot_diag = []
-
-MARKETING_COPY = {
-    "PRIMARY_CASE": "Απόλυτη προστασία & τέλεια εφαρμογή.",
-    "SCREEN_GLASS": "Αόρατη ασπίδα για την οθόνη σου.",
-    "WALL_CHARGER": "Γρήγορη και απόλυτα ασφαλής φόρτιση.",
-    "EARBUDS": "Κορυφαία, ασύρματη ακουστική εμπειρία.",
-    "POWERBANK": "Ενέργεια on-the-go.",
-    "CROSS_SELL": "Smart gadget για το οικοσύστημά σου.",
-    "CAMERA_GLASS": "Θωράκιση φακών για τέλειες λήψεις.",
-    "SMARTWATCH": "Ο απόλυτος σύντροφος.",
-    "HOLDER": "Σταθερή τοποθέτηση για το αυτοκίνητο.",
-    "ALT_CASE": "Premium προστασία.",
-    "Series Book": "Η συνέχεια της περιπέτειας!",
-    "Start from Beginning": "Ξεκίνα από την αρχή!", 
-    "Other Box Set": "Ολόκληρη η συλλογή!", 
-    "Series Discovery": "Άλλη έκδοση της σειράς!",
-    "Cross-Sell: IP Toy": "Ο ήρωας ζωντανεύει!",
-    "Cross-Sell: Plush": "Αγκαλιά με τον αγαπημένο σου!",
-    "Cross-Sell: Arts": "Δημιούργησε & φαντάσου!",
-    "Cross-Sell: Creative Toy": "Χτίσε τον κόσμο σου!",
-    "Cross-Sell: Puzzle": "Μάθε παίζοντας!",
-    "Cross-Sell: Lifestyle": "Στιλ για κάθε μέρα!",
-    "Cross-Sell: Collectable Cards": "Συλλογή για πρωταθλητές!",
-    "Cross-Sell: Action Figure": "Ο ήρωας στο ράφι σου!",
-    "Explore Series": "Ανακάλυψε κι άλλα από τη σειρά!",
-    "Category Discovery": "Μια ακόμα τέλεια επιλογή!",
-}
-
-if not recs.empty:
-    rts = recs.head(10)
-    ch = ""
-    for _, r in rts.iterrows():
-        iu=safe(str(r.get('Thumbnails','')).strip())
-        if not iu or iu == 'nan': iu = "https://via.placeholder.com/150"
-        rp=parse_euro_price(r.get('LIST PRICE',0))
-        np=f"{rp:.2f}".replace('.',','); op=f"{(rp*1.25):.2f}".replace('.',',')
-        ti=safe(str(r.get('Title',''))); sn=int(r.get('Assigned_Slot',0))
-        
-        raw_role = str(r.get('Slot_Role',''))
-        if active_cluster == "Smartphones":
-            lk = detect_logic_key(raw_role)
-            marketing_text = MARKETING_COPY.get(lk, "Ιδανική επιλογή!")
-        elif active_cluster == "Laptops":
-            # Fetches the dynamic text we created, falls back to the dictionary
-            marketing_text = str(r.get('Marketing_Copy', LAPTOP_MARKETING_COPY.get(raw_role, "Ιδανική επιλογή!")))
-        else:
-            marketing_text = MARKETING_COPY.get(raw_role, "Μια εξαιρετική επιλογή!")
-        
-        ch+=f"""<div class="pc">
-            <div class="sb">Slot {sn}</div>
-            <img src="{iu}" alt="product">
-            <div class="ti" title="{ti}">{ti}</div>
-            <div class="sr">{marketing_text}</div>
-            <div class="rv"><span class="sc">4.8</span> <span class="st">★★★★★</span> <span class="ct">(305)</span></div>
-            <div class="op">Π.Λ.Τ. : {op}€</div>
-            <div class="np">{np.split(',')[0]}<span class="dm">,{np.split(',')[1]}€</span></div>
-            <button class="cb">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                    <circle cx="9" cy="21" r="1"></circle><circle cx="20" cy="21" r="1"></circle>
-                    <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path>
-                </svg>
-            </button>
-        </div>"""
-
-    if active_cluster == "Smartphones":
-        header_text = "Μαζί με αυτό αγοράζουν"
-    elif active_cluster == "Laptops":
-        header_text = "Ολοκλήρωσε το setup σου"
-    else:
-        header_text = "Συνέχισε την περιπέτεια"
-
-    css="""
-    *{margin:0;padding:0;box-sizing:border-box}
-    body{font-family:-apple-system,BlinkMacSystemFont,sans-serif;background:transparent}
-    .desktop-wrapper{background-color:#f8f9fa;border-radius:16px;padding:30px;margin:10px 0;position:relative}
-    .desktop-header{font-size:24px;font-weight:700;margin-bottom:25px;color:#111;display:flex;align-items:center}
-    .desktop-header span{color:#ff5e00;margin-right:10px;font-size:26px;line-height:1;font-weight:900}
-    .car{display:flex;overflow-x:auto;gap:15px;padding-bottom:10px;scrollbar-width:none;scroll-behavior:smooth}
-    .car::-webkit-scrollbar{display:none}
-    .pc{background:#fff;border:1px solid #eaeaea;border-radius:12px;padding:15px 12px;display:flex;flex-direction:column;align-items:center;box-shadow:0 2px 5px rgba(0,0,0,.04);position:relative;flex-shrink:0;width:180px;min-width:180px;max-width:180px}
-    .sb{position:absolute;top:8px;left:8px;background:#ff5e00;color:#fff;font-size:10px;font-weight:700;padding:3px 6px;border-radius:6px;z-index:10}
-    .pc img{height:110px;width:auto;object-fit:contain;margin-bottom:15px;margin-top:10px}
-    .ti{font-size:13px;color:#333;text-align:center;height:36px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;margin-bottom:6px;line-height:1.3;padding:0 5px;word-wrap:break-word;word-break:break-word;max-width:100%;white-space:normal !important}
-    .sr{font-size:10px;color:#777;margin-bottom:12px;text-align:center;height:28px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;line-height:1.35;width:100%;padding:0 4px}
-    .rv{font-size:11px;margin-bottom:15px}
-    .sc{color:#ff5e00;font-weight:700}
-    .st{color:#ff5e00;letter-spacing:-2px}
-    .ct{color:#1a73e8}
-    .op{font-size:11px;color:#888;text-decoration:line-through;margin-bottom:2px}
-    .np{font-size:18px;font-weight:700;color:#ff5e00;margin-bottom:15px}
-    .dm{font-size:12px}
-    .cb{background:#ff5e00;color:#fff;border:none;border-radius:8px;width:40px;height:35px;cursor:pointer;display:flex;justify-content:center;align-items:center}
-    .cb:hover{background:#e65500}
-    .nav-btn{position:absolute;top:55%;transform:translateY(-50%);width:44px;height:44px;background-color:#fff;border:1px solid #eaeaea;border-radius:50%;box-shadow:0 4px 10px rgba(0,0,0,0.1);display:flex;align-items:center;justify-content:center;cursor:pointer;z-index:100;transition:transform 0.2s,box-shadow 0.2s,opacity 0.3s}
-    .nav-btn:hover{transform:translateY(-50%) scale(1.05);box-shadow:0 6px 14px rgba(0,0,0,0.15)}
-    .nav-left{left:10px;opacity:0;pointer-events:none}
-    .nav-right{right:10px}
-    .nav-left::after{content:'';width:10px;height:10px;border-top:2px solid #555;border-left:2px solid #555;transform:rotate(-45deg);margin-left:4px}
-    .nav-right::after{content:'';width:10px;height:10px;border-top:2px solid #555;border-right:2px solid #555;transform:rotate(45deg);margin-right:4px}
-    """
-
-    dp=f"""<!DOCTYPE html><html><head><meta charset="utf-8"><style>{css}</style></head>
-    <body>
-    <div class="desktop-wrapper">
-        <div class="desktop-header"><span>|</span>{header_text}</div>
-        <div class="nav-btn nav-left" id="btnLeft" onclick="scrollL()"></div>
-        <div class="car" id="scrollContainer">{ch}</div>
-        <div class="nav-btn nav-right" id="btnRight" onclick="scrollR()"></div>
-    </div>
-    <script>
-        const container=document.getElementById('scrollContainer');
-        const btnLeft=document.getElementById('btnLeft');
-        const btnRight=document.getElementById('btnRight');
-        function scrollL(){{container.scrollBy({{left:-405,behavior:'smooth'}});}}
-        function scrollR(){{container.scrollBy({{left:405,behavior:'smooth'}});}}
-        container.addEventListener('scroll',()=>{{
-            btnLeft.style.opacity=container.scrollLeft>5?'1':'0';
-            btnLeft.style.pointerEvents=container.scrollLeft>5?'auto':'none';
-            btnRight.style.opacity=container.scrollLeft+container.clientWidth>=container.scrollWidth-2?'0':'1';
-            btnRight.style.pointerEvents=container.scrollLeft+container.clientWidth>=container.scrollWidth-2?'none':'auto';
-        }});
-        container.dispatchEvent(new Event('scroll'));
-    </script>
-    </body></html>"""
-
-    components.html(dp, height=540, scrolling=False)
-else:
-    st.error("❌ No recommendations found.")
-
-# ─────────────────────────────────────────────────────────────
-# DIAGNOSTICS
-# ─────────────────────────────────────────────────────────────
-st.markdown("---")
-
-st.markdown("""
-<style>
-[data-testid="stExpander"]{background-color:#ffffff !important;border:1px solid #d9d9d9 !important;border-radius:12px !important;box-shadow:none !important;margin-top:20px}
-[data-testid="stExpander"] summary{padding:24px 30px !important;display:flex !important;align-items:center !important}
-[data-testid="stExpander"] summary p{font-size:18px !important;font-weight:700 !important;color:#000 !important;flex-grow:1}
-[data-testid="stExpander"] summary svg{display:none !important}
-[data-testid="stExpander"] summary::after{content:'';display:inline-block;width:12px;height:12px;border-right:2px solid #111;border-bottom:2px solid #111;transform:rotate(45deg);margin-top:-4px}
-[data-testid="stExpander"][open] summary::after{transform:rotate(225deg);margin-top:6px}
-[data-testid="stExpanderDetails"]{padding:10px 30px 30px 30px !important}
-</style>
-""", unsafe_allow_html=True)
-
-with st.expander("⚙️ System Diagnostics"):
-    st.markdown(f"### Active Cluster: **{active_cluster}**")
-    
-    if active_cluster == "Kids Books":
-        t_series = str(trigger.get('Σειρά βιβλίου', '')).strip()
-        t_age = str(trigger.get('Ηλικία', '')).strip()
-        t_hierarchy = str(trigger.get('Hierarchy', '')).strip()
-        st.markdown(f"**Series:** `{t_series}` (Valid: {is_valid_series(t_series)}) | **Age:** `{t_age}` | **Hierarchy:** `{t_hierarchy}`")
-
-    st.markdown("### Engine Funnel")
-    st.dataframe(pd.DataFrame(diag, columns=["Step","Count","Note"]), use_container_width=True, hide_index=True)
-
-    st.markdown("### Slot Details")
-    for sn, notes in sorted(slot_notes.items()):
-        if notes:
-            st.markdown(f"**Priority {sn}**")
-            for n in notes: 
-                st.text(n)
-
-    st.markdown("### Trigger Attributes")
-    if active_cluster == "Kids Books":
-        cols = ['Material','Title','Level 2','Hierarchy','Σειρά βιβλίου','Ηλικία','Εξώφυλλο','Brand','LIST PRICE']
-    elif active_cluster == "Laptops":
-        cols = ['Material','Title','Level 1','Level 2','Hierarchy','Κατασκευαστής','Μοντέλο','Προτεινόμενη χρήση','Μέγεθος οθόνης','Θύρες','LIST PRICE']
-    else:
-        cols = ['Material','Title','Level 2','Hierarchy','Κατασκευαστής','Μοντέλο','LIST PRICE']
-    for col in cols:
-        val = trigger.get(col, 'N/A')
-        st.text(f"{col}: {val}")
-
-    if not recs.empty:
-        st.markdown("### Final Recommendations")
-        dc = ['Title','Hierarchy','Assigned_Slot','Slot_Role','Final_Score'] if 'Final_Score' in recs.columns else ['Title','Hierarchy','Assigned_Slot','Slot_Role']
-        st.dataframe(recs[[c for c in dc if c in recs.columns]], use_container_width=True, hide_index=True)
 
 # ═════════════════════════════════════════════════════════════
 # 🟢 PERIPHERALS ENGINE — All IT Peripheral Clusters
@@ -3688,7 +3481,7 @@ with st.expander("⚙️ System Diagnostics"):
 PERIPHERAL_TRIGGERS = {
     "Mouse":        {"hierarchies": {"MOUSE WIRELESS", "MOUSE WIRED", "APPLE ORIGINAL WIRELESS MOUSE"}},
     "Keyboard":     {"hierarchies": {"KEYBOARDS WIRELESS", "KEYBOARDS WIRED", "APPLE ORIGINAL WIRELESS KEYBOARD"}},
-    "Gaming Mouse": {"hierarchies": {"MOUSE WIRELESS"}},
+    "Gaming Mouse": {"hierarchies": {"GAMING MOUSE"}},
 }
 
 # ── Slot configs per cluster ──
@@ -3725,7 +3518,7 @@ MOUSE_SLOTS = [
     ("Batteries",           ['ΑΛΚΑΛΙΚΕΣ'],                    {'skip_if': 'no_battery'}),
     ("Wrist Rest",          ['MOUSE PADS'],                   {'wrist_rest_only': True}),
     ("USB Hub",             ['USB HUB DEVICES'],              {}),
-    ("Headset",             ['PC HEADSET/MICROPHONE'],        {}),
+    ("Headset",             ['PC HEADSET/MICROPHONE', 'OVERHEAD'], {}),
     ("Mouse Pad 2",         ['MOUSE PADS'],                   {'title_hide': ['Gel', 'Wrist', 'Μαξιλαράκι']}),
     ("Keyboard 2",          ['KEYBOARDS WIRELESS', 'KEYBOARDS WIRED'], {'connectivity_mirror': True, 'brand_match': True, 'apple_force': 'APPLE ORIGINAL WIRELESS KEYBOARD'}),
     ("Screen Cleaner",      ['CLEANING PRODUCTS'],            {}),
@@ -3737,8 +3530,8 @@ KEYBOARD_SLOTS = [
     ("Desk Mat",            ['MOUSE PADS'],                   {'xxl_only': True}),
     ("Batteries",           ['ΑΛΚΑΛΙΚΕΣ'],                    {'skip_if': 'no_battery', 'fallback_hier': ['USB HUB DEVICES']}),
     ("Cleaning",            ['CLEANING PRODUCTS'],            {}),
-    ("PC Speakers",         ['PC SPEAKERS 2.0'],              {}),
-    ("PC Headset",          ['PC HEADSET/MICROPHONE'],        {}),
+    ("PC Speakers",         ['PC SPEAKERS 2.0', 'PC SPEAKERS 1'], {}),
+    ("PC Headset",          ['PC HEADSET/MICROPHONE', 'OVERHEAD'], {}),
     ("USB Hub",             ['USB HUB DEVICES'],              {}),
     ("Mouse 2",             ['MOUSE WIRELESS', 'MOUSE WIRED', 'APPLE ORIGINAL WIRELESS MOUSE'], {'connectivity_mirror': True, 'brand_match': True, 'apple_force': 'APPLE ORIGINAL WIRELESS MOUSE'}),
     ("Wrist Rest",          ['MOUSE PADS'],                   {'wrist_rest_only': True}),
@@ -3746,30 +3539,30 @@ KEYBOARD_SLOTS = [
 ]
 
 GAMING_MOUSE_SLOTS = [
-    ("Gaming Pad",          ['MOUSE WIRELESS PADS'],          {'title_hide': ['Gel', 'Wrist'], 'sensor_surface': True}),
-    ("Gaming Keyboard",     ['KEYBOARDS WIRELESS'],           {'connectivity_mirror': True, 'brand_match': True, 'rgb_match': True, 'button_kb_size': True}),
+    ("Gaming Pad",          ['GAMING MOUSE PADS'],          {'title_hide': ['Gel', 'Wrist'], 'sensor_surface': True}),
+    ("Gaming Keyboard",     ['GAMING KEYBOARDS'],             {'brand_match': True, 'rgb_match': True, 'button_kb_size': True}),
     ("Batteries/Cable",     ['ΑΛΚΑΛΙΚΕΣ'],                    {'skip_if': 'no_battery', 'fallback_hier': ['USB CABLES']}),
-    ("XXL Pad",             ['MOUSE WIRELESS PADS'],          {'xxl_only': True, 'dpi_pad_size': True}),
+    ("XXL Pad",             ['GAMING MOUSE PADS'],          {'xxl_only': True, 'dpi_pad_size': True}),
     ("USB Hub",             ['USB HUB DEVICES'],              {'title_boost': ['USB 3', 'SuperSpeed']}),
-    ("Gaming Headset",      ['PC HEADSET/MICROPHONE'],        {'title_boost': ['Gaming', 'RGB'], 'brand_match': True}),
-    ("Gaming Pad 2",        ['MOUSE WIRELESS PADS'],          {'title_hide': ['Gel', 'Wrist'], 'sensor_surface': True}),
-    ("Gaming Keyboard 2",   ['KEYBOARDS WIRELESS'],           {'connectivity_mirror': True, 'brand_match': True, 'rgb_match': True}),
+    ("Gaming Headset",      ['GAMING AUDIO'],                 {'brand_match': True}),
+    ("Gaming Pad 2",        ['GAMING MOUSE PADS'],          {'title_hide': ['Gel', 'Wrist'], 'sensor_surface': True}),
+    ("Gaming Keyboard 2",   ['GAMING KEYBOARDS'],             {'brand_match': True, 'rgb_match': True}),
     ("Webcam/Stand",        ['PC WEB CAMS'],                  {'title_boost': ['Stand', 'Holder']}),
     ("Cleaning Kit",        ['CLEANING PRODUCTS'],            {}),
 ]
 
 # ── Monitor sub-personas (detected from Χρήση or hierarchy) ──
 MONITOR_GAMING_SLOTS = [
-    ("DisplayPort Cable",   ['DISPLAY-PORT CABLES'],          {'cable_port_match': 'DisplayPort'}),
-    ("Monitor Arm",         ['PC CASE STANDS'],               {'vesa_match': True, 'title_hide': ['Wall Mount']}),
+    ("DisplayPort Cable",   ['DISPLAY-PORT CABLES', 'GAMING HDMI CABLES'], {'cable_port_match': 'DisplayPort'}),
+    ("Monitor Arm",         ['ΒΑΣΕΙΣ ΓΡΑΦΕΙΟΥ'],               {'vesa_match': True, 'title_hide': ['Wall Mount']}),
     ("LED Strip",           ['ΕΞΥΠΝΟΣ ΦΩΤΙΣΜΟΣ'],            {'title_boost': ['Strip', 'LED', 'Bias', 'Backlight']}),
-    ("Gaming Mouse",        ['MOUSE WIRELESS'],               {'title_boost': ['Gaming', 'RGB']}),
-    ("Gaming Keyboard",     ['KEYBOARDS WIRELESS'],           {'title_boost': ['Gaming', 'Mechanical', 'Μηχανικό', 'RGB']}),
-    ("Gaming Mousepad",     ['MOUSE WIRELESS PADS'],          {}),
-    ("Gaming Headset",      ['PC HEADSET/MICROPHONE'],        {'title_boost': ['Gaming', 'RGB']}),
-    ("Gaming Headset 2",    ['PC HEADSET/MICROPHONE'],        {'title_boost': ['Gaming', '7.1']}),
+    ("Gaming Mouse",        ['GAMING MOUSE'],                 {}),
+    ("Gaming Keyboard",     ['GAMING KEYBOARDS'],             {}),
+    ("Gaming Mousepad",     ['GAMING MOUSE PADS'],            {}),
+    ("Gaming Headset",      ['GAMING AUDIO'],                 {}),
+    ("Gaming Headset 2",    ['GAMING AUDIO'],                 {}),
     ("Screen Cleaner",      ['CLEANING PRODUCTS'],            {}),
-    ("UPS",                 ['UPS'],                          {}),
+    ("UPS",                 ['ΜΠΑΤΑΡΙΕΣ UPS'],                          {}),
 ]
 
 MONITOR_PRO_SLOTS = [
@@ -3777,20 +3570,20 @@ MONITOR_PRO_SLOTS = [
     ("Ergonomic Mouse",     ['MOUSE WIRELESS'],               {'ergo_match': True, 'title_hide': ['Gaming', 'RGB']}),
     ("Wireless Keyboard",   ['KEYBOARDS WIRELESS'],           {'title_hide': ['Gaming', 'RGB']}),
     ("Webcam",              ['PC WEB CAMS'],                  {'resolution_match': True}),
-    ("Monitor Arm",         ['PC CASE STANDS'],               {'vesa_match': True, 'title_boost': ['Heavy', 'UltraWide']}),
+    ("Monitor Arm",         ['ΒΑΣΕΙΣ ΓΡΑΦΕΙΟΥ'],               {'vesa_match': True, 'title_boost': ['Heavy', 'UltraWide']}),
     ("ScreenBar",           ['ΕΞΥΠΝΟΣ ΦΩΤΙΣΜΟΣ'],            {'title_boost': ['ScreenBar', 'Monitor Light', 'Desk', 'Γραφείου']}),
     ("USB-C Hub",           ['USB HUB DEVICES', 'DOCKING STATIONS LAPTOP'], {'title_boost': ['USB-C', 'Thunderbolt', 'Dock']}),
     ("PC Speakers",         ['PC SPEAKERS 2.0'],              {}),
     ("Screen Cleaner",      ['CLEANING PRODUCTS'],            {}),
-    ("UPS",                 ['UPS'],                          {}),
+    ("UPS",                 ['ΜΠΑΤΑΡΙΕΣ UPS'],                          {}),
 ]
 
 MONITOR_MAINSTREAM_SLOTS = [
     ("HDMI Cable",          ['MONITOR CABLES'],               {'cable_length_boost': True}),
-    ("Mouse+KB Combo",      ['DESKTOP KEYBOARDS/MOUSE WIRELESS'], {}),
+    ("Mouse+KB Combo",      ['KEYBOARDS WIRELESS'], {}),
     ("Wireless Mouse",      ['MOUSE WIRELESS'],               {'title_hide': ['Gaming', 'RGB']}),
     ("Mouse Pad",           ['MOUSE PADS'],                   {'title_boost': ['Gel', 'Wrist', 'Ergonomic'], 'title_hide': ['XXL', 'Extended']}),
-    ("Monitor Riser",       ['PC CASE STANDS'],               {'title_boost': ['Riser', 'Stand', 'Drawer', 'Organizer'], 'title_hide': ['Wall Mount', 'Gas Spring', 'VESA']}),
+    ("Monitor Riser",       ['ΒΑΣΕΙΣ ΓΡΑΦΕΙΟΥ'],               {'title_boost': ['Riser', 'Stand', 'Drawer', 'Organizer'], 'title_hide': ['Wall Mount', 'Gas Spring', 'VESA']}),
     ("PC Speakers",         ['PC SPEAKERS 2.0'],              {}),
     ("Webcam",              ['PC WEB CAMS'],                  {}),
     ("USB Hub",             ['USB HUB DEVICES'],              {}),
@@ -3800,25 +3593,25 @@ MONITOR_MAINSTREAM_SLOTS = [
 
 # ── Printer sub-personas (Inkjet vs Laser) ──
 PRINTER_INKJET_SLOTS = [
-    ("Ink Cartridge 1",     ['INK CARTRIDGES', 'COMPATIBLE INK CARTRIDGES'], {'ink_model_match': True, 'brand_match': True}),
-    ("Ink Cartridge 2",     ['INK CARTRIDGES', 'COMPATIBLE INK CARTRIDGES'], {'ink_model_match': True, 'brand_match': True}),
-    ("Ink Cartridge 3",     ['INK CARTRIDGES', 'COMPATIBLE INK CARTRIDGES'], {'ink_model_match': True, 'brand_match': True}),
-    ("Ink Cartridge 4",     ['INK CARTRIDGES', 'COMPATIBLE INK CARTRIDGES'], {'ink_model_match': True, 'brand_match': True}),
+    ("Ink Cartridge 1",     ['INK CATRIDGES', 'COMPATIBLE INK CARTRIDGES'], {'ink_model_match': True, 'brand_match': True}),
+    ("Ink Cartridge 2",     ['INK CATRIDGES', 'COMPATIBLE INK CARTRIDGES'], {'ink_model_match': True, 'brand_match': True}),
+    ("Ink Cartridge 3",     ['INK CATRIDGES', 'COMPATIBLE INK CARTRIDGES'], {'ink_model_match': True, 'brand_match': True}),
+    ("Ink Cartridge 4",     ['INK CATRIDGES', 'COMPATIBLE INK CARTRIDGES'], {'ink_model_match': True, 'brand_match': True}),
     ("A4 Paper",            ['INKJET PAPER', 'COPIERS PAPER'],{'paper_weight_max': 90}),
     ("Photo Paper",         ['SPECIAL PAPERS'],               {'paper_weight_min': 150, 'title_boost': ['Gloss', 'Matte', 'Photo']}),
     ("USB Printer Cable",   ['USB CABLES'],                   {'title_boost': ['USB-B', 'Printer', 'Type-B']}),
-    ("Surge Protector",     ['UPS'],                          {}),
+    ("Surge Protector",     ['ΜΠΑΤΑΡΙΕΣ UPS'],                          {}),
     ("Cleaning",            ['CLEANING PRODUCTS'],            {}),
     ("Cleaning 2",          ['CLEANING PRODUCTS'],            {}),
 ]
 
 PRINTER_LASER_SLOTS = [
-    ("Toner",               ['TONER CARTRIDGES', 'COMPATIBLE TONERS'], {'toner_model_match': True, 'brand_match': True}),
+    ("Toner",               ['TONER CATRIDGES', 'COMPATIBLE TONERS'], {'toner_model_match': True, 'brand_match': True}),
     ("Drum Unit",           ['DRUMS CATRIDGES'],              {'brand_match': True}),
     ("A4 Paper",            ['LASER PAPERS', 'COPIERS PAPER'],{}),
     ("Network Cable",       ['NETWORK CABLES'],               {'title_boost': ['Cat6', 'Cat 6']}),
     ("Shredder",            ['ΚΑΤΑΣΤΡΟΦΕΙΣ ΕΓΓΡΑΦΩΝ'],        {}),
-    ("UPS",                 ['UPS'],                          {'ups_min_va': 1000}),
+    ("UPS",                 ['ΜΠΑΤΑΡΙΕΣ UPS'],                          {'ups_min_va': 1000}),
     ("Laminator",           ['ΠΛΑΣΤΙΚΟΠΟΙΗΤΕΣ'],              {}),
     ("A3 Paper",            ['LASER PAPERS', 'COPIERS PAPER'],{'title_boost': ['A3']}),
     ("Cleaning",            ['CLEANING PRODUCTS'],            {}),
@@ -3829,7 +3622,7 @@ PRINTER_LASER_SLOTS = [
 WEBCAM_SLOTS = [
     ("Ring Light",          ['ΕΞΥΠΝΟΣ ΦΩΤΙΣΜΟΣ', 'ΦΩΤΙΣΤΙΚΑ'],{'title_boost': ['Ring', 'LED Panel', 'Video Light', 'Streaming'], 'title_hide': ['Ceiling', 'Bulb', 'Strip']}),
     ("Microphone",          ['PC MICROPHONES'],               {'title_boost': ['USB', 'Condenser', 'Streaming', 'Podcast']}),
-    ("Webcam Mount",        ['PC CASE STANDS'],               {'title_boost': ['Desktop', 'Mini', 'Webcam', 'Clip', 'Monitor Mount'], 'title_hide': ['Full Size', 'DSLR', 'Heavy Duty']}),
+    ("Webcam Mount",        ['ΒΑΣΕΙΣ ΓΡΑΦΕΙΟΥ', 'TRIPODS'],   {'title_boost': ['Desktop', 'Mini', 'Webcam', 'Clip', 'Monitor Mount'], 'title_hide': ['Full Size', 'DSLR', 'Heavy Duty']}),
     ("USB Extension",       ['USB CABLES'],                   {'title_boost': ['Extension', 'Extender', '3m', '5m'], 'title_hide': ['DisplayPort', 'Charging']}),
     ("Lens Cleaner",        ['CLEANING PRODUCTS'],            {'title_boost': ['Lens', 'Screen', 'Camera', 'Microfiber', 'Wipes']}),
     ("PC Headset",          ['PC HEADSET/MICROPHONE'],        {'title_boost': ['Noise Cancelling', 'Teams', 'Zoom', 'Conference']}),
@@ -4260,3 +4053,208 @@ def run_peripherals_engine(trigger, df_products, df_history, cluster_key):
         recs_df['Draft_Score'] = recs_df['Assigned_Slot']
         return recs_df, diag, slot_notes, recs_df
     return pd.DataFrame(), diag, slot_notes, pd.DataFrame()
+
+# ─────────────────────────────────────────────────────────────
+# RUN ENGINE
+# ─────────────────────────────────────────────────────────────
+if active_cluster == "Smartphones":
+    recs, diag, slot_diag, slot_notes, full_candidates = run_engine(trigger, df_products, df_history, df_slots)
+elif active_cluster == "Laptops":
+    # --- FIX: Combine both sheets so it finds Bags/Mice (Laptops sheet) AND Headsets (Products sheet) ---
+    combined_pool = pd.concat([df_products, df_laptops], ignore_index=True)
+    recs, diag, slot_notes, full_candidates = run_laptops_engine(trigger, combined_pool, df_history)
+    slot_diag = []
+elif active_cluster == "Floor Care":
+    # Combine both sheets: triggers are in Vacuums, accessories may be in either
+    combined_pool = pd.concat([df_products, df_vacuums], ignore_index=True)
+    recs, diag, slot_notes, full_candidates = run_floor_care_engine(trigger, combined_pool, df_history)
+    slot_diag = []
+elif active_cluster in ("Mouse", "Keyboard", "Gaming Mouse"):
+    recs, diag, slot_notes, full_candidates = run_peripherals_engine(trigger, df_peripherals, df_history, active_cluster)
+    slot_diag = []
+elif active_cluster in ("Monitors", "Printers", "Webcam", "USB Hub"):
+    recs, diag, slot_notes, full_candidates = run_peripherals_engine(trigger, df_peripherals, df_history, active_cluster)
+    slot_diag = []
+else:
+    recs, diag, slot_notes, full_candidates = run_books_engine(trigger, df_books, df_history)
+    slot_diag = []
+
+MARKETING_COPY = {
+    "PRIMARY_CASE": "Απόλυτη προστασία & τέλεια εφαρμογή.",
+    "SCREEN_GLASS": "Αόρατη ασπίδα για την οθόνη σου.",
+    "WALL_CHARGER": "Γρήγορη και απόλυτα ασφαλής φόρτιση.",
+    "EARBUDS": "Κορυφαία, ασύρματη ακουστική εμπειρία.",
+    "POWERBANK": "Ενέργεια on-the-go.",
+    "CROSS_SELL": "Smart gadget για το οικοσύστημά σου.",
+    "CAMERA_GLASS": "Θωράκιση φακών για τέλειες λήψεις.",
+    "SMARTWATCH": "Ο απόλυτος σύντροφος.",
+    "HOLDER": "Σταθερή τοποθέτηση για το αυτοκίνητο.",
+    "ALT_CASE": "Premium προστασία.",
+    "Series Book": "Η συνέχεια της περιπέτειας!",
+    "Start from Beginning": "Ξεκίνα από την αρχή!", 
+    "Other Box Set": "Ολόκληρη η συλλογή!", 
+    "Series Discovery": "Άλλη έκδοση της σειράς!",
+    "Cross-Sell: IP Toy": "Ο ήρωας ζωντανεύει!",
+    "Cross-Sell: Plush": "Αγκαλιά με τον αγαπημένο σου!",
+    "Cross-Sell: Arts": "Δημιούργησε & φαντάσου!",
+    "Cross-Sell: Creative Toy": "Χτίσε τον κόσμο σου!",
+    "Cross-Sell: Puzzle": "Μάθε παίζοντας!",
+    "Cross-Sell: Lifestyle": "Στιλ για κάθε μέρα!",
+    "Cross-Sell: Collectable Cards": "Συλλογή για πρωταθλητές!",
+    "Cross-Sell: Action Figure": "Ο ήρωας στο ράφι σου!",
+    "Explore Series": "Ανακάλυψε κι άλλα από τη σειρά!",
+    "Category Discovery": "Μια ακόμα τέλεια επιλογή!",
+}
+
+if not recs.empty:
+    rts = recs.head(10)
+    ch = ""
+    for _, r in rts.iterrows():
+        iu=safe(str(r.get('Thumbnails','')).strip())
+        if not iu or iu == 'nan': iu = "https://via.placeholder.com/150"
+        rp=parse_euro_price(r.get('LIST PRICE',0))
+        np=f"{rp:.2f}".replace('.',','); op=f"{(rp*1.25):.2f}".replace('.',',')
+        ti=safe(str(r.get('Title',''))); sn=int(r.get('Assigned_Slot',0))
+        
+        raw_role = str(r.get('Slot_Role',''))
+        if active_cluster == "Smartphones":
+            lk = detect_logic_key(raw_role)
+            marketing_text = MARKETING_COPY.get(lk, "Ιδανική επιλογή!")
+        elif active_cluster == "Laptops":
+            # Fetches the dynamic text we created, falls back to the dictionary
+            marketing_text = str(r.get('Marketing_Copy', LAPTOP_MARKETING_COPY.get(raw_role, "Ιδανική επιλογή!")))
+        else:
+            marketing_text = MARKETING_COPY.get(raw_role, "Μια εξαιρετική επιλογή!")
+        
+        ch+=f"""<div class="pc">
+            <div class="sb">Slot {sn}</div>
+            <img src="{iu}" alt="product">
+            <div class="ti" title="{ti}">{ti}</div>
+            <div class="sr">{marketing_text}</div>
+            <div class="rv"><span class="sc">4.8</span> <span class="st">★★★★★</span> <span class="ct">(305)</span></div>
+            <div class="op">Π.Λ.Τ. : {op}€</div>
+            <div class="np">{np.split(',')[0]}<span class="dm">,{np.split(',')[1]}€</span></div>
+            <button class="cb">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                    <circle cx="9" cy="21" r="1"></circle><circle cx="20" cy="21" r="1"></circle>
+                    <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path>
+                </svg>
+            </button>
+        </div>"""
+
+    if active_cluster == "Smartphones":
+        header_text = "Μαζί με αυτό αγοράζουν"
+    elif active_cluster == "Laptops":
+        header_text = "Ολοκλήρωσε το setup σου"
+    else:
+        header_text = "Συνέχισε την περιπέτεια"
+
+    css="""
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{font-family:-apple-system,BlinkMacSystemFont,sans-serif;background:transparent}
+    .desktop-wrapper{background-color:#f8f9fa;border-radius:16px;padding:30px;margin:10px 0;position:relative}
+    .desktop-header{font-size:24px;font-weight:700;margin-bottom:25px;color:#111;display:flex;align-items:center}
+    .desktop-header span{color:#ff5e00;margin-right:10px;font-size:26px;line-height:1;font-weight:900}
+    .car{display:flex;overflow-x:auto;gap:15px;padding-bottom:10px;scrollbar-width:none;scroll-behavior:smooth}
+    .car::-webkit-scrollbar{display:none}
+    .pc{background:#fff;border:1px solid #eaeaea;border-radius:12px;padding:15px 12px;display:flex;flex-direction:column;align-items:center;box-shadow:0 2px 5px rgba(0,0,0,.04);position:relative;flex-shrink:0;width:180px;min-width:180px;max-width:180px}
+    .sb{position:absolute;top:8px;left:8px;background:#ff5e00;color:#fff;font-size:10px;font-weight:700;padding:3px 6px;border-radius:6px;z-index:10}
+    .pc img{height:110px;width:auto;object-fit:contain;margin-bottom:15px;margin-top:10px}
+    .ti{font-size:13px;color:#333;text-align:center;height:36px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;margin-bottom:6px;line-height:1.3;padding:0 5px;word-wrap:break-word;word-break:break-word;max-width:100%;white-space:normal !important}
+    .sr{font-size:10px;color:#777;margin-bottom:12px;text-align:center;height:28px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;line-height:1.35;width:100%;padding:0 4px}
+    .rv{font-size:11px;margin-bottom:15px}
+    .sc{color:#ff5e00;font-weight:700}
+    .st{color:#ff5e00;letter-spacing:-2px}
+    .ct{color:#1a73e8}
+    .op{font-size:11px;color:#888;text-decoration:line-through;margin-bottom:2px}
+    .np{font-size:18px;font-weight:700;color:#ff5e00;margin-bottom:15px}
+    .dm{font-size:12px}
+    .cb{background:#ff5e00;color:#fff;border:none;border-radius:8px;width:40px;height:35px;cursor:pointer;display:flex;justify-content:center;align-items:center}
+    .cb:hover{background:#e65500}
+    .nav-btn{position:absolute;top:55%;transform:translateY(-50%);width:44px;height:44px;background-color:#fff;border:1px solid #eaeaea;border-radius:50%;box-shadow:0 4px 10px rgba(0,0,0,0.1);display:flex;align-items:center;justify-content:center;cursor:pointer;z-index:100;transition:transform 0.2s,box-shadow 0.2s,opacity 0.3s}
+    .nav-btn:hover{transform:translateY(-50%) scale(1.05);box-shadow:0 6px 14px rgba(0,0,0,0.15)}
+    .nav-left{left:10px;opacity:0;pointer-events:none}
+    .nav-right{right:10px}
+    .nav-left::after{content:'';width:10px;height:10px;border-top:2px solid #555;border-left:2px solid #555;transform:rotate(-45deg);margin-left:4px}
+    .nav-right::after{content:'';width:10px;height:10px;border-top:2px solid #555;border-right:2px solid #555;transform:rotate(45deg);margin-right:4px}
+    """
+
+    dp=f"""<!DOCTYPE html><html><head><meta charset="utf-8"><style>{css}</style></head>
+    <body>
+    <div class="desktop-wrapper">
+        <div class="desktop-header"><span>|</span>{header_text}</div>
+        <div class="nav-btn nav-left" id="btnLeft" onclick="scrollL()"></div>
+        <div class="car" id="scrollContainer">{ch}</div>
+        <div class="nav-btn nav-right" id="btnRight" onclick="scrollR()"></div>
+    </div>
+    <script>
+        const container=document.getElementById('scrollContainer');
+        const btnLeft=document.getElementById('btnLeft');
+        const btnRight=document.getElementById('btnRight');
+        function scrollL(){{container.scrollBy({{left:-405,behavior:'smooth'}});}}
+        function scrollR(){{container.scrollBy({{left:405,behavior:'smooth'}});}}
+        container.addEventListener('scroll',()=>{{
+            btnLeft.style.opacity=container.scrollLeft>5?'1':'0';
+            btnLeft.style.pointerEvents=container.scrollLeft>5?'auto':'none';
+            btnRight.style.opacity=container.scrollLeft+container.clientWidth>=container.scrollWidth-2?'0':'1';
+            btnRight.style.pointerEvents=container.scrollLeft+container.clientWidth>=container.scrollWidth-2?'none':'auto';
+        }});
+        container.dispatchEvent(new Event('scroll'));
+    </script>
+    </body></html>"""
+
+    components.html(dp, height=540, scrolling=False)
+else:
+    st.error("❌ No recommendations found.")
+
+# ─────────────────────────────────────────────────────────────
+# DIAGNOSTICS
+# ─────────────────────────────────────────────────────────────
+st.markdown("---")
+
+st.markdown("""
+<style>
+[data-testid="stExpander"]{background-color:#ffffff !important;border:1px solid #d9d9d9 !important;border-radius:12px !important;box-shadow:none !important;margin-top:20px}
+[data-testid="stExpander"] summary{padding:24px 30px !important;display:flex !important;align-items:center !important}
+[data-testid="stExpander"] summary p{font-size:18px !important;font-weight:700 !important;color:#000 !important;flex-grow:1}
+[data-testid="stExpander"] summary svg{display:none !important}
+[data-testid="stExpander"] summary::after{content:'';display:inline-block;width:12px;height:12px;border-right:2px solid #111;border-bottom:2px solid #111;transform:rotate(45deg);margin-top:-4px}
+[data-testid="stExpander"][open] summary::after{transform:rotate(225deg);margin-top:6px}
+[data-testid="stExpanderDetails"]{padding:10px 30px 30px 30px !important}
+</style>
+""", unsafe_allow_html=True)
+
+with st.expander("⚙️ System Diagnostics"):
+    st.markdown(f"### Active Cluster: **{active_cluster}**")
+    
+    if active_cluster == "Kids Books":
+        t_series = str(trigger.get('Σειρά βιβλίου', '')).strip()
+        t_age = str(trigger.get('Ηλικία', '')).strip()
+        t_hierarchy = str(trigger.get('Hierarchy', '')).strip()
+        st.markdown(f"**Series:** `{t_series}` (Valid: {is_valid_series(t_series)}) | **Age:** `{t_age}` | **Hierarchy:** `{t_hierarchy}`")
+
+    st.markdown("### Engine Funnel")
+    st.dataframe(pd.DataFrame(diag, columns=["Step","Count","Note"]), use_container_width=True, hide_index=True)
+
+    st.markdown("### Slot Details")
+    for sn, notes in sorted(slot_notes.items()):
+        if notes:
+            st.markdown(f"**Priority {sn}**")
+            for n in notes: 
+                st.text(n)
+
+    st.markdown("### Trigger Attributes")
+    if active_cluster == "Kids Books":
+        cols = ['Material','Title','Level 2','Hierarchy','Σειρά βιβλίου','Ηλικία','Εξώφυλλο','Brand','LIST PRICE']
+    elif active_cluster == "Laptops":
+        cols = ['Material','Title','Level 1','Level 2','Hierarchy','Κατασκευαστής','Μοντέλο','Προτεινόμενη χρήση','Μέγεθος οθόνης','Θύρες','LIST PRICE']
+    else:
+        cols = ['Material','Title','Level 2','Hierarchy','Κατασκευαστής','Μοντέλο','LIST PRICE']
+    for col in cols:
+        val = trigger.get(col, 'N/A')
+        st.text(f"{col}: {val}")
+
+    if not recs.empty:
+        st.markdown("### Final Recommendations")
+        dc = ['Title','Hierarchy','Assigned_Slot','Slot_Role','Final_Score'] if 'Final_Score' in recs.columns else ['Title','Hierarchy','Assigned_Slot','Slot_Role']
+        st.dataframe(recs[[c for c in dc if c in recs.columns]], use_container_width=True, hide_index=True)
