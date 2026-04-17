@@ -3860,7 +3860,7 @@ def run_peripherals_engine(trigger, df_products, df_history, cluster_key):
         pool['Final_Score'] += pool['Sales_Tiebreaker'].fillna(0) * 0.1
 
 
-# ── Price Proportionality & Tier Logic ──
+        # ── Price Proportionality & Tier Logic ──
         if 'LIST PRICE' in pool.columns and tprice > 0:
             pool['_p'] = pool['LIST PRICE'].apply(parse_euro_price)
             
@@ -3888,6 +3888,29 @@ def run_peripherals_engine(trigger, df_products, df_history, cluster_key):
             
             notes.append(f"Pricing [{cat_key}]: Target €{min_p:.0f}-€{max_p:.0f} (Anchor: €{tprice:.0f}). In band: {in_band.sum()}")
 
+        # ── Universal Small Brand Boost & Color Match ──
+        
+        # 1. Small Brand Tiebreaker (+15k)
+        if tb:
+            is_same_brand = pool['Κατασκευαστής'].fillna('').str.strip().str.upper() == tb
+            pool.loc[is_same_brand, 'Final_Score'] += 15000
+            
+            # If the slot explicitly required a brand match via flags, give it the massive boost
+            if flags.get('brand_match'):
+                pool.loc[is_same_brand, 'Final_Score'] += 80000
+                
+            if is_same_brand.any():
+                notes.append(f"Brand Match ({tb}): Boosted {is_same_brand.sum()} items")
+
+        # 2. Color Tiebreaker (+10k)
+        if do_color_match and 'Χρώμα' in pool.columns:
+            # We already extracted tcolor at the top of the function
+            is_same_color = pool['Χρώμα'].fillna('').astype(str).str.strip().str.upper() == tcolor.upper()
+            pool.loc[is_same_color, 'Final_Score'] += 10000
+            
+            if is_same_color.any():
+                notes.append(f"Color Match ({tcolor}): Boosted {is_same_color.sum()} items (+10k)")
+                
             # ── Tier Locking (Intent Matching) ──
             # Ensure Gaming items aren't pushed to non-gaming anchors, and vice-versa
             is_pool_gaming = pool['Title'].fillna('').str.lower().str.contains('gaming|rgb|razer|rog', regex=True, na=False)
