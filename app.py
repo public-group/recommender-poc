@@ -3531,15 +3531,14 @@ PERIPHERAL_TRIGGERS = {
 MOUSE_SLOTS = [
     ("Mouse Pad",           ['MOUSE PADS'],                   {'title_hide': ['Gel', 'Wrist', 'Μαξιλαράκι']}),
     ("Keyboard",            ['KEYBOARDS WIRELESS', 'KEYBOARDS WIRED'], {'connectivity_mirror': True, 'brand_match': True, 'apple_force': 'APPLE ORIGINAL WIRELESS KEYBOARD', 'silent_match': True, 'ergo_match': True}),
-    ("Batteries",           ['ΑΛΚΑΛΙΚΕΣ'],                    {'skip_if': 'no_battery'}),
+    ("Batteries",           ['ΑΛΚΑΛΙΚΕΣ'],                    {'skip_if': 'no_battery', 'title_hide': ['CR', 'Button', 'Coin', 'Λιθίου'], 'title_boost': ['AA', 'AAA', 'LR6', 'LR03']}),
     ("Screen Cleaner",      ['CLEANING PRODUCTS'],            {}),
     ("USB Hub",             ['USB HUB DEVICES'],              {}),
     ("Headset",             ['PC HEADSET/MICROPHONE', 'OVERHEAD'], {}),
-    ("Desk Lamp",           ['ΕΞΥΠΝΟΣ ΦΩΤΙΣΜΟΣ'],            {'title_boost': ['Desk', 'Γραφείου', 'Table', 'Επιτραπέζιο'], 'title_hide': ['Ceiling', 'Bulb', 'Strip', 'Οροφής']}),
+    ("Desk Lamp",           ['ΕΞΥΠΝΟΣ ΦΩΤΙΣΜΟΣ'],            {'title_boost': ['Desk', 'Γραφείου', 'Table', 'Επιτραπέζιο', 'Φωτιστικό'], 'title_hide': ['Ceiling', 'Bulb', 'Strip', 'Οροφής', 'Λάμπα', 'E27', 'E14', 'Ταινία', 'Λεντοταινία']}),
     ("Wrist Rest",          ['MOUSE PADS'],                   {'wrist_rest_only': True}),
-    ("Keyboard 2",          ['KEYBOARDS WIRELESS', 'KEYBOARDS WIRED'], {'connectivity_mirror': True, 'brand_match': True, 'apple_force': 'APPLE ORIGINAL WIRELESS KEYBOARD'}),
     ("Mouse Pad 2",         ['MOUSE PADS'],                   {'title_hide': ['Gel', 'Wrist', 'Μαξιλαράκι']}),
-
+    ("Keyboard 2",          ['KEYBOARDS WIRELESS', 'KEYBOARDS WIRED'], {'connectivity_mirror': True, 'brand_match': True, 'apple_force': 'APPLE ORIGINAL WIRELESS KEYBOARD'}),
 ]
 
 KEYBOARD_SLOTS = [
@@ -3918,25 +3917,29 @@ def run_peripherals_engine(trigger, df_products, df_history, cluster_key):
             if is_same_brand.any():
                 notes.append(f"Brand Match ({tb}): Boosted {is_same_brand.sum()} items")
 
-        # 2. Color Tiebreaker (+10k)
-        if do_color_match and 'Χρώμα' in pool.columns:
-            # We already extracted tcolor at the top of the function
+        # 2. Color Tiebreaker (+10k) - STRICTLY FOR KEYBOARDS AND MICE
+        r_lower = role.lower()
+        is_color_eligible = 'keyboard' in r_lower or ('mouse' in r_lower and 'pad' not in r_lower)
+        
+        if do_color_match and is_color_eligible and 'Χρώμα' in pool.columns:
             is_same_color = pool['Χρώμα'].fillna('').astype(str).str.strip().str.upper() == tcolor.upper()
             pool.loc[is_same_color, 'Final_Score'] += 10000
             
             if is_same_color.any():
                 notes.append(f"Color Match ({tcolor}): Boosted {is_same_color.sum()} items (+10k)")
-                
-            # ── Tier Locking (Intent Matching) ──
-            # Ensure Gaming items aren't pushed to non-gaming anchors, and vice-versa
-            is_pool_gaming = pool['Title'].fillna('').str.lower().str.contains('gaming|rgb|razer|rog', regex=True, na=False)
-            is_anchor_gaming = 'gaming' in _tt_lower or 'rgb' in _tt_lower
-            
-            if is_anchor_gaming:
-                pool.loc[is_pool_gaming, 'Final_Score'] += 40000
-            else:
-                pool.loc[is_pool_gaming, 'Final_Score'] -= 100000
 
+
+                
+        # 3. Sub-Series / Ecosystem Match (e.g., Logitech MX)
+        # Pad the title with spaces to ensure we match the isolated word "mx"
+        if ' mx ' in f" {_tt_lower} ":
+            is_mx = pool['Title'].fillna('').str.lower().str.contains(r'\bmx\b', regex=True, na=False)
+            
+            # Massive boost to force the MX product to the top of its slot
+            pool.loc[is_mx, 'Final_Score'] += 100000 
+            
+            if is_mx.any():
+                notes.append(f"Sub-series Match (MX): Boosted {is_mx.sum()} items (+100k)")
                 
         # ── Connectivity mirror ──
         if flags.get('connectivity_mirror'):
