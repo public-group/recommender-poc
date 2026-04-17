@@ -3917,21 +3917,32 @@ def run_peripherals_engine(trigger, df_products, df_history, cluster_key):
             if is_same_brand.any():
                 notes.append(f"Brand Match ({tb}): Boosted {is_same_brand.sum()} items")
 
-        # 2. Color Tiebreaker (+10k) - STRICTLY FOR KEYBOARDS AND MICE (Attribute-Driven)
+        # 2. Color Tiebreaker (+10k) - Eligible for Keyboards and Mousepads/Mats
         r_lower = role.lower()
-        is_color_eligible = 'keyboard' in r_lower or ('mouse' in r_lower and 'pad' not in r_lower)
+        is_color_eligible = 'keyboard' in r_lower or 'pad' in r_lower or 'mat' in r_lower or 'rest' in r_lower
         
         if do_color_match and is_color_eligible and 'Χρώμα' in pool.columns:
-            # Clean the anchor color (lowercase, remove extra spaces)
-            clean_tcolor = str(tcolor).strip().lower()
+            target_colors = pool['Χρώμα'].fillna('').astype(str).str.strip().str.upper()
+            trigger_color_upper = tcolor.upper()
             
-            # Compare directly against the cleaned 'Χρώμα' column in the pool
-            is_same_color = pool['Χρώμα'].fillna('').astype(str).str.strip().str.lower() == clean_tcolor
+            # Map common English/Greek color pairs to ensure matching
+            color_synonyms = [trigger_color_upper]
+            if trigger_color_upper in ['GRAPHITE', 'ΓΡΑΦΙΤΗΣ', 'GREY', 'GRAY', 'ΓΚΡΙ']:
+                color_synonyms.extend(['GRAPHITE', 'ΓΡΑΦΙΤΗΣ', 'ΓΚΡΙ', 'GREY', 'GRAY'])
+            elif trigger_color_upper in ['BLACK', 'ΜΑΥΡΟ']:
+                color_synonyms.extend(['BLACK', 'ΜΑΥΡΟ'])
+            elif trigger_color_upper in ['WHITE', 'ΛΕΥΚΟ', 'ΑΣΠΡΟ', 'PALE GREY']:
+                color_synonyms.extend(['WHITE', 'ΛΕΥΚΟ', 'ΑΣΠΡΟ', 'PALE GREY'])
+            elif trigger_color_upper in ['ROSE', 'ΡΟΖ', 'PINK']:
+                color_synonyms.extend(['ROSE', 'ΡΟΖ', 'PINK'])
+                
+            # Check if any of the mapped synonyms exist in the target's color field
+            is_same_color = target_colors.apply(lambda x: any(syn in x or x in syn for syn in color_synonyms if syn))
             
             pool.loc[is_same_color, 'Final_Score'] += 10000
             
             if is_same_color.any():
-                notes.append(f"Color Match (Attribute '{tcolor}'): Boosted {is_same_color.sum()} items (+10k)")
+                notes.append(f"Color Match ({tcolor}): Boosted {is_same_color.sum()} Keyboards/Pads (+10k)")
 
 
                 
