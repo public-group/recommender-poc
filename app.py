@@ -3118,9 +3118,9 @@ def run_laptops_engine(trigger, df_products, df_history):
 
 
 
-# ═════════════════════════════════════════════════════════════
+# ═══════════════════════════════════════════════════════════════
 # 🟢 FLOOR CARE ENGINE — "Perfect Fit" Ecosystem
-# ═════════════════════════════════════════════════════════════
+# ═══════════════════════════════════════════════════════════════
 
 def run_floor_care_engine(trigger, df_products, df_history):
     diag = []
@@ -3134,7 +3134,6 @@ def run_floor_care_engine(trigger, df_products, df_history):
     thier = str(trigger.get('Hierarchy', '')).strip().upper()
     tprice = parse_euro_price(trigger.get('LIST PRICE', 0))
 
-    # Detect vacuum type from title/attributes
     _tt_lower = tt.lower()
     is_robot = 'ρομπότ' in thier.lower() or 'robot' in _tt_lower
     is_bagged = False
@@ -3144,265 +3143,198 @@ def run_floor_care_engine(trigger, df_products, df_history):
     if not is_bagged:
         is_bagged = 'με σακούλα' in _tt_lower or 'bagged' in _tt_lower
 
+    is_pet = False
+    if 'Κατάλληλη για κατοικίδια' in trigger.index:
+        pet_val = str(trigger.get('Κατάλληλη για κατοικίδια', '')).lower()
+        is_pet = pet_val in ('ναι', 'yes', 'true', '1')
+    if not is_pet:
+        is_pet = 'pet' in _tt_lower or 'κατοικίδι' in _tt_lower
+
     diag.append(("0. Trigger", f"Brand={tb}, €{tprice:.0f}",
-                 f"Model={tmodel}, Hier={thier}, Robot={is_robot}, Bagged={is_bagged}"))
+                 f"Model={tmodel}, Robot={is_robot}, Bagged={is_bagged}, Pet={is_pet}"))
 
-    # ── Build candidate pool (exclude the trigger itself) ──
+    # ── Build candidate pool ──
     c = df_products[df_products['Material'] != tm].copy()
-
-    # Exclude other full-size vacuums from candidates (don't recommend another
-    # vacuum as an accessory — handhelds are a DIFFERENT hierarchy so they stay)
     trigger_hiers_upper = {h.upper().strip() for h in FLOOR_CARE_TRIGGER_HIERARCHIES}
     b4 = len(c)
     c = c[~c['Hierarchy'].fillna('').astype(str).str.upper().str.strip().isin(trigger_hiers_upper)]
     diag.append(("1a. Excl vacuums", len(c), f"Removed {b4 - len(c)}"))
 
-    # Stock filter
     if 'CW Stock Units' in c.columns:
         stv = pd.to_numeric(c['CW Stock Units'], errors='coerce').fillna(0)
         pct = (stv > 0).sum() / len(c) if len(c) > 0 else 0
         if pct >= 0.10:
             c = c[stv > 0]
-            diag.append(("1. Stock filter", len(c), f"Applied ({pct:.0%})"))
+            diag.append(("1b. Stock", len(c), f"Applied ({pct:.0%})"))
         else:
-            diag.append(("1. Stock filter", len(c), f"⚠ SKIPPED ({pct:.0%})"))
+            diag.append(("1b. Stock", len(c), f"⚠ SKIPPED ({pct:.0%})"))
 
-    # Sales tiebreaker
     if 'Sum of Sales' in c.columns:
         c['Sales_Tiebreaker'] = pd.to_numeric(c['Sum of Sales'], errors='coerce').fillna(0)
     else:
         c['Sales_Tiebreaker'] = 0
 
-    # ── Helper: find items by hierarchy + optional attribute filters ──
-    def find_by_hierarchy(pool, hierarchies, attr_filters=None, notes_list=None):
-        """Find candidates matching hierarchy list, optionally filtered by attribute columns.
-        attr_filters: list of (column, values_set_or_regex, is_regex) tuples."""
-        hier_upper = [h.upper().strip() for h in hierarchies]
-        mask = pool['Hierarchy'].fillna('').astype(str).str.upper().str.strip().isin(hier_upper)
-        result = pool[mask].copy()
-        if notes_list is not None:
-            notes_list.append(f"Hierarchy {hierarchies}: {mask.sum()} items")
+    used_materials = {tm}
+    slot_num = 0
 
-        if attr_filters and not result.empty:
-            for col, values, is_regex in attr_filters:
-                if col not in result.columns:
-                    if notes_list: notes_list.append(f"⚠ Column '{col}' missing")
-                    continue
-                if is_regex:
-                    attr_mask = result[col].fillna('').astype(str).str.contains(values, case=False, regex=True, na=False)
-                else:
-                    vals_upper = {v.upper().strip() for v in values} if isinstance(values, (set, list)) else {str(values).upper().strip()}
-                    attr_mask = result[col].fillna('').astype(str).str.upper().str.strip().isin(vals_upper)
-                result = result[attr_mask]
-                if notes_list:
-                    notes_list.append(f"  Filter {col}: {attr_mask.sum()} matches")
-        return result
+    # ══════════════════════════════════════════════════════════
+    # PHASE 1: MODEL-MATCHED ACCESSORIES (show ALL)
+    # Match trigger.Μοντέλο against accessory.Συμβατό μοντέλο
+    # AND verify brand via Για μάρκες ηλεκτρικής σκούπας
+    # ══════════════════════════════════════════════════════════
+    p1_notes = ["=== PHASE 1: Model-matched accessories ==="]
+    model_matched = pd.DataFrame()
 
-    # ── Helper: brand+model match for consumables ──
-    def brand_model_match(pool, notes_list):
-        """Try to match consumables by brand (Κατασκευαστής) AND model
-        compatibility (Συμβατό μοντέλο2) fields from the Vacuums sheet."""
-        matched = pool.copy()
+    if tmodel and tmodel.lower() not in ('n/a', 'nan', '', '0'):
+        model_mask = pd.Series(False, index=c.index)
+        for mcol in ['Συμβατό μοντέλο', 'Συμβατό μοντέλο2']:
+            if mcol in c.columns:
+                col_match = c[mcol].fillna('').astype(str).str.upper().str.contains(
+                    re.escape(tmodel.upper()), regex=True, na=False
+                )
+                model_mask |= col_match
+                p1_notes.append(f"  {mcol}: {col_match.sum()} matches for \'{tmodel}\'")
 
-        # Brand match via Κατασκευαστής on the accessory
-        if tb:
-            brand_mask = matched['Κατασκευαστής'].fillna('').astype(str).str.upper().str.strip() == tb
-            # Also check if brand appears anywhere in Title (some accessories
-            # list the vacuum brand in the title rather than Κατασκευαστής)
-            title_brand = matched['Title'].fillna('').str.upper().str.contains(
+        brand_mask = pd.Series(True, index=c.index)
+        brand_col = 'Για μάρκες ηλεκτρικής σκούπας'
+        if brand_col in c.columns and tb:
+            brand_mask = c[brand_col].fillna('').astype(str).str.upper().str.contains(
                 re.escape(tb), regex=True, na=False
             )
-            brand_combined = brand_mask | title_brand
-            brand_filtered = matched[brand_combined]
-            if not brand_filtered.empty:
-                matched = brand_filtered
-                notes_list.append(f"Brand match ({tb}): {brand_combined.sum()} items")
-            else:
-                notes_list.append(f"⚠ Brand match ({tb}): 0 items — keeping all {len(matched)}")
-                return matched  # Can't narrow by brand → return what we have
+            brand_empty = c[brand_col].fillna('').astype(str).str.strip() == ''
+            brand_mask = brand_mask | brand_empty
+            p1_notes.append(f"  Brand filter ({tb}): {brand_mask.sum()} pass")
 
-        # Model match via 'Συμβατό μοντέλο2' column
-        model_col = 'Συμβατό μοντέλο2'
-        if model_col in matched.columns and tmodel and tmodel.lower() not in ('n/a', 'nan', ''):
-            model_mask = matched[model_col].fillna('').astype(str).str.upper().str.contains(
-                re.escape(tmodel.upper()), regex=True, na=False
+        mfr_match = c['Κατασκευαστής'].fillna('').astype(str).str.upper().str.strip() == tb
+        brand_mask = brand_mask | mfr_match
+
+        combined = model_mask & brand_mask
+        model_matched = c[combined].copy()
+        p1_notes.append(f"  Combined (model AND brand): {len(model_matched)} items")
+    else:
+        p1_notes.append(f"  ⚠ No model on trigger (\'{tmodel}\') — skipping")
+
+    if not model_matched.empty:
+        model_matched['Final_Score'] = 0.0
+        if 'AVAILABILITY' in model_matched.columns:
+            model_matched.loc[model_matched['AVAILABILITY'] == 'Άμεσα Διαθέσιμο', 'Final_Score'] += 100000
+        model_matched['Final_Score'] += model_matched['Sales_Tiebreaker'].fillna(0) * 0.1
+        model_matched = model_matched.sort_values('Final_Score', ascending=False)
+
+        for _, row in model_matched.iterrows():
+            if row['Material'] in used_materials:
+                continue
+            slot_num += 1
+            rc = row.copy()
+            rc['Assigned_Slot'] = slot_num
+            eidos = str(row.get('Είδος', '')).strip()
+            role = eidos if eidos and eidos.lower() not in ('nan', '') else 'Αξεσουάρ'
+            rc['Slot_Role'] = f"🎯 {role}"
+            rc['Marketing_Copy'] = f"Απόλυτα συμβατό με {tb.title()} {tmodel}."
+            rc['Item_Rank'] = 1
+            all_recs.append(rc)
+            used_materials.add(row['Material'])
+
+        p1_notes.append(f"✅ Added {slot_num} model-matched accessories")
+    else:
+        p1_notes.append("❌ No model-matched accessories found")
+        # Universal fallback: scent sticks / pearls
+        hier_col = c['Hierarchy'].fillna('').astype(str).str.upper().str.strip()
+        scent_pool = c[hier_col.str.contains('ΕΞΑΡΤΗΜΑΤΑ', na=False)]
+        if 'Είδος' in scent_pool.columns and not scent_pool.empty:
+            scent_mask = scent_pool['Είδος'].fillna('').str.contains(
+                r'Αρωματικ|sticks|Πέρλες|pearls', case=False, regex=True, na=False
             )
-            model_matched = matched[model_mask]
-            if not model_matched.empty:
-                matched = model_matched
-                notes_list.append(f"Model match ({tmodel}): {model_mask.sum()} items")
-            else:
-                notes_list.append(f"⚠ Model match ({tmodel}): 0 → kept brand-only ({len(matched)})")
+            scent_items = scent_pool[scent_mask]
+            scent_items = scent_items[~scent_items['Material'].isin(used_materials)]
+            if not scent_items.empty:
+                scent_items = scent_items.copy()
+                scent_items['Final_Score'] = 0.0
+                if 'AVAILABILITY' in scent_items.columns:
+                    scent_items.loc[scent_items['AVAILABILITY'] == 'Άμεσα Διαθέσιμο', 'Final_Score'] += 100000
+                scent_items['Final_Score'] += scent_items['Sales_Tiebreaker'].fillna(0) * 0.1
+                best = scent_items.sort_values('Final_Score', ascending=False).iloc[0]
+                slot_num += 1
+                rc = best.copy()
+                rc['Assigned_Slot'] = slot_num
+                rc['Slot_Role'] = '↩ Αρωματικό (Universal)'
+                rc['Marketing_Copy'] = 'Φρεσκάδα σε κάθε σκούπισμα.'
+                rc['Item_Rank'] = 1
+                all_recs.append(rc)
+                used_materials.add(best['Material'])
+                p1_notes.append(f"↩ Universal fallback: scent → slot {slot_num}")
 
-        return matched
+    slot_notes[0] = p1_notes
+    diag.append(("Phase 1", slot_num, f"{len(model_matched)} matches"))
 
-    # ── Iterate slots ──
-    used_materials = {tm}
+    # ══════════════════════════════════════════════════════════
+    # PHASE 2: COMPANION DEVICES (fixed slots)
+    # ══════════════════════════════════════════════════════════
+    COMPANIONS = [
+        ('Σκουπάκι',       ['Ηλεκτρικά Σκουπάκια', 'ΣΚΟΥΠΑΚΙΑ']),
+        ('Ατμοκαθαριστής', ['Ατμοκαθαριστές', 'ΑΤΜΟΚΑΘΑΡΙΣΤΕΣ']),
+        ('Σκούπα Στάχτης', ['Σκούπες Στάχτης', 'ΣΚΟΥΠΕΣ ΣΤΑΧΤΗΣ']),
+        ('Pet Care',       ['PET CARE']),
+    ]
 
-    for slot_num, role, logic_key in FLOOR_CARE_SLOTS:
-        notes = [f"Logic: {logic_key}"]
-        pool = pd.DataFrame()
-
-        # ══════════════════════════════════════════════════════
-        # SLOT 1: CONSUMABLE (bags/filters/scent sticks)
-        # ══════════════════════════════════════════════════════
-        if logic_key == 'CONSUMABLE_MATCH':
-            if is_bagged:
-                # Try bags first
-                pool = find_by_hierarchy(c, ['Σακούλες για σκούπες'], notes_list=notes)
-                if not pool.empty:
-                    pool = brand_model_match(pool, notes)
-                    if not pool.empty:
-                        notes.append("✅ Bagged: Found matching bags")
-                    else:
-                        notes.append("⚠ Bagged: Brand/model bags not found")
-                        pool = pd.DataFrame()  # fall through to universal
-            else:
-                # Try filters for bagless
-                pool = find_by_hierarchy(c, ['Εξαρτήματα για σκούπες'],
-                    attr_filters=[('Είδος', r'Φίλτρ', True)], notes_list=notes)
-                if not pool.empty:
-                    pool = brand_model_match(pool, notes)
-                    if not pool.empty:
-                        notes.append("✅ Bagless: Found matching filters")
-                    else:
-                        notes.append("⚠ Bagless: Brand/model filters not found")
-                        pool = pd.DataFrame()
-
-            # Universal fallback: scent sticks / pearls
-            if pool.empty:
-                pool = find_by_hierarchy(c, ['Εξαρτήματα για σκούπες'],
-                    attr_filters=[('Είδος', r'Αρωματικ|sticks|Πέρλες|pearls', True)],
-                    notes_list=notes)
-                if not pool.empty:
-                    notes.append("↩ Universal fallback: Scent sticks/pearls")
-                else:
-                    notes.append("❌ No consumable found at all")
-
-        # ══════════════════════════════════════════════════════
-        # SLOT 2: MAINTENANCE (parts/filters → handheld pivot)
-        # ══════════════════════════════════════════════════════
-        elif logic_key == 'MAINTENANCE_MATCH':
-            # Try parts & accessories
-            pool = find_by_hierarchy(c, ['Εξαρτήματα για σκούπες'],
-                attr_filters=[('Είδος', r'Εξαρτήματα|Αξεσουάρ|Φίλτρ|Βούρτσ|Brush', True)],
-                notes_list=notes)
-            if not pool.empty:
-                pool = brand_model_match(pool, notes)
-                if not pool.empty:
-                    notes.append("✅ Found matching parts/filters")
-                else:
-                    notes.append("⚠ No brand/model parts match")
-                    pool = pd.DataFrame()
-
-            # Robot-specific: try replacement brush covers
-            if pool.empty and is_robot:
-                pool = find_by_hierarchy(c, ['Εξαρτήματα για σκούπες'],
-                    attr_filters=[('Είδος', r'Brush Cover|Βούρτσα|Replacement', True)],
-                    notes_list=notes)
-                if not pool.empty:
-                    notes.append("🤖 Robot: Found replacement brush covers")
-
-            # Device pivot fallback: handheld vacuum
-            if pool.empty:
-                pool = find_by_hierarchy(c, ['Ηλεκτρικά Σκουπάκια', 'ΣΚΟΥΠΑΚΙΑ'], notes_list=notes)
-                if not pool.empty:
-                    notes.append("↩ Device pivot: Handheld vacuum (no parts found)")
-                else:
-                    notes.append("❌ No maintenance item or handheld found")
-
-        # ══════════════════════════════════════════════════════
-        # SLOTS 3-5: HANDHELD VACUUMS (companions)
-        # ══════════════════════════════════════════════════════
-        elif logic_key in ('HANDHELD', 'HANDHELD_2', 'HANDHELD_3'):
-            pool = find_by_hierarchy(c, ['Ηλεκτρικά Σκουπάκια', 'ΣΚΟΥΠΑΚΙΑ'], notes_list=notes)
-            if not pool.empty:
-                notes.append(f"Handheld pool: {len(pool)}")
-
-        # ══════════════════════════════════════════════════════
-        # SLOTS 6-7: STEAM CLEANERS (sanitizers)
-        # ══════════════════════════════════════════════════════
-        elif logic_key in ('STEAM_CLEANER', 'STEAM_CLEANER_2'):
-            pool = find_by_hierarchy(c, ['Ατμοκαθαριστές', 'ΑΤΜΟΚΑΘΑΡΙΣΤΕΣ'], notes_list=notes)
-            if pool.empty and is_robot:
-                # Robots sweep; steamers mop — natural companion
-                notes.append("🤖 Robot: Steam cleaner = ideal companion (robots can't mop)")
-            if not pool.empty:
-                notes.append(f"Steam cleaner pool: {len(pool)}")
-
-        # ══════════════════════════════════════════════════════
-        # SLOT 8: ASH VACUUM
-        # ══════════════════════════════════════════════════════
-        elif logic_key == 'ASH_VACUUM':
-            pool = find_by_hierarchy(c, ['Σκούπες Στάχτης', 'ΣΚΟΥΠΕΣ ΣΤΑΧΤΗΣ'], notes_list=notes)
-            if not pool.empty:
-                notes.append(f"Ash vacuum pool: {len(pool)}")
-
-        # ══════════════════════════════════════════════════════
-        # SLOTS 9-10: PET / SPECIALTY
-        # ══════════════════════════════════════════════════════
-        elif logic_key in ('PET_SPECIALTY', 'PET_SPECIALTY_2'):
-            # Try PET CARE hierarchy first
-            pool = find_by_hierarchy(c, ['PET CARE'], notes_list=notes)
-            if pool.empty:
-                # Fallback: universal nozzles/accessories
-                pool = find_by_hierarchy(c, ['Εξαρτήματα για σκούπες'],
-                    attr_filters=[('Είδος', r'Universal|Ακροφύσιο|Nozzle', True)],
-                    notes_list=notes)
-                if not pool.empty:
-                    notes.append("↩ Fallback: Universal nozzles/accessories")
-            if not pool.empty:
-                notes.append(f"Pet/specialty pool: {len(pool)}")
-
-        # ══════════════════════════════════════════════════════
-        # PICK BEST ITEM
-        # ══════════════════════════════════════════════════════
-        # Dedup: exclude already-used materials
-        if not pool.empty:
-            pool = pool[~pool['Material'].isin(used_materials)]
+    for comp_role, comp_hiers in COMPANIONS:
+        slot_num += 1
+        notes = [f"Companion: {comp_role}"]
+        hier_upper = [h.upper().strip() for h in comp_hiers]
+        pool = c[c['Hierarchy'].fillna('').astype(str).str.upper().str.strip().isin(hier_upper)].copy()
 
         if pool.empty:
-            notes.append("❌ Empty after dedup or no candidates")
+            hier_col = c['Hierarchy'].fillna('').astype(str).str.upper().str.strip()
+            mask = pd.Series(False, index=c.index)
+            for hk in hier_upper:
+                if hk: mask |= hier_col.str.contains(re.escape(hk), regex=True, na=False)
+            pool = c[mask].copy()
+            if not pool.empty: notes.append(f"⚠ Substring fallback: {len(pool)}")
+
+        notes.append(f"Pool: {len(pool)}")
+        pool = pool[~pool['Material'].isin(used_materials)]
+
+        if pool.empty:
+            notes.append("❌ Empty")
             slot_notes[slot_num] = notes
-            diag.append((f"Slot {slot_num} ({role})", 0, "Empty"))
+            diag.append((f"Slot {slot_num} ({comp_role})", 0, "Empty"))
             continue
 
-        # Score: availability + sales
         pool['Final_Score'] = 0.0
         if 'AVAILABILITY' in pool.columns:
             pool.loc[pool['AVAILABILITY'] == 'Άμεσα Διαθέσιμο', 'Final_Score'] += 100000
         pool['Final_Score'] += pool['Sales_Tiebreaker'].fillna(0) * 0.1
-
-        # Brand match bonus (same brand as trigger → ecosystem feel)
         if tb:
-            same_brand = pool['Κατασκευαστής'].fillna('').str.strip().str.upper() == tb
-            pool.loc[same_brand, 'Final_Score'] += 50000
-            if same_brand.any():
-                notes.append(f"Brand bonus ({tb}): {same_brand.sum()} items")
+            same = pool['Κατασκευαστής'].fillna('').str.strip().str.upper() == tb
+            pool.loc[same, 'Final_Score'] += 50000
+            if same.any(): notes.append(f"Brand bonus ({tb}): {same.sum()}")
+        if is_pet and comp_role == 'Pet Care':
+            pool['Final_Score'] += 30000
+            notes.append("🐾 Pet trigger boost")
+        if is_robot and comp_role == 'Ατμοκαθαριστής':
+            pool['Final_Score'] += 40000
+            notes.append("🤖 Robot → steam companion")
 
         pool = pool.sort_values('Final_Score', ascending=False)
-
-        # Pick top item
         chosen = pool.iloc[0]
-        row_copy = chosen.copy()
-        row_copy['Assigned_Slot'] = slot_num
-        row_copy['Slot_Role'] = role
-        row_copy['Marketing_Copy'] = FLOOR_CARE_MARKETING_COPY.get(role, "Ιδανική επιλογή!")
-        row_copy['Item_Rank'] = 1
-        all_recs.append(row_copy)
+        rc = chosen.copy()
+        rc['Assigned_Slot'] = slot_num
+        rc['Slot_Role'] = comp_role
+        rc['Marketing_Copy'] = FLOOR_CARE_MARKETING_COPY.get(comp_role, "Ιδανική επιλογή!")
+        rc['Item_Rank'] = 1
+        all_recs.append(rc)
         used_materials.add(chosen['Material'])
         notes.append(f"✅ {str(chosen.get('Title',''))[:60]}")
         slot_notes[slot_num] = notes
-        diag.append((f"Slot {slot_num} ({role})", 1, f"Score: {chosen.get('Final_Score', 0):.0f}"))
+        diag.append((f"Slot {slot_num} ({comp_role})", 1, f"Score: {chosen.get('Final_Score',0):.0f}"))
 
-    diag.append(("TOTAL", len(all_recs), f"out of {len(FLOOR_CARE_SLOTS)}"))
+    diag.append(("TOTAL", len(all_recs), f"Phase1={slot_num - len(COMPANIONS)} + Phase2={len(COMPANIONS)}"))
 
     if all_recs:
         recs_df = pd.DataFrame(all_recs)
         recs_df['Draft_Score'] = recs_df['Assigned_Slot']
         return recs_df, diag, slot_notes, recs_df
     return pd.DataFrame(), diag, slot_notes, pd.DataFrame()
-
 
 # ─────────────────────────────────────────────────────────────
 # RUN ENGINE
