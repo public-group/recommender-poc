@@ -75,7 +75,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v20.0 — Laptops: Unified "filter_or_penalize" fallback pattern across all slots
+        🟢 Engine v20.1 — Laptops: Apple charger fallback restored + Apple headset boost all sizes + "για Mac" mouse detection
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -2466,15 +2466,18 @@ def run_laptops_engine(trigger, df_products, df_history):
 
                 # Brand Ecosystem fallback for chargers
                 if is_apple:
-                    # 🍎 STRICT: Apple laptops get Apple chargers ONLY. If catalog
-                    # is empty, penalise non-Apple chargers (-150k) so premium PD
-                    # brands win over random cheapies — instead of going wide open.
+                    # 🍎 STRICT: Apple laptops get Apple chargers ONLY.
                     apple_mask = pool['Κατασκευαστής'].fillna('').str.strip().str.upper() == 'APPLE'
-                    pool, note = filter_or_penalize(pool, apple_mask, "🍎 Apple-only charger")
-                    notes.append(note)
-                    # Then still give premium PD brands a boost in case we fell back
-                    premium_pd = pool['Κατασκευαστής'].fillna('').str.upper().isin(['ANKER', 'BELKIN', 'UGREEN'])
-                    pool.loc[premium_pd & usbc_mask, 'Final_Score'] += 80000
+                    if apple_mask.any():
+                        b4 = len(pool)
+                        pool = pool[apple_mask].copy()
+                        notes.append(f"🍎 Apple-only charger filter: {b4}→{len(pool)}")
+                    else:
+                        # No Apple chargers in catalog → boost premium PD brands
+                        # (Anker/Belkin/UGREEN are what Apple Store stocks as 3rd-party)
+                        premium_pd = pool['Κατασκευαστής'].fillna('').str.upper().isin(['ANKER', 'BELKIN', 'UGREEN'])
+                        pool.loc[premium_pd & usbc_mask, 'Final_Score'] += 80000
+                        notes.append("⚠ No Apple chargers in catalog → fallback: premium PD brands boosted +80k")
 
             elif has_dcin_only:
                 universal = pool['Title'].fillna('').str.lower().str.contains('universal|γενικής|πολλαπλ', regex=True, na=False)
@@ -2547,18 +2550,23 @@ def run_laptops_engine(trigger, df_products, df_history):
                     pool.loc[pool['_p'] < mouse_min * 0.5, 'Final_Score'] -= 100000
                 notes.append(f"Tier {laptop_tier} ({tier_label}): Boost €{mouse_min:.0f}–€{mouse_max:.0f} (+150k), overbuy >€{overbuy_threshold:.0f} (-250k)")
 
-            # Apple ecosystem priority (subordinate to tier budget now — tier boost +150k > ecosystem +100k)
+            # Apple ecosystem priority — prioritize Mac-compatible mice
             if is_apple:
                 apple_mice = pool['Κατασκευαστής'].fillna('').str.upper() == 'APPLE'
-                mac_logi = pool['Title'].fillna('').str.lower().str.contains('mac|mx master|mx anywhere')
+                # Detect Mac-compatible products: brand-specific (MX Master/Anywhere)
+                # AND products explicitly labelled "για Mac" / "for Mac" in the title.
+                mac_title = pool['Title'].fillna('').str.lower().str.contains(
+                    r'για mac|for mac|mac edition|mx master|mx anywhere',
+                    regex=True, na=False
+                )
                 if tprice >= 1200:
                     pool.loc[apple_mice, 'Final_Score'] += 100000
-                    pool.loc[mac_logi & (pool['_p'] >= 70), 'Final_Score'] += 80000
-                    notes.append("Apple Ecosystem (premium): Magic Mouse + MX Master")
+                    pool.loc[mac_title & (pool['_p'] >= 70), 'Final_Score'] += 80000
+                    notes.append(f"Apple Ecosystem (premium): Magic Mouse + Mac-compatible mice ({mac_title.sum()} 'Mac' items)")
                 else:
-                    pool.loc[mac_logi & (pool['_p'] < 70), 'Final_Score'] += 100000
+                    pool.loc[mac_title & (pool['_p'] < 70), 'Final_Score'] += 100000
                     pool.loc[apple_mice, 'Final_Score'] += 50000
-                    notes.append("Apple Ecosystem (budget): Affordable Mac-compatible mice")
+                    notes.append(f"Apple Ecosystem (budget): Mac-compatible mice boosted ({mac_title.sum()} 'Mac' items)")
 
             # Microsoft Surface ecosystem — mirror the Apple pattern
             elif is_surface:
@@ -2799,15 +2807,17 @@ def run_laptops_engine(trigger, df_products, df_history):
                 else:
                     notes.append("Persona: Boost skipped ('Προτεινόμενη χρήση' column missing from candidates)")
 
-                # Apple Workstation ecosystem — applies when ≥15" (over-ear only now)
-                if tscreen >= 15 and is_apple:
+                # Apple ecosystem — boost premium audio brands regardless of screen size.
+                # An Apple user buying a 13.6" Air or 15.3" Air or 16" Pro
+                # should get the same premium headset recommendations.
+                if is_apple:
                     premium_overhead = pool['Title'].fillna('').str.lower().str.contains(
                         r'airpods max|wh-1000xm|wh1000xm|quietcomfort|qc\d|momentum \d|bose 700|audio-technica|beats studio',
                         regex=True, na=False
                     )
                     pool.loc[is_headset & premium_overhead, 'Final_Score'] += 100000
                     if (is_headset & premium_overhead).any():
-                        notes.append(f"🍎 Apple Workstation: Premium overhead brands boosted +100k ({(is_headset & premium_overhead).sum()} items)")
+                        notes.append(f"🍎 Apple Ecosystem: Premium audio brands boosted +100k ({(is_headset & premium_overhead).sum()} items)")
 
                 # Headset Sane Price Tiering (Max ~15% of laptop price)
                 if tprice >= 2000:
