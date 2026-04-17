@@ -4356,6 +4356,37 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 with st.expander("⚙️ System Diagnostics"):
+# ─────────────────────────────────────────────────────────────
+    # ONE-CLICK COPYABLE DIAGNOSTICS
+    # ─────────────────────────────────────────────────────────────
+    st.markdown("### 📋 Copy Diagnostics")
+    
+    # Build the massive string
+    diag_export = f"Active Cluster: {active_cluster}\n\n"
+    
+    diag_export += "--- TRIGGER ATTRIBUTES ---\n"
+    for col in cols:
+        val = trigger.get(col, 'N/A')
+        diag_export += f"{col}: {val}\n"
+        
+    diag_export += "\n--- ENGINE FUNNEL ---\n"
+    for step in diag:
+        diag_export += f"{step[0]} | Count: {step[1]} | Note: {step[2]}\n"
+        
+    diag_export += "\n--- SLOT DETAILS ---\n"
+    for sn, notes in sorted(slot_notes.items()):
+        if notes:
+            diag_export += f"\nPriority {sn}\n"
+            for n in notes: 
+                diag_export += f"{n}\n"
+                
+    if not recs.empty:
+        diag_export += "\n--- FINAL RECOMMENDATIONS ---\n"
+        for _, r in recs.iterrows():
+            diag_export += f"Slot {r.get('Assigned_Slot', '?')}: {r.get('Title', 'Unknown')} (Score: {r.get('Final_Score', 0)})\n"
+
+    # Display it inside a code block which provides a native copy button
+    st.code(diag_export, language="text")
     st.markdown(f"### Active Cluster: **{active_cluster}**")
     
     if active_cluster == "Kids Books":
