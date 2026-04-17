@@ -515,6 +515,8 @@ except Exception as e:
     st.code(traceback.format_exc())
     st.stop()
 
+
+
 # ═════════════════════════════════════════════════════════════
 # 🟢 NEW SIDEBAR — 2-Level Navigation (Level 1 → Level 2)
 # ═════════════════════════════════════════════════════════════
@@ -546,30 +548,14 @@ L1_CATEGORIES = [
     },
 ]
 
-# Updated IT children to match your target UI exact layout
+# Keep ONLY Laptops in the IT category for now
 L2_CHILDREN = {
     "Books":     [{"key": "Kids Books",  "label": "Παιδικά\nΒιβλία",
                    "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 19.5A2.5 2.5 0 0 1 6.5 17H20'/%3E%3Cpath d='M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z'/%3E%3C/svg%3E"}],
     "Telephony": [{"key": "Smartphones", "label": "Smart-\nphones",
                    "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='5' y='2' width='14' height='20' rx='2' ry='2'/%3E%3Cline x1='12' y1='18' x2='12.01' y2='18'/%3E%3C/svg%3E"}],
-    "IT":        [
-        {"key": "Laptops",     "label": "Laptops", 
-         "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23333' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='2' y='4' width='20' height='12' rx='2' ry='2'/%3E%3Cpath d='M2 16h20M6 20h12'/%3E%3C/svg%3E"},
-        {"key": "Desktops",    "label": "Σταθεροί\nΥπολογιστές", 
-         "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23333' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='6' y='2' width='12' height='20' rx='2' ry='2'/%3E%3Cline x1='12' y1='18' x2='12.01' y2='18'/%3E%3C/svg%3E"},
-        {"key": "Refurbished", "label": "Refurbished &\nCertified...", "color": "#00897b",
-         "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2300897b' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='2' y='4' width='20' height='12' rx='2' ry='2'/%3E%3Cpath d='M2 16h20M6 20h12M12 10l-2 2-1-1'/%3E%3C/svg%3E"},
-        {"key": "Monitors",    "label": "Οθόνες &\nΑξεσουάρ", 
-         "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23333' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='2' y='3' width='20' height='14' rx='2' ry='2'/%3E%3Cline x1='8' y1='21' x2='16' y2='21'/%3E%3Cline x1='12' y1='17' x2='12' y2='21'/%3E%3C/svg%3E"},
-        {"key": "Printers",    "label": "Εκτύπωση &\nΑναλώσιμα", 
-         "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23333' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 6 2 18 2 18 9'/%3E%3Cpath d='M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2'/%3E%3Crect x='6' y='14' width='12' height='8' rx='1'/%3E%3C/svg%3E"},
-        {"key": "Storage",     "label": "Αποθήκευση", 
-         "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23333' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='4' y='4' width='16' height='16' rx='2' ry='2'/%3E%3Cpath d='M4 8h16M4 16h16'/%3E%3C/svg%3E"},
-        {"key": "Peripherals", "label": "Περιφερειακά", "opacity": "0.4",
-         "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23333' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='2' y='6' width='20' height='12' rx='2' ry='2'/%3E%3Ccircle cx='12' cy='12' r='2'/%3E%3C/svg%3E"},
-        {"key": "Networking",  "label": "Δικτυακά", "opacity": "0.4",
-         "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23333' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12.55a11 11 0 0 1 14.08 0M1.42 9a16 16 0 0 1 21.16 0M8.53 16.11a6 6 0 0 1 6.95 0M12 20h.01'/%3E%3C/svg%3E"}
-    ]
+    "IT":        [{"key": "Laptops",     "label": "Laptops", 
+                   "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%231a73e8' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='2' y='4' width='20' height='12' rx='2' ry='2'/%3E%3Cpath d='M2 16h20M6 20h12'/%3E%3C/svg%3E"}],
 }
 
 L2_TO_L1 = {child["key"]: l1 for l1, children in L2_CHILDREN.items() for child in children}
@@ -577,8 +563,9 @@ L2_TO_L1 = {child["key"]: l1 for l1, children in L2_CHILDREN.items() for child i
 # ───── Sidebar base styling ─────
 st.sidebar.markdown("""
 <style>
-    [data-testid="stSidebar"] > div:first-child { background-color: #ffffff !important; }
-    [data-testid="stSidebar"] { background-color: #ffffff !important; border-right: 1px solid #eaeaea; }
+    /* Make the whole sidebar background slightly gray */
+    [data-testid="stSidebar"] > div:first-child { background-color: #f4f5f7 !important; }
+    [data-testid="stSidebar"] { background-color: #f4f5f7 !important; border-right: 1px solid #eaeaea; }
     [data-testid="stSidebarCollapseButton"] { display: none !important; }
 
     .sidebar-header {
@@ -598,15 +585,15 @@ st.sidebar.markdown("""
     [data-testid="stSidebar"] .block-container { padding-top: 0 !important; }
     [data-testid="stSidebar"] [data-testid="stVerticalBlockBorderWrapper"] { gap: 0.5rem !important; }
 
-    /* Tile buttons (L1 and L2 grids) */
+    /* Tile buttons (White on gray background) */
     [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] button {
         background: #ffffff !important;
-        border: 1px solid #eef0f2 !important;
+        border: 1px solid #eaeaea !important;
         border-radius: 12px !important;
         padding: 70px 4px 14px 4px !important;
         min-height: 120px !important;
         font-family: -apple-system, BlinkMacSystemFont, sans-serif !important;
-        font-size: 12px !important; font-weight: 700 !important; color: #111 !important;
+        font-size: 13px !important; font-weight: 700 !important; color: #111 !important;
         white-space: pre-line !important; line-height: 1.3 !important;
         box-shadow: 0 2px 6px rgba(0,0,0,0.02) !important;
         position: relative !important;
@@ -618,7 +605,7 @@ st.sidebar.markdown("""
         transform: translateY(-1px);
     }
     [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] button p {
-        font-size: 12px !important; margin-top: 2px !important; font-weight: 700 !important;
+        font-size: 13px !important; margin-top: 2px !important; font-weight: 700 !important;
     }
 
     .section-divider { border: none; border-top: 1px solid #e0e0e0; margin: 8px 0 4px 0; }
@@ -628,40 +615,36 @@ st.sidebar.markdown("""
         text-transform: uppercase; letter-spacing: 0.5px; margin: 8px 0 4px 0;
     }
 
-    /* Back button row (L2 view) */
+    /* Target UI: Back button row */
     .l2-breadcrumb {
         display: flex; align-items: center; gap: 12px;
-        margin: 10px 0 20px 0;
+        margin: 10px -1rem 20px -1rem; 
+        padding: 0 1rem 15px 1rem;
+        background-color: #ffffff;
+        border-bottom: 1px solid #eaeaea;
     }
-    .l2-back-btn-wrap { width: 36px; flex-shrink: 0; display: inline-block; }
+    .l2-back-btn-wrap { width: 34px; flex-shrink: 0; display: inline-block; }
     .l2-back-btn-wrap button {
-        background: #f5f6f8 !important;
+        background: #f4f5f7 !important;
         border: none !important;
         border-radius: 50% !important;
-        width: 36px !important; height: 36px !important;
-        min-height: 36px !important; padding: 0 !important;
-        font-size: 20px !important; font-weight: 500 !important; color: #111 !important;
+        width: 34px !important; height: 34px !important;
+        min-height: 34px !important; padding: 0 !important;
+        font-size: 18px !important; font-weight: 600 !important; color: #111 !important;
         line-height: 1 !important; box-shadow: none !important;
         display: flex !important; justify-content: center !important; align-items: center !important;
     }
     .l2-back-btn-wrap button:hover { background: #e0e4e8 !important; }
     .l2-breadcrumb-label {
-        font-size: 16px; font-weight: 700; color: #111; line-height: 1.2; margin-top: 6px;
+        font-size: 15px; font-weight: 700; color: #111; line-height: 1.2;
     }
-    .l2-discover-link {
-        display: block; text-align: center; margin-top: 15px; margin-bottom: 25px;
-        color: #0066cc; font-weight: 700; text-decoration: none; font-size: 14px; font-family: -apple-system, BlinkMacSystemFont, sans-serif;
-    }
-    .l2-discover-link:hover { text-decoration: underline; }
 </style>
 """, unsafe_allow_html=True)
 
-
 # ─────────────────────────────────────────────────────────────
-# LEVEL 1 VIEW — Show top-level category tiles
+# LEVEL 1 VIEW
 # ─────────────────────────────────────────────────────────────
 if st.session_state.nav_level == 1:
-    # Only render the big orange "Μενού" header on Level 1
     st.sidebar.markdown('''
     <div class="sidebar-header">
         <span>Μενού</span>
@@ -676,10 +659,10 @@ if st.session_state.nav_level == 1:
         icon_css += f"""
         [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] > div:nth-child({i}) button::before {{
             content: ''; display: block; width: 44px; height: 44px;
-            background-color: #f5f6f8; border-radius: 50%;
+            background-color: #f4f5f7; border-radius: 50%;
             background-image: url("data:image/svg+xml,{l1['icon_svg']}");
             background-size: 24px; background-repeat: no-repeat; background-position: center;
-            position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
+            position: absolute; top: 14px; left: 50%; transform: translateX(-50%);
         }}
         """
     icon_css += "</style>"
@@ -705,14 +688,15 @@ if st.session_state.nav_level == 1:
     trigger = None
 
 # ─────────────────────────────────────────────────────────────
-# LEVEL 2 VIEW — Show L2 tiles + product selector
+# LEVEL 2 VIEW
 # ─────────────────────────────────────────────────────────────
 else:
     selected_l1_key = st.session_state.selected_l1
     selected_l1 = next((x for x in L1_CATEGORIES if x["key"] == selected_l1_key), None)
     children = L2_CHILDREN.get(selected_l1_key, [])
 
-    # Breadcrumb row (Block 1): ‹ back arrow + parent label
+    # Wrap the breadcrumb inside a white header section mimicking the image
+    st.sidebar.markdown('<div style="background-color: #ffffff; margin: -1rem -1rem 1rem -1rem; padding: 1rem 1rem 0 1rem;">', unsafe_allow_html=True)
     bc_col1, bc_col2 = st.sidebar.columns([1, 6])
     with bc_col1:
         st.markdown('<div class="l2-back-btn-wrap">', unsafe_allow_html=True)
@@ -725,56 +709,54 @@ else:
     with bc_col2:
         label_clean = (selected_l1["label"] if selected_l1 else "").replace("\n", " ")
         st.markdown(f'<div class="l2-breadcrumb-label">{label_clean}</div>', unsafe_allow_html=True)
+    st.sidebar.markdown('<div style="border-bottom: 1px solid #eaeaea; margin-top: 15px;"></div></div>', unsafe_allow_html=True)
 
-    # Active cluster layout & Dynamic CSS injection for Target UI grids
     active_cluster = st.session_state.active_cluster
     border_css = "<style>"
     
     n_l2 = len(children)
     for row_start in range(0, n_l2, 2):
         row_items = children[row_start:row_start + 2]
-        # Calculate HTML tree position for the streamit grid rows
-        # Assuming Breadcrumb is Block #1, grid rows start at Block #2
         block_idx = (row_start // 2) + 2 
         
         for col_index, child in enumerate(row_items):
             col_child_idx = col_index + 1
             is_active = child["key"] == active_cluster
-            border = "1px solid #1a73e8" if is_active else "1px solid #eef0f2"
-            
-            # Fetch custom styling properties
-            text_color = child.get("color", "#111")
-            opacity = child.get("opacity", "1")
+            border = "1px solid #1a73e8" if is_active else "1px solid #eaeaea"
             
             border_css += f"""
             [data-testid="stSidebar"] [data-testid="stHorizontalBlock"]:nth-of-type({block_idx}) > div:nth-child({col_child_idx}) button {{
                 border: {border} !important;
-                color: {text_color} !important;
-                opacity: {opacity} !important;
             }}
             [data-testid="stSidebar"] [data-testid="stHorizontalBlock"]:nth-of-type({block_idx}) > div:nth-child({col_child_idx}) button::before {{
                 content: ''; display: block; width: 44px; height: 44px;
-                background-color: #f5f6f8; border-radius: 50%;
+                background-color: #f4f5f7; border-radius: 50%;
                 background-image: url("data:image/svg+xml,{child['icon_svg']}");
                 background-size: 24px; background-repeat: no-repeat; background-position: center;
-                position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
+                position: absolute; top: 14px; left: 50%; transform: translateX(-50%);
             }}
             """
     border_css += "</style>"
     st.sidebar.markdown(border_css, unsafe_allow_html=True)
 
-    # Render L2 tiles in pairs
+    # Render L2 tiles
     for row_start in range(0, n_l2, 2):
         row_items = children[row_start:row_start + 2]
-        cols = st.sidebar.columns(2)
-        for col, child in zip(cols, row_items):
-            with col:
+        if len(row_items) == 1:
+            cols = st.sidebar.columns(2)
+            with cols[0]:
+                child = row_items[0]
                 if st.button(child["label"], key=f"l2_{child['key']}", use_container_width=True):
                     st.session_state.active_cluster = child["key"]
                     st.rerun()
+        else:
+            cols = st.sidebar.columns(2)
+            for col, child in zip(cols, row_items):
+                with col:
+                    if st.button(child["label"], key=f"l2_{child['key']}", use_container_width=True):
+                        st.session_state.active_cluster = child["key"]
+                        st.rerun()
 
-    # Link at the bottom of the grid
-    st.sidebar.markdown('<a href="#" class="l2-discover-link">Ανακάλυψε τα όλα</a>', unsafe_allow_html=True)
     st.sidebar.markdown('<hr class="section-divider">', unsafe_allow_html=True)
 
     # ───── Product selector + trigger setup based on active_cluster ─────
