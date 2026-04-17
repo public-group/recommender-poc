@@ -548,7 +548,7 @@ L1_CATEGORIES = [
     },
 ]
 
-# Keep ONLY Laptops in the IT category for now
+# Keep ONLY Laptops in the IT category as requested
 L2_CHILDREN = {
     "Books":     [{"key": "Kids Books",  "label": "Παιδικά\nΒιβλία",
                    "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 19.5A2.5 2.5 0 0 1 6.5 17H20'/%3E%3Cpath d='M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z'/%3E%3C/svg%3E"}],
@@ -614,30 +614,6 @@ st.sidebar.markdown("""
         font-size: 11px; font-weight: 700; color: #888;
         text-transform: uppercase; letter-spacing: 0.5px; margin: 8px 0 4px 0;
     }
-
-    /* Target UI: Back button row */
-    .l2-breadcrumb {
-        display: flex; align-items: center; gap: 12px;
-        margin: 10px -1rem 20px -1rem; 
-        padding: 0 1rem 15px 1rem;
-        background-color: #ffffff;
-        border-bottom: 1px solid #eaeaea;
-    }
-    .l2-back-btn-wrap { width: 34px; flex-shrink: 0; display: inline-block; }
-    .l2-back-btn-wrap button {
-        background: #f4f5f7 !important;
-        border: none !important;
-        border-radius: 50% !important;
-        width: 34px !important; height: 34px !important;
-        min-height: 34px !important; padding: 0 !important;
-        font-size: 18px !important; font-weight: 600 !important; color: #111 !important;
-        line-height: 1 !important; box-shadow: none !important;
-        display: flex !important; justify-content: center !important; align-items: center !important;
-    }
-    .l2-back-btn-wrap button:hover { background: #e0e4e8 !important; }
-    .l2-breadcrumb-label {
-        font-size: 15px; font-weight: 700; color: #111; line-height: 1.2;
-    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -695,21 +671,59 @@ else:
     selected_l1 = next((x for x in L1_CATEGORIES if x["key"] == selected_l1_key), None)
     children = L2_CHILDREN.get(selected_l1_key, [])
 
-    # Wrap the breadcrumb inside a white header section mimicking the image
-    st.sidebar.markdown('<div style="background-color: #ffffff; margin: -1rem -1rem 1rem -1rem; padding: 1rem 1rem 0 1rem;">', unsafe_allow_html=True)
-    bc_col1, bc_col2 = st.sidebar.columns([1, 6])
-    with bc_col1:
-        st.markdown('<div class="l2-back-btn-wrap">', unsafe_allow_html=True)
+    # 🟢 LEVEL 2 CSS INJECTION: Styles the Breadcrumb Row and Back Button precisely
+    st.sidebar.markdown("""
+    <style>
+        /* Transform the first row (Breadcrumb) into a white header */
+        [data-testid="stSidebar"] [data-testid="stHorizontalBlock"]:first-of-type {
+            background-color: #ffffff !important;
+            margin: -4rem -1rem 1rem -1rem !important;
+            padding: 4.5rem 1rem 1rem 1.5rem !important;
+            border-bottom: 1px solid #eaeaea !important;
+            align-items: center !important;
+        }
+        
+        /* Transform the back button in the first column into a perfect circle */
+        [data-testid="stSidebar"] [data-testid="stHorizontalBlock"]:first-of-type > div:nth-child(1) button {
+            background-color: #f4f5f7 !important;
+            border: none !important;
+            border-radius: 50% !important;
+            width: 36px !important;
+            height: 36px !important;
+            min-height: 36px !important;
+            padding: 0 !important;
+            font-size: 22px !important;
+            font-weight: 500 !important;
+            color: #111 !important;
+            display: flex !important;
+            justify-content: center !important;
+            align-items: center !important;
+            box-shadow: none !important;
+        }
+        [data-testid="stSidebar"] [data-testid="stHorizontalBlock"]:first-of-type > div:nth-child(1) button:hover {
+            background-color: #e0e4e8 !important;
+        }
+        
+        /* Breadcrumb Text Styling */
+        .l2-breadcrumb-label {
+            font-size: 16px; font-weight: 700; color: #111; line-height: 1.2;
+            margin-left: -5px;
+        }
+    </style>
+    """, unsafe_allow_html=True)
+
+    # Breadcrumb row (Renders inside the white header defined above)
+    bc_cols = st.sidebar.columns([1, 4])
+    with bc_cols[0]:
         if st.button("‹", key="back_to_l1", help="Επιστροφή"):
             st.session_state.nav_level = 1
             st.session_state.selected_l1 = None
             st.session_state.active_cluster = None
             st.rerun()
-        st.markdown('</div>', unsafe_allow_html=True)
-    with bc_col2:
+    with bc_cols[1]:
         label_clean = (selected_l1["label"] if selected_l1 else "").replace("\n", " ")
         st.markdown(f'<div class="l2-breadcrumb-label">{label_clean}</div>', unsafe_allow_html=True)
-    st.sidebar.markdown('<div style="border-bottom: 1px solid #eaeaea; margin-top: 15px;"></div></div>', unsafe_allow_html=True)
+
 
     active_cluster = st.session_state.active_cluster
     border_css = "<style>"
@@ -822,9 +836,6 @@ else:
                     matching_books['_has_series'] = matching_books['Σειρά βιβλίου'].apply(lambda x: 0 if (pd.isna(x) or str(x).strip().lower() in ['', '0', 'nan']) else 1)
                     matching_books = matching_books.sort_values('_has_series', ascending=False)
                 trigger = matching_books.iloc[0]
-
-
-
 
 # ───── Compatibility shim: rest of app expects `active_cluster` as a string ─────
 active_cluster = st.session_state.active_cluster or ""
