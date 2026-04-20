@@ -932,6 +932,9 @@ else:
             p_hiers = {h.upper().strip() for h in pconfig.get('hierarchies', set())}
             periph = df_peripherals[df_peripherals['Hierarchy'].fillna('').astype(str).str.upper().str.strip().isin(p_hiers)].copy()
             
+            # 🐛 DEBUG: show counts at each step
+            st.sidebar.caption(f"🐛 Pool after hierarchy filter: {len(periph)} | Hierarchies: {p_hiers}")
+            
             # ─────────────────────────────────────────────────────────────
             # 🧪 TEST LIST: Restrict the dropdown to specific SKUs
             # ─────────────────────────────────────────────────────────────
@@ -946,6 +949,8 @@ else:
                     "1794589", "1841439", "2057552", "1906214"
                 }
                 periph = periph[periph['Material'].astype(str).str.strip().isin(target_skus)]
+                # 🐛 DEBUG
+                st.sidebar.caption(f"🐛 After SKU filter: {len(periph)} | Sample Materials: {list(df_peripherals['Material'].astype(str).str.strip().head(3))}")
             # ─────────────────────────────────────────────────────────────
 
             if periph.empty:
@@ -972,7 +977,10 @@ else:
                 "2096238", "1992012", "2076445", "2066078",
                 "2093201", "1795955", "2024266"
             }
+            # 🐛 DEBUG
+            st.sidebar.caption(f"🐛 Monitors before SKU filter: {len(monitors)} | Sample Materials: {list(monitors['Material'].astype(str).str.strip().head(3))}")
             monitors = monitors[monitors['Material'].astype(str).str.strip().isin(monitor_test_skus)]
+            st.sidebar.caption(f"🐛 Monitors after SKU filter: {len(monitors)}")
             # ─────────────────────────────────────────────────────────────
             if monitors.empty:
                 st.sidebar.warning("Δεν βρέθηκαν test οθόνες.")
