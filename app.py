@@ -101,7 +101,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v21.0 — Peripherals: Mouse/KB/Gaming Mouse deep attrs + Monitors (3 personas) + Printers (Inkjet/Laser) + Webcam + USB Hub
+        🟢 Engine v22.0 — Peripherals: Mouse/KB/Gaming Mouse deep attrs + Gaming KB triggers + Streaming Είδος filter + Monitors (3 personas) + Printers (Inkjet/Laser) + Webcam + USB Hub
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -197,7 +197,7 @@ FLOOR_CARE_MARKETING_COPY = {
 # ── Peripheral trigger detection (used by product selector AND engine) ──
 PERIPHERAL_TRIGGERS = {
     "Mouse":        {"hierarchies": {"MOUSE WIRELESS", "MOUSE WIRED", "APPLE ORIGINAL WIRELESS MOUSE"}},
-    "Keyboard":     {"hierarchies": {"KEYBOARDS WIRELESS", "KEYBOARDS WIRED", "APPLE ORIGINAL WIRELESS KEYBOARD"}},
+    "Keyboard":     {"hierarchies": {"KEYBOARDS WIRELESS", "KEYBOARDS WIRED", "APPLE ORIGINAL WIRELESS KEYBOARD", "GAMING KEYBOARDS"}},
     "Gaming Mouse": {"hierarchies": {"GAMING MOUSE"}},
 }
 
@@ -3496,7 +3496,7 @@ def run_floor_care_engine(trigger, df_products, df_history):
 # ── Trigger detection ──
 PERIPHERAL_TRIGGERS = {
     "Mouse":        {"hierarchies": {"MOUSE WIRELESS", "MOUSE WIRED", "APPLE ORIGINAL WIRELESS MOUSE"}},
-    "Keyboard":     {"hierarchies": {"KEYBOARDS WIRELESS", "KEYBOARDS WIRED", "APPLE ORIGINAL WIRELESS KEYBOARD"}},
+    "Keyboard":     {"hierarchies": {"KEYBOARDS WIRELESS", "KEYBOARDS WIRED", "APPLE ORIGINAL WIRELESS KEYBOARD", "GAMING KEYBOARDS"}},
     "Gaming Mouse": {"hierarchies": {"GAMING MOUSE"}},
 }
 
@@ -3547,23 +3547,23 @@ KEYBOARD_SLOTS = [
     ("Batteries",           ['ΑΛΚΑΛΙΚΕΣ'],                    {'skip_if': 'no_battery', 'fallback_hier': ['USB HUB DEVICES']}),
     ("Cleaning",            ['CLEANING PRODUCTS'],            {}),
     ("PC Speakers",         ['PC SPEAKERS 2.0', 'PC SPEAKERS 1'], {}),
-    ("PC Headset",          ['PC HEADSET/MICROPHONE', 'OVERHEAD'], {}),
-    ("USB Hub",             ['USB HUB DEVICES'],              {}),
+    ("PC Headset",          ['PC HEADSET/MICROPHONE', 'OVERHEAD', 'GAMING AUDIO'], {}),
+    ("Headset Stand",       ['GAMING HEADSET STANDS', 'PORTABLE ACCESSORIES'], {}),
+    ("Cleaning 2",          ['CLEANING PRODUCTS'],            {}),
+    ("Smart Lighting",      ['ΕΞΥΠΝΟΣ ΦΩΤΙΣΜΟΣ'],            {'title_boost': ['Desk', 'Γραφείου', 'Table', 'Επιτραπέζιο', 'Φωτιστικό'], 'title_hide': ['Ceiling', 'Bulb', 'Strip', 'Οροφής', 'Λάμπα', 'E27', 'E14', 'Ταινία', 'Λεντοταινία']}),
     ("Mouse 2",             ['MOUSE WIRELESS', 'MOUSE WIRED', 'APPLE ORIGINAL WIRELESS MOUSE'], {'connectivity_mirror': True, 'brand_match': True, 'apple_force': 'APPLE ORIGINAL WIRELESS MOUSE'}),
-    ("Wrist Rest",          ['MOUSE PADS'],                   {'wrist_rest_only': True}),
-    ("USB Cable",           ['USB CABLES'],                   {}),
 ]
 
 GAMING_MOUSE_SLOTS = [
     ("Gaming Pad",          ['GAMING MOUSE PADS'],            {'title_hide': ['Gel', 'Wrist'], 'sensor_surface': True, 'brand_match': True}),
     ("Gaming Keyboard",     ['GAMING KEYBOARDS'],             {'brand_match': True, 'rgb_match': True, 'button_kb_size': True, 'connectivity_mirror': True}),
-    ("Batteries/Cable",     ['ΑΛΚΑΛΙΚΕΣ'],                    {'skip_if': 'no_battery', 'fallback_hier': ['USB CABLES']}),
-    ("Cleaning Kit",        ['CLEANING PRODUCTS'],            {}),
-    ("USB Hub",             ['USB HUB DEVICES'],              {'title_boost': ['USB 3', 'SuperSpeed']}),
+    ("Batteries/USB Hub",   ['ΑΛΚΑΛΙΚΕΣ'],                    {'skip_if': 'no_battery', 'fallback_hier': ['USB HUB DEVICES']}),
     ("Gaming Headset",      ['GAMING AUDIO'],                 {'brand_match': True}),
-    ("Streaming Audio",     ['STREAMING ACCESSORIES'], {'eidos_include': ['Μικρόφωνο', 'Microphone', 'Audio', 'Stand'], 'title_hide': ['Headset', 'Ακουστικά']}),
-    ("Streaming Video",     ['STREAMING ACCESSORIES', 'ΕΞΥΠΝΟΣ ΦΩΤΙΣΜΟΣ'], {'eidos_include': ['Κάμερα', 'Webcam', 'Φωτισμός', 'Light', 'Capture', 'Video', 'Ring', 'Prompter'], 'title_hide': ['Bulb', 'Λάμπα', 'GU10', 'E27', 'E14', 'Οροφής', 'Ceiling', 'Ταινία', 'Strip', 'Λεντοταινία', 'Smart Home', 'Tapo']}),    ("XXL Pad",             ['GAMING MOUSE PADS'],            {'xxl_only': True, 'dpi_pad_size': True, 'brand_match': True}),
-    ("Gaming Keyboard 2",   ['GAMING KEYBOARDS'],             {'brand_match': True, 'rgb_match': True}),
+    ("Αξεσουάρ Streaming",  ['STREAMING ACCESSORIES'],        {'eidos_include': ['Capture Card', 'Gaming Αξεσουάρ', 'Green Screen', 'LED ring light', 'Mic Arm', 'Prompter', 'RGB Controller', 'Ring Light', 'Selfie Stick', 'Stream Controller', 'Stream Deck', 'Streaming Kit', 'USB Hub', 'Web Camera', 'Άλλο', 'Ασύρματο μικρόφωνο για vlogging', 'Βάση Στήριξης', 'Βραχίονας μικροφώνου', 'Επαγγελματικά Μικρόφωνα', 'Επιτραπέζιο', 'Ηχοαπορροφητικά Πάνελ', 'Κάρτα καταγραφής βίντεο', 'Κάρτα καταγραφής βίντεο (Capture Card)', 'Μικρόφωνο', 'Μικρόφωνο streaming', 'Τηλεπρομπτέρ με ενσωματωμένη οθόνη', 'Φωτισμός', 'Φωτιστικό']}),
+    ("Αξεσουάρ Streaming 2", ['STREAMING ACCESSORIES'],       {'eidos_include': ['Capture Card', 'Gaming Αξεσουάρ', 'Green Screen', 'LED ring light', 'Mic Arm', 'Prompter', 'RGB Controller', 'Ring Light', 'Selfie Stick', 'Stream Controller', 'Stream Deck', 'Streaming Kit', 'USB Hub', 'Web Camera', 'Άλλο', 'Ασύρματο μικρόφωνο για vlogging', 'Βάση Στήριξης', 'Βραχίονας μικροφώνου', 'Επαγγελματικά Μικρόφωνα', 'Επιτραπέζιο', 'Ηχοαπορροφητικά Πάνελ', 'Κάρτα καταγραφής βίντεο', 'Κάρτα καταγραφής βίντεο (Capture Card)', 'Μικρόφωνο', 'Μικρόφωνο streaming', 'Τηλεπρομπτέρ με ενσωματωμένη οθόνη', 'Φωτισμός', 'Φωτιστικό']}),
+    ("Headset Stand",       ['GAMING HEADSET STANDS', 'PORTABLE ACCESSORIES'], {}),
+    ("Cleaning Product",    ['CLEANING PRODUCTS'],            {}),
+    ("Smart Lighting",      ['ΕΞΥΠΝΟΣ ΦΩΤΙΣΜΟΣ'],            {'title_hide': ['Ceiling', 'Bulb', 'Strip', 'Οροφής', 'Λάμπα', 'E27', 'E14', 'Ταινία', 'Λεντοταινία']}),
 ]
 
 # ── Monitor sub-personas (detected from Χρήση or hierarchy) ──
