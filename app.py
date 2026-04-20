@@ -883,16 +883,6 @@ else:
     trigger = None
     active_cluster = st.session_state.active_cluster
 
-    # ───── 1. GLOBAL PERIPHERAL FILTER (FOR SELECTION ONLY) ─────
-    target_skus = {
-        "1148597", "1200734", "1986598", "2092896", "1533714", "2064103", "1736727", "1576681", "1974266", 
-        "1981199", "1334843", "1334845", "1566188", "1571956", "1574806", "1585918", "1611810", "1646794", 
-        "1646827", "1663975", "1696998", "1539766", "2084471", "1534473", "1867024", "1600373", "1950837", 
-        "1839249", "1825285", "1841438", "1794589", "1841439", "2057552", "1906214", "2096238", "1992012", 
-        "2076445", "2066078", "2093201", "1795955", "2024266"
-    }
-
-    # ───── 2. SMARTPHONES (NO CHANGES) ─────
     if active_cluster == "Smartphones":
         if df_products.empty: st.stop()
         phones = df_products[(df_products['Level 2']=='Mobiles') & (df_products['Hierarchy']=='Smartphones')]
@@ -902,71 +892,139 @@ else:
             sel = st.sidebar.selectbox("", phones['Title'].unique(), label_visibility="collapsed", key="sm_sel")
             trigger = phones[phones['Title']==sel].iloc[0] if sel else None
 
-    # ───── 3. LAPTOPS (NO CHANGES) ─────
     elif active_cluster == "Laptops":
         if df_laptops.empty:
-            st.sidebar.warning("Sheet 'Laptops' is empty.")
+            st.sidebar.warning("Sheet 'Laptops' is empty or missing.")
         else:
             laptops = df_laptops[(df_laptops['Level 1']=='IT') & (df_laptops['Level 2'].isin(LAPTOP_L2_VALUES))]
-            if not laptops.empty:
+            if laptops.empty:
+                # Fallback: hierarchy-based
+                laptops = df_laptops[df_laptops['Hierarchy'].fillna('').astype(str).str.upper().str.contains('NOTEBOOK|LAPTOP', regex=True, na=False)]
+            if laptops.empty:
+                st.sidebar.warning("No laptop rows found in Laptops sheet.")
+            else:
                 st.sidebar.markdown('<p class="sidebar-section">Επιλέξτε Laptop</p>', unsafe_allow_html=True)
                 sel = st.sidebar.selectbox("", laptops['Title'].unique(), label_visibility="collapsed", key="lt_sel")
                 trigger = laptops[laptops['Title']==sel].iloc[0] if sel else None
 
-    # ───── 4. FLOOR CARE (NO CHANGES) ─────
     elif active_cluster == "Floor Care":
         if df_vacuums.empty:
-            st.sidebar.warning("Sheet 'Vacuums' is empty.")
+            st.sidebar.warning("Sheet 'Vacuums' is empty or missing.")
         else:
             hier_upper = df_vacuums['Hierarchy'].fillna('').astype(str).str.upper().str.strip()
             trigger_hiers_upper = {h.upper().strip() for h in FLOOR_CARE_TRIGGER_HIERARCHIES}
             vacuums = df_vacuums[hier_upper.isin(trigger_hiers_upper)].copy()
-            if not vacuums.empty:
+            if vacuums.empty:
+                # Fallback: all rows in Vacuums sheet
+                vacuums = df_vacuums.copy()
+            if vacuums.empty:
+                st.sidebar.warning("Δεν βρέθηκαν σκούπες.")
+            else:
                 st.sidebar.markdown('<p class="sidebar-section">Επιλέξτε Σκούπα</p>', unsafe_allow_html=True)
                 sel = st.sidebar.selectbox("", vacuums['Title'].unique(), label_visibility="collapsed", key="fc_sel")
                 trigger = vacuums[vacuums['Title']==sel].iloc[0] if sel else None
 
-    # ───── 5. PERIPHERALS & MONITORS (APPLY TEST LIST FILTER HERE) ─────
-    elif active_cluster in ("Mouse", "Keyboard", "Gaming Mouse", "Gaming Keyboard", "Monitors", "Printers", "Webcam", "USB Hub"):
-        combined_it = pd.concat([df_products, df_peripherals], ignore_index=True) if not df_peripherals.empty else df_products
-        
-        # We only filter the 'selection_pool' for the dropdown, leaving global data alone
-        selection_pool = combined_it.copy()
-        selection_pool['Material_Clean'] = selection_pool['Material'].astype(str).str.split('.').str[0].str.strip()
-        selection_pool = selection_pool[selection_pool['Material_Clean'].isin(target_skus)]
-        
-        if active_cluster in ("Mouse", "Keyboard", "Gaming Mouse", "Gaming Keyboard"):
+    elif active_cluster in ("Mouse", "Keyboard", "Gaming Mouse", "Gaming Keyboard"):
+        if df_peripherals.empty:
+            st.sidebar.warning("Sheet 'Peripherals' is empty or missing.")
+        else:
             pconfig = PERIPHERAL_TRIGGERS.get(active_cluster, {})
             p_hiers = {h.upper().strip() for h in pconfig.get('hierarchies', set())}
-            final_pool = selection_pool[selection_pool['Hierarchy'].fillna('').astype(str).str.upper().str.strip().isin(p_hiers)].copy()
-            label = active_cluster
-        
-        elif active_cluster == "Monitors":
-            final_pool = selection_pool[selection_pool['Hierarchy'].fillna('').astype(str).str.upper().str.strip().isin({'TFT MONITOR', 'MONITORS'})].copy()
-            label = "Οθόνη"
+            periph = df_peripherals[df_peripherals['Hierarchy'].fillna('').astype(str).str.upper().str.strip().isin(p_hiers)].copy()
+            
+            # ─────────────────────────────────────────────────────────────
+            # 🧪 TEST LIST: Restrict the dropdown to specific SKUs
+            # Only filters if there are matching SKUs in this cluster's pool
+            # ─────────────────────────────────────────────────────────────
+            target_skus = {
+                "1148597", "1200734", "1986598", "2092896", "1533714", 
+                "2064103", "1736727", "1576681", "1974266", "1981199", 
+                "1334843", "1334845", "1566188", "1571956", "1574806", 
+                "1585918", "1611810", "1646794", "1646827", "1663975",
+                "1696998", "1539766", "2084471", "1534473", "1867024",
+                "1600373", "1950837", "1839249", "1825285", "1841438", 
+                "1794589", "1841439", "2057552", "1906214"
+            }
+            test_filtered = periph[periph['Material'].astype(str).str.strip().isin(target_skus)]
+            if not test_filtered.empty:
+                periph = test_filtered
+            # ─────────────────────────────────────────────────────────────
 
-        elif active_cluster == "Printers":
-            printer_hiers = {'INKJET', 'MULTIFUNCTION INKJET', 'MULTIFUCTION LASER', 'LASER', 'LASER A4 MONO'}
-            final_pool = selection_pool[selection_pool['Hierarchy'].fillna('').astype(str).str.upper().str.strip().isin(printer_hiers)].copy()
-            label = "Εκτυπωτή"
+            if periph.empty:
+                st.sidebar.warning(f"Δεν βρέθηκαν {active_cluster} products.")
+            else:
+                label = {"Mouse": "Ποντίκι", "Keyboard": "Πληκτρολόγιο", "Gaming Mouse": "Gaming Mouse", "Gaming Keyboard": "Gaming Keyboard"}.get(active_cluster, active_cluster)
+                st.sidebar.markdown(f'<p class="sidebar-section">Επιλέξτε {label}</p>', unsafe_allow_html=True)
+                sel = st.sidebar.selectbox("", periph['Title'].unique(), label_visibility="collapsed", key=f"periph_{active_cluster}_sel")
+                trigger = periph[periph['Title']==sel].iloc[0] if sel else None
 
-        elif active_cluster == "Webcam":
-            final_pool = selection_pool[selection_pool['Hierarchy'].fillna('').astype(str).str.upper().str.strip().isin({'PC WEB CAMS', 'WEB CAMS', 'NOTEBOOK WEB CAMS'})].copy()
-            label = "Webcam"
-
-        elif active_cluster == "USB Hub":
-            final_pool = selection_pool[selection_pool['Hierarchy'].fillna('').astype(str).str.upper().str.strip().isin({'USB HUB DEVICES'})].copy()
-            label = "USB Hub"
-
-        if final_pool.empty:
-            st.sidebar.warning(f"No products from the Test List found in {active_cluster}.")
+    elif active_cluster == "Monitors":
+        # Monitor triggers may be in Products sheet or Peripherals
+        combined = pd.concat([df_products, df_peripherals], ignore_index=True) if not df_peripherals.empty else df_products
+        monitors = combined[combined['Hierarchy'].fillna('').astype(str).str.upper().str.strip().isin({'TFT MONITOR', 'MONITORS'})].copy()
+        if monitors.empty:
+            monitors = combined[combined['Level 2'].fillna('').str.strip().str.lower().isin(['monitors', 'οθόνες'])].copy()
+        if monitors.empty:
+            st.sidebar.warning("Δεν βρέθηκαν οθόνες.")
         else:
-            st.sidebar.markdown(f'<p class="sidebar-section">Επιλέξτε {label}</p>', unsafe_allow_html=True)
-            sel = st.sidebar.selectbox("", final_pool['Title'].unique(), label_visibility="collapsed", key=f"sel_{active_cluster}")
-            trigger = final_pool[final_pool['Title']==sel].iloc[0] if sel else None
+            # ─────────────────────────────────────────────────────────────
+            # 🧪 TEST LIST: Restrict the dropdown to specific Monitor SKUs
+            # ─────────────────────────────────────────────────────────────
+            monitor_test_skus = {
+                "2096238", "1992012", "2076445", "2066078",
+                "2093201", "1795955", "2024266"
+            }
+            mon_filtered = monitors[monitors['Material'].astype(str).str.strip().isin(monitor_test_skus)]
+            if not mon_filtered.empty:
+                monitors = mon_filtered
+            # ─────────────────────────────────────────────────────────────
+            if monitors.empty:
+                st.sidebar.warning("Δεν βρέθηκαν test οθόνες.")
+            else:
+                st.sidebar.markdown('<p class="sidebar-section">Επιλέξτε Οθόνη</p>', unsafe_allow_html=True)
+                sel = st.sidebar.selectbox("", monitors['Title'].unique(), label_visibility="collapsed", key="mon_sel")
+                trigger = monitors[monitors['Title']==sel].iloc[0] if sel else None
 
+    elif active_cluster == "Printers":
+        combined = pd.concat([df_products, df_peripherals], ignore_index=True) if not df_peripherals.empty else df_products
+        printer_hiers = {'INKJET', 'MULTIFUNCTION INKJET', 'MULTIFUCTION LASER', 'LASER', 'LASER A4 MONO',
+                         'LASER A4 COLOR', 'LASER A3 MONO', 'LASER A3 COLOR', 'FAX LASER',
+                         'MULTIFUCTION LASER A4 COLOR', 'MULTIFUCTION LASER A4 MONO',
+                         'MULTIFUCTION LASER A3 COLOR', 'MULTIFUCTION LASER A3 MONO'}
+        printers = combined[combined['Hierarchy'].fillna('').astype(str).str.upper().str.strip().isin(printer_hiers)].copy()
+        if printers.empty:
+            printers = combined[combined['Level 2'].fillna('').str.strip().str.lower().isin(['printers', 'εκτυπωτές'])].copy()
+        if printers.empty:
+            st.sidebar.warning("Δεν βρέθηκαν εκτυπωτές.")
+        else:
+            st.sidebar.markdown('<p class="sidebar-section">Επιλέξτε Εκτυπωτή</p>', unsafe_allow_html=True)
+            sel = st.sidebar.selectbox("", printers['Title'].unique(), label_visibility="collapsed", key="print_sel")
+            trigger = printers[printers['Title']==sel].iloc[0] if sel else None
 
-    # ───── Kids Books Cluster ─────
+    elif active_cluster == "Webcam":
+        if df_peripherals.empty:
+            st.sidebar.warning("Sheet 'Peripherals' is empty or missing.")
+        else:
+            webcams = df_peripherals[df_peripherals['Hierarchy'].fillna('').astype(str).str.upper().str.strip().isin({'PC WEB CAMS', 'WEB CAMS', 'NOTEBOOK WEB CAMS'})].copy()
+            if webcams.empty:
+                st.sidebar.warning("Δεν βρέθηκαν webcams.")
+            else:
+                st.sidebar.markdown('<p class="sidebar-section">Επιλέξτε Webcam</p>', unsafe_allow_html=True)
+                sel = st.sidebar.selectbox("", webcams['Title'].unique(), label_visibility="collapsed", key="wc_sel")
+                trigger = webcams[webcams['Title']==sel].iloc[0] if sel else None
+
+    elif active_cluster == "USB Hub":
+        if df_peripherals.empty:
+            st.sidebar.warning("Sheet 'Peripherals' is empty or missing.")
+        else:
+            hubs = df_peripherals[df_peripherals['Hierarchy'].fillna('').astype(str).str.upper().str.strip().isin({'USB HUB DEVICES'})].copy()
+            if hubs.empty:
+                st.sidebar.warning("Δεν βρέθηκαν USB Hubs.")
+            else:
+                st.sidebar.markdown('<p class="sidebar-section">Επιλέξτε USB Hub</p>', unsafe_allow_html=True)
+                sel = st.sidebar.selectbox("", hubs['Title'].unique(), label_visibility="collapsed", key="hub_sel")
+                trigger = hubs[hubs['Title']==sel].iloc[0] if sel else None
+
     elif active_cluster == "Kids Books":
         if df_books.empty: st.stop()
         kids_books = df_books[(df_books['Level 1'] == 'Books') & (df_books['Level 2'].isin(KIDS_BOOKS_LEVEL2))]
