@@ -3603,7 +3603,7 @@ MONITOR_GAMING_SLOTS = [
     ("DisplayPort Cable",   ['DISPLAY-PORT CABLES'],           {'cable_port_match': 'DisplayPort'}),
     ("HDMI Cable",          ['GAMING HDMI CABLES', 'MONITOR CABLES'], {'cable_port_match': 'HDMI'}),
     ("Monitor Arm",         ['ΒΑΣΕΙΣ ΓΡΑΦΕΙΟΥ'],               {'vesa_match': True, 'title_hide': ['Wall Mount']}),
-    ("LED Strip",           ['ΕΞΥΠΝΟΣ ΦΩΤΙΣΜΟΣ'],            {'title_boost': ['Strip', 'LED', 'Bias', 'Backlight']}),
+    ("LED Strip",           ['ΕΞΥΠΝΟΣ ΦΩΤΙΣΜΟΣ'],            {'title_boost': ['Strip', 'LED', 'Bias', 'Backlight'], 'usage_hide': ['Εξωτερική', 'Εξωτερικού χώρου', 'TV']}),
     ("Gaming Mouse",        ['GAMING MOUSE'],                 {'brand_match': True}),
     ("Gaming Keyboard",     ['GAMING KEYBOARDS'],             {'brand_match': True}),
     ("Gaming Mousepad",     ['GAMING MOUSE PADS'],            {'brand_match': True}),
@@ -3618,7 +3618,7 @@ MONITOR_PRO_SLOTS = [
     ("Wireless Keyboard",   ['KEYBOARDS WIRELESS'],           {'brand_match': True, 'title_hide': ['Gaming', 'RGB']}),
     ("Webcam",              ['PC WEB CAMS'],                  {'resolution_match': True}),
     ("Monitor Arm",         ['ΒΑΣΕΙΣ ΓΡΑΦΕΙΟΥ'],               {'vesa_match': True, 'title_boost': ['Heavy', 'UltraWide']}),
-    ("ScreenBar",           ['ΕΞΥΠΝΟΣ ΦΩΤΙΣΜΟΣ'],            {'title_boost': ['ScreenBar', 'Monitor Light', 'Desk', 'Γραφείου']}),
+    ("ScreenBar",           ['ΕΞΥΠΝΟΣ ΦΩΤΙΣΜΟΣ'],            {'title_boost': ['ScreenBar', 'Monitor Light', 'Desk', 'Γραφείου'], 'usage_hide': ['Εξωτερική', 'Εξωτερικού χώρου', 'TV']}),
     ("USB-C Hub",           ['USB HUB DEVICES', 'DOCKING STATIONS LAPTOP'], {'title_boost': ['USB-C', 'Thunderbolt', 'Dock']}),
     ("PC Speakers",         ['PC SPEAKERS 2.0'],              {}),
     ("Screen Cleaner",      ['CLEANING PRODUCTS'],            {}),
@@ -3627,15 +3627,15 @@ MONITOR_PRO_SLOTS = [
 
 MONITOR_MAINSTREAM_SLOTS = [
     ("HDMI Cable",          ['MONITOR CABLES'],               {'cable_port_match': 'HDMI', 'cable_length_boost': True}),
-    ("Mouse+KB Combo",      ['KEYBOARDS WIRELESS'], {}),
+    ("Mouse+KB Combo",      ['KEYBOARDS WIRELESS'],           {'title_hide': ['Gaming', 'RGB']}),
     ("Wireless Mouse",      ['MOUSE WIRELESS'],               {'title_hide': ['Gaming', 'RGB']}),
-    ("Mouse Pad",           ['MOUSE PADS'],                   {'title_boost': ['Gel', 'Wrist', 'Ergonomic'], 'title_hide': ['XXL', 'Extended']}),
+    ("Mouse Pad",           ['MOUSE PADS'],                   {'title_boost': ['Gel', 'Wrist', 'Ergonomic'], 'title_hide': ['XXL', 'Extended', 'Gaming'], 'usage_hide': ['Gaming']}),
     ("Monitor Riser",       ['ΒΑΣΕΙΣ ΓΡΑΦΕΙΟΥ'],               {'title_boost': ['Riser', 'Stand', 'Drawer', 'Organizer'], 'title_hide': ['Wall Mount', 'Gas Spring', 'VESA']}),
     ("PC Speakers",         ['PC SPEAKERS 2.0'],              {}),
     ("Webcam",              ['PC WEB CAMS'],                  {}),
     ("USB Hub",             ['USB HUB DEVICES'],              {}),
     ("Screen Cleaner",      ['CLEANING PRODUCTS'],            {}),
-    ("USB Cable",           ['USB CABLES'],                   {}),
+    ("Desk Lamp",           ['ΕΞΥΠΝΟΣ ΦΩΤΙΣΜΟΣ'],            {'title_boost': ['Desk', 'Γραφείου', 'Table', 'Επιτραπέζιο', 'Φωτιστικό', 'ScreenBar', 'Monitor Light'], 'title_hide': ['Ceiling', 'Bulb', 'Strip', 'Οροφής', 'Λάμπα', 'E27', 'E14', 'Ταινία', 'Λεντοταινία'], 'usage_hide': ['Gaming', 'Εξωτερική', 'Εξωτερικού χώρου', 'TV']}),
 ]
 
 # ── Printer sub-personas (Inkjet vs Laser) ──
@@ -3813,16 +3813,38 @@ def run_peripherals_engine(trigger, df_products, df_history, cluster_key):
 
     
     # ── Determine slot config ──
+    monitor_persona = None  # Used by usage_filter flag
     if cluster_key == "Monitors":
-        if 'gaming' in tusage:
+        # Primary: Χρήση column
+        is_gaming_monitor = 'gaming' in tusage
+        is_pro_monitor = 'business' in tusage or 'professional' in tusage or 'επαγγελματικ' in tusage
+        
+        # Fallback: if Χρήση is empty, detect from hardware signals
+        if not is_gaming_monitor and not is_pro_monitor and tusage in ('', 'nan', 'n/a'):
+            textra = str(trigger.get('Extra Χαρακτηριστικά', '')).lower()
+            textra2 = str(trigger.get('Πρόσθετα χαρακτηριστικά', '')).lower()
+            all_signals = f"{textra} {textra2} {_tt_lower} {thier.lower()}"
+            gaming_keywords = ['gaming', 'freesync', 'g-sync', 'gsync', 'adaptive sync',
+                               '144hz', '165hz', '240hz', '360hz', '500hz']
+            is_gaming_monitor = any(kw in all_signals for kw in gaming_keywords)
+            
+            # Hardware fallback: DisplayPort → strong gaming signal
+            if not is_gaming_monitor and has_dp:
+                is_gaming_monitor = True
+                diag.append(("0a. Gaming Fallback", "✅", "Has DisplayPort → Gaming"))
+            elif is_gaming_monitor:
+                diag.append(("0a. Gaming Fallback", "✅", "Detected from Extra/Πρόσθετα/Title/Hierarchy"))
+        
+        if is_gaming_monitor:
             slots = MONITOR_GAMING_SLOTS
             persona = "Gaming"
-        elif 'business' in tusage or 'professional' in tusage or 'επαγγελματικ' in tusage:
+        elif is_pro_monitor:
             slots = MONITOR_PRO_SLOTS
             persona = "Professional"
         else:
             slots = MONITOR_MAINSTREAM_SLOTS
             persona = "Mainstream"
+        monitor_persona = persona
         diag.append(("0. Monitor Persona", persona, f"Usage='{tusage}'"))
         port_info = f"HDMI={'✅'+t_hdmi_raw if has_hdmi else '❌'}, DP={'✅'+t_dp_raw if has_dp else '❌'}, USB={'✅'+t_usb_raw if has_usb else '❌'}"
         diag.append(("0b. Monitor Ports", port_info, f"Res={tres}"))
@@ -4067,6 +4089,14 @@ def run_peripherals_engine(trigger, df_products, df_history, cluster_key):
             else:
                 notes.append(f"⚠ Eidos filter ({pat}) would empty pool, skipped")
 
+        # ── Χρήση (Usage) filter — hide/penalize products by their usage category ──
+        if flags.get('usage_hide') and 'Χρήση' in pool.columns:
+            hide_usages = flags['usage_hide']
+            pat_usage = '|'.join(re.escape(u) for u in hide_usages)
+            m_hide = pool['Χρήση'].fillna('').str.contains(pat_usage, case=False, regex=True, na=False)
+            if m_hide.any():
+                pool.loc[m_hide, 'Final_Score'] -= 100000
+                notes.append(f"Usage hide ({', '.join(hide_usages)}): penalized {m_hide.sum()}")
                 
         # ── Wrist rest / XXL filters ──
         if flags.get('wrist_rest_only'):
