@@ -4823,12 +4823,13 @@ if not recs.empty:
             </button>
         </div>"""
 
+    
     if active_cluster == "Smartphones":
-        header_text = "Μαζί με αυτό αγοράζουν"
+        header_text = "Μαζί με αυτό, οι<br>περισσότεροι αγοράζουν"
     elif active_cluster == "Laptops":
-        header_text = "Ολοκλήρωσε το setup σου"
+        header_text = "Ολοκλήρωσε το<br>setup σου"
     else:
-        header_text = "Συνέχισε την περιπέτεια"
+        header_text = "Συνέχισε την<br>περιπέτεια"
 
     css="""
     *{margin:0;padding:0;box-sizing:border-box}
@@ -4858,6 +4859,38 @@ if not recs.empty:
     .nav-right{right:10px}
     .nav-left::after{content:'';width:10px;height:10px;border-top:2px solid #555;border-left:2px solid #555;transform:rotate(-45deg);margin-left:4px}
     .nav-right::after{content:'';width:10px;height:10px;border-top:2px solid #555;border-right:2px solid #555;transform:rotate(45deg);margin-right:4px}
+
+    /* 📱 MOBILE STYLES */
+    @media (max-width: 768px) {
+        .desktop-wrapper {
+            padding: 20px 15px;
+            background-color: #f6f6f6; /* Matched the subtle grey from your image */
+        }
+        .desktop-header {
+            font-size: 20px;
+            justify-content: center;
+            text-align: center;
+            margin-bottom: 20px;
+            line-height: 1.3;
+        }
+        .desktop-header span {
+            display: none; /* Hide the vertical orange bar */
+        }
+        .nav-btn {
+            display: none !important; /* Remove navigation arrows entirely */
+        }
+        .car {
+            scroll-snap-type: x mandatory; /* Native smooth swiping */
+            gap: 12px;
+            padding: 5px 0 15px 0;
+        }
+        .pc {
+            width: 60%; /* Ensures the next item peeks onto the screen */
+            min-width: 60%;
+            max-width: 60%;
+            scroll-snap-align: center; /* Snaps the card nicely to the center */
+        }
+    }
     """
 
     dp=f"""<!DOCTYPE html><html><head><meta charset="utf-8"><style>{css}</style></head>
@@ -4875,11 +4908,13 @@ if not recs.empty:
         function scrollL(){{container.scrollBy({{left:-405,behavior:'smooth'}});}}
         function scrollR(){{container.scrollBy({{left:405,behavior:'smooth'}});}}
         container.addEventListener('scroll',()=>{{
+            // Arrow logic still runs but the CSS hides them completely on mobile
             btnLeft.style.opacity=container.scrollLeft>5?'1':'0';
             btnLeft.style.pointerEvents=container.scrollLeft>5?'auto':'none';
             btnRight.style.opacity=container.scrollLeft+container.clientWidth>=container.scrollWidth-2?'0':'1';
             btnRight.style.pointerEvents=container.scrollLeft+container.clientWidth>=container.scrollWidth-2?'none':'auto';
         }});
+        // Trigger once to hide the left arrow on load
         container.dispatchEvent(new Event('scroll'));
     </script>
     </body></html>"""
