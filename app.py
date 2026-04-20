@@ -196,9 +196,10 @@ FLOOR_CARE_MARKETING_COPY = {
 
 # ── Peripheral trigger detection (used by product selector AND engine) ──
 PERIPHERAL_TRIGGERS = {
-    "Mouse":        {"hierarchies": {"MOUSE WIRELESS", "MOUSE WIRED", "APPLE ORIGINAL WIRELESS MOUSE"}},
-    "Keyboard":     {"hierarchies": {"KEYBOARDS WIRELESS", "KEYBOARDS WIRED", "APPLE ORIGINAL WIRELESS KEYBOARD", "GAMING KEYBOARDS"}},
-    "Gaming Mouse": {"hierarchies": {"GAMING MOUSE"}},
+    "Mouse":           {"hierarchies": {"MOUSE WIRELESS", "MOUSE WIRED", "APPLE ORIGINAL WIRELESS MOUSE"}},
+    "Keyboard":        {"hierarchies": {"KEYBOARDS WIRELESS", "KEYBOARDS WIRED", "APPLE ORIGINAL WIRELESS KEYBOARD"}},
+    "Gaming Mouse":    {"hierarchies": {"GAMING MOUSE"}},
+    "Gaming Keyboard": {"hierarchies": {"GAMING KEYBOARDS"}},
 }
 
 
@@ -656,6 +657,8 @@ L2_CHILDREN = {
                    "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='2' y='6' width='20' height='12' rx='2'/%3E%3Cline x1='6' y1='10' x2='6.01' y2='10'/%3E%3Cline x1='10' y1='10' x2='10.01' y2='10'/%3E%3Cline x1='14' y1='10' x2='14.01' y2='10'/%3E%3Cline x1='18' y1='10' x2='18.01' y2='10'/%3E%3Cline x1='8' y1='14' x2='16' y2='14'/%3E%3C/svg%3E"},
                   {"key": "Gaming Mouse", "label": "Gaming\nMouse",
                    "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='6' y='3' width='12' height='18' rx='6'/%3E%3Cline x1='12' y1='7' x2='12' y2='11'/%3E%3Cpath d='M6 12h12'/%3E%3C/svg%3E"},
+                  {"key": "Gaming Keyboard", "label": "Gaming\nKeyboard",
+                   "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='2' y='6' width='20' height='12' rx='2'/%3E%3Cline x1='6' y1='10' x2='6.01' y2='10'/%3E%3Cline x1='10' y1='10' x2='10.01' y2='10'/%3E%3Cline x1='14' y1='10' x2='14.01' y2='10'/%3E%3Cline x1='18' y1='10' x2='18.01' y2='10'/%3E%3Cpath d='M6 12h12'/%3E%3Cline x1='8' y1='14' x2='16' y2='14'/%3E%3C/svg%3E"},
                   {"key": "Monitors",     "label": "Οθόνες",
                    "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='2' y='3' width='20' height='14' rx='2'/%3E%3Cline x1='8' y1='21' x2='16' y2='21'/%3E%3Cline x1='12' y1='17' x2='12' y2='21'/%3E%3C/svg%3E"},
                   {"key": "Printers",     "label": "Εκτυπωτές",
@@ -921,7 +924,7 @@ else:
                 sel = st.sidebar.selectbox("", vacuums['Title'].unique(), label_visibility="collapsed", key="fc_sel")
                 trigger = vacuums[vacuums['Title']==sel].iloc[0] if sel else None
 
-    elif active_cluster in ("Mouse", "Keyboard", "Gaming Mouse"):
+    elif active_cluster in ("Mouse", "Keyboard", "Gaming Mouse", "Gaming Keyboard"):
         if df_peripherals.empty:
             st.sidebar.warning("Sheet 'Peripherals' is empty or missing.")
         else:
@@ -932,20 +935,23 @@ else:
             # ─────────────────────────────────────────────────────────────
             # 🧪 TEST LIST: Restrict the dropdown to specific SKUs
             # ─────────────────────────────────────────────────────────────
-            if active_cluster in ("Mouse", "Gaming Mouse"):
+            if active_cluster in ("Mouse", "Keyboard", "Gaming Mouse", "Gaming Keyboard"):
                 target_skus = {
                     "1148597", "1200734", "1986598", "2092896", "1533714", 
                     "2064103", "1736727", "1576681", "1974266", "1981199", 
                     "1334843", "1334845", "1566188", "1571956", "1574806", 
-                    "1585918", "1611810", "1646794", "1646827", "1663975"
-                }
+                    "1585918", "1611810", "1646794", "1646827", "1663975",
+                    "1696998", "1539766", "2084471", "1534473", "1867024", # Added new SKUs
+                    "1600373", "1950837", "1839249", "1825285", "1841438", 
+                    "1794589", "1841439", "2057552", "1906214"
+                    }
                 periph = periph[periph['Material'].astype(str).str.strip().isin(target_skus)]
             # ─────────────────────────────────────────────────────────────
 
             if periph.empty:
                 st.sidebar.warning(f"Δεν βρέθηκαν {active_cluster} products.")
             else:
-                label = {"Mouse": "Ποντίκι", "Keyboard": "Πληκτρολόγιο", "Gaming Mouse": "Gaming Mouse"}.get(active_cluster, active_cluster)
+                label = {"Mouse": "Ποντίκι", "Keyboard": "Πληκτρολόγιο", "Gaming Mouse": "Gaming Mouse", "Gaming Keyboard": "Gaming Keyboard"}.get(active_cluster, active_cluster)
                 st.sidebar.markdown(f'<p class="sidebar-section">Επιλέξτε {label}</p>', unsafe_allow_html=True)
                 sel = st.sidebar.selectbox("", periph['Title'].unique(), label_visibility="collapsed", key=f"periph_{active_cluster}_sel")
                 trigger = periph[periph['Title']==sel].iloc[0] if sel else None
@@ -3495,9 +3501,10 @@ def run_floor_care_engine(trigger, df_products, df_history):
 
 # ── Trigger detection ──
 PERIPHERAL_TRIGGERS = {
-    "Mouse":        {"hierarchies": {"MOUSE WIRELESS", "MOUSE WIRED", "APPLE ORIGINAL WIRELESS MOUSE"}},
-    "Keyboard":     {"hierarchies": {"KEYBOARDS WIRELESS", "KEYBOARDS WIRED", "APPLE ORIGINAL WIRELESS KEYBOARD", "GAMING KEYBOARDS"}},
-    "Gaming Mouse": {"hierarchies": {"GAMING MOUSE"}},
+    "Mouse":           {"hierarchies": {"MOUSE WIRELESS", "MOUSE WIRED", "APPLE ORIGINAL WIRELESS MOUSE"}},
+    "Keyboard":        {"hierarchies": {"KEYBOARDS WIRELESS", "KEYBOARDS WIRED", "APPLE ORIGINAL WIRELESS KEYBOARD"}},
+    "Gaming Mouse":    {"hierarchies": {"GAMING MOUSE"}},
+    "Gaming Keyboard": {"hierarchies": {"GAMING KEYBOARDS"}},
 }
 
 # ── Slot configs per cluster ──
@@ -3547,11 +3554,11 @@ KEYBOARD_SLOTS = [
     ("Batteries",           ['ΑΛΚΑΛΙΚΕΣ'],                    {'skip_if': 'no_battery', 'fallback_hier': ['USB HUB DEVICES']}),
     ("Cleaning",            ['CLEANING PRODUCTS'],            {}),
     ("PC Speakers",         ['PC SPEAKERS 2.0', 'PC SPEAKERS 1'], {}),
-    ("PC Headset",          ['PC HEADSET/MICROPHONE', 'OVERHEAD', 'GAMING AUDIO'], {}),
-    ("Headset Stand",       ['GAMING HEADSET STANDS', 'PORTABLE ACCESSORIES'], {}),
-    ("Cleaning 2",          ['CLEANING PRODUCTS'],            {}),
-    ("Smart Lighting",      ['ΕΞΥΠΝΟΣ ΦΩΤΙΣΜΟΣ'],            {'title_boost': ['Desk', 'Γραφείου', 'Table', 'Επιτραπέζιο', 'Φωτιστικό'], 'title_hide': ['Ceiling', 'Bulb', 'Strip', 'Οροφής', 'Λάμπα', 'E27', 'E14', 'Ταινία', 'Λεντοταινία']}),
+    ("PC Headset",          ['PC HEADSET/MICROPHONE', 'OVERHEAD'], {}),
+    ("Desk Lamp",           ['ΕΞΥΠΝΟΣ ΦΩΤΙΣΜΟΣ'],            {'title_boost': ['Desk', 'Γραφείου', 'Table', 'Επιτραπέζιο', 'Φωτιστικό'], 'title_hide': ['Ceiling', 'Bulb', 'Strip', 'Οροφής', 'Λάμπα', 'E27', 'E14', 'Ταινία', 'Λεντοταινία']}),
+    ("Wrist Rest",          ['MOUSE PADS'],                   {'wrist_rest_only': True}),
     ("Mouse 2",             ['MOUSE WIRELESS', 'MOUSE WIRED', 'APPLE ORIGINAL WIRELESS MOUSE'], {'connectivity_mirror': True, 'brand_match': True, 'apple_force': 'APPLE ORIGINAL WIRELESS MOUSE'}),
+    ("Keyboard 2",          ['KEYBOARDS WIRELESS', 'KEYBOARDS WIRED'], {'connectivity_mirror': True, 'brand_match': True, 'apple_force': 'APPLE ORIGINAL WIRELESS KEYBOARD'}),
 ]
 
 GAMING_MOUSE_SLOTS = [
@@ -3559,6 +3566,18 @@ GAMING_MOUSE_SLOTS = [
     ("Gaming Keyboard",     ['GAMING KEYBOARDS'],             {'brand_match': True, 'rgb_match': True, 'button_kb_size': True, 'connectivity_mirror': True}),
     ("Batteries/USB Hub",   ['ΑΛΚΑΛΙΚΕΣ'],                    {'skip_if': 'no_battery', 'fallback_hier': ['USB HUB DEVICES']}),
     ("Gaming Headset",      ['GAMING AUDIO'],                 {'brand_match': True}),
+    ("Αξεσουάρ Streaming",  ['STREAMING ACCESSORIES'],        {'eidos_include': ['Capture Card', 'Gaming Αξεσουάρ', 'Green Screen', 'LED ring light', 'Mic Arm', 'Prompter', 'RGB Controller', 'Ring Light', 'Selfie Stick', 'Stream Controller', 'Stream Deck', 'Streaming Kit', 'USB Hub', 'Web Camera', 'Άλλο', 'Ασύρματο μικρόφωνο για vlogging', 'Βάση Στήριξης', 'Βραχίονας μικροφώνου', 'Επαγγελματικά Μικρόφωνα', 'Επιτραπέζιο', 'Ηχοαπορροφητικά Πάνελ', 'Κάρτα καταγραφής βίντεο', 'Κάρτα καταγραφής βίντεο (Capture Card)', 'Μικρόφωνο', 'Μικρόφωνο streaming', 'Τηλεπρομπτέρ με ενσωματωμένη οθόνη', 'Φωτισμός', 'Φωτιστικό']}),
+    ("Αξεσουάρ Streaming 2", ['STREAMING ACCESSORIES'],       {'eidos_include': ['Capture Card', 'Gaming Αξεσουάρ', 'Green Screen', 'LED ring light', 'Mic Arm', 'Prompter', 'RGB Controller', 'Ring Light', 'Selfie Stick', 'Stream Controller', 'Stream Deck', 'Streaming Kit', 'USB Hub', 'Web Camera', 'Άλλο', 'Ασύρματο μικρόφωνο για vlogging', 'Βάση Στήριξης', 'Βραχίονας μικροφώνου', 'Επαγγελματικά Μικρόφωνα', 'Επιτραπέζιο', 'Ηχοαπορροφητικά Πάνελ', 'Κάρτα καταγραφής βίντεο', 'Κάρτα καταγραφής βίντεο (Capture Card)', 'Μικρόφωνο', 'Μικρόφωνο streaming', 'Τηλεπρομπτέρ με ενσωματωμένη οθόνη', 'Φωτισμός', 'Φωτιστικό']}),
+    ("Headset Stand",       ['GAMING HEADSET STANDS', 'PORTABLE ACCESSORIES'], {}),
+    ("Cleaning Product",    ['CLEANING PRODUCTS'],            {}),
+    ("Smart Lighting",      ['ΕΞΥΠΝΟΣ ΦΩΤΙΣΜΟΣ'],            {'title_hide': ['Ceiling', 'Bulb', 'Strip', 'Οροφής', 'Λάμπα', 'E27', 'E14', 'Ταινία', 'Λεντοταινία']}),
+]
+
+GAMING_KEYBOARD_SLOTS = [
+    ("Gaming Mousepad",     ['GAMING MOUSE PADS'],            {'brand_match': True}),
+    ("Gaming Mouse",        ['GAMING MOUSE'],                 {'brand_match': True, 'connectivity_mirror': True}),
+    ("Batteries/USB Hub",   ['ΑΛΚΑΛΙΚΕΣ'],                    {'skip_if': 'no_battery', 'fallback_hier': ['USB HUB DEVICES']}),
+    ("Gaming Headset",      ['GAMING AUDIO', 'OVERHEAD'],     {'brand_match': True}),
     ("Αξεσουάρ Streaming",  ['STREAMING ACCESSORIES'],        {'eidos_include': ['Capture Card', 'Gaming Αξεσουάρ', 'Green Screen', 'LED ring light', 'Mic Arm', 'Prompter', 'RGB Controller', 'Ring Light', 'Selfie Stick', 'Stream Controller', 'Stream Deck', 'Streaming Kit', 'USB Hub', 'Web Camera', 'Άλλο', 'Ασύρματο μικρόφωνο για vlogging', 'Βάση Στήριξης', 'Βραχίονας μικροφώνου', 'Επαγγελματικά Μικρόφωνα', 'Επιτραπέζιο', 'Ηχοαπορροφητικά Πάνελ', 'Κάρτα καταγραφής βίντεο', 'Κάρτα καταγραφής βίντεο (Capture Card)', 'Μικρόφωνο', 'Μικρόφωνο streaming', 'Τηλεπρομπτέρ με ενσωματωμένη οθόνη', 'Φωτισμός', 'Φωτιστικό']}),
     ("Αξεσουάρ Streaming 2", ['STREAMING ACCESSORIES'],       {'eidos_include': ['Capture Card', 'Gaming Αξεσουάρ', 'Green Screen', 'LED ring light', 'Mic Arm', 'Prompter', 'RGB Controller', 'Ring Light', 'Selfie Stick', 'Stream Controller', 'Stream Deck', 'Streaming Kit', 'USB Hub', 'Web Camera', 'Άλλο', 'Ασύρματο μικρόφωνο για vlogging', 'Βάση Στήριξης', 'Βραχίονας μικροφώνου', 'Επαγγελματικά Μικρόφωνα', 'Επιτραπέζιο', 'Ηχοαπορροφητικά Πάνελ', 'Κάρτα καταγραφής βίντεο', 'Κάρτα καταγραφής βίντεο (Capture Card)', 'Μικρόφωνο', 'Μικρόφωνο streaming', 'Τηλεπρομπτέρ με ενσωματωμένη οθόνη', 'Φωτισμός', 'Φωτιστικό']}),
     ("Headset Stand",       ['GAMING HEADSET STANDS', 'PORTABLE ACCESSORIES'], {}),
@@ -3663,13 +3682,14 @@ USB_HUB_SLOTS = [
 
 # Map cluster key → slot list
 PERIPHERAL_CLUSTER_SLOTS = {
-    "Mouse":          MOUSE_SLOTS,
-    "Keyboard":       KEYBOARD_SLOTS,
-    "Gaming Mouse":   GAMING_MOUSE_SLOTS,
-    "Monitors":       None,  # Detected dynamically from Χρήση
-    "Printers":       None,  # Detected dynamically from Hierarchy
-    "Webcam":         WEBCAM_SLOTS,
-    "USB Hub":        USB_HUB_SLOTS,
+    "Mouse":            MOUSE_SLOTS,
+    "Keyboard":         KEYBOARD_SLOTS,
+    "Gaming Mouse":     GAMING_MOUSE_SLOTS,
+    "Gaming Keyboard":  GAMING_KEYBOARD_SLOTS,
+    "Monitors":         None,  # Detected dynamically from Χρήση
+    "Printers":         None,  # Detected dynamically from Hierarchy
+    "Webcam":           WEBCAM_SLOTS,
+    "USB Hub":          USB_HUB_SLOTS,
 }
 
 def get_peripheral_budget(anchor_price, category):
@@ -3803,7 +3823,7 @@ def run_peripherals_engine(trigger, df_products, df_history, cluster_key):
         c['Sales_Tiebreaker'] = 0
 
     # Apple ban for non-Apple
-    if not is_apple and cluster_key in ("Mouse", "Keyboard", "Gaming Mouse"):
+    if not is_apple and cluster_key in ("Mouse", "Keyboard", "Gaming Mouse", "Gaming Keyboard"):
         b4 = len(c)
         c = c[c['Κατασκευαστής'].fillna('').astype(str).str.strip().str.upper() != 'APPLE']
         if b4 > len(c):
@@ -4221,7 +4241,7 @@ elif active_cluster == "Floor Care":
     combined_pool = pd.concat([df_products, df_vacuums], ignore_index=True)
     recs, diag, slot_notes, full_candidates = run_floor_care_engine(trigger, combined_pool, df_history)
     slot_diag = []
-elif active_cluster in ("Mouse", "Keyboard", "Gaming Mouse"):
+elif active_cluster in ("Mouse", "Keyboard", "Gaming Mouse", "Gaming Keyboard"):
     recs, diag, slot_notes, full_candidates = run_peripherals_engine(trigger, df_peripherals, df_history, active_cluster)
     slot_diag = []
 elif active_cluster in ("Monitors", "Printers", "Webcam", "USB Hub"):
