@@ -948,7 +948,10 @@ else:
                     "2096238", "1992012", "2076445", "2066078", "2093201", 
                     "1795955", "2024266"
                 }
-                periph = periph[periph['Material'].astype(str).str.strip().isin(target_skus)]
+                
+                # FIX: Split by '.' and take the first part to drop any trailing .0 floats from Pandas
+                clean_material = periph['Material'].astype(str).str.split('.').str[0].str.strip()
+                periph = periph[clean_material.isin(target_skus)]
             # ─────────────────────────────────────────────────────────────
 
             if periph.empty:
