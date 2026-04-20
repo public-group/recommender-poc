@@ -1024,9 +1024,6 @@ else:
 
     # ───── Kids Books Cluster ─────
     elif active_cluster == "Kids Books":
-        # ... (keep your existing Kids Books logic here)
-
-    elif active_cluster == "Kids Books":
         if df_books.empty: st.stop()
         kids_books = df_books[(df_books['Level 1'] == 'Books') & (df_books['Level 2'].isin(KIDS_BOOKS_LEVEL2))]
         if kids_books.empty: kids_books = df_books[df_books['Level 1'] == 'Books']
