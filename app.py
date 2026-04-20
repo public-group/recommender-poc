@@ -570,6 +570,11 @@ def load_all_data():
         dper = pd.read_excel(excel_file, sheet_name='Peripherals')
         dper.columns = dper.columns.str.strip()
     else: dper = pd.DataFrame()
+
+    if 'Stationery' in available_sheets:
+        dstat = pd.read_excel(excel_file, sheet_name='Stationery')
+        dstat.columns = dstat.columns.str.strip()
+    else: dstat = pd.DataFrame()
     
     if not dp.empty:
         parts = [dp[c].fillna('').astype(str).str.strip() for c in COMPAT_COLS if c in dp.columns]
@@ -586,10 +591,10 @@ def load_all_data():
     if not db.empty and CC not in db.columns:
         db[CC] = ''
     
-    return dp, dh, ds, db, dl, dv, dper, available_sheets
+    return dp, dh, ds, db, dl, dv, dper, dstat, available_sheets
 
 try:
-    df_products, df_history, df_slots, df_books, df_laptops, df_vacuums, df_peripherals, sheets_loaded = load_all_data()
+    df_products, df_history, df_slots, df_books, df_laptops, df_vacuums, df_peripherals, df_stationery, sheets_loaded = load_all_data()
     compat_cols_found = [c for c in COMPAT_COLS if c in df_products.columns]
 except Exception as e:
     st.error(f"🚨 Error loading data: {e}")
@@ -638,6 +643,11 @@ L1_CATEGORIES = [
         "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='2' y='4' width='20' height='12' rx='1' ry='1'/%3E%3Cline x1='6' y1='20' x2='18' y2='20'/%3E%3Cline x1='12' y1='16' x2='12' y2='20'/%3E%3C/svg%3E",
     },
     {
+        "key": "Stationery",
+        "label": "Χαρτικά\n& Ζωγραφική",
+        "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z'/%3E%3C/svg%3E",
+    },
+    {
         "key": "SDA",
         "label": "Μικρές\nΣυσκευές",
         "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 2v8l4-2'/%3E%3Cpath d='M12 10l-4-2'/%3E%3Ccircle cx='12' cy='18' r='4'/%3E%3Cline x1='12' y1='10' x2='12' y2='14'/%3E%3C/svg%3E",
@@ -667,6 +677,24 @@ L2_CHILDREN = {
                    "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='10' r='7'/%3E%3Ccircle cx='12' cy='10' r='3'/%3E%3Cline x1='12' y1='17' x2='12' y2='21'/%3E%3Cline x1='8' y1='21' x2='16' y2='21'/%3E%3C/svg%3E"},
                   {"key": "USB Hub",      "label": "USB Hub",
                    "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='4' y='8' width='16' height='8' rx='2'/%3E%3Cline x1='8' y1='12' x2='8.01' y2='12'/%3E%3Cline x1='12' y1='12' x2='12.01' y2='12'/%3E%3Cline x1='16' y1='12' x2='16.01' y2='12'/%3E%3C/svg%3E"},
+                 ],
+    "Stationery": [
+                  {"key": "Pens",           "label": "Στυλό",        "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5'%3E%3Cpath d='M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z'/%3E%3C/svg%3E"},
+                  {"key": "Pencils",        "label": "Μολύβια",     "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5'%3E%3Cpath d='M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z'/%3E%3C/svg%3E"},
+                  {"key": "Markers",        "label": "Μαρκαδόροι",  "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5'%3E%3Cpath d='M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z'/%3E%3C/svg%3E"},
+                  {"key": "Sharpeners",     "label": "Ξύστρες",     "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5'%3E%3Cpath d='M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z'/%3E%3C/svg%3E"},
+                  {"key": "Erasers",        "label": "Γόμες",       "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5'%3E%3Cpath d='M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z'/%3E%3C/svg%3E"},
+                  {"key": "Correction",     "label": "Διορθωτικά",  "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5'%3E%3Cpath d='M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z'/%3E%3C/svg%3E"},
+                  {"key": "Pencil Cases",   "label": "Κασετίνες",   "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5'%3E%3Cpath d='M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z'/%3E%3C/svg%3E"},
+                  {"key": "Geometric Tools","label": "Γεωμετρικά",  "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5'%3E%3Cpath d='M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z'/%3E%3C/svg%3E"},
+                  {"key": "Stationery Sets","label": "Σετ\nΧαρτικών","icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5'%3E%3Cpath d='M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z'/%3E%3C/svg%3E"},
+                  {"key": "Paints",         "label": "Χρώματα",     "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5'%3E%3Cpath d='M18.37 2.63a2 2 0 0 1 3 3L14 13l-4 1 1-4 7.37-7.37z'/%3E%3Cpath d='M9 14.5a4 4 0 0 1-4 4H3v-2a4 4 0 0 1 4-4'/%3E%3C/svg%3E"},
+                  {"key": "Brushes",        "label": "Πινέλα",      "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5'%3E%3Cpath d='M18.37 2.63a2 2 0 0 1 3 3L14 13l-4 1 1-4 7.37-7.37z'/%3E%3Cpath d='M9 14.5a4 4 0 0 1-4 4H3v-2a4 4 0 0 1 4-4'/%3E%3C/svg%3E"},
+                  {"key": "Colored Pencils Art","label": "Ξυλομπογιές", "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5'%3E%3Cpath d='M18.37 2.63a2 2 0 0 1 3 3L14 13l-4 1 1-4 7.37-7.37z'/%3E%3Cpath d='M9 14.5a4 4 0 0 1-4 4H3v-2a4 4 0 0 1 4-4'/%3E%3C/svg%3E"},
+                  {"key": "Drawing Markers","label": "Μαρκαδόροι\nΖωγρ.", "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5'%3E%3Cpath d='M18.37 2.63a2 2 0 0 1 3 3L14 13l-4 1 1-4 7.37-7.37z'/%3E%3Cpath d='M9 14.5a4 4 0 0 1-4 4H3v-2a4 4 0 0 1 4-4'/%3E%3C/svg%3E"},
+                  {"key": "Art Paper",      "label": "Μπλοκ\nΧαρτιά",   "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5'%3E%3Cpath d='M18.37 2.63a2 2 0 0 1 3 3L14 13l-4 1 1-4 7.37-7.37z'/%3E%3Cpath d='M9 14.5a4 4 0 0 1-4 4H3v-2a4 4 0 0 1 4-4'/%3E%3C/svg%3E"},
+                  {"key": "Notebooks",      "label": "Τετράδια",    "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5'%3E%3Cpath d='M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z'/%3E%3C/svg%3E"},
+                  {"key": "Notepads",       "label": "Σημειωμ.",    "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5'%3E%3Cpath d='M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z'/%3E%3C/svg%3E"},
                  ],
     "SDA":       [{"key": "Floor Care", "label": "Σκούπες",
                    "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 2v8l4-2'/%3E%3Cpath d='M12 10l-4-2'/%3E%3Ccircle cx='12' cy='18' r='4'/%3E%3Cline x1='12' y1='10' x2='12' y2='14'/%3E%3C/svg%3E"}],
@@ -956,6 +984,31 @@ else:
                 st.sidebar.markdown(f'<p class="sidebar-section">Επιλέξτε {label}</p>', unsafe_allow_html=True)
                 sel = st.sidebar.selectbox("", periph['Title'].unique(), label_visibility="collapsed", key=f"periph_{active_cluster}_sel")
                 trigger = periph[periph['Title']==sel].iloc[0] if sel else None
+
+    elif active_cluster in STATIONERY_CLUSTERS:
+        if df_stationery.empty:
+            st.sidebar.warning("Sheet 'Stationery' is empty or missing.")
+        else:
+            sconfig = STATIONERY_TRIGGERS.get(active_cluster, {})
+            s_hiers = {h.upper().strip() for h in sconfig.get('hierarchies', set())}
+            stat_pool = df_stationery[df_stationery['Hierarchy'].fillna('').astype(str).str.upper().str.strip().isin(s_hiers)].copy()
+            
+            # ─────────────────────────────────────────────────────────────
+            # 🧪 TEST LIST: Restrict the dropdown to specific SKUs
+            # ─────────────────────────────────────────────────────────────
+            placeholder_skus = {"PLACEHOLDER_1", "PLACEHOLDER_2", "PLACEHOLDER_3"}
+            test_filtered = stat_pool[stat_pool['Material'].astype(str).str.strip().str.replace(r'\.0$', '', regex=True).isin(placeholder_skus)]
+            if not test_filtered.empty:
+                stat_pool = test_filtered
+            # ─────────────────────────────────────────────────────────────
+
+            if stat_pool.empty:
+                st.sidebar.warning(f"Δεν βρέθηκαν {active_cluster} products.")
+            else:
+                label = active_cluster
+                st.sidebar.markdown(f'<p class="sidebar-section">Επιλέξτε {label}</p>', unsafe_allow_html=True)
+                sel = st.sidebar.selectbox("", stat_pool['Title'].unique(), label_visibility="collapsed", key=f"stat_{active_cluster}_sel")
+                trigger = stat_pool[stat_pool['Title']==sel].iloc[0] if sel else None
 
     elif active_cluster == "Monitors":
         # Monitor triggers may be in Products sheet or Peripherals
@@ -3638,6 +3691,263 @@ MONITOR_MAINSTREAM_SLOTS = [
     ("Desk Lamp",           ['ΕΞΥΠΝΟΣ ΦΩΤΙΣΜΟΣ'],            {'title_boost': ['Desk', 'Γραφείου', 'Table', 'Επιτραπέζιο', 'Φωτιστικό', 'ScreenBar', 'Monitor Light'], 'title_hide': ['Ceiling', 'Bulb', 'Strip', 'Οροφής', 'Λάμπα', 'E27', 'E14', 'Ταινία', 'Λεντοταινία'], 'usage_hide': ['Gaming', 'Εξωτερική', 'Εξωτερικού χώρου', 'TV']}),
 ]
 
+
+
+# ═════════════════════════════════════════════════════════════
+# 🟢 STATIONERY ENGINE — Writing & Correction + Arts & Crafts
+# Config-driven: reuses peripherals engine infrastructure
+# ═════════════════════════════════════════════════════════════
+
+STATIONERY_TRIGGERS = {
+    "Pens":              {"hierarchies": {"ΣΤΥΛΟ ΥΓΡΗΣ ΜΕΛΑΝΗΣ", "ΣΤΥΛΟ GEL", "ΣΤΥΛΟ ΔΙΑΡΚΕΙΑΣ"}},
+    "Pencils":           {"hierarchies": {"ΜΟΛΥΒΙΑ", "ΧΡΩΜΑΤΙΣΤΑ ΜΟΛΥΒΙΑ"}},
+    "Markers":           {"hierarchies": {"ΜΑΡΚΑΔΟΡΟΙ ΥΠΟΓΡΑΜΜΙΣΗΣ", "ΜΑΡΚΑΔΟΡΟΙ ΠΙΝΑΚΑ", "ΜΑΡΚΑΔΟΡΟΙ ΑΝΕΞΙΤΗΛΟΙ", "ΜΑΡΚΑΔΟΡΟΙ"}},
+    "Sharpeners":        {"hierarchies": {"ΞΥΣΤΡΕΣ"}},
+    "Erasers":           {"hierarchies": {"ΓΟΜΕΣ"}},
+    "Correction":        {"hierarchies": {"ΔΙΟΡΘΩΤΙΚΑ"}},
+    "Pencil Cases":      {"hierarchies": {"ΚΑΣΕΤΙΝΕΣ-ΘΗΚΕΣ", "ΣΧΟΛΙΚΕΣ ΚΑΣΕΤΙΝΕΣ", "ΜΟΛΥΒΟΘΗΚΕΣ"}},
+    "Geometric Tools":   {"hierarchies": {"ΓΕΩΜΕΤΡΙΚΑ ΟΡΓΑΝΑ", "ΟΡΓΑΝΑ ΣΧΕΔΙΑΣΗΣ", "ΟΡΓΑΝΑ ΜΕΤΡΗΣΗΣ"}},
+    "Stationery Sets":   {"hierarchies": {"ΣΕΤ ΧΑΡΤΙΚΩΝ"}},
+    "Paints":            {"hierarchies": {"ΧΡΩΜΑΤΑ ΖΩΓΡΑΦΙΚΗΣ"}},
+    "Brushes":           {"hierarchies": {"ΠΙΝΕΛΑ"}},
+    "Colored Pencils Art": {"hierarchies": {"ΞΥΛΟΜΠΟΓΙΕΣ", "ΧΡΩΜΑΤΙΣΤΑ ΜΟΛΥΒΙΑ"}},
+    "Drawing Markers":   {"hierarchies": {"ΜΑΡΚΑΔΟΡΟΙ ΖΩΓΡΑΦΙΚΗΣ"}},
+    "Art Paper":         {"hierarchies": {"ΜΠΛΟΚ-ΧΑΡΤΙΑ", "ΧΑΡΤΙΑ - ΜΠΛΟΚ", "ΜΠΛΟΚ - ΧΑΡΤΙΑ ΖΩΓΡΑΦΙΚΗΣ"}},
+    "Notebooks":         {"hierarchies": {"ΤΕΤΡΑΔΙΟ"}},
+    "Notepads":          {"hierarchies": {"ΣΗΜΕΙΩΜΑΤΑΡΙΟ"}},
+}
+
+STATIONERY_CLUSTERS = set(STATIONERY_TRIGGERS.keys())
+
+# ── Slot configs ──
+
+PENS_SLOTS = [
+    ("Notebook",          ['ΤΕΤΡΑΔΙΟ', 'ΣΗΜΕΙΩΜΑΤΑΡΙΟ', 'ΜΠΛΟΚ'],       {'title_boost': ['A5', 'Medium', 'Standard']}),
+    ("Highlighter",       ['ΜΑΡΚΑΔΟΡΟΙ ΥΠΟΓΡΑΜΜΙΣΗΣ', 'ΜΑΡΚΑΔΟΡΟΙ'],    {'title_boost': ['Pastel', '4-pack', '6-pack'], 'title_hide': ['Whiteboard', 'Πίνακα', 'CD-DVD', 'Ανεξίτηλοι']}),
+    ("Pencil",            ['ΜΟΛΥΒΙΑ', 'ΧΡΩΜΑΤΙΣΤΑ ΜΟΛΥΒΙΑ'],             {'title_boost': ['HB', '2B', 'Set', 'Pack']}),
+    ("Eraser",            ['ΓΟΜΕΣ'],                                      {'title_boost': ['White', 'Λευκή', 'Pencil', 'Μολυβιού'], 'title_hide': ['Ink', 'Μελανιού']}),
+    ("Pencil Case",       ['ΚΑΣΕΤΙΝΕΣ-ΘΗΚΕΣ', 'ΣΧΟΛΙΚΕΣ ΚΑΣΕΤΙΝΕΣ', 'ΜΟΛΥΒΟΘΗΚΕΣ'], {'title_boost': ['Zipper', 'Φερμουάρ', 'Simple', 'Basic']}),
+    ("Correction",        ['ΔΙΟΡΘΩΤΙΚΑ'],                                 {'title_boost': ['Tape', 'Ταινία', 'Roller']}),
+    ("Sticky Notes",      ['POST-IT-ΧΑΡΤΑΚΙΑ ΣΗΜΕΙΩΣΕΩΝ'],               {'title_boost': ['3x3', 'Small', 'Square', 'Yellow']}),
+    ("Ruler",             ['ΓΕΩΜΕΤΡΙΚΑ ΟΡΓΑΝΑ', 'ΟΡΓΑΝΑ ΜΕΤΡΗΣΗΣ'],      {'title_boost': ['Ruler', 'Χάρακας', '15cm', '20cm', '30cm'], 'title_hide': ['Compass', 'Protractor', 'Set']}),
+    ("Sharpener",         ['ΞΥΣΤΡΕΣ'],                                    {'title_boost': ['Double', 'Dual', 'Metal', 'Container']}),
+    ("Alternative Pen",   ['ΣΤΥΛΟ ΥΓΡΗΣ ΜΕΛΑΝΗΣ', 'ΣΤΥΛΟ GEL', 'ΣΤΥΛΟ ΔΙΑΡΚΕΙΑΣ'], {}),
+]
+
+PENCILS_SLOTS = [
+    ("Sharpener",         ['ΞΥΣΤΡΕΣ'],                                    {'title_boost': ['Metal', 'Dual', 'Container', 'Μεταλλική', 'Διπλή'], 'title_hide': ['Electric', 'Ηλεκτρική']}),
+    ("Eraser",            ['ΓΟΜΕΣ'],                                      {'title_boost': ['White', 'Λευκή', 'Soft', 'Μαλακή', 'Staedtler', 'Faber', 'Pelikan']}),
+    ("Pencil Case",       ['ΚΑΣΕΤΙΝΕΣ-ΘΗΚΕΣ', 'ΣΧΟΛΙΚΕΣ ΚΑΣΕΤΙΝΕΣ', 'ΜΟΛΥΒΟΘΗΚΕΣ'], {'title_boost': ['Large', 'Μεγάλη', 'Compartment', 'Θήκες']}),
+    ("Notebook",          ['ΤΕΤΡΑΔΙΟ', 'ΣΗΜΕΙΩΜΑΤΑΡΙΟ', 'ΜΠΛΟΚ-ΧΑΡΤΙΑ'], {}),
+    ("Pen",               ['ΣΤΥΛΟ ΥΓΡΗΣ ΜΕΛΑΝΗΣ', 'ΣΤΥΛΟ GEL', 'ΣΤΥΛΟ ΔΙΑΡΚΕΙΑΣ'], {'title_boost': ['Black', 'Blue', 'Μαύρο', 'Μπλε']}),
+    ("Geometric Tools",   ['ΓΕΩΜΕΤΡΙΚΑ ΟΡΓΑΝΑ', 'ΟΡΓΑΝΑ ΣΧΕΔΙΑΣΗΣ', 'ΟΡΓΑΝΑ ΜΕΤΡΗΣΗΣ'], {}),
+    ("Alt Pencils",       ['ΜΟΛΥΒΙΑ', 'ΧΡΩΜΑΤΙΣΤΑ ΜΟΛΥΒΙΑ'],             {'title_boost': ['Set', 'Σετ', 'HB', '2B', '4B', '6B']}),
+    ("Highlighter",       ['ΜΑΡΚΑΔΟΡΟΙ ΥΠΟΓΡΑΜΜΙΣΗΣ', 'ΜΑΡΚΑΔΟΡΟΙ'],    {'title_boost': ['Pastel', '4-pack', 'Soft'], 'title_hide': ['Permanent', 'Whiteboard', 'Neon']}),
+    ("Sticky Notes",      ['POST-IT-ΧΑΡΤΑΚΙΑ ΣΗΜΕΙΩΣΕΩΝ'],               {'title_boost': ['Small', '3x3', 'Yellow', 'Κίτρινο']}),
+    ("Art Upgrade",       ['ΧΡΩΜΑΤΙΣΤΑ ΜΟΛΥΒΙΑ', 'ΚΗΡΟΜΠΟΓΙΕΣ-ΠΑΣΤΕΛ', 'ΧΡΩΜΑΤΑ ΖΩΓΡΑΦΙΚΗΣ'], {}),
+]
+
+MARKERS_SLOTS = [
+    ("Notebook",          ['ΤΕΤΡΑΔΙΟ', 'ΣΗΜΕΙΩΜΑΤΑΡΙΟ', 'ΜΠΛΟΚ'],       {'title_boost': ['A4', 'A5', 'Lined', 'Γραμμές']}),
+    ("Pen",               ['ΣΤΥΛΟ ΥΓΡΗΣ ΜΕΛΑΝΗΣ', 'ΣΤΥΛΟ GEL', 'ΜΟΛΥΒΙΑ'], {'title_boost': ['Black', 'Blue', '0.7mm']}),
+    ("Sticky Notes",      ['POST-IT-ΧΑΡΤΑΚΙΑ ΣΗΜΕΙΩΣΕΩΝ', 'ΣΕΛΙΔΟΔΕΙΚΤΕΣ'], {'title_boost': ['Arrow', 'Flag', 'Index', 'Σημάδια']}),
+    ("Pencil Case",       ['ΚΑΣΕΤΙΝΕΣ-ΘΗΚΕΣ', 'ΣΧΟΛΙΚΕΣ ΚΑΣΕΤΙΝΕΣ', 'ΜΟΛΥΒΟΘΗΚΕΣ'], {'title_boost': ['Wide', 'Large', 'Compartment', 'Φαρδιά']}),
+    ("Alt Markers",       ['ΜΑΡΚΑΔΟΡΟΙ ΥΠΟΓΡΑΜΜΙΣΗΣ', 'ΜΑΡΚΑΔΟΡΟΙ ΠΙΝΑΚΑ', 'ΜΑΡΚΑΔΟΡΟΙ ΑΝΕΞΙΤΗΛΟΙ', 'ΜΑΡΚΑΔΟΡΟΙ'], {'title_boost': ['Pastel', 'Neon', '12-pack', 'Extended']}),
+    ("Backup Pencil",     ['ΜΟΛΥΒΙΑ', 'ΣΤΥΛΟ ΥΓΡΗΣ ΜΕΛΑΝΗΣ'],            {}),
+    ("Correction",        ['ΔΙΟΡΘΩΤΙΚΑ'],                                 {'title_boost': ['Tape', 'Roller']}),
+    ("Ruler",             ['ΓΕΩΜΕΤΡΙΚΑ ΟΡΓΑΝΑ', 'ΟΡΓΑΝΑ ΜΕΤΡΗΣΗΣ'],      {'title_boost': ['30cm', 'Transparent', 'Διάφανος']}),
+    ("Eraser",            ['ΓΟΜΕΣ'],                                      {'title_boost': ['White', 'Soft', 'Pencil']}),
+    ("Dividers",          ['ΔΙΑΧΩΡΙΣΤΙΚΑ', 'ΣΕΛΙΔΟΔΕΙΚΤΕΣ'],             {'title_boost': ['Tabbed', 'Index', 'Color-coded', 'Χρωματιστά']}),
+]
+
+SHARPENERS_SLOTS = [
+    ("Pencil",            ['ΜΟΛΥΒΙΑ', 'ΧΡΩΜΑΤΙΣΤΑ ΜΟΛΥΒΙΑ'],             {'title_boost': ['HB', '2B', 'School', 'Student', 'Σχολικά']}),
+    ("Eraser",            ['ΓΟΜΕΣ'],                                      {'title_boost': ['White', 'Λευκή', 'Soft', 'Pencil', 'Μολυβιού']}),
+    ("Pencil Case",       ['ΚΑΣΕΤΙΝΕΣ-ΘΗΚΕΣ', 'ΣΧΟΛΙΚΕΣ ΚΑΣΕΤΙΝΕΣ', 'ΜΟΛΥΒΟΘΗΚΕΣ'], {}),
+    ("Notebook",          ['ΤΕΤΡΑΔΙΟ', 'ΣΗΜΕΙΩΜΑΤΑΡΙΟ', 'ΜΠΛΟΚ-ΧΑΡΤΙΑ'], {'title_boost': ['A5', 'Lined', 'Grid', 'Καρέ']}),
+    ("Alt Sharpener",     ['ΞΥΣΤΡΕΣ'],                                    {'title_boost': ['Dual', 'Double', 'Container', 'Δοχείο']}),
+    ("Colored Pencils",   ['ΧΡΩΜΑΤΙΣΤΑ ΜΟΛΥΒΙΑ', 'ΚΗΡΟΜΠΟΓΙΕΣ-ΠΑΣΤΕΛ'],  {'title_boost': ['12', '18', '24', 'Kids', 'Παιδικά']}),
+    ("Pen",               ['ΣΤΥΛΟ ΥΓΡΗΣ ΜΕΛΑΝΗΣ', 'ΣΤΥΛΟ GEL'],          {'title_boost': ['Black', 'Blue', 'Μαύρο', 'Μπλε']}),
+    ("Drawing Tools",     ['ΓΕΩΜΕΤΡΙΚΑ ΟΡΓΑΝΑ', 'ΟΡΓΑΝΑ ΣΧΕΔΙΑΣΗΣ'],     {'title_boost': ['Ruler', 'Χάρακας', '30cm']}),
+    ("Correction",        ['ΔΙΟΡΘΩΤΙΚΑ'],                                 {'title_boost': ['Tape', 'Roller', 'Ταινία']}),
+    ("Sticky Notes",      ['POST-IT-ΧΑΡΤΑΚΙΑ ΣΗΜΕΙΩΣΕΩΝ'],               {'title_boost': ['Small', '3x3', 'Yellow', 'Κίτρινο']}),
+]
+
+ERASERS_SLOTS = [
+    ("Pencil",            ['ΜΟΛΥΒΙΑ', 'ΧΡΩΜΑΤΙΣΤΑ ΜΟΛΥΒΙΑ'],             {'title_boost': ['HB', '2B', 'School', 'Student']}),
+    ("Sharpener",         ['ΞΥΣΤΡΕΣ'],                                    {'title_boost': ['Dual', 'Container', 'Metal', 'Διπλή', 'Δοχείο']}),
+    ("Pencil Case",       ['ΚΑΣΕΤΙΝΕΣ-ΘΗΚΕΣ', 'ΣΧΟΛΙΚΕΣ ΚΑΣΕΤΙΝΕΣ', 'ΜΟΛΥΒΟΘΗΚΕΣ'], {}),
+    ("Notebook",          ['ΤΕΤΡΑΔΙΟ', 'ΣΗΜΕΙΩΜΑΤΑΡΙΟ', 'ΜΠΛΟΚ-ΧΑΡΤΙΑ'], {'title_boost': ['A5', 'Lined', 'Grid']}),
+    ("Alt Eraser",        ['ΓΟΜΕΣ'],                                      {'title_boost': ['Precision', 'Mechanical', 'Pen-style', 'Ακριβείας']}),
+    ("Pen",               ['ΣΤΥΛΟ ΥΓΡΗΣ ΜΕΛΑΝΗΣ', 'ΣΤΥΛΟ GEL'],          {'title_boost': ['Black', 'Blue', 'Permanent']}),
+    ("Drawing Tools",     ['ΓΕΩΜΕΤΡΙΚΑ ΟΡΓΑΝΑ', 'ΟΡΓΑΝΑ ΣΧΕΔΙΑΣΗΣ'],     {'title_boost': ['Ruler', 'Χάρακας', '30cm']}),
+    ("Colored Pencils",   ['ΧΡΩΜΑΤΙΣΤΑ ΜΟΛΥΒΙΑ', 'ΚΗΡΟΜΠΟΓΙΕΣ-ΠΑΣΤΕΛ'],  {}),
+    ("Correction",        ['ΔΙΟΡΘΩΤΙΚΑ'],                                 {'title_boost': ['Tape', 'Roller', 'Ταινία']}),
+    ("Sticky Notes",      ['POST-IT-ΧΑΡΤΑΚΙΑ ΣΗΜΕΙΩΣΕΩΝ'],               {'title_boost': ['Small', '3x3', 'Yellow']}),
+]
+
+CORRECTION_SLOTS = [
+    ("Pen",               ['ΣΤΥΛΟ ΥΓΡΗΣ ΜΕΛΑΝΗΣ', 'ΣΤΥΛΟ GEL', 'ΣΤΥΛΟ ΔΙΑΡΚΕΙΑΣ'], {'title_boost': ['Black', 'Blue', '0.7mm', 'Medium']}),
+    ("Notebook",          ['ΤΕΤΡΑΔΙΟ', 'ΣΗΜΕΙΩΜΑΤΑΡΙΟ', 'ΜΠΛΟΚ'],       {'title_boost': ['A4', 'A5', 'Lined', 'Γραμμές']}),
+    ("Alt Correction",    ['ΔΙΟΡΘΩΤΙΚΑ'],                                 {'title_boost': ['Tape', 'Roller', 'Liquid', 'Fluid']}),
+    ("Pencil Case",       ['ΚΑΣΕΤΙΝΕΣ-ΘΗΚΕΣ', 'ΣΧΟΛΙΚΕΣ ΚΑΣΕΤΙΝΕΣ', 'ΜΟΛΥΒΟΘΗΚΕΣ'], {'title_boost': ['Simple', 'Zipper', 'Compact']}),
+    ("Highlighter",       ['ΜΑΡΚΑΔΟΡΟΙ ΥΠΟΓΡΑΜΜΙΣΗΣ', 'ΜΑΡΚΑΔΟΡΟΙ'],    {'title_boost': ['Pastel', '4-pack', '6-pack'], 'title_hide': ['Whiteboard', 'Permanent', 'Πίνακα']}),
+    ("Sticky Notes",      ['POST-IT-ΧΑΡΤΑΚΙΑ ΣΗΜΕΙΩΣΕΩΝ'],               {'title_boost': ['Small', '3x3', 'Yellow', 'Κίτρινο']}),
+    ("Pencil",            ['ΜΟΛΥΒΙΑ'],                                    {'title_boost': ['HB', '2B', 'Mechanical', 'Μηχανικό']}),
+    ("Eraser",            ['ΓΟΜΕΣ'],                                      {'title_boost': ['White', 'Soft', 'Λευκή', 'Μαλακή']}),
+    ("Extra Pens",        ['ΣΤΥΛΟ ΥΓΡΗΣ ΜΕΛΑΝΗΣ', 'ΣΤΥΛΟ GEL'],          {}),
+    ("Ruler",             ['ΓΕΩΜΕΤΡΙΚΑ ΟΡΓΑΝΑ'],                          {'title_boost': ['Ruler', 'Χάρακας', '30cm', 'Transparent']}),
+]
+
+PENCIL_CASES_SLOTS = [
+    ("Pen",               ['ΣΤΥΛΟ ΥΓΡΗΣ ΜΕΛΑΝΗΣ', 'ΣΤΥΛΟ GEL', 'ΣΤΥΛΟ ΔΙΑΡΚΕΙΑΣ'], {}),
+    ("Pencil",            ['ΜΟΛΥΒΙΑ', 'ΧΡΩΜΑΤΙΣΤΑ ΜΟΛΥΒΙΑ'],             {'title_boost': ['HB', '2B', 'Pack', 'School']}),
+    ("Eraser",            ['ΓΟΜΕΣ'],                                      {'title_boost': ['White', 'Soft', 'Small', 'Λευκή', 'Μικρή']}),
+    ("Sharpener",         ['ΞΥΣΤΡΕΣ'],                                    {'title_boost': ['Compact', 'Dual', 'Container', 'Μικρή', 'Με δοχείο']}),
+    ("Highlighter",       ['ΜΑΡΚΑΔΟΡΟΙ ΥΠΟΓΡΑΜΜΙΣΗΣ', 'ΜΑΡΚΑΔΟΡΟΙ'],    {'title_boost': ['4-pack', 'Basic', 'Compact']}),
+    ("Ruler",             ['ΓΕΩΜΕΤΡΙΚΑ ΟΡΓΑΝΑ', 'ΟΡΓΑΝΑ ΜΕΤΡΗΣΗΣ'],      {'title_boost': ['15cm', '20cm', 'Flexible', 'Εύκαμπτος']}),
+    ("Correction",        ['ΔΙΟΡΘΩΤΙΚΑ'],                                 {'title_boost': ['Pen', 'Compact', 'Mini', 'Στυλό', 'Μίνι']}),
+    ("Alt Case",          ['ΚΑΣΕΤΙΝΕΣ-ΘΗΚΕΣ', 'ΣΧΟΛΙΚΕΣ ΚΑΣΕΤΙΝΕΣ', 'ΜΟΛΥΒΟΘΗΚΕΣ'], {}),
+    ("Notebook",          ['ΤΕΤΡΑΔΙΟ', 'ΣΗΜΕΙΩΜΑΤΑΡΙΟ'],                 {'title_boost': ['A5', 'Lined', 'Grid', 'Καρέ']}),
+    ("Sticky Notes",      ['POST-IT-ΧΑΡΤΑΚΙΑ ΣΗΜΕΙΩΣΕΩΝ'],               {'title_boost': ['Small', '3x3', 'Compact', 'Μικρό']}),
+]
+
+GEOMETRIC_TOOLS_SLOTS = [
+    ("Pencil",            ['ΜΟΛΥΒΙΑ', 'ΧΡΩΜΑΤΙΣΤΑ ΜΟΛΥΒΙΑ'],             {'title_boost': ['HB', '2B', '4B', 'Technical', 'Τεχνικά', 'Set']}),
+    ("Eraser",            ['ΓΟΜΕΣ'],                                      {'title_boost': ['White', 'Λευκή', 'Precision', 'Ακριβείας']}),
+    ("Sharpener",         ['ΞΥΣΤΡΕΣ'],                                    {'title_boost': ['Metal', 'Dual', 'Premium', 'Μεταλλική']}),
+    ("Drawing Pad",       ['ΤΕΤΡΑΔΙΟ', 'ΣΗΜΕΙΩΜΑΤΑΡΙΟ', 'ΜΠΛΟΚ-ΧΑΡΤΙΑ'], {'title_boost': ['Grid', 'Graph', 'Καρέ', 'Μιλιμετρέ', 'Technical']}),
+    ("Pen",               ['ΣΤΥΛΟ ΥΓΡΗΣ ΜΕΛΑΝΗΣ', 'ΣΤΥΛΟ GEL'],          {'title_boost': ['0.5mm', '0.7mm', 'Fine', 'Technical', 'Λεπτή μύτη']}),
+    ("Alt Tools",         ['ΓΕΩΜΕΤΡΙΚΑ ΟΡΓΑΝΑ', 'ΟΡΓΑΝΑ ΣΧΕΔΙΑΣΗΣ', 'ΟΡΓΑΝΑ ΜΕΤΡΗΣΗΣ'], {'title_boost': ['Set', 'Compass', 'Protractor', 'Σετ', 'Διαβήτης']}),
+    ("Pencil Case",       ['ΚΑΣΕΤΙΝΕΣ-ΘΗΚΕΣ', 'ΜΟΛΥΒΟΘΗΚΕΣ'],           {}),
+    ("Highlighter",       ['ΜΑΡΚΑΔΟΡΟΙ ΥΠΟΓΡΑΜΜΙΣΗΣ'],                   {'title_boost': ['Pastel', '4-pack', 'Thin', 'Λεπτή']}),
+    ("Correction",        ['ΔΙΟΡΘΩΤΙΚΑ'],                                 {'title_boost': ['Tape', 'Precision', 'Ταινία', 'Ακριβείας']}),
+    ("Sticky Notes",      ['POST-IT-ΧΑΡΤΑΚΙΑ ΣΗΜΕΙΩΣΕΩΝ'],               {'title_boost': ['Small', 'Flag', 'Arrow', 'Σημάδια']}),
+]
+
+STATIONERY_SETS_SLOTS = [
+    ("Notebook",          ['ΤΕΤΡΑΔΙΟ', 'ΣΗΜΕΙΩΜΑΤΑΡΙΟ', 'ΜΠΛΟΚ'],       {'title_boost': ['A5', 'Lined', 'Grid', 'Γραμμές', 'Καρέ']}),
+    ("Pencil Case",       ['ΚΑΣΕΤΙΝΕΣ-ΘΗΚΕΣ', 'ΣΧΟΛΙΚΕΣ ΚΑΣΕΤΙΝΕΣ', 'ΜΟΛΥΒΟΘΗΚΕΣ'], {}),
+    ("Refill Pens",       ['ΣΤΥΛΟ ΥΓΡΗΣ ΜΕΛΑΝΗΣ', 'ΣΤΥΛΟ GEL'],          {'title_boost': ['Blue', 'Black', '10-pack', 'Μπλε', 'Μαύρο']}),
+    ("Refill Pencils",    ['ΜΟΛΥΒΙΑ', 'ΧΡΩΜΑΤΙΣΤΑ ΜΟΛΥΒΙΑ'],             {'title_boost': ['HB', '2B', '12-pack', 'School']}),
+    ("Highlighter",       ['ΜΑΡΚΑΔΟΡΟΙ ΥΠΟΓΡΑΜΜΙΣΗΣ'],                   {'title_boost': ['Pastel', '4-pack', '6-pack']}),
+    ("Correction",        ['ΔΙΟΡΘΩΤΙΚΑ'],                                 {'title_boost': ['Tape', 'Roller', 'Compact']}),
+    ("Sticky Notes",      ['POST-IT-ΧΑΡΤΑΚΙΑ ΣΗΜΕΙΩΣΕΩΝ'],               {'title_boost': ['Small', '3x3', 'Assorted', 'Ποικιλία']}),
+    ("Geometric Tools",   ['ΓΕΩΜΕΤΡΙΚΑ ΟΡΓΑΝΑ', 'ΟΡΓΑΝΑ ΣΧΕΔΙΑΣΗΣ'],     {'title_boost': ['Ruler', 'Set', '30cm', 'Χάρακας']}),
+    ("Eraser/Sharpener",  ['ΓΟΜΕΣ', 'ΞΥΣΤΡΕΣ'],                          {}),
+    ("Alt Set",           ['ΣΕΤ ΧΑΡΤΙΚΩΝ', 'ΣΕΤ ΖΩΓΡΑΦΙΚΗΣ'],           {}),
+]
+
+PAINTS_SLOTS = [
+    ("Brushes",           ['ΠΙΝΕΛΑ'],                                     {'title_boost': ['Set', 'Σετ', 'Assorted', 'Round', 'Flat', 'Ποικιλία']}),
+    ("Canvas/Paper",      ['ΚΑΜΒΑΔΕΣ', 'ΜΠΛΟΚ-ΧΑΡΤΙΑ', 'ΧΑΡΤΙΑ - ΜΠΛΟΚ'], {'title_boost': ['Stretched', 'Τελαρωμένος', 'Set', 'Pack']}),
+    ("Water Cup",         ['ACCESSORIES ΖΩΓΡΑΦΙΚΗΣ'],                     {'title_boost': ['Water', 'Brush cleaner', 'Νερού', 'Καθαρισμού', 'Double']}),
+    ("Palette",           ['ACCESSORIES ΖΩΓΡΑΦΙΚΗΣ'],                     {'title_boost': ['Palette', 'Παλέτα', 'Mixing', 'Plastic', 'Πλαστική']}),
+    ("Easel",             ['ΚΑΒΑΛΕΤΑ'],                                   {'title_boost': ['Table', 'Desktop', 'Portable', 'Επιτραπέζιο', 'Φορητό']}),
+    ("Sketch Pencil",     ['ΜΟΛΥΒΙΑ', 'ΧΡΩΜΑΤΙΣΤΑ ΜΟΛΥΒΙΑ'],             {'title_boost': ['HB', '2B', 'Sketch', 'Drawing', 'Σκίτσου']}),
+    ("Eraser",            ['ΓΟΜΕΣ'],                                      {'title_boost': ['Kneaded', 'Putty', 'Art', 'Ζύμης', 'Πλαστική']}),
+    ("Alt Paints",        ['ΧΡΩΜΑΤΑ ΖΩΓΡΑΦΙΚΗΣ'],                        {'title_boost': ['Professional', 'Artist', 'Large', 'Μεγάλο', 'Επαγγελματικό']}),
+    ("Paint Accessories", ['ACCESSORIES ΖΩΓΡΑΦΙΚΗΣ'],                     {'title_boost': ['Sponge', 'Σφουγγάρι', 'Palette knife', 'Σπάτουλα', 'Roller']}),
+    ("Apron",             ['ACCESSORIES ΖΩΓΡΑΦΙΚΗΣ'],                     {'title_boost': ['Apron', 'Smock', 'Kids', 'Waterproof', 'Παιδική', 'Αδιάβροχη']}),
+]
+
+BRUSHES_SLOTS = [
+    ("Paints",            ['ΧΡΩΜΑΤΑ ΖΩΓΡΑΦΙΚΗΣ'],                        {}),
+    ("Canvas/Paper",      ['ΚΑΜΒΑΔΕΣ', 'ΜΠΛΟΚ-ΧΑΡΤΙΑ', 'ΧΑΡΤΙΑ - ΜΠΛΟΚ'], {}),
+    ("Brush Cleaner",     ['ACCESSORIES ΖΩΓΡΑΦΙΚΗΣ'],                     {'title_boost': ['Water', 'Brush cleaner', 'Soap', 'Νερού', 'Double']}),
+    ("Brush Case",        ['ACCESSORIES ΖΩΓΡΑΦΙΚΗΣ', 'ΘΗΚΕΣ ΜΕΤΑΦΟΡΑΣ'], {'title_boost': ['Brush holder', 'Brush case', 'Roll', 'Θήκη πινέλων', 'Bamboo', 'Ρολό']}),
+    ("Palette",           ['ACCESSORIES ΖΩΓΡΑΦΙΚΗΣ'],                     {'title_boost': ['Palette', 'Παλέτα', 'Plastic', 'Tear-off', 'Αποσπώμενη']}),
+    ("Alt Brushes",       ['ΠΙΝΕΛΑ'],                                     {}),
+    ("Sketch Pencil",     ['ΜΟΛΥΒΙΑ'],                                    {'title_boost': ['2B', '4B', 'Sketch', 'Drawing']}),
+    ("Easel",             ['ΚΑΒΑΛΕΤΑ'],                                   {'title_boost': ['Table', 'Desktop', 'Portable', 'Επιτραπέζιο']}),
+    ("Paint Accessories", ['ACCESSORIES ΖΩΓΡΑΦΙΚΗΣ'],                     {'title_boost': ['Palette knife', 'Sponge', 'Σπάτουλα', 'Σφουγγάρι']}),
+    ("Apron",             ['ACCESSORIES ΖΩΓΡΑΦΙΚΗΣ'],                     {'title_boost': ['Apron', 'Artist', 'Painter', 'Waterproof']}),
+]
+
+COLORED_PENCILS_ART_SLOTS = [
+    ("Drawing Paper",     ['ΜΠΛΟΚ-ΧΑΡΤΙΑ', 'ΧΑΡΤΙΑ - ΜΠΛΟΚ'],           {'title_boost': ['Sketch', 'Drawing', 'Student', 'Σχεδίου', 'A4', 'A5']}),
+    ("Sharpener",         ['ΞΥΣΤΡΕΣ'],                                    {'title_boost': ['Metal', 'Dual', 'Container', 'Μεταλλική', 'Δοχείο']}),
+    ("Eraser",            ['ΓΟΜΕΣ', 'ACCESSORIES ΖΩΓΡΑΦΙΚΗΣ'],            {'title_boost': ['Kneaded', 'Putty', 'Precision', 'Ζύμης', 'Ακριβείας']}),
+    ("Art Case",          ['ΘΗΚΕΣ ΜΕΤΑΦΟΡΑΣ', 'ΚΑΣΕΤΙΝΕΣ-ΘΗΚΕΣ'],        {'title_boost': ['Art case', 'Portfolio', 'Large', 'Professional']}),
+    ("Sketch Pencil",     ['ΜΟΛΥΒΙΑ'],                                    {'title_boost': ['Sketch', 'Drawing', 'HB', '2B', '4B', '6B', 'Set']}),
+    ("Alt Colored",       ['ΧΡΩΜΑΤΙΣΤΑ ΜΟΛΥΒΙΑ', 'ΚΗΡΟΜΠΟΓΙΕΣ-ΠΑΣΤΕΛ'],  {}),
+    ("Precision Eraser",  ['ΓΟΜΕΣ'],                                      {'title_boost': ['Precision', 'Mechanical', 'Pen-style', 'Ακριβείας']}),
+    ("Fixative",          ['ACCESSORIES ΖΩΓΡΑΦΙΚΗΣ', 'ACCESSORIES ΧΕΙΡΟΤΕΧΝΙΑΣ'], {'title_boost': ['Fixative', 'Portfolio', 'Storage', 'Folder']}),
+    ("Fine Liners",       ['ΜΑΡΚΑΔΟΡΟΙ', 'ΜΑΡΚΑΔΟΡΟΙ ΖΩΓΡΑΦΙΚΗΣ'],      {'title_boost': ['Fine liner', 'Micron', '0.1mm', '0.3mm', '0.5mm']}),
+    ("Markers",           ['ΜΑΡΚΑΔΟΡΟΙ ΖΩΓΡΑΦΙΚΗΣ', 'ACCESSORIES ΧΕΙΡΟΤΕΧΝΙΑΣ'], {}),
+]
+
+DRAWING_MARKERS_SLOTS = [
+    ("Marker Paper",      ['ΜΠΛΟΚ-ΧΑΡΤΙΑ', 'ΧΑΡΤΙΑ - ΜΠΛΟΚ'],           {'title_boost': ['Marker', 'Bristol', 'Bleedproof', 'Mixed media', 'Μαρκαδόρων', 'Smooth']}),
+    ("Fine Liners",       ['ΜΑΡΚΑΔΟΡΟΙ', 'ΚΗΡΟΜΠΟΓΙΕΣ-ΠΑΣΤΕΛ'],          {}),
+    ("Colored Pencils",   ['ΧΡΩΜΑΤΙΣΤΑ ΜΟΛΥΒΙΑ', 'ΚΗΡΟΜΠΟΓΙΕΣ-ΠΑΣΤΕΛ'],  {'title_boost': ['24', '36', '48', 'Professional', 'Artist']}),
+    ("Blending/Extra",    ['ΜΑΡΚΑΔΟΡΟΙ ΖΩΓΡΑΦΙΚΗΣ', 'ACCESSORIES ΖΩΓΡΑΦΙΚΗΣ'], {'title_boost': ['Blender', 'Colorless', 'Ανάμειξης', 'Άχρωμος']}),
+    ("Marker Case",       ['ΘΗΚΕΣ ΜΕΤΑΦΟΡΑΣ', 'ΚΑΣΕΤΙΝΕΣ-ΘΗΚΕΣ'],        {'title_boost': ['Marker case', 'Elastic', 'Roll', 'Art case']}),
+    ("Sketch Pencil",     ['ΜΟΛΥΒΙΑ'],                                    {'title_boost': ['HB', '2B', 'Mechanical', 'Sketch']}),
+    ("Alt Markers",       ['ΜΑΡΚΑΔΟΡΟΙ ΖΩΓΡΑΦΙΚΗΣ'],                     {}),
+    ("Portfolio",         ['ACCESSORIES ΖΩΓΡΑΦΙΚΗΣ', 'ACCESSORIES ΧΕΙΡΟΤΕΧΝΙΑΣ'], {'title_boost': ['Portfolio', 'Storage', 'Art folder', 'Stickers']}),
+    ("White Gel Pen",     ['ΣΤΥΛΟ GEL', 'ΜΑΡΚΑΔΟΡΟΙ'],                   {'title_boost': ['White', 'Metallic', 'Gel pen', 'Paint marker', 'Gold', 'Silver']}),
+    ("Eraser",            ['ΓΟΜΕΣ'],                                      {'title_boost': ['Kneaded', 'Precision', 'Mechanical']}),
+]
+
+ART_PAPER_SLOTS = [
+    ("Art Supplies",      ['ΧΡΩΜΑΤΑ ΖΩΓΡΑΦΙΚΗΣ', 'ΧΡΩΜΑΤΙΣΤΑ ΜΟΛΥΒΙΑ', 'ΜΑΡΚΑΔΟΡΟΙ ΖΩΓΡΑΦΙΚΗΣ'], {}),
+    ("Brushes",           ['ΠΙΝΕΛΑ'],                                     {'title_boost': ['Set', 'Σετ', 'Assorted']}),
+    ("Palette",           ['ACCESSORIES ΖΩΓΡΑΦΙΚΗΣ'],                     {'title_boost': ['Palette', 'Παλέτα', 'Mixing']}),
+    ("Water Cup",         ['ACCESSORIES ΖΩΓΡΑΦΙΚΗΣ'],                     {'title_boost': ['Water cup', 'Brush cleaner', 'Νερού']}),
+    ("Sketch Pencil",     ['ΜΟΛΥΒΙΑ'],                                    {'title_boost': ['2B', '4B', 'Sketch', 'Drawing', 'HB']}),
+    ("Alt Paper",         ['ΜΠΛΟΚ-ΧΑΡΤΙΑ', 'ΧΑΡΤΙΑ - ΜΠΛΟΚ'],            {}),
+    ("Eraser",            ['ΓΟΜΕΣ', 'ACCESSORIES ΖΩΓΡΑΦΙΚΗΣ'],            {'title_boost': ['Kneaded', 'Putty', 'Precision', 'Masking']}),
+    ("Detail Tools",      ['ΜΑΡΚΑΔΟΡΟΙ', 'ΠΙΝΕΛΑ'],                       {'title_boost': ['Fine', 'Detail', 'Liner', 'Small', '0.1mm', '0.3mm']}),
+    ("Fixative",          ['ACCESSORIES ΖΩΓΡΑΦΙΚΗΣ'],                     {'title_boost': ['Portfolio', 'Storage', 'Folder', 'Φάκελος', 'Fixative']}),
+    ("Accessories",       ['ACCESSORIES ΖΩΓΡΑΦΙΚΗΣ', 'ACCESSORIES ΧΕΙΡΟΤΕΧΝΙΑΣ'], {'title_boost': ['Sponge', 'Palette knife', 'Scissors', 'Σπάτουλα']}),
+]
+
+NOTEBOOKS_SLOTS = [
+    ("Pen",               ['ΣΤΥΛΟ ΥΓΡΗΣ ΜΕΛΑΝΗΣ', 'ΣΤΥΛΟ GEL'],          {'title_boost': ['Blue', 'Black', 'Red', 'Multi-color', '4-pack', '6-pack', '10-pack', 'Μπλε', 'Μαύρο']}),
+    ("Pencil",            ['ΜΟΛΥΒΙΑ'],                                    {'title_boost': ['HB', '2B', 'School', 'Pack', '12-pack', 'Σχολικά']}),
+    ("Highlighter",       ['ΜΑΡΚΑΔΟΡΟΙ ΥΠΟΓΡΑΜΜΙΣΗΣ'],                   {'title_boost': ['Pastel', 'Neon', 'Bright', '4-pack', '6-pack', 'Φωτεινά']}),
+    ("Sticky Notes",      ['POST-IT-ΧΑΡΤΑΚΙΑ ΣΗΜΕΙΩΣΕΩΝ'],               {'title_boost': ['Small', '3x3', 'Flag', 'Arrow', 'Colorful', 'Χρωματιστά']}),
+    ("Correction",        ['ΔΙΟΡΘΩΤΙΚΑ'],                                 {'title_boost': ['Tape', 'Roller', 'Pen', 'Compact']}),
+    ("Pencil Case",       ['ΚΑΣΕΤΙΝΕΣ-ΘΗΚΕΣ', 'ΣΧΟΛΙΚΕΣ ΚΑΣΕΤΙΝΕΣ'],    {'title_boost': ['Colorful', 'Fun', 'Simple', 'Zipper', 'School', 'Σχολική']}),
+    ("Ruler",             ['ΓΕΩΜΕΤΡΙΚΑ ΟΡΓΑΝΑ'],                          {'title_boost': ['15cm', '20cm', '30cm', 'Transparent', 'Flexible', 'Διάφανος']}),
+    ("Book Covers",       ['ΔΙΑΧΩΡΙΣΤΙΚΑ', 'ΣΕΛΙΔΟΔΕΙΚΤΕΣ'],             {'title_boost': ['Book cover', 'Label', 'Sticker', 'Protective', 'Εξώφυλλο']}),
+    ("Sharpener/Eraser",  ['ΞΥΣΤΡΕΣ', 'ΓΟΜΕΣ'],                          {'title_boost': ['Dual', 'Container', 'Colorful', 'White', 'Soft']}),
+    ("More Notebooks",    ['ΤΕΤΡΑΔΙΟ'],                                   {'title_boost': ['Different color', 'Subject', 'Pack', 'Set', 'Grid', 'Ruled', 'Καρέ']}),
+]
+
+NOTEPADS_SLOTS = [
+    ("Pro Pen",           ['ΣΤΥΛΟ ΥΓΡΗΣ ΜΕΛΑΝΗΣ', 'ΣΤΥΛΟ GEL', 'ΣΤΥΛΟ ΔΙΑΡΚΕΙΑΣ'], {'title_boost': ['Black', 'Blue', '0.7mm', 'Premium', 'Professional', 'Executive', 'Μαύρο', 'Μπλε'], 'title_hide': ['Multi-color', 'Glitter', 'Kids', 'Παιδικό']}),
+    ("Mechanical Pencil", ['ΜΟΛΥΒΙΑ'],                                    {'title_boost': ['Mechanical', '0.5mm', '0.7mm', 'Professional', 'Executive', 'Μηχανικό'], 'title_hide': ['Colored', 'Kids', 'Jumbo']}),
+    ("Highlighter",       ['ΜΑΡΚΑΔΟΡΟΙ ΥΠΟΓΡΑΜΜΙΣΗΣ'],                   {'title_boost': ['Pastel', 'Subtle', 'Classic', 'Yellow', '4-pack'], 'title_hide': ['Neon', 'Glitter', 'Kids']}),
+    ("Sticky Notes",      ['POST-IT-ΧΑΡΤΑΚΙΑ ΣΗΜΕΙΩΣΕΩΝ'],               {'title_boost': ['Yellow', 'Classic', '3x3', 'Professional', 'Lined'], 'title_hide': ['Fun shapes', 'Colorful', 'Kids']}),
+    ("Correction",        ['ΔΙΟΡΘΩΤΙΚΑ'],                                 {'title_boost': ['Tape', 'Roller', 'Professional', 'Ταινία']}),
+    ("Desk Organizer",    ['ΜΟΛΥΒΟΘΗΚΕΣ'],                               {'title_boost': ['Desk organizer', 'Pen holder', 'Professional', 'Metal', 'Γραφείου']}),
+    ("Page Flags",        ['ΣΕΛΙΔΟΔΕΙΚΤΕΣ', 'POST-IT-ΧΑΡΤΑΚΙΑ ΣΗΜΕΙΩΣΕΩΝ'], {'title_boost': ['Flag', 'Arrow', 'Index', 'Bookmark', 'Professional']}),
+    ("Dividers",          ['ΔΙΑΧΩΡΙΣΤΙΚΑ'],                               {'title_boost': ['File divider', 'Folder', 'Tabbed', 'Professional']}),
+    ("More Notepads",     ['ΣΗΜΕΙΩΜΑΤΑΡΙΟ'],                             {'title_boost': ['A4', 'A5', 'Professional', 'Hardcover', 'Spiral', 'Perforated', 'Αποσπώμενο']}),
+    ("Eraser",            ['ΓΟΜΕΣ'],                                      {'title_boost': ['White', 'Soft', 'Λευκή']}),
+]
+
+STATIONERY_CLUSTER_SLOTS = {
+    "Pens":               PENS_SLOTS,
+    "Pencils":            PENCILS_SLOTS,
+    "Markers":            MARKERS_SLOTS,
+    "Sharpeners":         SHARPENERS_SLOTS,
+    "Erasers":            ERASERS_SLOTS,
+    "Correction":         CORRECTION_SLOTS,
+    "Pencil Cases":       PENCIL_CASES_SLOTS,
+    "Geometric Tools":    GEOMETRIC_TOOLS_SLOTS,
+    "Stationery Sets":    STATIONERY_SETS_SLOTS,
+    "Paints":             PAINTS_SLOTS,
+    "Brushes":            BRUSHES_SLOTS,
+    "Colored Pencils Art": COLORED_PENCILS_ART_SLOTS,
+    "Drawing Markers":    DRAWING_MARKERS_SLOTS,
+    "Art Paper":          ART_PAPER_SLOTS,
+    "Notebooks":          NOTEBOOKS_SLOTS,
+    "Notepads":           NOTEPADS_SLOTS,
+}
+
 # ── Printer sub-personas (Inkjet vs Laser) ──
 PRINTER_INKJET_SLOTS = [
     ("Ink Cartridge 1",     ['INK CATRIDGES', 'COMPATIBLE INK CARTRIDGES'], {'ink_model_match': True, 'brand_match': True}),
@@ -4347,7 +4657,7 @@ def run_peripherals_engine(trigger, df_products, df_history, cluster_key):
     # second pass without.
     # ═══════════════════════════════════════════════════════════
     max_slots = len(slots)
-    if len(all_recs) < max_slots and cluster_key in ("Mouse", "Keyboard", "Gaming Mouse", "Gaming Keyboard", "Monitors"):
+    if len(all_recs) < max_slots and (cluster_key in ("Mouse", "Keyboard", "Gaming Mouse", "Gaming Keyboard", "Monitors") or cluster_key in STATIONERY_CLUSTERS):
         empty_count = max_slots - len(all_recs)
         backfill_notes = [f"🔄 Backfill: {empty_count} empty slots to fill"]
 
@@ -4434,6 +4744,14 @@ elif active_cluster == "Floor Care":
     slot_diag = []
 elif active_cluster in ("Mouse", "Keyboard", "Gaming Mouse", "Gaming Keyboard"):
     recs, diag, slot_notes, full_candidates = run_peripherals_engine(trigger, df_peripherals, df_history, active_cluster)
+    slot_diag = []
+elif active_cluster in STATIONERY_CLUSTERS:
+    # Stationery uses the same peripherals engine with stationery-specific slots
+    stat_slots = STATIONERY_CLUSTER_SLOTS.get(active_cluster, [])
+    if stat_slots:
+        # Temporarily inject slots into PERIPHERAL_CLUSTER_SLOTS for the engine
+        PERIPHERAL_CLUSTER_SLOTS[active_cluster] = stat_slots
+    recs, diag, slot_notes, full_candidates = run_peripherals_engine(trigger, df_stationery, df_history, active_cluster)
     slot_diag = []
 elif active_cluster in ("Monitors", "Printers", "Webcam", "USB Hub"):
     recs, diag, slot_notes, full_candidates = run_peripherals_engine(trigger, df_peripherals, df_history, active_cluster)
