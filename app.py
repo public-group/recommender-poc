@@ -932,7 +932,15 @@ else:
             p_hiers = {h.upper().strip() for h in pconfig.get('hierarchies', set())}
             periph = df_peripherals[df_peripherals['Hierarchy'].fillna('').astype(str).str.upper().str.strip().isin(p_hiers)].copy()
             
-            elif active_cluster == "Monitors":
+            if periph.empty:
+                st.sidebar.warning(f"Δεν βρέθηκαν {active_cluster} products.")
+            else:
+                label = {"Mouse": "Ποντίκι", "Keyboard": "Πληκτρολόγιο", "Gaming Mouse": "Gaming Mouse", "Gaming Keyboard": "Gaming Keyboard"}.get(active_cluster, active_cluster)
+                st.sidebar.markdown(f'<p class="sidebar-section">Επιλέξτε {label}</p>', unsafe_allow_html=True)
+                sel = st.sidebar.selectbox("", periph['Title'].unique(), label_visibility="collapsed", key=f"periph_{active_cluster}_sel")
+                trigger = periph[periph['Title']==sel].iloc[0] if sel else None
+
+    elif active_cluster == "Monitors":
         # Monitor triggers may be in Products sheet or Peripherals
         combined = pd.concat([df_products, df_peripherals], ignore_index=True) if not df_peripherals.empty else df_products
         monitors = combined[combined['Hierarchy'].fillna('').astype(str).str.upper().str.strip().isin({'TFT MONITOR', 'MONITORS'})].copy()
