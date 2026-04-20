@@ -935,15 +935,15 @@ else:
             # ─────────────────────────────────────────────────────────────
             # 🧪 TEST LIST: Restrict the dropdown to specific SKUs
             # ─────────────────────────────────────────────────────────────
-            if active_cluster in ("Mouse", "Keyboard", "Gaming Mouse", "Gaming Keyboard"):
+            if active_cluster in ("Mouse", "Gaming Mouse"):
                 target_skus = {
                     "1148597", "1200734", "1986598", "2092896", "1533714", 
                     "2064103", "1736727", "1576681", "1974266", "1981199", 
                     "1334843", "1334845", "1566188", "1571956", "1574806", 
-                    "1585918", "1611810", "1646794", "1646827", "1663975",
                     "1696998", "1539766", "2084471", "1534473", "1867024", # Added new SKUs
                     "1600373", "1950837", "1839249", "1825285", "1841438", 
-                    "1794589", "1841439", "2057552", "1696998"
+                    "1585918", "1611810", "1646794", "1646827", "1663975"
+                    "1794589", "1841439", "2057552", "1906214"
                 }
                 periph = periph[periph['Material'].astype(str).str.strip().isin(target_skus)]
             # ─────────────────────────────────────────────────────────────
@@ -4224,6 +4224,76 @@ def run_peripherals_engine(trigger, df_products, df_history, cluster_key):
         diag.append((f"Slot {idx} ({role})", 1, f"Score: {chosen.get('Final_Score',0):.0f}"))
 
     diag.append(("TOTAL", len(all_recs), f"out of {len(slots)}"))
+
+    # ═══════════════════════════════════════════════════════════
+    # BACKFILL: If any slots are empty, recycle earlier hierarchies
+    # to always show a full carousel. First pass with brand match,
+    # second pass without.
+    # ═══════════════════════════════════════════════════════════
+    max_slots = len(slots)
+    if len(all_recs) < max_slots and cluster_key in ("Mouse", "Keyboard", "Gaming Mouse", "Gaming Keyboard"):
+        empty_count = max_slots - len(all_recs)
+        backfill_notes = [f"🔄 Backfill: {empty_count} empty slots to fill"]
+
+        # Build recyclable hierarchy list from filled slots (in order)
+        recycle_hiers = []
+        for _, hierarchies, _ in slots:
+            for h in hierarchies:
+                if h not in recycle_hiers:
+                    recycle_hiers.append(h)
+
+        filled = 0
+        # Pass 1: brand match, Pass 2: no brand match
+        for pass_num, do_brand in enumerate([True, False], 1):
+            if filled >= empty_count:
+                break
+            for h in recycle_hiers:
+                if filled >= empty_count:
+                    break
+                hier_upper = h.upper().strip()
+                pool = c[c['Hierarchy'].fillna('').astype(str).str.upper().str.strip() == hier_upper].copy()
+                pool = pool[~pool['Material'].isin(used_materials)]
+
+                if pool.empty:
+                    continue
+
+                # Score
+                pool['Final_Score'] = 0.0
+                if 'AVAILABILITY' in pool.columns:
+                    pool.loc[pool['AVAILABILITY'] == 'Άμεσα Διαθέσιμο', 'Final_Score'] += 100000
+                pool['Final_Score'] += pool['Sales_Tiebreaker'].fillna(0) * 0.1
+
+                # Brand boost (pass 1 only)
+                if do_brand and tb:
+                    target_brands = pool['Κατασκευαστής'].fillna('').str.strip().str.upper()
+                    if tb in ['LOGITECH', 'LOGITECH G']:
+                        is_same = target_brands.isin(['LOGITECH', 'LOGITECH G'])
+                    else:
+                        is_same = target_brands == tb
+                    brand_pool = pool[is_same]
+                    if not brand_pool.empty:
+                        pool = brand_pool
+                    elif pass_num == 1:
+                        continue  # Pass 1: skip if no brand match, try in pass 2
+
+                pool = pool.sort_values('Final_Score', ascending=False)
+                chosen = pool.iloc[0]
+
+                next_slot = len(all_recs) + 1
+                rc = chosen.copy()
+                rc['Assigned_Slot'] = next_slot
+                rc['Slot_Role'] = f"Backfill ({h})"
+                rc['Marketing_Copy'] = "Ταιριάζει τέλεια στο setup σου."
+                rc['Item_Rank'] = 1
+                all_recs.append(rc)
+                used_materials.add(chosen['Material'])
+                filled += 1
+
+                pass_label = "brand" if do_brand else "any"
+                backfill_notes.append(f"  Slot {next_slot}: [{pass_label}] {str(chosen.get('Title',''))[:50]} (from {h})")
+
+        diag.append(("BACKFILL", filled, f"Recycled {filled} products"))
+        slot_notes[max_slots + 1] = backfill_notes
 
     if all_recs:
         recs_df = pd.DataFrame(all_recs)
