@@ -935,12 +935,15 @@ else:
             # ─────────────────────────────────────────────────────────────
             # 🧪 TEST LIST: Restrict the dropdown to specific SKUs
             # ─────────────────────────────────────────────────────────────
-            if active_cluster in ("Mouse", "Gaming Mouse"):
+            if active_cluster in ("Mouse", "Keyboard", "Gaming Mouse", "Gaming Keyboard"):
                 target_skus = {
                     "1148597", "1200734", "1986598", "2092896", "1533714", 
                     "2064103", "1736727", "1576681", "1974266", "1981199", 
                     "1334843", "1334845", "1566188", "1571956", "1574806", 
-                    "1585918", "1611810", "1646794", "1646827", "1663975"
+                    "1585918", "1611810", "1646794", "1646827", "1663975",
+                    "1696998", "1539766", "2084471", "1534473", "1867024",
+                    "1600373", "1950837", "1839249", "1825285", "1841438", 
+                    "1794589", "1841439", "2057552", "1906214"
                 }
                 periph = periph[periph['Material'].astype(str).str.strip().isin(target_skus)]
             # ─────────────────────────────────────────────────────────────
@@ -962,9 +965,21 @@ else:
         if monitors.empty:
             st.sidebar.warning("Δεν βρέθηκαν οθόνες.")
         else:
-            st.sidebar.markdown('<p class="sidebar-section">Επιλέξτε Οθόνη</p>', unsafe_allow_html=True)
-            sel = st.sidebar.selectbox("", monitors['Title'].unique(), label_visibility="collapsed", key="mon_sel")
-            trigger = monitors[monitors['Title']==sel].iloc[0] if sel else None
+            # ─────────────────────────────────────────────────────────────
+            # 🧪 TEST LIST: Restrict the dropdown to specific Monitor SKUs
+            # ─────────────────────────────────────────────────────────────
+            monitor_test_skus = {
+                "2096238", "1992012", "2076445", "2066078",
+                "2093201", "1795955", "2024266"
+            }
+            monitors = monitors[monitors['Material'].astype(str).str.strip().isin(monitor_test_skus)]
+            # ─────────────────────────────────────────────────────────────
+            if monitors.empty:
+                st.sidebar.warning("Δεν βρέθηκαν test οθόνες.")
+            else:
+                st.sidebar.markdown('<p class="sidebar-section">Επιλέξτε Οθόνη</p>', unsafe_allow_html=True)
+                sel = st.sidebar.selectbox("", monitors['Title'].unique(), label_visibility="collapsed", key="mon_sel")
+                trigger = monitors[monitors['Title']==sel].iloc[0] if sel else None
 
     elif active_cluster == "Printers":
         combined = pd.concat([df_products, df_peripherals], ignore_index=True) if not df_peripherals.empty else df_products
