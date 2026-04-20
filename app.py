@@ -934,18 +934,20 @@ else:
             
             # ─────────────────────────────────────────────────────────────
             # 🧪 TEST LIST: Restrict the dropdown to specific SKUs
+            # Only filters if there are matching SKUs in this cluster's pool
             # ─────────────────────────────────────────────────────────────
-            if active_cluster in ("Mouse", "Keyboard", "Gaming Mouse", "Gaming Keyboard"):
-                target_skus = {
-                    "1148597", "1200734", "1986598", "2092896", "1533714", 
-                    "2064103", "1736727", "1576681", "1974266", "1981199", 
-                    "1334843", "1334845", "1566188", "1571956", "1574806", 
-                    "1585918", "1611810", "1646794", "1646827", "1663975",
-                    "1696998", "1539766", "2084471", "1534473", "1867024",
-                    "1600373", "1950837", "1839249", "1825285", "1841438", 
-                    "1794589", "1841439", "2057552", "1906214"
-                }
-                periph = periph[periph['Material'].astype(str).str.strip().isin(target_skus)]
+            target_skus = {
+                "1148597", "1200734", "1986598", "2092896", "1533714", 
+                "2064103", "1736727", "1576681", "1974266", "1981199", 
+                "1334843", "1334845", "1566188", "1571956", "1574806", 
+                "1585918", "1611810", "1646794", "1646827", "1663975",
+                "1696998", "1539766", "2084471", "1534473", "1867024",
+                "1600373", "1950837", "1839249", "1825285", "1841438", 
+                "1794589", "1841439", "2057552", "1906214"
+            }
+            test_filtered = periph[periph['Material'].astype(str).str.strip().isin(target_skus)]
+            if not test_filtered.empty:
+                periph = test_filtered
             # ─────────────────────────────────────────────────────────────
 
             if periph.empty:
@@ -972,7 +974,9 @@ else:
                 "2096238", "1992012", "2076445", "2066078",
                 "2093201", "1795955", "2024266"
             }
-            monitors = monitors[monitors['Material'].astype(str).str.strip().isin(monitor_test_skus)]
+            mon_filtered = monitors[monitors['Material'].astype(str).str.strip().isin(monitor_test_skus)]
+            if not mon_filtered.empty:
+                monitors = mon_filtered
             # ─────────────────────────────────────────────────────────────
             if monitors.empty:
                 st.sidebar.warning("Δεν βρέθηκαν test οθόνες.")
