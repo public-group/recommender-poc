@@ -943,8 +943,8 @@ else:
                     "1585918", "1611810", "1646794", "1646827", "1663975",
                     "1696998", "1539766", "2084471", "1534473", "1867024", # Added new SKUs
                     "1600373", "1950837", "1839249", "1825285", "1841438", 
-                    "1794589", "1841439", "2057552", "1906214"
-                    }
+                    "1794589", "1841439", "2057552", "1696998"
+                }
                 periph = periph[periph['Material'].astype(str).str.strip().isin(target_skus)]
             # ─────────────────────────────────────────────────────────────
 
@@ -3549,9 +3549,9 @@ MOUSE_SLOTS = [
 ]
 
 KEYBOARD_SLOTS = [
-    ("Mouse",               ['MOUSE WIRELESS', 'MOUSE WIRED', 'APPLE ORIGINAL WIRELESS MOUSE'], {'connectivity_mirror': True, 'brand_match': True, 'apple_force': 'APPLE ORIGINAL WIRELESS MOUSE', 'silent_match': True}),
+    ("Mouse",               ['MOUSE WIRELESS', 'MOUSE WIRED', 'APPLE ORIGINAL WIRELESS MOUSE'], {'connectivity_mirror': True, 'brand_match': True, 'apple_force': 'APPLE ORIGINAL WIRELESS MOUSE', 'silent_match': True, 'ergo_match': True}),
     ("Desk Mat",            ['MOUSE PADS'],                   {'xxl_only': True}),
-    ("Batteries",           ['ΑΛΚΑΛΙΚΕΣ'],                    {'skip_if': 'no_battery', 'fallback_hier': ['USB HUB DEVICES']}),
+    ("Batteries",           ['ΑΛΚΑΛΙΚΕΣ'],                    {'skip_if': 'no_battery', 'fallback_hier': ['USB HUB DEVICES'], 'title_hide': ['CR', 'Button', 'Coin', 'Λιθίου'], 'title_boost': ['AA', 'AAA', 'LR6', 'LR03']}),
     ("Cleaning",            ['CLEANING PRODUCTS'],            {}),
     ("PC Speakers",         ['PC SPEAKERS 2.0', 'PC SPEAKERS 1'], {}),
     ("PC Headset",          ['PC HEADSET/MICROPHONE', 'OVERHEAD'], {}),
@@ -3574,8 +3574,8 @@ GAMING_MOUSE_SLOTS = [
 ]
 
 GAMING_KEYBOARD_SLOTS = [
-    ("Gaming Mousepad",     ['GAMING MOUSE PADS'],            {'brand_match': True}),
-    ("Gaming Mouse",        ['GAMING MOUSE'],                 {'brand_match': True, 'connectivity_mirror': True}),
+    ("Gaming Mousepad",     ['GAMING MOUSE PADS'],            {'brand_match': True, 'title_hide': ['Gel', 'Wrist']}),
+    ("Gaming Mouse",        ['GAMING MOUSE'],                 {'brand_match': True, 'rgb_match': True, 'connectivity_mirror': True}),
     ("Batteries/USB Hub",   ['ΑΛΚΑΛΙΚΕΣ'],                    {'skip_if': 'no_battery', 'fallback_hier': ['USB HUB DEVICES']}),
     ("Gaming Headset",      ['GAMING AUDIO', 'OVERHEAD'],     {'brand_match': True}),
     ("Αξεσουάρ Streaming",  ['STREAMING ACCESSORIES'],        {'eidos_include': ['Capture Card', 'Gaming Αξεσουάρ', 'Green Screen', 'LED ring light', 'Mic Arm', 'Prompter', 'RGB Controller', 'Ring Light', 'Selfie Stick', 'Stream Controller', 'Stream Deck', 'Streaming Kit', 'USB Hub', 'Web Camera', 'Άλλο', 'Ασύρματο μικρόφωνο για vlogging', 'Βάση Στήριξης', 'Βραχίονας μικροφώνου', 'Επαγγελματικά Μικρόφωνα', 'Επιτραπέζιο', 'Ηχοαπορροφητικά Πάνελ', 'Κάρτα καταγραφής βίντεο', 'Κάρτα καταγραφής βίντεο (Capture Card)', 'Μικρόφωνο', 'Μικρόφωνο streaming', 'Τηλεπρομπτέρ με ενσωματωμένη οθόνη', 'Φωτισμός', 'Φωτιστικό']}),
@@ -3700,6 +3700,7 @@ def get_peripheral_budget(anchor_price, category):
     # Budget Tier
     if anchor_price < 20:
         if category == 'KEYBOARD': return (15, 25)
+        if category == 'MOUSE': return (10, 20)
         if category == 'HEADSET': return (15, 30)
         if category == 'MOUSEPAD': return (5, 10)
         return (5, anchor_price * 0.30) # 30% rule for general accessories
@@ -3707,6 +3708,7 @@ def get_peripheral_budget(anchor_price, category):
     # Sweet Spot Tier
     elif anchor_price < 80:
         if category == 'KEYBOARD': return (40, 70)
+        if category == 'MOUSE': return (30, 60)
         if category == 'HEADSET': return (40, 80)
         if category == 'MOUSEPAD': return (15, 25)
         return (10, anchor_price * 0.30)
@@ -3714,6 +3716,7 @@ def get_peripheral_budget(anchor_price, category):
     # High-End Tier
     elif anchor_price < 150:
         if category == 'KEYBOARD': return (120, 180)
+        if category == 'MOUSE': return (80, 130)
         if category == 'HEADSET': return (100, 150)
         if category == 'MOUSEPAD': return (30, 50)
         return (15, anchor_price * 0.30)
@@ -3721,6 +3724,7 @@ def get_peripheral_budget(anchor_price, category):
     # Ultra/Pro Tier (>= 150)
     else:
         if category == 'KEYBOARD': return (200, 350)
+        if category == 'MOUSE': return (150, 300)
         if category == 'HEADSET': return (200, 400)
         if category == 'MOUSEPAD': return (50, 100)
         return (25, anchor_price * 0.50) # Loosened 30% rule for flagship buyers
@@ -3902,6 +3906,7 @@ def run_peripherals_engine(trigger, df_products, df_history, cluster_key):
             # Identify the category for the current slot
             r_lower = role.lower()
             if 'keyboard' in r_lower: cat_key = 'KEYBOARD'
+            elif 'mouse' in r_lower and 'pad' not in r_lower: cat_key = 'MOUSE'
             elif 'headset' in r_lower: cat_key = 'HEADSET'
             elif 'pad' in r_lower or 'mat' in r_lower or 'rest' in r_lower: cat_key = 'MOUSEPAD'
             else: cat_key = 'ACCESSORY'
