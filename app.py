@@ -101,7 +101,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v22.0 — Peripherals: Mouse/KB/Gaming Mouse deep attrs + Gaming KB triggers + Streaming Είδος filter + Monitors (3 personas) + Printers (Inkjet/Laser) + Webcam + USB Hub
+        🟢 Engine v22.1 — Peripherals: Mouse/KB/Gaming Mouse/Gaming KB + Streaming Είδος + Monitors (dedicated HDMI/DP/USB ports) + Backfill + Printers + Webcam + USB Hub
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -940,10 +940,7 @@ else:
                     "1148597", "1200734", "1986598", "2092896", "1533714", 
                     "2064103", "1736727", "1576681", "1974266", "1981199", 
                     "1334843", "1334845", "1566188", "1571956", "1574806", 
-                    "1696998", "1539766", "2084471", "1534473", "1867024", # Added new SKUs
-                    "1600373", "1950837", "1839249", "1825285", "1841438", 
                     "1585918", "1611810", "1646794", "1646827", "1663975"
-                    "1794589", "1841439", "2057552", "1906214"
                 }
                 periph = periph[periph['Material'].astype(str).str.strip().isin(target_skus)]
             # ─────────────────────────────────────────────────────────────
@@ -3587,22 +3584,22 @@ GAMING_KEYBOARD_SLOTS = [
 
 # ── Monitor sub-personas (detected from Χρήση or hierarchy) ──
 MONITOR_GAMING_SLOTS = [
-    ("DisplayPort Cable",   ['DISPLAY-PORT CABLES', 'GAMING HDMI CABLES'], {'cable_port_match': 'DisplayPort'}),
+    ("DisplayPort Cable",   ['DISPLAY-PORT CABLES'],           {'cable_port_match': 'DisplayPort'}),
+    ("HDMI Cable",          ['GAMING HDMI CABLES', 'MONITOR CABLES'], {'cable_port_match': 'HDMI'}),
     ("Monitor Arm",         ['ΒΑΣΕΙΣ ΓΡΑΦΕΙΟΥ'],               {'vesa_match': True, 'title_hide': ['Wall Mount']}),
     ("LED Strip",           ['ΕΞΥΠΝΟΣ ΦΩΤΙΣΜΟΣ'],            {'title_boost': ['Strip', 'LED', 'Bias', 'Backlight']}),
-    ("Gaming Mouse",        ['GAMING MOUSE'],                 {}),
-    ("Gaming Keyboard",     ['GAMING KEYBOARDS'],             {}),
-    ("Gaming Mousepad",     ['GAMING MOUSE PADS'],            {}),
-    ("Gaming Headset",      ['GAMING AUDIO'],                 {}),
-    ("Gaming Headset 2",    ['GAMING AUDIO'],                 {}),
+    ("Gaming Mouse",        ['GAMING MOUSE'],                 {'brand_match': True}),
+    ("Gaming Keyboard",     ['GAMING KEYBOARDS'],             {'brand_match': True}),
+    ("Gaming Mousepad",     ['GAMING MOUSE PADS'],            {'brand_match': True}),
+    ("Gaming Headset",      ['GAMING AUDIO'],                 {'brand_match': True}),
     ("Screen Cleaner",      ['CLEANING PRODUCTS'],            {}),
     ("UPS",                 ['ΜΠΑΤΑΡΙΕΣ UPS'],                          {}),
 ]
 
 MONITOR_PRO_SLOTS = [
     ("USB-C Cable",         ['USB CABLES'],                   {'cable_port_match': 'USB-C', 'title_boost': ['Thunderbolt', 'USB-C']}),
-    ("Ergonomic Mouse",     ['MOUSE WIRELESS'],               {'ergo_match': True, 'title_hide': ['Gaming', 'RGB']}),
-    ("Wireless Keyboard",   ['KEYBOARDS WIRELESS'],           {'title_hide': ['Gaming', 'RGB']}),
+    ("Ergonomic Mouse",     ['MOUSE WIRELESS'],               {'ergo_match': True, 'brand_match': True, 'title_hide': ['Gaming', 'RGB']}),
+    ("Wireless Keyboard",   ['KEYBOARDS WIRELESS'],           {'brand_match': True, 'title_hide': ['Gaming', 'RGB']}),
     ("Webcam",              ['PC WEB CAMS'],                  {'resolution_match': True}),
     ("Monitor Arm",         ['ΒΑΣΕΙΣ ΓΡΑΦΕΙΟΥ'],               {'vesa_match': True, 'title_boost': ['Heavy', 'UltraWide']}),
     ("ScreenBar",           ['ΕΞΥΠΝΟΣ ΦΩΤΙΣΜΟΣ'],            {'title_boost': ['ScreenBar', 'Monitor Light', 'Desk', 'Γραφείου']}),
@@ -3613,7 +3610,7 @@ MONITOR_PRO_SLOTS = [
 ]
 
 MONITOR_MAINSTREAM_SLOTS = [
-    ("HDMI Cable",          ['MONITOR CABLES'],               {'cable_length_boost': True}),
+    ("HDMI Cable",          ['MONITOR CABLES'],               {'cable_port_match': 'HDMI', 'cable_length_boost': True}),
     ("Mouse+KB Combo",      ['KEYBOARDS WIRELESS'], {}),
     ("Wireless Mouse",      ['MOUSE WIRELESS'],               {'title_hide': ['Gaming', 'RGB']}),
     ("Mouse Pad",           ['MOUSE PADS'],                   {'title_boost': ['Gel', 'Wrist', 'Ergonomic'], 'title_hide': ['XXL', 'Extended']}),
@@ -3769,6 +3766,20 @@ def run_peripherals_engine(trigger, df_products, df_history, cluster_key):
     tinches = parse_screen_size(trigger.get('Ιντσες', trigger.get('Μέγεθος οθόνης', '')))
     tres = str(trigger.get('Ανάλυση Οθόνης', '')).lower()
 
+    # Dedicated port columns (new — takes priority over old Θύρες)
+    _port_na = {'', 'nan', 'n/a', '0', '-', 'none'}
+    t_hdmi_raw = str(trigger.get('HDMI', '')).strip()
+    t_dp_raw   = str(trigger.get('Display Port', '')).strip()
+    t_usb_raw  = str(trigger.get('USB', '')).strip()
+    has_hdmi = t_hdmi_raw.lower() not in _port_na
+    has_dp   = t_dp_raw.lower() not in _port_na
+    has_usb  = t_usb_raw.lower() not in _port_na
+    # Fallback: if dedicated columns are all empty, parse old Θύρες
+    if not has_hdmi and not has_dp and not has_usb and tports:
+        has_hdmi = 'hdmi' in tports
+        has_dp   = 'displayport' in tports or 'display port' in tports or 'dp ' in tports
+        has_usb  = 'usb-c' in tports or 'type-c' in tports or 'usb c' in tports
+
     # Printer attributes
     tink = str(trigger.get('Αναλώσιμο υλικό', '')).strip()
     ttech = str(trigger.get('Τεχνολογία', '')).lower()
@@ -3797,6 +3808,8 @@ def run_peripherals_engine(trigger, df_products, df_history, cluster_key):
             slots = MONITOR_MAINSTREAM_SLOTS
             persona = "Mainstream"
         diag.append(("0. Monitor Persona", persona, f"Usage='{tusage}'"))
+        port_info = f"HDMI={'✅'+t_hdmi_raw if has_hdmi else '❌'}, DP={'✅'+t_dp_raw if has_dp else '❌'}, USB={'✅'+t_usb_raw if has_usb else '❌'}"
+        diag.append(("0b. Monitor Ports", port_info, f"Res={tres}"))
     elif cluster_key == "Printers":
         if is_laser:
             slots = PRINTER_LASER_SLOTS
@@ -4118,13 +4131,31 @@ def run_peripherals_engine(trigger, df_products, df_history, cluster_key):
                 pool.loc[vm, 'Final_Score'] += 80000
                 notes.append(f"VESA match ({tvesa}): {vm.sum()}")
 
-        # ── Cable port match (Monitors) ──
+        # ── Cable port match (Monitors — uses dedicated HDMI/DP/USB columns) ──
         if flags.get('cable_port_match'):
             port_keyword = flags['cable_port_match'].lower()
-            if port_keyword in tports:
+            # Map flag to dedicated port boolean
+            port_present = False
+            if 'displayport' in port_keyword or 'dp' == port_keyword:
+                port_present = has_dp
+            elif 'usb' in port_keyword or 'type-c' in port_keyword:
+                port_present = has_usb
+            elif 'hdmi' in port_keyword:
+                port_present = has_hdmi
+            else:
+                # Fallback to old Θύρες substring
+                port_present = port_keyword in tports
+
+            if port_present:
                 m = pool['Title'].fillna('').str.lower().str.contains(port_keyword, na=False)
                 pool.loc[m, 'Final_Score'] += 80000
-                notes.append(f"Port match ({port_keyword})")
+                notes.append(f"Port match ({port_keyword}): ✅ Monitor has this port, boosted {m.sum()}")
+            else:
+                # Monitor doesn't have this port → skip slot
+                notes.append(f"Port match ({port_keyword}): ❌ Monitor lacks this port → skipping")
+                slot_notes[idx] = notes
+                diag.append((f"Slot {idx} ({role})", 0, f"No {port_keyword} port"))
+                continue
 
         # ── Cable length boost (Monitors mainstream) ──
         if flags.get('cable_length_boost'):
@@ -4231,7 +4262,7 @@ def run_peripherals_engine(trigger, df_products, df_history, cluster_key):
     # second pass without.
     # ═══════════════════════════════════════════════════════════
     max_slots = len(slots)
-    if len(all_recs) < max_slots and cluster_key in ("Mouse", "Keyboard", "Gaming Mouse", "Gaming Keyboard"):
+    if len(all_recs) < max_slots and cluster_key in ("Mouse", "Keyboard", "Gaming Mouse", "Gaming Keyboard", "Monitors"):
         empty_count = max_slots - len(all_recs)
         backfill_notes = [f"🔄 Backfill: {empty_count} empty slots to fill"]
 
