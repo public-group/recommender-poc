@@ -934,6 +934,7 @@ else:
             
             # ─────────────────────────────────────────────────────────────
             # 🧪 TEST LIST: Restrict the dropdown to specific SKUs
+            # Only filters if there are matching SKUs in this cluster's pool
             # ─────────────────────────────────────────────────────────────
             target_skus = {
                 "1148597", "1200734", "1986598", "2092896", "1533714", 
@@ -944,12 +945,13 @@ else:
                 "1600373", "1950837", "1839249", "1825285", "1841438", 
                 "1794589", "1841439", "2057552", "1906214"
             }
-            
-            # STRICT FILTER: Replaced the fallback logic to force restriction
-            periph = periph[periph['Material'].astype(str).str.strip().isin(target_skus)]
+            test_filtered = periph[periph['Material'].astype(str).str.strip().isin(target_skus)]
+            if not test_filtered.empty:
+                periph = test_filtered
+            # ─────────────────────────────────────────────────────────────
 
             if periph.empty:
-                st.sidebar.warning(f"Δεν βρέθηκαν Test SKUs για την κατηγορία {active_cluster}.")
+                st.sidebar.warning(f"Δεν βρέθηκαν {active_cluster} products.")
             else:
                 label = {"Mouse": "Ποντίκι", "Keyboard": "Πληκτρολόγιο", "Gaming Mouse": "Gaming Mouse", "Gaming Keyboard": "Gaming Keyboard"}.get(active_cluster, active_cluster)
                 st.sidebar.markdown(f'<p class="sidebar-section">Επιλέξτε {label}</p>', unsafe_allow_html=True)
@@ -960,27 +962,28 @@ else:
         # Monitor triggers may be in Products sheet or Peripherals
         combined = pd.concat([df_products, df_peripherals], ignore_index=True) if not df_peripherals.empty else df_products
         monitors = combined[combined['Hierarchy'].fillna('').astype(str).str.upper().str.strip().isin({'TFT MONITOR', 'MONITORS'})].copy()
-        
         if monitors.empty:
             monitors = combined[combined['Level 2'].fillna('').str.strip().str.lower().isin(['monitors', 'οθόνες'])].copy()
-            
-        # ─────────────────────────────────────────────────────────────
-        # 🧪 TEST LIST: Restrict the dropdown to specific Monitor SKUs
-        # ─────────────────────────────────────────────────────────────
-        monitor_test_skus = {
-            "2096238", "1992012", "2076445", "2066078",
-            "2093201", "1795955", "2024266"
-        }
-        
-        # STRICT FILTER: Removed fallback logic here as well
-        monitors = monitors[monitors['Material'].astype(str).str.strip().isin(monitor_test_skus)]
-        
         if monitors.empty:
-            st.sidebar.warning("Δεν βρέθηκαν test οθόνες στην τρέχουσα ιεραρχία.")
+            st.sidebar.warning("Δεν βρέθηκαν οθόνες.")
         else:
-            st.sidebar.markdown('<p class="sidebar-section">Επιλέξτε Οθόνη</p>', unsafe_allow_html=True)
-            sel = st.sidebar.selectbox("", monitors['Title'].unique(), label_visibility="collapsed", key="mon_sel")
-            trigger = monitors[monitors['Title']==sel].iloc[0] if sel else None
+            # ─────────────────────────────────────────────────────────────
+            # 🧪 TEST LIST: Restrict the dropdown to specific Monitor SKUs
+            # ─────────────────────────────────────────────────────────────
+            monitor_test_skus = {
+                "2096238", "1992012", "2076445", "2066078",
+                "2093201", "1795955", "2024266"
+            }
+            mon_filtered = monitors[monitors['Material'].astype(str).str.strip().isin(monitor_test_skus)]
+            if not mon_filtered.empty:
+                monitors = mon_filtered
+            # ─────────────────────────────────────────────────────────────
+            if monitors.empty:
+                st.sidebar.warning("Δεν βρέθηκαν test οθόνες.")
+            else:
+                st.sidebar.markdown('<p class="sidebar-section">Επιλέξτε Οθόνη</p>', unsafe_allow_html=True)
+                sel = st.sidebar.selectbox("", monitors['Title'].unique(), label_visibility="collapsed", key="mon_sel")
+                trigger = monitors[monitors['Title']==sel].iloc[0] if sel else None
 
     elif active_cluster == "Printers":
         combined = pd.concat([df_products, df_peripherals], ignore_index=True) if not df_peripherals.empty else df_products
