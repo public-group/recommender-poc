@@ -941,14 +941,14 @@ else:
                 trigger = periph[periph['Title']==sel].iloc[0] if sel else None
 
     elif active_cluster == "Monitors":
-        # 1. Gather all possible monitor rows
+        # Monitor triggers logic
         combined = pd.concat([df_products, df_peripherals], ignore_index=True) if not df_peripherals.empty else df_products
         monitors = combined[combined['Hierarchy'].fillna('').astype(str).str.upper().str.strip().isin({'TFT MONITOR', 'MONITORS'})].copy()
         
         if monitors.empty:
             monitors = combined[combined['Level 2'].fillna('').str.strip().str.lower().isin(['monitors', 'οθόνες'])].copy()
             
-        # 2. 🧪 TEST LIST: Restrict the dropdown to specific SKUs (Only these will show)
+        # 🧪 TEST LIST: Restrict the dropdown to specific SKUs
         target_skus = {
             "1148597", "1200734", "1986598", "2092896", "1533714", 
             "2064103", "1736727", "1576681", "1974266", "1981199", 
@@ -961,13 +961,11 @@ else:
             "1795955", "2024266"
         }
         
-        # Clean the Material column to match the strings in target_skus
         monitors['Material_Clean'] = monitors['Material'].astype(str).str.split('.').str[0].str.strip()
         monitors = monitors[monitors['Material_Clean'].isin(target_skus)]
 
-        # 3. Render the selector
         if monitors.empty:
-            st.sidebar.warning("Δεν βρέθηκαν οι συγκεκριμένες οθόνες του Test List.")
+            st.sidebar.warning("Δεν βρέθηκαν οθόνες.")
         else:
             st.sidebar.markdown('<p class="sidebar-section">Επιλέξτε Οθόνη</p>', unsafe_allow_html=True)
             sel = st.sidebar.selectbox("", monitors['Title'].unique(), label_visibility="collapsed", key="mon_sel")
