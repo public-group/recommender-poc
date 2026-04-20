@@ -3600,24 +3600,24 @@ GAMING_KEYBOARD_SLOTS = [
 
 # ── Monitor sub-personas (detected from Χρήση or hierarchy) ──
 MONITOR_GAMING_SLOTS = [
-    ("DisplayPort Cable",   ['DISPLAY-PORT CABLES'],           {'cable_port_match': 'DisplayPort'}),
-    ("HDMI Cable",          ['GAMING HDMI CABLES', 'MONITOR CABLES'], {'cable_port_match': 'HDMI'}),
-    ("Monitor Arm",         ['ΒΑΣΕΙΣ ΓΡΑΦΕΙΟΥ'],               {'vesa_match': True, 'title_hide': ['Wall Mount']}),
-    ("LED Strip",           ['ΕΞΥΠΝΟΣ ΦΩΤΙΣΜΟΣ'],            {'title_boost': ['Strip', 'LED', 'Bias', 'Backlight'], 'usage_hide': ['Εξωτερική', 'Εξωτερικού χώρου', 'TV']}),
     ("Gaming Mouse",        ['GAMING MOUSE'],                 {'brand_match': True}),
     ("Gaming Keyboard",     ['GAMING KEYBOARDS'],             {'brand_match': True}),
     ("Gaming Mousepad",     ['GAMING MOUSE PADS'],            {'brand_match': True}),
     ("Gaming Headset",      ['GAMING AUDIO'],                 {'brand_match': True}),
+    ("DisplayPort Cable",   ['DISPLAY-PORT CABLES'],           {'cable_port_match': 'DisplayPort'}),
+    ("HDMI Cable",          ['GAMING HDMI CABLES', 'MONITOR CABLES'], {'cable_port_match': 'HDMI'}),
+    ("LED Strip",           ['ΕΞΥΠΝΟΣ ΦΩΤΙΣΜΟΣ'],            {'title_boost': ['Strip', 'LED', 'Bias', 'Backlight'], 'usage_hide': ['Εξωτερική', 'Εξωτερικού χώρου', 'TV']}),
+    ("Monitor Arm",         ['ΒΑΣΕΙΣ ΓΡΑΦΕΙΟΥ'],               {'vesa_match': True, 'title_hide': ['Wall Mount', 'CPU', 'Υπολογιστή', 'Riser', 'Drawer']}),
     ("Screen Cleaner",      ['CLEANING PRODUCTS'],            {}),
     ("UPS",                 ['ΜΠΑΤΑΡΙΕΣ UPS'],                          {}),
 ]
 
 MONITOR_PRO_SLOTS = [
-    ("USB-C Cable",         ['USB CABLES'],                   {'cable_port_match': 'USB-C', 'title_boost': ['Thunderbolt', 'USB-C']}),
     ("Ergonomic Mouse",     ['MOUSE WIRELESS'],               {'ergo_match': True, 'brand_match': True, 'title_hide': ['Gaming', 'RGB']}),
     ("Wireless Keyboard",   ['KEYBOARDS WIRELESS'],           {'brand_match': True, 'title_hide': ['Gaming', 'RGB']}),
+    ("USB-C Cable",         ['USB CABLES'],                   {'cable_port_match': 'USB-C', 'title_boost': ['Thunderbolt', 'USB-C']}),
     ("Webcam",              ['PC WEB CAMS'],                  {'resolution_match': True}),
-    ("Monitor Arm",         ['ΒΑΣΕΙΣ ΓΡΑΦΕΙΟΥ'],               {'vesa_match': True, 'title_boost': ['Heavy', 'UltraWide']}),
+    ("Monitor Arm",         ['ΒΑΣΕΙΣ ΓΡΑΦΕΙΟΥ'],               {'vesa_match': True, 'title_boost': ['Heavy', 'UltraWide'], 'title_hide': ['CPU', 'Υπολογιστή', 'Riser', 'Drawer']}),
     ("ScreenBar",           ['ΕΞΥΠΝΟΣ ΦΩΤΙΣΜΟΣ'],            {'title_boost': ['ScreenBar', 'Monitor Light', 'Desk', 'Γραφείου'], 'usage_hide': ['Εξωτερική', 'Εξωτερικού χώρου', 'TV']}),
     ("USB-C Hub",           ['USB HUB DEVICES', 'DOCKING STATIONS LAPTOP'], {'title_boost': ['USB-C', 'Thunderbolt', 'Dock']}),
     ("PC Speakers",         ['PC SPEAKERS 2.0'],              {}),
@@ -3626,11 +3626,11 @@ MONITOR_PRO_SLOTS = [
 ]
 
 MONITOR_MAINSTREAM_SLOTS = [
-    ("HDMI Cable",          ['MONITOR CABLES'],               {'cable_port_match': 'HDMI', 'cable_length_boost': True}),
     ("Mouse+KB Combo",      ['KEYBOARDS WIRELESS'],           {'title_hide': ['Gaming', 'RGB']}),
     ("Wireless Mouse",      ['MOUSE WIRELESS'],               {'title_hide': ['Gaming', 'RGB']}),
-    ("Mouse Pad",           ['MOUSE PADS'],                   {'title_boost': ['Gel', 'Wrist', 'Ergonomic'], 'title_hide': ['XXL', 'Extended', 'Gaming'], 'usage_hide': ['Gaming']}),
-    ("Monitor Riser",       ['ΒΑΣΕΙΣ ΓΡΑΦΕΙΟΥ'],               {'title_boost': ['Riser', 'Stand', 'Drawer', 'Organizer'], 'title_hide': ['Wall Mount', 'Gas Spring', 'VESA']}),
+    ("Mouse Pad",           ['MOUSE PADS'],                   {'title_hide': ['XXL', 'Extended', 'Gaming', 'Gel', 'Wrist', 'Μαξιλαράκι'], 'usage_hide': ['Gaming']}),
+    ("HDMI Cable",          ['MONITOR CABLES'],               {'cable_port_match': 'HDMI', 'cable_length_boost': True}),
+    ("Monitor Riser",       ['ΒΑΣΕΙΣ ΓΡΑΦΕΙΟΥ'],               {'title_boost': ['Riser', 'Stand', 'Drawer', 'Organizer'], 'title_hide': ['Wall Mount', 'Gas Spring', 'VESA', 'CPU', 'Υπολογιστή']}),
     ("PC Speakers",         ['PC SPEAKERS 2.0'],              {}),
     ("Webcam",              ['PC WEB CAMS'],                  {}),
     ("USB Hub",             ['USB HUB DEVICES'],              {}),
@@ -3741,6 +3741,41 @@ def get_peripheral_budget(anchor_price, category):
         if category == 'HEADSET': return (200, 400)
         if category == 'MOUSEPAD': return (50, 100)
         return (25, anchor_price * 0.50) # Loosened 30% rule for flagship buyers
+
+def get_monitor_peripheral_budget(monitor_price, category):
+    """
+    Returns (min_price, max_price) for peripherals recommended alongside monitors.
+    Monitor price ≠ peripheral price — a €129 monitor doesn't mean €120 keyboard.
+    Uses the monitor price to gauge the buyer's overall budget level.
+    """
+    # Budget monitor (<€100)
+    if monitor_price < 100:
+        if category == 'KEYBOARD': return (20, 50)
+        if category == 'MOUSE': return (15, 40)
+        if category == 'HEADSET': return (20, 50)
+        if category == 'MOUSEPAD': return (5, 15)
+        return (5, 25)
+    # Mid-range (€100-€250)
+    elif monitor_price < 250:
+        if category == 'KEYBOARD': return (40, 80)
+        if category == 'MOUSE': return (30, 60)
+        if category == 'HEADSET': return (40, 80)
+        if category == 'MOUSEPAD': return (10, 25)
+        return (10, 40)
+    # High-end (€250-€400)
+    elif monitor_price < 400:
+        if category == 'KEYBOARD': return (80, 150)
+        if category == 'MOUSE': return (50, 100)
+        if category == 'HEADSET': return (80, 150)
+        if category == 'MOUSEPAD': return (20, 40)
+        return (15, 60)
+    # Premium (€400+)
+    else:
+        if category == 'KEYBOARD': return (120, 250)
+        if category == 'MOUSE': return (80, 150)
+        if category == 'HEADSET': return (100, 200)
+        if category == 'MOUSEPAD': return (30, 60)
+        return (25, 100)
         
 def run_peripherals_engine(trigger, df_products, df_history, cluster_key):
     """Unified peripheral engine for all IT clusters."""
@@ -3962,7 +3997,11 @@ def run_peripherals_engine(trigger, df_products, df_history, cluster_key):
             elif 'pad' in r_lower or 'mat' in r_lower or 'rest' in r_lower: cat_key = 'MOUSEPAD'
             else: cat_key = 'ACCESSORY'
 
-            min_p, max_p = get_peripheral_budget(tprice, cat_key)
+            # Use monitor-specific pricing when trigger is a monitor
+            if cluster_key == "Monitors":
+                min_p, max_p = get_monitor_peripheral_budget(tprice, cat_key)
+            else:
+                min_p, max_p = get_peripheral_budget(tprice, cat_key)
             
             # Find items in the sweet spot band
             in_band = (pool['_p'] >= min_p) & (pool['_p'] <= max_p)
