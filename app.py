@@ -4510,7 +4510,6 @@ def run_peripherals_engine(trigger, df_products, df_history, cluster_key):
             m = pool['Title'].fillna('').str.contains(pat, case=False, regex=True, na=False)
             pool.loc[m, 'Final_Score'] -= 100000
 
-
         # ── Pen Variant Match (Same Brand, Same Variant, Different Color) ──
         if flags.get('match_pen_variant'):
             if tb and do_color_match:
@@ -4563,11 +4562,23 @@ def run_peripherals_engine(trigger, df_products, df_history, cluster_key):
                 is_diff_color = has_col_diff | has_title_diff
                 
                 is_same_brand = target_brands == tb
-                variant_mask = is_same_brand & is_same_variant & is_diff_color
                 
+                # --- CASCADE FALLBACK LOGIC ---
                 b4_var = len(pool)
-                pool = pool[variant_mask]
-                notes.append(f"Pen Variant (Brand={tb}, Variant={t_mm or t_text}, Color!={trigger_color_clean}): {b4_var} → {len(pool)}")
+                strict_mask = is_same_brand & is_same_variant & is_diff_color
+                
+                if not pool[strict_mask].empty:
+                    pool = pool[strict_mask]
+                    notes.append(f"Pen Variant (Strict: Brand+Tip+Color): {b4_var} → {len(pool)}")
+                elif not pool[is_same_brand & is_diff_color].empty:
+                    pool = pool[is_same_brand & is_diff_color]
+                    notes.append(f"Pen Variant (Fallback 1: Brand+Color, Ignored Tip): {b4_var} → {len(pool)}")
+                elif not pool[is_same_brand].empty:
+                    pool = pool[is_same_brand]
+                    notes.append(f"Pen Variant (Fallback 2: Any from Brand): {b4_var} → {len(pool)}")
+                else:
+                    notes.append("⚠ No brand match found. Skipping variant match.")
+                    pool = pool.head(0)
             else:
                 notes.append("⚠ Missing Brand or Color on trigger. Skipping variant match.")
                 pool = pool.head(0)
@@ -4628,14 +4639,30 @@ def run_peripherals_engine(trigger, df_products, df_history, cluster_key):
                 is_diff_color = has_col_diff | has_title_diff
                 
                 is_same_brand = target_brands == tb
-                variant_mask = is_same_brand & is_same_variant & is_diff_color & is_single_candidate
                 
+                # --- CASCADE FALLBACK LOGIC ---
                 b4_var = len(pool)
-                pool = pool[variant_mask]
-                notes.append(f"Marker Variant (Brand={tb}, Variant={t_mm or t_text}, Color!={trigger_color_clean}): {b4_var} → {len(pool)}")
+                strict_mask = is_same_brand & is_same_variant & is_diff_color & is_single_candidate
+                
+                if not pool[strict_mask].empty:
+                    pool = pool[strict_mask]
+                    notes.append(f"Marker Variant (Strict: Brand+Tip+Color+Single): {b4_var} → {len(pool)}")
+                elif not pool[is_same_brand & is_single_candidate & is_diff_color].empty:
+                    pool = pool[is_same_brand & is_single_candidate & is_diff_color]
+                    notes.append(f"Marker Variant (Fallback 1: Brand+Single+Color, Ignored Tip): {b4_var} → {len(pool)}")
+                elif not pool[is_same_brand & is_diff_color].empty:
+                    pool = pool[is_same_brand & is_diff_color]
+                    notes.append(f"Marker Variant (Fallback 2: Brand+Color, Any Pack Size): {b4_var} → {len(pool)}")
+                elif not pool[is_same_brand].empty:
+                    pool = pool[is_same_brand]
+                    notes.append(f"Marker Variant (Fallback 3: Any from Brand): {b4_var} → {len(pool)}")
+                else:
+                    notes.append("⚠ No brand match found. Skipping variant match.")
+                    pool = pool.head(0)
             else:
-                notes.append("⚠ Not a single marker or missing brand/color. Skipping variant match.")
-                pool = pool.head(0)    
+                notes.append("⚠ Not a single marker ('Μαρκαδόρος' vs 'Μαρκαδόροι') or missing brand/color. Skipping variant match.")
+                pool = pool.head(0)
+       
        
                 
         # ── Eidos (Type) Include Match ──
