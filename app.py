@@ -4413,19 +4413,19 @@ def run_peripherals_engine(trigger, df_products, df_history, cluster_key):
                 
             pool.loc[is_same_brand, 'Final_Score'] += 30000
             
+            # --- NEW: Dynamic Brand Loyalty for Stationery ---
+            # Guarantees the same brand wins over generic premium brands
+            if cluster_key in STATIONERY_CLUSTERS:
+                pool.loc[is_same_brand, 'Final_Score'] += 100000
+                if is_same_brand.any():
+                    notes.append(f"Stationery Brand Match ({tb}): +100k points to {is_same_brand.sum()} items")
+            # -----------------------------------------------
+            
             # Reduced from 250k to 80k to let high sales win if the lead is significant
             if flags.get('brand_match'):
                 pool.loc[is_same_brand, 'Final_Score'] += 80000
                 if is_same_brand.any():
                     notes.append(f"Brand Match ({tb}): +80k points to {is_same_brand.sum()} items")
-
-        # 1b. Stationery Premium Brand Boost (+50k)
-        if cluster_key in STATIONERY_CLUSTERS and 'Κατασκευαστής' in pool.columns:
-            pool_brands = pool['Κατασκευαστής'].fillna('').str.strip().str.upper()
-            is_premium = pool_brands.isin(STATIONERY_PREMIUM_BRANDS)
-            if is_premium.any():
-                pool.loc[is_premium, 'Final_Score'] += 50000
-                notes.append(f"✨ Premium stationery brands: {is_premium.sum()} items boosted")
 
         # 2. Color Tiebreaker (+200k) - Eligible for Keyboards and Mousepads/Mats
         r_lower = role.lower()
