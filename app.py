@@ -4204,8 +4204,8 @@ def run_peripherals_engine(trigger, df_products, df_history, cluster_key):
 
 
     # ── Pen Variant Match (Same Brand, Same Tip, Different Color) ──
-        if flags.get('match_pen_variant'):
-            t_tip = str(trigger.get('Πάχος Μύτης', '')).strip().lower()
+    if flags.get('match_pen_variant'):
+        t_tip = str(trigger.get('Πάχος Μύτης', '')).strip().lower()
             
             if tb and t_tip and do_color_match:
                 target_brands = pool['Κατασκευαστής'].fillna('').str.strip().str.upper()
