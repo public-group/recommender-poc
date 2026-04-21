@@ -4071,11 +4071,38 @@ def get_peripheral_budget(anchor_price, category):
         if category == 'MOUSEPAD': return (50, 100)
         return (25, anchor_price * 0.50) # Loosened 30% rule for flagship buyers
 
+# ── Stationery premium brands ──
+STATIONERY_PREMIUM_BRANDS = {
+    'LEGAMI', 'FABER-CASTELL', 'FABER CASTELL', 'MOLESKINE', 'MOSES',
+    'STABILO', 'COOLBEE', 'MAPED', 'OOLY', 'POSCA', 'BAN.DO', 'BANDO',
+}
+
+def get_stationery_budget(anchor_price, role_lower):
+    """
+    Stationery pricing. Products are €0.50-€30.
+    We don't scale accessories to trigger price — a €1 pen buyer
+    still needs a €5 notebook. Instead, we set sensible bands per role.
+    """
+    if 'case' in role_lower or 'κασετίνα' in role_lower:
+        return (3, 15)
+    elif 'notebook' in role_lower or 'notepad' in role_lower:
+        return (1, 8)
+    elif 'easel' in role_lower or 'καβαλέτ' in role_lower:
+        return (10, 40)
+    elif 'canvas' in role_lower or 'καμβά' in role_lower:
+        return (3, 15)
+    elif 'brush' in role_lower and 'case' not in role_lower:
+        return (2, 12)
+    elif 'paint' in role_lower or 'χρώμα' in role_lower:
+        return (2, 15)
+    elif 'set' in role_lower or 'σετ' in role_lower:
+        return (3, 20)
+    else:
+        return (0.5, 6)
+
 def get_monitor_peripheral_budget(monitor_price, category):
     """
     Returns (min_price, max_price) for peripherals recommended alongside monitors.
-    Monitor price ≠ peripheral price — a €129 monitor doesn't mean €120 keyboard.
-    Uses the monitor price to gauge the buyer's overall budget level.
     """
     # Budget monitor (<€100)
     if monitor_price < 100:
@@ -4320,15 +4347,19 @@ def run_peripherals_engine(trigger, df_products, df_history, cluster_key):
             
             # Identify the category for the current slot
             r_lower = role.lower()
-            if 'keyboard' in r_lower: cat_key = 'KEYBOARD'
+            if cluster_key in STATIONERY_CLUSTERS:
+                cat_key = 'STATIONERY'
+            elif 'keyboard' in r_lower: cat_key = 'KEYBOARD'
             elif 'mouse' in r_lower and 'pad' not in r_lower: cat_key = 'MOUSE'
             elif 'headset' in r_lower: cat_key = 'HEADSET'
             elif 'pad' in r_lower or 'mat' in r_lower or 'rest' in r_lower: cat_key = 'MOUSEPAD'
             else: cat_key = 'ACCESSORY'
 
-            # Use monitor-specific pricing when trigger is a monitor
+            # Use cluster-specific pricing
             if cluster_key == "Monitors":
                 min_p, max_p = get_monitor_peripheral_budget(tprice, cat_key)
+            elif cluster_key in STATIONERY_CLUSTERS:
+                min_p, max_p = get_stationery_budget(tprice, r_lower)
             else:
                 min_p, max_p = get_peripheral_budget(tprice, cat_key)
             
@@ -4340,10 +4371,15 @@ def run_peripherals_engine(trigger, df_products, df_history, cluster_key):
             overbuy = pool['_p'] > max_p
             underbuy = pool['_p'] < min_p
             
-            # Heavy penalty for upselling too aggressively
-            pool.loc[overbuy, 'Final_Score'] -= 200000
-            # Moderate penalty for showing cheap gear to premium buyers
-            pool.loc[underbuy, 'Final_Score'] -= 80000 
+            if cluster_key in STATIONERY_CLUSTERS:
+                # Soft penalties for stationery — these are cheap items
+                pool.loc[overbuy, 'Final_Score'] -= 60000
+                pool.loc[underbuy, 'Final_Score'] -= 20000
+            else:
+                # Heavy penalty for upselling too aggressively
+                pool.loc[overbuy, 'Final_Score'] -= 200000
+                # Moderate penalty for showing cheap gear to premium buyers
+                pool.loc[underbuy, 'Final_Score'] -= 80000 
             
             notes.append(f"Pricing [{cat_key}]: Target €{min_p:.0f}-€{max_p:.0f} (Anchor: €{tprice:.0f}). In band: {in_band.sum()}")
 
@@ -4365,6 +4401,14 @@ def run_peripherals_engine(trigger, df_products, df_history, cluster_key):
                 pool.loc[is_same_brand, 'Final_Score'] += 80000
                 if is_same_brand.any():
                     notes.append(f"Brand Match ({tb}): +80k points to {is_same_brand.sum()} items")
+
+        # 1b. Stationery Premium Brand Boost (+50k)
+        if cluster_key in STATIONERY_CLUSTERS and 'Κατασκευαστής' in pool.columns:
+            pool_brands = pool['Κατασκευαστής'].fillna('').str.strip().str.upper()
+            is_premium = pool_brands.isin(STATIONERY_PREMIUM_BRANDS)
+            if is_premium.any():
+                pool.loc[is_premium, 'Final_Score'] += 50000
+                notes.append(f"✨ Premium stationery brands: {is_premium.sum()} items boosted")
 
         # 2. Color Tiebreaker (+200k) - Eligible for Keyboards and Mousepads/Mats
         r_lower = role.lower()
