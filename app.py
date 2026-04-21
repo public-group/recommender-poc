@@ -4572,7 +4572,7 @@ def run_peripherals_engine(trigger, df_products, df_history, cluster_key):
                 target_brands = pool['Κατασκευαστής'].fillna('').str.strip().str.upper()
                 pool_tips = pool['Πάχος Μύτης'].fillna('').astype(str).str.strip().str.lower()
                 color_col = 'Χρώμα Γραφής' if 'Χρώμα Γραφής' in pool.columns else 'Χρώμα'
-                pool_colors = pool.get(color_col, pd.Series('', index=pool.in
+                pool_colors = pool.get(color_col, pd.Series('', index=pool.index)).fillna('').astype(str).str.strip().str.upper()
                 trigger_color_upper = tcolor.upper()
                 
                 is_same_brand = target_brands == tb
