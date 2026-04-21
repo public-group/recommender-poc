@@ -996,8 +996,27 @@ else:
             # ─────────────────────────────────────────────────────────────
             # 🧪 TEST LIST: Restrict the dropdown to specific SKUs
             # ─────────────────────────────────────────────────────────────
-            placeholder_skus = {"PLACEHOLDER_1", "PLACEHOLDER_2", "PLACEHOLDER_3"}
-            test_filtered = stat_pool[stat_pool['Material'].astype(str).str.strip().str.replace(r'\.0$', '', regex=True).isin(placeholder_skus)]
+            stationery_skus = {
+                "733204", "733203", "733226", "2109505", "733196", "733195", "733183", 
+                "1102646", "758573", "1161576", "2024990", "1687016", "1687019", "405936", 
+                "1818846", "2025218", "2025219", "1941157", "788651", "1157073", "1164848", 
+                "696004", "2041223", "696006", "2024461", "172707", "2024465", "1104407", 
+                "1616375", "1616374", "1382240", "1242141", "696013", "1686583", "776869", 
+                "1686595", "2040906", "2041343", "2041351", "1277684", "1687017", "1510441", 
+                "2093224", "1164356", "1104159", "1211061", "1211060", "1071635", "834696", 
+                "1201739", "1211053", "733263", "1249322", "733259", "1249324", "1249325", 
+                "1239333", "1378911", "1378914", "1248952", "2109506", "2109520", "2109518", 
+                "2109507", "2038650", "2038651", "1652983", "1652982", "1154599", "1573739", 
+                "1154597", "2025638", "1587061", "1920828", "827033", "1407299", "827032", 
+                "1244275", "1829342", "1537593", "1492203", "1492202", "1492201", "1656003", 
+                "1492200", "1309722", "2040968", "2040978", "2040965", "1600603", "1110711", 
+                "2044539", "2109501", "2109502", "1445716", "1958366", "2088012", "1958365", 
+                "2025197", "1710644"
+            }
+
+            # Filtering logic
+            test_filtered = stat_pool[stat_pool['Material'].astype(str).str.strip().str.replace(r'\.0$', '', regex=True).isin(stationery_skus)]
+
             if not test_filtered.empty:
                 stat_pool = test_filtered
             # ─────────────────────────────────────────────────────────────
@@ -4823,13 +4842,12 @@ if not recs.empty:
             </button>
         </div>"""
 
-    
     if active_cluster == "Smartphones":
-        header_text = "Μαζί με αυτό, οι<br>περισσότεροι αγοράζουν"
+        header_text = "Μαζί με αυτό αγοράζουν"
     elif active_cluster == "Laptops":
-        header_text = "Ολοκλήρωσε το<br>setup σου"
+        header_text = "Ολοκλήρωσε το setup σου"
     else:
-        header_text = "Συνέχισε την<br>περιπέτεια"
+        header_text = "Συνέχισε την περιπέτεια"
 
     css="""
     *{margin:0;padding:0;box-sizing:border-box}
@@ -4859,38 +4877,6 @@ if not recs.empty:
     .nav-right{right:10px}
     .nav-left::after{content:'';width:10px;height:10px;border-top:2px solid #555;border-left:2px solid #555;transform:rotate(-45deg);margin-left:4px}
     .nav-right::after{content:'';width:10px;height:10px;border-top:2px solid #555;border-right:2px solid #555;transform:rotate(45deg);margin-right:4px}
-
-    /* 📱 MOBILE STYLES */
-    @media (max-width: 768px) {
-        .desktop-wrapper {
-            padding: 20px 15px;
-            background-color: #f6f6f6; /* Matched the subtle grey from your image */
-        }
-        .desktop-header {
-            font-size: 20px;
-            justify-content: center;
-            text-align: center;
-            margin-bottom: 20px;
-            line-height: 1.3;
-        }
-        .desktop-header span {
-            display: none; /* Hide the vertical orange bar */
-        }
-        .nav-btn {
-            display: none !important; /* Remove navigation arrows entirely */
-        }
-        .car {
-            scroll-snap-type: x mandatory; /* Native smooth swiping */
-            gap: 12px;
-            padding: 5px 0 15px 0;
-        }
-        .pc {
-            width: 60%; /* Ensures the next item peeks onto the screen */
-            min-width: 60%;
-            max-width: 60%;
-            scroll-snap-align: center; /* Snaps the card nicely to the center */
-        }
-    }
     """
 
     dp=f"""<!DOCTYPE html><html><head><meta charset="utf-8"><style>{css}</style></head>
@@ -4908,13 +4894,11 @@ if not recs.empty:
         function scrollL(){{container.scrollBy({{left:-405,behavior:'smooth'}});}}
         function scrollR(){{container.scrollBy({{left:405,behavior:'smooth'}});}}
         container.addEventListener('scroll',()=>{{
-            // Arrow logic still runs but the CSS hides them completely on mobile
             btnLeft.style.opacity=container.scrollLeft>5?'1':'0';
             btnLeft.style.pointerEvents=container.scrollLeft>5?'auto':'none';
             btnRight.style.opacity=container.scrollLeft+container.clientWidth>=container.scrollWidth-2?'0':'1';
             btnRight.style.pointerEvents=container.scrollLeft+container.clientWidth>=container.scrollWidth-2?'none':'auto';
         }});
-        // Trigger once to hide the left arrow on load
         container.dispatchEvent(new Event('scroll'));
     </script>
     </body></html>"""
