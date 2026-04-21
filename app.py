@@ -3744,7 +3744,7 @@ MONITOR_MAINSTREAM_SLOTS = [
 PENS_SLOTS = [
     ("Alt Color Pen 1",   ['ΣΤΥΛΟ ΥΓΡΗΣ ΜΕΛΑΝΗΣ', 'ΣΤΥΛΟ GEL', 'ΣΤΥΛΟ ΔΙΑΡΚΕΙΑΣ'], {'match_pen_variant': True}),
     ("Alt Color Pen 2",   ['ΣΤΥΛΟ ΥΓΡΗΣ ΜΕΛΑΝΗΣ', 'ΣΤΥΛΟ GEL', 'ΣΤΥΛΟ ΔΙΑΡΚΕΙΑΣ'], {'match_pen_variant': True}),
-    ("Notebook",          ['ΤΕΤΡΑΔΙΟ', 'ΣΗΜΕΙΩΜΑΤΑΡΙΟ', 'ΜΠΛΟΚ'],       {'title_boost': ['A5', 'Medium', 'Standard']}),
+    ("Notebook",          ['ΣΗΜΕΙΩΜΑΤΑΡΙΑ'],       {'title_boost': ['A5', 'Medium', 'Standard']}),
     ("Correction",        ['ΓΟΜΕΣ', 'ΔΙΟΡΘΩΤΙΚΑ'],                        {'match_writing_type': True, 'title_boost': ['Tape', 'Ταινία', 'Roller']}),
     ("Highlighter",       ['ΜΑΡΚΑΔΟΡΟΙ ΥΠΟΓΡΑΜΜΙΣΗΣ', 'ΜΑΡΚΑΔΟΡΟΙ'],    {'title_boost': ['Pastel', '4-pack', '6-pack'], 'title_hide': ['Whiteboard', 'Πίνακα', 'CD-DVD', 'Ανεξίτηλοι']}),
     ("Pencil Case",       ['ΚΑΣΕΤΙΝΕΣ-ΘΗΚΕΣ', 'ΣΧΟΛΙΚΕΣ ΚΑΣΕΤΙΝΕΣ', 'ΜΟΛΥΒΟΘΗΚΕΣ'], {'title_boost': ['Zipper', 'Φερμουάρ', 'Simple', 'Basic']}),
