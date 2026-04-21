@@ -3741,21 +3741,21 @@ MONITOR_MAINSTREAM_SLOTS = [
 # ── Slot configs ──
 
 PENS_SLOTS = [
+    ("Alt Color Pen 1",   ['ΣΤΥΛΟ ΥΓΡΗΣ ΜΕΛΑΝΗΣ', 'ΣΤΥΛΟ GEL', 'ΣΤΥΛΟ ΔΙΑΡΚΕΙΑΣ'], {'match_pen_variant': True}),
+    ("Alt Color Pen 2",   ['ΣΤΥΛΟ ΥΓΡΗΣ ΜΕΛΑΝΗΣ', 'ΣΤΥΛΟ GEL', 'ΣΤΥΛΟ ΔΙΑΡΚΕΙΑΣ'], {'match_pen_variant': True}),
     ("Notebook",          ['ΤΕΤΡΑΔΙΟ', 'ΣΗΜΕΙΩΜΑΤΑΡΙΟ', 'ΜΠΛΟΚ'],       {'title_boost': ['A5', 'Medium', 'Standard']}),
+    ("Correction",        ['ΓΟΜΕΣ', 'ΔΙΟΡΘΩΤΙΚΑ'],                        {'match_writing_type': True, 'title_boost': ['Tape', 'Ταινία', 'Roller']}),
     ("Highlighter",       ['ΜΑΡΚΑΔΟΡΟΙ ΥΠΟΓΡΑΜΜΙΣΗΣ', 'ΜΑΡΚΑΔΟΡΟΙ'],    {'title_boost': ['Pastel', '4-pack', '6-pack'], 'title_hide': ['Whiteboard', 'Πίνακα', 'CD-DVD', 'Ανεξίτηλοι']}),
-    ("Pencil",            ['ΜΟΛΥΒΙΑ', 'ΧΡΩΜΑΤΙΣΤΑ ΜΟΛΥΒΙΑ'],             {'title_boost': ['HB', '2B', 'Set', 'Pack']}),
-    ("Eraser",            ['ΓΟΜΕΣ'],                                      {'title_boost': ['White', 'Λευκή', 'Pencil', 'Μολυβιού'], 'title_hide': ['Ink', 'Μελανιού']}),
     ("Pencil Case",       ['ΚΑΣΕΤΙΝΕΣ-ΘΗΚΕΣ', 'ΣΧΟΛΙΚΕΣ ΚΑΣΕΤΙΝΕΣ', 'ΜΟΛΥΒΟΘΗΚΕΣ'], {'title_boost': ['Zipper', 'Φερμουάρ', 'Simple', 'Basic']}),
-    ("Correction",        ['ΔΙΟΡΘΩΤΙΚΑ'],                                 {'title_boost': ['Tape', 'Ταινία', 'Roller']}),
     ("Sticky Notes",      ['POST-IT-ΧΑΡΤΑΚΙΑ ΣΗΜΕΙΩΣΕΩΝ'],               {'title_boost': ['3x3', 'Small', 'Square', 'Yellow']}),
+    ("Pencil",            ['ΜΟΛΥΒΙΑ', 'ΧΡΩΜΑΤΙΣΤΑ ΜΟΛΥΒΙΑ'],             {'title_boost': ['HB', '2B', 'Set', 'Pack']}),
     ("Ruler",             ['ΓΕΩΜΕΤΡΙΚΑ ΟΡΓΑΝΑ', 'ΟΡΓΑΝΑ ΜΕΤΡΗΣΗΣ'],      {'title_boost': ['Ruler', 'Χάρακας', '15cm', '20cm', '30cm'], 'title_hide': ['Compass', 'Protractor', 'Set']}),
-    ("Sharpener",         ['ΞΥΣΤΡΕΣ'],                                    {'title_boost': ['Double', 'Dual', 'Metal', 'Container']}),
     ("Alternative Pen",   ['ΣΤΥΛΟ ΥΓΡΗΣ ΜΕΛΑΝΗΣ', 'ΣΤΥΛΟ GEL', 'ΣΤΥΛΟ ΔΙΑΡΚΕΙΑΣ'], {}),
 ]
 
 PENCILS_SLOTS = [
-    ("Sharpener",         ['ΞΥΣΤΡΕΣ'],                                    {'title_boost': ['Metal', 'Dual', 'Container', 'Μεταλλική', 'Διπλή'], 'title_hide': ['Electric', 'Ηλεκτρική']}),
-    ("Eraser",            ['ΓΟΜΕΣ'],                                      {'title_boost': ['White', 'Λευκή', 'Soft', 'Μαλακή', 'Staedtler', 'Faber', 'Pelikan']}),
+    ("Matching Accessory",['ΜΟΛΥΒΙΑ', 'ΞΥΣΤΡΕΣ'],                         {'match_writing_type': True}),
+    ("Eraser",            ['ΓΟΜΕΣ'],                                      {'title_boost': ['White', 'Λευκή', 'Soft', 'Μαλακή', 'Staedtler', 'Faber'], 'title_hide': ['Ταινία', 'Υγρό']}),
     ("Pencil Case",       ['ΚΑΣΕΤΙΝΕΣ-ΘΗΚΕΣ', 'ΣΧΟΛΙΚΕΣ ΚΑΣΕΤΙΝΕΣ', 'ΜΟΛΥΒΟΘΗΚΕΣ'], {'title_boost': ['Large', 'Μεγάλη', 'Compartment', 'Θήκες']}),
     ("Notebook",          ['ΤΕΤΡΑΔΙΟ', 'ΣΗΜΕΙΩΜΑΤΑΡΙΟ', 'ΜΠΛΟΚ-ΧΑΡΤΙΑ'], {}),
     ("Pen",               ['ΣΤΥΛΟ ΥΓΡΗΣ ΜΕΛΑΝΗΣ', 'ΣΤΥΛΟ GEL', 'ΣΤΥΛΟ ΔΙΑΡΚΕΙΑΣ'], {'title_boost': ['Black', 'Blue', 'Μαύρο', 'Μπλε']}),
@@ -3858,8 +3858,8 @@ STATIONERY_SETS_SLOTS = [
 ]
 
 PAINTS_SLOTS = [
-    ("Brushes",           ['ΠΙΝΕΛΑ'],                                     {'title_boost': ['Set', 'Σετ', 'Assorted', 'Round', 'Flat', 'Ποικιλία']}),
-    ("Canvas/Paper",      ['ΚΑΜΒΑΔΕΣ', 'ΜΠΛΟΚ-ΧΑΡΤΙΑ', 'ΧΑΡΤΙΑ - ΜΠΛΟΚ'], {'title_boost': ['Stretched', 'Τελαρωμένος', 'Set', 'Pack']}),
+    ("Brushes",           ['ΠΙΝΕΛΑ'],                                     {'match_art_medium': True, 'title_boost': ['Set', 'Σετ', 'Assorted', 'Round', 'Flat', 'Ποικιλία']}),
+    ("Canvas/Paper",      ['ΚΑΜΒΑΔΕΣ', 'ΜΠΛΟΚ-ΧΑΡΤΙΑ', 'ΧΑΡΤΙΑ - ΜΠΛΟΚ'], {'match_art_medium': True, 'title_boost': ['Stretched', 'Τελαρωμένος', 'Set', 'Pack']}),
     ("Water Cup",         ['ACCESSORIES ΖΩΓΡΑΦΙΚΗΣ'],                     {'title_boost': ['Water', 'Brush cleaner', 'Νερού', 'Καθαρισμού', 'Double']}),
     ("Palette",           ['ACCESSORIES ΖΩΓΡΑΦΙΚΗΣ'],                     {'title_boost': ['Palette', 'Παλέτα', 'Mixing', 'Plastic', 'Πλαστική']}),
     ("Easel",             ['ΚΑΒΑΛΕΤΑ'],                                   {'title_boost': ['Table', 'Desktop', 'Portable', 'Επιτραπέζιο', 'Φορητό']}),
@@ -3871,8 +3871,8 @@ PAINTS_SLOTS = [
 ]
 
 BRUSHES_SLOTS = [
-    ("Paints",            ['ΧΡΩΜΑΤΑ ΖΩΓΡΑΦΙΚΗΣ'],                        {}),
-    ("Canvas/Paper",      ['ΚΑΜΒΑΔΕΣ', 'ΜΠΛΟΚ-ΧΑΡΤΙΑ', 'ΧΑΡΤΙΑ - ΜΠΛΟΚ'], {}),
+    ("Paints",            ['ΧΡΩΜΑΤΑ ΖΩΓΡΑΦΙΚΗΣ'],                        {'match_art_medium': True}),
+    ("Canvas/Paper",      ['ΚΑΜΒΑΔΕΣ', 'ΜΠΛΟΚ-ΧΑΡΤΙΑ', 'ΧΑΡΤΙΑ - ΜΠΛΟΚ'], {'match_art_medium': True}),
     ("Brush Cleaner",     ['ACCESSORIES ΖΩΓΡΑΦΙΚΗΣ'],                     {'title_boost': ['Water', 'Brush cleaner', 'Soap', 'Νερού', 'Double']}),
     ("Brush Case",        ['ACCESSORIES ΖΩΓΡΑΦΙΚΗΣ', 'ΘΗΚΕΣ ΜΕΤΑΦΟΡΑΣ'], {'title_boost': ['Brush holder', 'Brush case', 'Roll', 'Θήκη πινέλων', 'Bamboo', 'Ρολό']}),
     ("Palette",           ['ACCESSORIES ΖΩΓΡΑΦΙΚΗΣ'],                     {'title_boost': ['Palette', 'Παλέτα', 'Plastic', 'Tear-off', 'Αποσπώμενη']}),
@@ -3884,7 +3884,7 @@ BRUSHES_SLOTS = [
 ]
 
 COLORED_PENCILS_ART_SLOTS = [
-    ("Drawing Paper",     ['ΜΠΛΟΚ-ΧΑΡΤΙΑ', 'ΧΑΡΤΙΑ - ΜΠΛΟΚ'],           {'title_boost': ['Sketch', 'Drawing', 'Student', 'Σχεδίου', 'A4', 'A5']}),
+    ("Drawing Paper",     ['ΜΠΛΟΚ-ΧΑΡΤΙΑ', 'ΧΑΡΤΙΑ - ΜΠΛΟΚ'],           {'match_art_medium': True, 'title_boost': ['Sketch', 'Drawing', 'Student', 'Σχεδίου', 'A4', 'A5']}),
     ("Sharpener",         ['ΞΥΣΤΡΕΣ'],                                    {'title_boost': ['Metal', 'Dual', 'Container', 'Μεταλλική', 'Δοχείο']}),
     ("Eraser",            ['ΓΟΜΕΣ', 'ACCESSORIES ΖΩΓΡΑΦΙΚΗΣ'],            {'title_boost': ['Kneaded', 'Putty', 'Precision', 'Ζύμης', 'Ακριβείας']}),
     ("Art Case",          ['ΘΗΚΕΣ ΜΕΤΑΦΟΡΑΣ', 'ΚΑΣΕΤΙΝΕΣ-ΘΗΚΕΣ'],        {'title_boost': ['Art case', 'Portfolio', 'Large', 'Professional']}),
@@ -3897,7 +3897,7 @@ COLORED_PENCILS_ART_SLOTS = [
 ]
 
 DRAWING_MARKERS_SLOTS = [
-    ("Marker Paper",      ['ΜΠΛΟΚ-ΧΑΡΤΙΑ', 'ΧΑΡΤΙΑ - ΜΠΛΟΚ'],           {'title_boost': ['Marker', 'Bristol', 'Bleedproof', 'Mixed media', 'Μαρκαδόρων', 'Smooth']}),
+    ("Marker Paper",      ['ΜΠΛΟΚ-ΧΑΡΤΙΑ', 'ΧΑΡΤΙΑ - ΜΠΛΟΚ'],           {'match_art_medium': True, 'title_boost': ['Marker', 'Bristol', 'Bleedproof', 'Mixed media', 'Μαρκαδόρων', 'Smooth']}),
     ("Fine Liners",       ['ΜΑΡΚΑΔΟΡΟΙ', 'ΚΗΡΟΜΠΟΓΙΕΣ-ΠΑΣΤΕΛ'],          {}),
     ("Colored Pencils",   ['ΧΡΩΜΑΤΙΣΤΑ ΜΟΛΥΒΙΑ', 'ΚΗΡΟΜΠΟΓΙΕΣ-ΠΑΣΤΕΛ'],  {'title_boost': ['24', '36', '48', 'Professional', 'Artist']}),
     ("Blending/Extra",    ['ΜΑΡΚΑΔΟΡΟΙ ΖΩΓΡΑΦΙΚΗΣ', 'ACCESSORIES ΖΩΓΡΑΦΙΚΗΣ'], {'title_boost': ['Blender', 'Colorless', 'Ανάμειξης', 'Άχρωμος']}),
@@ -3910,8 +3910,8 @@ DRAWING_MARKERS_SLOTS = [
 ]
 
 ART_PAPER_SLOTS = [
-    ("Art Supplies",      ['ΧΡΩΜΑΤΑ ΖΩΓΡΑΦΙΚΗΣ', 'ΧΡΩΜΑΤΙΣΤΑ ΜΟΛΥΒΙΑ', 'ΜΑΡΚΑΔΟΡΟΙ ΖΩΓΡΑΦΙΚΗΣ'], {}),
-    ("Brushes",           ['ΠΙΝΕΛΑ'],                                     {'title_boost': ['Set', 'Σετ', 'Assorted']}),
+    ("Art Supplies",      ['ΧΡΩΜΑΤΑ ΖΩΓΡΑΦΙΚΗΣ', 'ΧΡΩΜΑΤΙΣΤΑ ΜΟΛΥΒΙΑ', 'ΜΑΡΚΑΔΟΡΟΙ ΖΩΓΡΑΦΙΚΗΣ'], {'match_art_medium': True}),
+    ("Brushes",           ['ΠΙΝΕΛΑ'],                                     {'match_art_medium': True, 'title_boost': ['Set', 'Σετ', 'Assorted']}),
     ("Palette",           ['ACCESSORIES ΖΩΓΡΑΦΙΚΗΣ'],                     {'title_boost': ['Palette', 'Παλέτα', 'Mixing']}),
     ("Water Cup",         ['ACCESSORIES ΖΩΓΡΑΦΙΚΗΣ'],                     {'title_boost': ['Water cup', 'Brush cleaner', 'Νερού']}),
     ("Sketch Pencil",     ['ΜΟΛΥΒΙΑ'],                                    {'title_boost': ['2B', '4B', 'Sketch', 'Drawing', 'HB']}),
@@ -4202,6 +4202,90 @@ def run_peripherals_engine(trigger, df_products, df_history, cluster_key):
     # Color match - allow black and white to color match!
     do_color_match = tcolor and tcolor.lower() not in ('', 'nan', 'n/a', '0')
 
+
+    # ── Pen Variant Match (Same Brand, Same Tip, Different Color) ──
+        if flags.get('match_pen_variant'):
+            t_tip = str(trigger.get('Πάχος Μύτης', '')).strip().lower()
+            
+            if tb and t_tip and do_color_match:
+                target_brands = pool['Κατασκευαστής'].fillna('').str.strip().str.upper()
+                pool_tips = pool['Πάχος Μύτης'].fillna('').astype(str).str.strip().str.lower()
+                pool_colors = pool['Χρώμα'].fillna('').astype(str).str.strip().str.upper()
+                trigger_color_upper = tcolor.upper()
+                
+                is_same_brand = target_brands == tb
+                is_same_tip = pool_tips == t_tip
+                # We want colors that are NOT blank and DO NOT contain the trigger's color
+                is_diff_color = (pool_colors != '') & (~pool_colors.str.contains(trigger_color_upper, regex=False, na=False))
+                
+                variant_mask = is_same_brand & is_same_tip & is_diff_color
+                
+                b4_var = len(pool)
+                pool = pool[variant_mask]
+                notes.append(f"Pen Variant filter (Brand={tb}, Tip={t_tip}, Color!={trigger_color_upper}): {b4_var} → {len(pool)}")
+            else:
+                # If trigger is missing tip, color, or brand, we can't do a variant match
+                notes.append("⚠ Missing Brand, Tip, or Color on trigger. Skipping variant match.")
+                pool = pool.head(0) # Empties the pool so the engine skips this slot
+                
+    # ── Writing Instrument Precision Matching ──
+        if flags.get('match_writing_type'):
+            t_type = str(trigger.get('Τύπος', '')).lower()
+            
+            # Rule 1: Mechanical Pencil -> Needs "Μύτες" (Leads)
+            if 'μηχανικό' in t_type:
+                is_leads = pool['Τύπος'].fillna('').str.lower().str.contains('μύτες')
+                pool.loc[is_leads, 'Final_Score'] += 200000
+                notes.append("Mechanical Pencil detected -> Boosted 'Μύτες'")
+                
+            # Rule 2: Ink/Gel/Roller -> Needs Correction Tape/Fluid (not a classic eraser)
+            elif any(x in t_type for x in ['gel', 'υγρής', 'roller', 'διαρκείας', 'πένα']):
+                is_tape = pool['Είδος'].fillna('').str.lower().str.contains('ταινία|υγρό')
+                pool.loc[is_tape, 'Final_Score'] += 100000
+                notes.append("Ink pen detected -> Boosted Correction Tape/Fluid")
+                
+            # Rule 3: Classic Pencil -> Needs classic sharpener with bin (Βαρελάκι)
+            elif 'απλό' in t_type:
+                is_barrel_sharpener = pool['Είδος'].fillna('').str.lower().str.contains('βαρελάκι|μανιβέλα')
+                pool.loc[is_barrel_sharpener, 'Final_Score'] += 80000
+                notes.append("Classic pencil detected -> Boosted 'Βαρελάκι' sharpeners")
+                
+    # ── Deep Attribute Matching (Art Mediums & Techniques) ──
+        if flags.get('match_art_medium'):
+            # 1. Identify the trigger's medium from its Τύπος or Είδος
+            trigger_mediums = []
+            t_type = str(trigger.get('Τύπος', '')).lower()
+            t_eidos = str(trigger.get('Είδος', '')).lower()
+            combined_trigger_text = f"{t_type} {t_eidos} {_tt_lower}"
+            
+            # Mapping core mediums to their various Greek naming conventions
+            medium_map = {
+                'watercolor': ['ακουαρέλα', 'νερομπογιά', 'νερού'],
+                'oil': ['λαδιού', 'λαδοπαστέλ'],
+                'acrylic': ['ακρυλικ'],
+                'sketch': ['σχεδίου', 'μιλιμετρέ', 'κάρβουνο', 'γραφίτης'],
+                'pastel': ['παστέλ', 'κιμωλία']
+            }
+            
+            active_medium = None
+            for medium_key, keywords in medium_map.items():
+                if any(kw in combined_trigger_text for kw in keywords):
+                    active_medium = medium_key
+                    break
+            
+            # 2. Boost candidates that match the active medium
+            if active_medium:
+                candidate_text = pool['Τύπος'].fillna('').astype(str) + " " + pool['Είδος'].fillna('').astype(str) + " " + pool['Title'].fillna('').astype(str)
+                candidate_text = candidate_text.str.lower()
+                
+                # Create a mask for candidates containing the matching keywords
+                match_mask = pd.Series(False, index=pool.index)
+                for kw in medium_map[active_medium]:
+                    match_mask |= candidate_text.str.contains(kw, regex=False)
+                
+                # Massive boost for perfect medium match
+                pool.loc[match_mask, 'Final_Score'] += 150000
+                notes.append(f"Art Medium Match ({active_medium}): Boosted {match_mask.sum()} items")
     
     # ── Determine slot config ──
     monitor_persona = None  # Used by usage_filter flag
