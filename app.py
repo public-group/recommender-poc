@@ -3768,20 +3768,25 @@ PENCILS_SLOTS = [
 ]
 
 MARKERS_SLOTS = [
-    # Τα 2 νέα slots που εμφανίζονται ΜΟΝΟ αν ο μαρκαδόρος είναι "Ζωγραφικής"
-    ("Coloring Pad 1",    ['ΜΠΛΟΚ-ΧΑΡΤΙΑ', 'ΧΑΡΤΙΑ - ΜΠΛΟΚ', 'ΜΠΛΟΚ - ΧΑΡΤΙΑ ΖΩΓΡΑΦΙΚΗΣ'], {'match_coloring_activity': True}),
-    ("Coloring Pad 2",    ['ΜΠΛΟΚ-ΧΑΡΤΙΑ', 'ΧΑΡΤΙΑ - ΜΠΛΟΚ', 'ΜΠΛΟΚ - ΧΑΡΤΙΑ ΖΩΓΡΑΦΙΚΗΣ'], {'match_coloring_activity': True}),
+    # 1. Variant Matches (Εμφανίζονται ΜΟΝΟ αν ο τίτλος γράφει "Μαρκαδόρος" ενικό)
+    ("Alt Color Marker 1",['ΜΑΡΚΑΔΟΡΟΙ ΖΩΓΡΑΦΙΚΗΣ', 'ΜΑΡΚΑΔΟΡΟΙ ΥΠΟΓΡΑΜΜΙΣΗΣ', 'ΜΑΡΚΑΔΟΡΟΙ ΠΙΝΑΚΑ', 'ΜΑΡΚΑΔΟΡΟΙ ΑΝΕΞΙΤΗΛΟΙ', 'ΜΑΡΚΑΔΟΡΟΙ'], {'match_marker_variant': True}),
+    ("Alt Color Marker 2",['ΜΑΡΚΑΔΟΡΟΙ ΖΩΓΡΑΦΙΚΗΣ', 'ΜΑΡΚΑΔΟΡΟΙ ΥΠΟΓΡΑΜΜΙΣΗΣ', 'ΜΑΡΚΑΔΟΡΟΙ ΠΙΝΑΚΑ', 'ΜΑΡΚΑΔΟΡΟΙ ΑΝΕΞΙΤΗΛΟΙ', 'ΜΑΡΚΑΔΟΡΟΙ'], {'match_marker_variant': True}),
     
-    # Το κανονικό τετράδιο με απαγόρευση (title_hide) στο χαρτί ιχνογραφίας
-    ("Notebook",          ['ΤΕΤΡΑΔΙΟ', 'ΣΗΜΕΙΩΜΑΤΑΡΙΟ', 'ΜΠΛΟΚ'],       {'title_boost': ['A4', 'A5', 'Lined', 'Γραμμές'], 'title_hide': ['Ιχνογραφίας', 'Πολυγράφου']}),
+    # 2. Έξυπνα Art Slots (Εμφανίζονται ΜΟΝΟ αν ο μαρκαδόρος είναι "Ζωγραφικής")
+    ("Coloring Pad 1",    ['ΜΠΛΟΚ-ΧΑΡΤΙΑ', 'ΧΑΡΤΙΑ - ΜΠΛΟΚ', 'ΜΠΛΟΚ - ΧΑΡΤΙΑ ΖΩΓΡΑΦΙΚΗΣ'], {'match_coloring_activity': True, 'match_nib_type': True}),
+    ("Coloring Pad 2",    ['ΜΠΛΟΚ-ΧΑΡΤΙΑ', 'ΧΑΡΤΙΑ - ΜΠΛΟΚ', 'ΜΠΛΟΚ - ΧΑΡΤΙΑ ΖΩΓΡΑΦΙΚΗΣ'], {'match_coloring_activity': True, 'match_nib_type': True}),
     
+    # 3. Κλασικά Τετράδια (Κρύβει το ιχνογραφίας, boostάρει ανάλογα τη μύτη)
+    ("Notebook",          ['ΤΕΤΡΑΔΙΟ', 'ΣΗΜΕΙΩΜΑΤΑΡΙΟ', 'ΜΠΛΟΚ'],       {'match_nib_type': True, 'title_boost': ['A4', 'A5', 'Lined', 'Γραμμές'], 'title_hide': ['Ιχνογραφίας', 'Πολυγράφου']}),
+    
+    # 4. Εναλλακτικοί Μαρκαδόροι (για UPSALE, π.χ. σετ μαρκαδόρων της ίδιας εταιρείας)
+    ("Alt Markers",       ['ΜΑΡΚΑΔΟΡΟΙ ΥΠΟΓΡΑΜΜΙΣΗΣ', 'ΜΑΡΚΑΔΟΡΟΙ ΠΙΝΑΚΑ', 'ΜΑΡΚΑΔΟΡΟΙ ΑΝΕΞΙΤΗΛΟΙ', 'ΜΑΡΚΑΔΟΡΟΙ', 'ΜΑΡΚΑΔΟΡΟΙ ΖΩΓΡΑΦΙΚΗΣ'], {'match_nib_type': True, 'title_boost': ['Pastel', 'Neon', '12-pack', 'Extended']}),
+    
+    # 5. Υπόλοιπα Standard Αξεσουάρ
     ("Pen",               ['ΣΤΥΛΟ ΥΓΡΗΣ ΜΕΛΑΝΗΣ', 'ΣΤΥΛΟ GEL', 'ΜΟΛΥΒΙΑ'], {'title_boost': ['Black', 'Blue', '0.7mm']}),
     ("Sticky Notes",      ['POST-IT-ΧΑΡΤΑΚΙΑ ΣΗΜΕΙΩΣΕΩΝ', 'ΣΕΛΙΔΟΔΕΙΚΤΕΣ'], {'title_boost': ['Arrow', 'Flag', 'Index', 'Σημάδια']}),
     ("Pencil Case",       ['ΚΑΣΕΤΙΝΕΣ-ΘΗΚΕΣ', 'ΣΧΟΛΙΚΕΣ ΚΑΣΕΤΙΝΕΣ', 'ΜΟΛΥΒΟΘΗΚΕΣ'], {'title_boost': ['Wide', 'Large', 'Compartment', 'Φαρδιά']}),
-    ("Alt Markers",       ['ΜΑΡΚΑΔΟΡΟΙ ΥΠΟΓΡΑΜΜΙΣΗΣ', 'ΜΑΡΚΑΔΟΡΟΙ ΠΙΝΑΚΑ', 'ΜΑΡΚΑΔΟΡΟΙ ΑΝΕΞΙΤΗΛΟΙ', 'ΜΑΡΚΑΔΟΡΟΙ'], {'title_boost': ['Pastel', 'Neon', '12-pack', 'Extended']}),
-    ("Backup Pencil",     ['ΜΟΛΥΒΙΑ', 'ΣΤΥΛΟ ΥΓΡΗΣ ΜΕΛΑΝΗΣ'],            {}),
     ("Correction",        ['ΔΙΟΡΘΩΤΙΚΑ'],                                 {'title_boost': ['Tape', 'Roller']}),
-    ("Eraser",            ['ΓΟΜΕΣ'],                                      {'title_boost': ['White', 'Soft', 'Pencil']}),
 ]
 
 SHARPENERS_SLOTS = [
@@ -4255,7 +4260,7 @@ def run_peripherals_engine(trigger, df_products, df_history, cluster_key):
 
     diag.append(("0. Trigger", f"Brand={tb}, €{tprice:.0f}",
                  f"Cluster={cluster_key}, Wireless={is_wireless}, Apple={is_apple}"))
-
+    
     # ── Build candidate pool ──
     c = df_products[df_products['Material'] != tm].copy()
 
@@ -4504,7 +4509,40 @@ def run_peripherals_engine(trigger, df_products, df_history, cluster_key):
             pat = '|'.join(flags['title_hide'])
             m = pool['Title'].fillna('').str.contains(pat, case=False, regex=True, na=False)
             pool.loc[m, 'Final_Score'] -= 100000
+        # ── Marker Variant Match (Single item, Same Brand, Same Nib, Different Color) ──
+        if flags.get('match_marker_variant'):
+            # Ανίχνευση: Ψάχνουμε τη λέξη "μαρκαδόρος" (ενικός) και αποκλείουμε πληθυντικό ή σετ/τεμάχια
+            is_single_trigger = bool(re.search(r'\bμαρκαδόρος\b', _tt_lower)) and not bool(re.search(r'\bμαρκαδόροι\b|\d+\s*τεμ|\d+\s*χρώμ|σετ|pack', _tt_lower))
+            
+            if is_single_trigger and tb and do_color_match:
+                target_brands = pool['Κατασκευαστής'].fillna('').str.strip().str.upper()
+                
+                # Διαβάζουμε τον Τύπο Μύτης (π.χ. Λεπτή, Πλακέ, κλπ)
+                t_nib = str(trigger.get('Τύπος Μύτης', '')).strip().lower()
+                pool_nibs = pool['Τύπος Μύτης'].fillna('').astype(str).str.strip().str.lower()
+                
+                # Περιορίζουμε τις επιλογές ΑΥΣΤΗΡΑ σε άλλους μεμονωμένους μαρκαδόρους (όχι σετ)
+                candidate_titles = pool['Title'].fillna('').str.lower()
+                is_single_candidate = candidate_titles.str.contains(r'\bμαρκαδόρος\b', regex=True) & ~candidate_titles.str.contains(r'\bμαρκαδόροι\b|\d+\s*τεμ|\d+\s*χρώμ|σετ|pack', regex=True)
 
+                color_col = 'Χρώμα Γραφής' if 'Χρώμα Γραφής' in pool.columns else 'Χρώμα'
+                pool_colors = pool.get(color_col, pd.Series('', index=pool.index)).fillna('').astype(str).str.strip().str.upper()
+                trigger_color_upper = tcolor.upper()
+                
+                is_same_brand = target_brands == tb
+                # Αν υπάρχει τύπος μύτης τον ταιριάζουμε, αλλιώς το αγνοούμε
+                is_same_nib = pool_nibs == t_nib if t_nib and t_nib != 'nan' else pd.Series(True, index=pool.index)
+                is_diff_color = (pool_colors != '') & (~pool_colors.str.contains(trigger_color_upper, regex=False, na=False))
+                
+                variant_mask = is_same_brand & is_same_nib & is_diff_color & is_single_candidate
+                
+                b4_var = len(pool)
+                pool = pool[variant_mask]
+                notes.append(f"Marker Variant (Single, Brand={tb}, Nib={t_nib}, Color!={trigger_color_upper}): {b4_var} → {len(pool)}")
+            else:
+                notes.append("⚠ Not a single marker ('Μαρκαδόρος' vs 'Μαρκαδόροι') or missing brand/color. Skipping variant match.")
+                pool = pool.head(0) # Αδειάζει το pool για να προχωρήσει η μηχανή στα επόμενα slots
+                
         # ── Eidos (Type) Include Match ──
         if flags.get('eidos_include') and 'Είδος' in pool.columns:
             pat = '|'.join(flags['eidos_include'])
