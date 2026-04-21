@@ -4509,62 +4509,134 @@ def run_peripherals_engine(trigger, df_products, df_history, cluster_key):
             pat = '|'.join(flags['title_hide'])
             m = pool['Title'].fillna('').str.contains(pat, case=False, regex=True, na=False)
             pool.loc[m, 'Final_Score'] -= 100000
-        # ── Marker Variant Match (Single item, Same Brand, Same Tip/Nib, Different Color) ──
+
+
+        # ── Pen Variant Match (Same Brand, Same Variant, Different Color) ──
+        if flags.get('match_pen_variant'):
+            if tb and do_color_match:
+                target_brands = pool['Κατασκευαστής'].fillna('').str.strip().str.upper()
+                
+                na_vals = ['nan', 'n/a', 'none', '0', '#n/a', 'μη διαθέσιμη πληροφορία', 'null', '']
+                mm_regex = r'(\d+(?:[\.,]\d+)?(?:-\d+(?:[\.,]\d+)?)?\s*mm)'
+                
+                t_tip_raw = str(trigger.get('Πάχος Μύτης', '')).strip().lower()
+                t_nib_raw = str(trigger.get('Τύπος Μύτης', '')).strip().lower()
+                t_mm, t_text = '', ''
+                
+                for source in [t_tip_raw, t_nib_raw, _tt_lower]:
+                    if source not in na_vals:
+                        match = re.search(mm_regex, source)
+                        if match:
+                            t_mm = match.group(1).replace(' ', '').replace(',', '.')
+                            break
+                if not t_mm:
+                    for source in [t_nib_raw, t_tip_raw]:
+                        if source not in na_vals:
+                            t_text = re.sub(mm_regex, '', source).strip()
+                            if t_text: break
+                            
+                p_tip = pool['Πάχος Μύτης'].fillna('').astype(str).str.lower().str.strip()
+                p_nib = pool['Τύπος Μύτης'].fillna('').astype(str).str.lower().str.strip()
+                p_title = pool['Title'].fillna('').astype(str).str.lower()
+                
+                p_mm = p_tip.str.extract(mm_regex, expand=False).fillna(
+                       p_nib.str.extract(mm_regex, expand=False)).fillna(
+                       p_title.str.extract(mm_regex, expand=False)).fillna('').str.replace(' ', '').str.replace(',', '.')
+                
+                p_text = p_nib.replace(na_vals, '').where(p_nib.replace(na_vals, '') != '', p_tip.replace(na_vals, ''))
+                
+                if t_mm: is_same_variant = p_mm == t_mm
+                elif t_text: is_same_variant = p_text.apply(lambda x: t_text in x or x in t_text if x else False)
+                else: is_same_variant = pd.Series(True, index=pool.index)
+                
+                color_col = 'Χρώμα Γραφής' if 'Χρώμα Γραφής' in pool.columns else 'Χρώμα'
+                color_na_vals = ['#N/A', 'ΜΗ ΔΙΑΘΕΣΙΜΗ ΠΛΗΡΟΦΟΡΙΑ', 'NULL', 'NAN', 'N/A', 'NONE', '0']
+                
+                pool_colors = pool.get(color_col, pd.Series('', index=pool.index)).fillna('').astype(str).str.strip().str.upper().replace(color_na_vals, '')
+                pool_colors_clean = pool_colors.str.replace('Ύ', 'Υ').str.replace('Ά', 'Α').str.replace('Έ', 'Ε').str.replace('Ί', 'Ι').str.replace('Ό', 'Ο').str.replace('Ή', 'Η').str.replace('Ώ', 'Ω')
+                trigger_color_clean = tcolor.upper().replace('Ύ', 'Υ').replace('Ά', 'Α').replace('Έ', 'Ε').replace('Ί', 'Ι').replace('Ό', 'Ο').replace('Ή', 'Η').replace('Ώ', 'Ω')
+                
+                candidate_titles_clean = p_title.str.upper().str.replace('Ύ', 'Υ').str.replace('Ά', 'Α').str.replace('Έ', 'Ε').str.replace('Ί', 'Ι').str.replace('Ό', 'Ο').str.replace('Ή', 'Η').str.replace('Ώ', 'Ω')
+                
+                has_col_diff = (pool_colors_clean != '') & (~pool_colors_clean.str.contains(trigger_color_clean, regex=False, na=False))
+                has_title_diff = (pool_colors_clean == '') & (~candidate_titles_clean.str.contains(trigger_color_clean, regex=False, na=False))
+                is_diff_color = has_col_diff | has_title_diff
+                
+                is_same_brand = target_brands == tb
+                variant_mask = is_same_brand & is_same_variant & is_diff_color
+                
+                b4_var = len(pool)
+                pool = pool[variant_mask]
+                notes.append(f"Pen Variant (Brand={tb}, Variant={t_mm or t_text}, Color!={trigger_color_clean}): {b4_var} → {len(pool)}")
+            else:
+                notes.append("⚠ Missing Brand or Color on trigger. Skipping variant match.")
+                pool = pool.head(0)
+
+        # ── Marker Variant Match (Single item, Same Brand, Same Variant, Different Color) ──
         if flags.get('match_marker_variant'):
-            # Ανίχνευση: Ψάχνουμε τη λέξη "μαρκαδόρος" (ενικός) και αποκλείουμε πληθυντικό ή σετ/τεμάχια
             is_single_trigger = bool(re.search(r'\bμαρκαδόρος\b', _tt_lower)) and not bool(re.search(r'\bμαρκαδόροι\b|\d+\s*τεμ|\d+\s*χρώμ|σετ|pack', _tt_lower))
             
             if is_single_trigger and tb and do_color_match:
                 target_brands = pool['Κατασκευαστής'].fillna('').str.strip().str.upper()
                 
-                # --- ΕΞΥΠΝΗ ΑΝΙΧΝΕΥΣΗ ΠΑΧΟΥΣ ΜΥΤΗΣ ---
-                t_tip = str(trigger.get('Πάχος Μύτης', '')).strip().lower()
-                if t_tip in ['', 'nan', 'n/a', 'none', '0']:
-                    # Πιάνει "2.0 mm", "0.5-0.7 mm", "2 mm" κλπ
-                    tip_match = re.search(r'(\d+(?:[\.,]\d+)?(?:-\d+(?:[\.,]\d+)?)?\s*mm)', _tt_lower)
-                    t_tip = tip_match.group(1).replace(' ', '').replace(',', '.') if tip_match else ''
+                na_vals = ['nan', 'n/a', 'none', '0', '#n/a', 'μη διαθέσιμη πληροφορία', 'null', '']
+                mm_regex = r'(\d+(?:[\.,]\d+)?(?:-\d+(?:[\.,]\d+)?)?\s*mm)'
                 
-                t_nib = str(trigger.get('Τύπος Μύτης', '')).strip().lower()
-                if t_nib in ['nan', 'n/a', 'none']: t_nib = ''
+                t_tip_raw = str(trigger.get('Πάχος Μύτης', '')).strip().lower()
+                t_nib_raw = str(trigger.get('Τύπος Μύτης', '')).strip().lower()
+                t_mm, t_text = '', ''
                 
-                # Αντλούμε τα tips από τους υποψήφιους (ΚΑΘΑΡΙΣΜΟΣ του 'nan')
-                pool_tips_col = pool['Πάχος Μύτης'].fillna('').astype(str).str.strip().str.lower().replace(['nan', 'n/a', 'none', '0'], '')
-                pool_tips_title = pool['Title'].fillna('').astype(str).str.lower().str.extract(r'(\d+(?:[\.,]\d+)?(?:-\d+(?:[\.,]\d+)?)?\s*mm)', expand=False).fillna('').str.replace(' ', '').str.replace(',', '.')
+                for source in [t_tip_raw, t_nib_raw, _tt_lower]:
+                    if source not in na_vals:
+                        match = re.search(mm_regex, source)
+                        if match:
+                            t_mm = match.group(1).replace(' ', '').replace(',', '.')
+                            break
+                if not t_mm:
+                    for source in [t_nib_raw, t_tip_raw]:
+                        if source not in na_vals:
+                            t_text = re.sub(mm_regex, '', source).strip()
+                            if t_text: break
+                            
+                p_tip = pool['Πάχος Μύτης'].fillna('').astype(str).str.lower().str.strip()
+                p_nib = pool['Τύπος Μύτης'].fillna('').astype(str).str.lower().str.strip()
+                p_title = pool['Title'].fillna('').astype(str).str.lower()
                 
-                # Συνδυάζουμε: Αν το κελί είναι άδειο, πάρε από τον τίτλο
-                pool_tips = pool_tips_col.where(pool_tips_col != '', pool_tips_title)
-                pool_nibs = pool['Τύπος Μύτης'].fillna('').astype(str).str.strip().str.lower().replace(['nan', 'n/a', 'none'], '')
+                p_mm = p_tip.str.extract(mm_regex, expand=False).fillna(
+                       p_nib.str.extract(mm_regex, expand=False)).fillna(
+                       p_title.str.extract(mm_regex, expand=False)).fillna('').str.replace(' ', '').str.replace(',', '.')
                 
-                # Περιορίζουμε ΑΥΣΤΗΡΑ σε άλλους μεμονωμένους μαρκαδόρους (όχι σετ)
-                candidate_titles = pool['Title'].fillna('').str.lower()
-                is_single_candidate = candidate_titles.str.contains(r'\bμαρκαδόρος\b', regex=True) & ~candidate_titles.str.contains(r'\bμαρκαδόροι\b|\d+\s*τεμ|\d+\s*χρώμ|σετ|pack', regex=True)
+                p_text = p_nib.replace(na_vals, '').where(p_nib.replace(na_vals, '') != '', p_tip.replace(na_vals, ''))
+                
+                if t_mm: is_same_variant = p_mm == t_mm
+                elif t_text: is_same_variant = p_text.apply(lambda x: t_text in x or x in t_text if x else False)
+                else: is_same_variant = pd.Series(True, index=pool.index)
+                
+                is_single_candidate = p_title.str.contains(r'\bμαρκαδόρος\b', regex=True) & ~p_title.str.contains(r'\bμαρκαδόροι\b|\d+\s*τεμ|\d+\s*χρώμ|σετ|pack', regex=True)
 
-                # --- ΑΦΑΙΡΕΣΗ ΤΟΝΩΝ ΓΙΑ ΣΙΓΟΥΡΟ COLOR MATCHING ---
                 color_col = 'Χρώμα Γραφής' if 'Χρώμα Γραφής' in pool.columns else 'Χρώμα'
-                pool_colors = pool.get(color_col, pd.Series('', index=pool.index)).fillna('').astype(str).str.strip().str.upper()
+                color_na_vals = ['#N/A', 'ΜΗ ΔΙΑΘΕΣΙΜΗ ΠΛΗΡΟΦΟΡΙΑ', 'NULL', 'NAN', 'N/A', 'NONE', '0']
+                
+                pool_colors = pool.get(color_col, pd.Series('', index=pool.index)).fillna('').astype(str).str.strip().str.upper().replace(color_na_vals, '')
                 pool_colors_clean = pool_colors.str.replace('Ύ', 'Υ').str.replace('Ά', 'Α').str.replace('Έ', 'Ε').str.replace('Ί', 'Ι').str.replace('Ό', 'Ο').str.replace('Ή', 'Η').str.replace('Ώ', 'Ω')
                 trigger_color_clean = tcolor.upper().replace('Ύ', 'Υ').replace('Ά', 'Α').replace('Έ', 'Ε').replace('Ί', 'Ι').replace('Ό', 'Ο').replace('Ή', 'Η').replace('Ώ', 'Ω')
                 
+                candidate_titles_clean = p_title.str.upper().str.replace('Ύ', 'Υ').str.replace('Ά', 'Α').str.replace('Έ', 'Ε').str.replace('Ί', 'Ι').str.replace('Ό', 'Ο').str.replace('Ή', 'Η').str.replace('Ώ', 'Ω')
+                
+                has_col_diff = (pool_colors_clean != '') & (~pool_colors_clean.str.contains(trigger_color_clean, regex=False, na=False))
+                has_title_diff = (pool_colors_clean == '') & (~candidate_titles_clean.str.contains(trigger_color_clean, regex=False, na=False))
+                is_diff_color = has_col_diff | has_title_diff
+                
                 is_same_brand = target_brands == tb
-                
-                # Ταιριάζουμε βάσει mm αν υπάρχουν, αλλιώς βάσει Τύπου Μύτης (χονδρή, λεπτή κλπ)
-                if t_tip:
-                    is_same_variant = pool_tips == t_tip
-                elif t_nib:
-                    is_same_variant = pool_nibs.apply(lambda x: x in t_nib or t_nib in x if x else False)
-                else:
-                    is_same_variant = pd.Series(True, index=pool.index)
-
-                is_diff_color = (pool_colors_clean != '') & (~pool_colors_clean.str.contains(trigger_color_clean, regex=False, na=False))
-                
                 variant_mask = is_same_brand & is_same_variant & is_diff_color & is_single_candidate
                 
                 b4_var = len(pool)
                 pool = pool[variant_mask]
-                notes.append(f"Marker Variant (Brand={tb}, Tip={t_tip}, Nib={t_nib}, Color!={trigger_color_clean}): {b4_var} → {len(pool)}")
+                notes.append(f"Marker Variant (Brand={tb}, Variant={t_mm or t_text}, Color!={trigger_color_clean}): {b4_var} → {len(pool)}")
             else:
-                notes.append("⚠ Not a single marker ('Μαρκαδόρος' vs 'Μαρκαδόροι') or missing brand/color. Skipping variant match.")
-                pool = pool.head(0)
+                notes.append("⚠ Not a single marker or missing brand/color. Skipping variant match.")
+                pool = pool.head(0)    
+       
                 
         # ── Eidos (Type) Include Match ──
         if flags.get('eidos_include') and 'Είδος' in pool.columns:
@@ -4630,46 +4702,7 @@ def run_peripherals_engine(trigger, df_products, df_history, cluster_key):
                 cm = pool['Χρώμα'].fillna('').astype(str).str.upper() == tcolor.upper()
                 pool.loc[cm, 'Final_Score'] += 30000
 
-# ── Pen Variant Match (Same Brand, Same Tip, Different Color) ──
-        if flags.get('match_pen_variant'):
-            t_tip = str(trigger.get('Πάχος Μύτης', '')).strip().lower()
-            
-            # --- NEW: Έξυπνο Fallback ---
-            # Αν το Excel είναι άδειο, ψάχνει τον τίτλο (π.χ. "0.7mm" ή "0.8 mm")
-            if not t_tip:
-                tip_match = re.search(r'(\d[\.,]\d\s*mm)', _tt_lower)
-                if tip_match:
-                    t_tip = tip_match.group(1).replace(' ', '').replace(',', '.')
 
-            if tb and t_tip and do_color_match:
-                target_brands = pool['Κατασκευαστής'].fillna('').str.strip().str.upper()
-                
-                # Διαβάζει το πάχος μύτης και στους υποψήφιους (ψάχνει και στους τίτλους τους)
-                pool_tips = pool['Πάχος Μύτης'].fillna('').astype(str).str.strip().str.lower()
-                pool_tips_fallback = pool['Title'].fillna('').astype(str).str.lower().str.extract(r'(\d[\.,]\d\s*mm)', expand=False).fillna('').str.replace(' ', '').str.replace(',', '.')
-                pool_tips = np.where(pool_tips == '', pool_tips_fallback, pool_tips)
-                
-                color_col = 'Χρώμα Γραφής' if 'Χρώμα Γραφής' in pool.columns else 'Χρώμα'
-                pool_colors = pool.get(color_col, pd.Series('', index=pool.index)).fillna('').astype(str).str.strip().str.upper()
-                trigger_color_upper = tcolor.upper()
-                
-                is_same_brand = target_brands == tb
-                is_same_tip = pool_tips == t_tip
-                # Θέλουμε χρώματα που ΔΕΝ είναι κενά και ΔΕΝ περιέχουν το χρώμα του trigger
-                is_diff_color = (pool_colors != '') & (~pool_colors.str.contains(trigger_color_upper, regex=False, na=False))
-                
-                variant_mask = is_same_brand & is_same_tip & is_diff_color
-                
-                b4_var = len(pool)
-                pool = pool[variant_mask]
-                notes.append(f"Pen Variant filter (Brand={tb}, Tip={t_tip}, Color!={trigger_color_upper}): {b4_var} → {len(pool)}")
-            else:
-                missing_info = []
-                if not tb: missing_info.append("Brand")
-                if not t_tip: missing_info.append("Tip")
-                if not do_color_match: missing_info.append("Color")
-                notes.append(f"⚠ Missing {', '.join(missing_info)} on trigger. Skipping variant match.")
-                pool = pool.head(0) # Αδειάζει το pool για να πάει στο next slot
 
         # ── Writing Instrument Precision Matching ──
         if flags.get('match_writing_type'):
