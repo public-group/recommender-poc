@@ -4144,7 +4144,7 @@ def run_peripherals_engine(trigger, df_products, df_history, cluster_key):
     tb = str(trigger.get('Κατασκευαστής', '')).strip().upper()
     thier = str(trigger.get('Hierarchy', '')).strip().upper()
     tprice = parse_euro_price(trigger.get('LIST PRICE', 0))
-    tcolor = str(trigger.get('Χρώμα', '')).strip()
+    tcolor = str(trigger.get('Χρώμα Γραφής', trigger.get('Χρώμα', ''))).strip()
 
     # Connectivity
     is_wireless = 'WIRELESS' in thier or 'ΑΣΥΡΜΑΤ' in tt.upper()
@@ -4571,7 +4571,8 @@ def run_peripherals_engine(trigger, df_products, df_history, cluster_key):
             if tb and t_tip and do_color_match:
                 target_brands = pool['Κατασκευαστής'].fillna('').str.strip().str.upper()
                 pool_tips = pool['Πάχος Μύτης'].fillna('').astype(str).str.strip().str.lower()
-                pool_colors = pool['Χρώμα'].fillna('').astype(str).str.strip().str.upper()
+                color_col = 'Χρώμα Γραφής' if 'Χρώμα Γραφής' in pool.columns else 'Χρώμα'
+                pool_colors = pool.get(color_col, pd.Series('', index=pool.in
                 trigger_color_upper = tcolor.upper()
                 
                 is_same_brand = target_brands == tb
