@@ -4198,7 +4198,7 @@ def run_peripherals_engine(trigger, df_products, df_history, cluster_key):
     hub_expansion = str(trigger.get('Θύρες επέκτασης', '')).lower()
     hub_power = str(trigger.get('Τροφοδοσία', trigger.get('Τροφοδοσία15', ''))).lower()
     hub_interface = str(trigger.get('Interface', '')).lower()
-
+    do_color_match = tcolor and tcolor.lower() not in ('', 'nan', 'n/a', '0')
     
     
     # ── Determine slot config ──
