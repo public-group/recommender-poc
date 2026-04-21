@@ -4669,6 +4669,46 @@ def run_peripherals_engine(trigger, df_products, df_history, cluster_key):
                 pool.loc[match_mask, 'Final_Score'] += 150000
                 notes.append(f"Art Medium Match ({active_medium}): Boosted {match_mask.sum()} items")
 
+        # ── Nib Type Deep Matching (Λεπτή, Χονδρή, Πλακέ, κλπ) ──
+        if flags.get('match_nib_type'):
+            t_nib = str(trigger.get('Τύπος Μύτης', '')).strip().lower()
+            
+            # Έξυπνο Fallback αν το κελί είναι άδειο (διαβάζει τον τίτλο)
+            if not t_nib or t_nib == 'nan':
+                if re.search(r'fine|λεπτή|0\.[1-8]mm', _tt_lower): t_nib = 'λεπτή'
+                elif re.search(r'χονδρή|maxi|jumbo|broad', _tt_lower): t_nib = 'χονδρή'
+                elif re.search(r'πλακέ|chisel|υπογράμμισης', _tt_lower): t_nib = 'πλακέ'
+                elif re.search(r'σφραγίδα|stamp', _tt_lower): t_nib = 'σφραγίδα'
+            
+            if t_nib:
+                # 1. Boost σε εναλλακτικούς μαρκαδόρους με την ΙΔΙΑ μύτη
+                if 'Τύπος Μύτης' in pool.columns:
+                    is_same_nib = pool['Τύπος Μύτης'].fillna('').astype(str).str.strip().str.lower() == t_nib
+                    pool.loc[is_same_nib, 'Final_Score'] += 80000
+                    if is_same_nib.any():
+                        notes.append(f"Nib Match ({t_nib}): +80k points to {is_same_nib.sum()} items")
+                
+                # 2. Έξυπνα Cross-Sells (Χαρτιά & Αξεσουάρ) ανάλογα τη μύτη
+                candidate_text = pool['Title'].fillna('').astype(str).str.lower() + " " + pool['Είδος'].fillna('').astype(str).str.lower()
+                
+                if t_nib == 'λεπτή':
+                    # Λεπτή Μύτη -> Σχέδιο ακριβείας, χάρακες, μιλιμετρέ χαρτί
+                    is_precision = candidate_text.str.contains(r'σχεδίου|μιλιμετρέ|χάρακας|fineliner|ακριβείας|fine')
+                    pool.loc[is_precision, 'Final_Score'] += 60000
+                    notes.append(f"Fine Nib -> Boosted precision tools/paper ({is_precision.sum()} items)")
+                    
+                elif t_nib == 'χονδρή' or t_nib == 'σφραγίδα':
+                    # Χονδρή/Σφραγίδα -> Μεγάλα μπλοκ ζωγραφικής, παιδικά craft
+                    is_broad_art = candidate_text.str.contains(r'ακουαρέλας|ζωγραφικής|maxi|jumbo|craft')
+                    pool.loc[is_broad_art, 'Final_Score'] += 60000
+                    notes.append(f"Broad/Stamp Nib -> Boosted art/drawing blocks ({is_broad_art.sum()} items)")
+                    
+                elif t_nib == 'πλακέ' or t_nib == 'μεσαία':
+                    # Πλακέ (Chisel) / Μεσαία -> Υπογράμμιση, Τετράδια, Σημειώσεις
+                    is_chisel_acc = candidate_text.str.contains(r'σημειώσεων|τετράδιο|υπογράμμισης|καλλιγραφίας')
+                    pool.loc[is_chisel_acc, 'Final_Score'] += 60000
+                    notes.append(f"Chisel Nib -> Boosted notebooks/highlighters ({is_chisel_acc.sum()} items)")
+        
         # ── Kids vs Adult Coloring Activity Matching ──
         if flags.get('match_coloring_activity'):
             t_eidos = str(trigger.get('Είδος', '')).lower()
