@@ -4199,93 +4199,7 @@ def run_peripherals_engine(trigger, df_products, df_history, cluster_key):
     hub_power = str(trigger.get('Τροφοδοσία', trigger.get('Τροφοδοσία15', ''))).lower()
     hub_interface = str(trigger.get('Interface', '')).lower()
 
-    # Color match - allow black and white to color match!
-    do_color_match = tcolor and tcolor.lower() not in ('', 'nan', 'n/a', '0')
-
-
-    # ── Pen Variant Match (Same Brand, Same Tip, Different Color) ──
-        if flags.get('match_pen_variant'):
-            t_tip = str(trigger.get('Πάχος Μύτης', '')).strip().lower()
-            
-            if tb and t_tip and do_color_match:
-                target_brands = pool['Κατασκευαστής'].fillna('').str.strip().str.upper()
-                pool_tips = pool['Πάχος Μύτης'].fillna('').astype(str).str.strip().str.lower()
-                pool_colors = pool['Χρώμα'].fillna('').astype(str).str.strip().str.upper()
-                trigger_color_upper = tcolor.upper()
-                
-                is_same_brand = target_brands == tb
-                is_same_tip = pool_tips == t_tip
-                # We want colors that are NOT blank and DO NOT contain the trigger's color
-                is_diff_color = (pool_colors != '') & (~pool_colors.str.contains(trigger_color_upper, regex=False, na=False))
-                
-                variant_mask = is_same_brand & is_same_tip & is_diff_color
-                
-                b4_var = len(pool)
-                pool = pool[variant_mask]
-                notes.append(f"Pen Variant filter (Brand={tb}, Tip={t_tip}, Color!={trigger_color_upper}): {b4_var} → {len(pool)}")
-            else:
-                # If trigger is missing tip, color, or brand, we can't do a variant match
-                notes.append("⚠ Missing Brand, Tip, or Color on trigger. Skipping variant match.")
-                pool = pool.head(0) # Empties the pool so the engine skips this slot
-
-        # ── Writing Instrument Precision Matching ──
-        if flags.get('match_writing_type'):
-            t_type = str(trigger.get('Τύπος', '')).lower()
-            
-            # Rule 1: Mechanical Pencil -> Needs "Μύτες" (Leads)
-            if 'μηχανικό' in t_type:
-                is_leads = pool['Τύπος'].fillna('').str.lower().str.contains('μύτες')
-                pool.loc[is_leads, 'Final_Score'] += 200000
-                notes.append("Mechanical Pencil detected -> Boosted 'Μύτες'")
-                
-            # Rule 2: Ink/Gel/Roller -> Needs Correction Tape/Fluid (not a classic eraser)
-            elif any(x in t_type for x in ['gel', 'υγρής', 'roller', 'διαρκείας', 'πένα']):
-                is_tape = pool['Είδος'].fillna('').str.lower().str.contains('ταινία|υγρό')
-                pool.loc[is_tape, 'Final_Score'] += 100000
-                notes.append("Ink pen detected -> Boosted Correction Tape/Fluid")
-                
-            # Rule 3: Classic Pencil -> Needs classic sharpener with bin (Βαρελάκι)
-            elif 'απλό' in t_type:
-                is_barrel_sharpener = pool['Είδος'].fillna('').str.lower().str.contains('βαρελάκι|μανιβέλα')
-                pool.loc[is_barrel_sharpener, 'Final_Score'] += 80000
-                notes.append("Classic pencil detected -> Boosted 'Βαρελάκι' sharpeners")
-
-        # ── Deep Attribute Matching (Art Mediums & Techniques) ──
-        if flags.get('match_art_medium'):
-            # 1. Identify the trigger's medium from its Τύπος or Είδος
-            trigger_mediums = []
-            t_type = str(trigger.get('Τύπος', '')).lower()
-            t_eidos = str(trigger.get('Είδος', '')).lower()
-            combined_trigger_text = f"{t_type} {t_eidos} {_tt_lower}"
-            
-            # Mapping core mediums to their various Greek naming conventions
-            medium_map = {
-                'watercolor': ['ακουαρέλα', 'νερομπογιά', 'νερού'],
-                'oil': ['λαδιού', 'λαδοπαστέλ'],
-                'acrylic': ['ακρυλικ'],
-                'sketch': ['σχεδίου', 'μιλιμετρέ', 'κάρβουνο', 'γραφίτης'],
-                'pastel': ['παστέλ', 'κιμωλία']
-            }
-            
-            active_medium = None
-            for medium_key, keywords in medium_map.items():
-                if any(kw in combined_trigger_text for kw in keywords):
-                    active_medium = medium_key
-                    break
-            
-            # 2. Boost candidates that match the active medium
-            if active_medium:
-                candidate_text = pool['Τύπος'].fillna('').astype(str) + " " + pool['Είδος'].fillna('').astype(str) + " " + pool['Title'].fillna('').astype(str)
-                candidate_text = candidate_text.str.lower()
-                
-                # Create a mask for candidates containing the matching keywords
-                match_mask = pd.Series(False, index=pool.index)
-                for kw in medium_map[active_medium]:
-                    match_mask |= candidate_text.str.contains(kw, regex=False)
-                
-                # Massive boost for perfect medium match
-                pool.loc[match_mask, 'Final_Score'] += 150000
-                notes.append(f"Art Medium Match ({active_medium}): Boosted {match_mask.sum()} items")
+    
     
     # ── Determine slot config ──
     monitor_persona = None  # Used by usage_filter flag
@@ -4649,6 +4563,90 @@ def run_peripherals_engine(trigger, df_products, df_history, cluster_key):
             if 'Χρώμα' in pool.columns:
                 cm = pool['Χρώμα'].fillna('').astype(str).str.upper() == tcolor.upper()
                 pool.loc[cm, 'Final_Score'] += 30000
+
+# ── Pen Variant Match (Same Brand, Same Tip, Different Color) ──
+        if flags.get('match_pen_variant'):
+            t_tip = str(trigger.get('Πάχος Μύτης', '')).strip().lower()
+            
+            if tb and t_tip and do_color_match:
+                target_brands = pool['Κατασκευαστής'].fillna('').str.strip().str.upper()
+                pool_tips = pool['Πάχος Μύτης'].fillna('').astype(str).str.strip().str.lower()
+                pool_colors = pool['Χρώμα'].fillna('').astype(str).str.strip().str.upper()
+                trigger_color_upper = tcolor.upper()
+                
+                is_same_brand = target_brands == tb
+                is_same_tip = pool_tips == t_tip
+                # We want colors that are NOT blank and DO NOT contain the trigger's color
+                is_diff_color = (pool_colors != '') & (~pool_colors.str.contains(trigger_color_upper, regex=False, na=False))
+                
+                variant_mask = is_same_brand & is_same_tip & is_diff_color
+                
+                b4_var = len(pool)
+                pool = pool[variant_mask]
+                notes.append(f"Pen Variant filter (Brand={tb}, Tip={t_tip}, Color!={trigger_color_upper}): {b4_var} → {len(pool)}")
+            else:
+                # If trigger is missing tip, color, or brand, we can't do a variant match
+                notes.append("⚠ Missing Brand, Tip, or Color on trigger. Skipping variant match.")
+                pool = pool.head(0) # Empties the pool so the engine skips this slot
+
+        # ── Writing Instrument Precision Matching ──
+        if flags.get('match_writing_type'):
+            t_type = str(trigger.get('Τύπος', '')).lower()
+            
+            # Rule 1: Mechanical Pencil -> Needs "Μύτες" (Leads)
+            if 'μηχανικό' in t_type:
+                is_leads = pool['Τύπος'].fillna('').str.lower().str.contains('μύτες')
+                pool.loc[is_leads, 'Final_Score'] += 200000
+                notes.append("Mechanical Pencil detected -> Boosted 'Μύτες'")
+                
+            # Rule 2: Ink/Gel/Roller -> Needs Correction Tape/Fluid (not a classic eraser)
+            elif any(x in t_type for x in ['gel', 'υγρής', 'roller', 'διαρκείας', 'πένα']):
+                is_tape = pool['Είδος'].fillna('').str.lower().str.contains('ταινία|υγρό')
+                pool.loc[is_tape, 'Final_Score'] += 100000
+                notes.append("Ink pen detected -> Boosted Correction Tape/Fluid")
+                
+            # Rule 3: Classic Pencil -> Needs classic sharpener with bin (Βαρελάκι)
+            elif 'απλό' in t_type:
+                is_barrel_sharpener = pool['Είδος'].fillna('').str.lower().str.contains('βαρελάκι|μανιβέλα')
+                pool.loc[is_barrel_sharpener, 'Final_Score'] += 80000
+                notes.append("Classic pencil detected -> Boosted 'Βαρελάκι' sharpeners")
+
+        # ── Deep Attribute Matching (Art Mediums & Techniques) ──
+        if flags.get('match_art_medium'):
+            # 1. Identify the trigger's medium from its Τύπος or Είδος
+            trigger_mediums = []
+            t_type = str(trigger.get('Τύπος', '')).lower()
+            t_eidos = str(trigger.get('Είδος', '')).lower()
+            combined_trigger_text = f"{t_type} {t_eidos} {_tt_lower}"
+            
+            # Mapping core mediums to their various Greek naming conventions
+            medium_map = {
+                'watercolor': ['ακουαρέλα', 'νερομπογιά', 'νερού'],
+                'oil': ['λαδιού', 'λαδοπαστέλ'],
+                'acrylic': ['ακρυλικ'],
+                'sketch': ['σχεδίου', 'μιλιμετρέ', 'κάρβουνο', 'γραφίτης'],
+                'pastel': ['παστέλ', 'κιμωλία']
+            }
+            
+            active_medium = None
+            for medium_key, keywords in medium_map.items():
+                if any(kw in combined_trigger_text for kw in keywords):
+                    active_medium = medium_key
+                    break
+            
+            # 2. Boost candidates that match the active medium
+            if active_medium:
+                candidate_text = pool['Τύπος'].fillna('').astype(str) + " " + pool['Είδος'].fillna('').astype(str) + " " + pool['Title'].fillna('').astype(str)
+                candidate_text = candidate_text.str.lower()
+                
+                # Create a mask for candidates containing the matching keywords
+                match_mask = pd.Series(False, index=pool.index)
+                for kw in medium_map[active_medium]:
+                    match_mask |= candidate_text.str.contains(kw, regex=False)
+                
+                # Massive boost for perfect medium match
+                pool.loc[match_mask, 'Final_Score'] += 150000
+                notes.append(f"Art Medium Match ({active_medium}): Boosted {match_mask.sum()} items")
 
         # ── DPI-based pad size (Gaming Mouse #17 L3) ──
         if flags.get('dpi_pad_size') and dpi_str:
