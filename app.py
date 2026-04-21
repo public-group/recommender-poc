@@ -3768,16 +3768,20 @@ PENCILS_SLOTS = [
 ]
 
 MARKERS_SLOTS = [
-    ("Notebook",          ['ΤΕΤΡΑΔΙΟ', 'ΣΗΜΕΙΩΜΑΤΑΡΙΟ', 'ΜΠΛΟΚ'],       {'title_boost': ['A4', 'A5', 'Lined', 'Γραμμές']}),
+    # Τα 2 νέα slots που εμφανίζονται ΜΟΝΟ αν ο μαρκαδόρος είναι "Ζωγραφικής"
+    ("Coloring Pad 1",    ['ΜΠΛΟΚ-ΧΑΡΤΙΑ', 'ΧΑΡΤΙΑ - ΜΠΛΟΚ', 'ΜΠΛΟΚ - ΧΑΡΤΙΑ ΖΩΓΡΑΦΙΚΗΣ'], {'match_coloring_activity': True}),
+    ("Coloring Pad 2",    ['ΜΠΛΟΚ-ΧΑΡΤΙΑ', 'ΧΑΡΤΙΑ - ΜΠΛΟΚ', 'ΜΠΛΟΚ - ΧΑΡΤΙΑ ΖΩΓΡΑΦΙΚΗΣ'], {'match_coloring_activity': True}),
+    
+    # Το κανονικό τετράδιο με απαγόρευση (title_hide) στο χαρτί ιχνογραφίας
+    ("Notebook",          ['ΤΕΤΡΑΔΙΟ', 'ΣΗΜΕΙΩΜΑΤΑΡΙΟ', 'ΜΠΛΟΚ'],       {'title_boost': ['A4', 'A5', 'Lined', 'Γραμμές'], 'title_hide': ['Ιχνογραφίας', 'Πολυγράφου']}),
+    
     ("Pen",               ['ΣΤΥΛΟ ΥΓΡΗΣ ΜΕΛΑΝΗΣ', 'ΣΤΥΛΟ GEL', 'ΜΟΛΥΒΙΑ'], {'title_boost': ['Black', 'Blue', '0.7mm']}),
     ("Sticky Notes",      ['POST-IT-ΧΑΡΤΑΚΙΑ ΣΗΜΕΙΩΣΕΩΝ', 'ΣΕΛΙΔΟΔΕΙΚΤΕΣ'], {'title_boost': ['Arrow', 'Flag', 'Index', 'Σημάδια']}),
     ("Pencil Case",       ['ΚΑΣΕΤΙΝΕΣ-ΘΗΚΕΣ', 'ΣΧΟΛΙΚΕΣ ΚΑΣΕΤΙΝΕΣ', 'ΜΟΛΥΒΟΘΗΚΕΣ'], {'title_boost': ['Wide', 'Large', 'Compartment', 'Φαρδιά']}),
     ("Alt Markers",       ['ΜΑΡΚΑΔΟΡΟΙ ΥΠΟΓΡΑΜΜΙΣΗΣ', 'ΜΑΡΚΑΔΟΡΟΙ ΠΙΝΑΚΑ', 'ΜΑΡΚΑΔΟΡΟΙ ΑΝΕΞΙΤΗΛΟΙ', 'ΜΑΡΚΑΔΟΡΟΙ'], {'title_boost': ['Pastel', 'Neon', '12-pack', 'Extended']}),
     ("Backup Pencil",     ['ΜΟΛΥΒΙΑ', 'ΣΤΥΛΟ ΥΓΡΗΣ ΜΕΛΑΝΗΣ'],            {}),
     ("Correction",        ['ΔΙΟΡΘΩΤΙΚΑ'],                                 {'title_boost': ['Tape', 'Roller']}),
-    ("Ruler",             ['ΓΕΩΜΕΤΡΙΚΑ ΟΡΓΑΝΑ', 'ΟΡΓΑΝΑ ΜΕΤΡΗΣΗΣ'],      {'title_boost': ['30cm', 'Transparent', 'Διάφανος']}),
     ("Eraser",            ['ΓΟΜΕΣ'],                                      {'title_boost': ['White', 'Soft', 'Pencil']}),
-    ("Dividers",          ['ΔΙΑΧΩΡΙΣΤΙΚΑ', 'ΣΕΛΙΔΟΔΕΙΚΤΕΣ'],             {'title_boost': ['Tabbed', 'Index', 'Color-coded', 'Χρωματιστά']}),
 ]
 
 SHARPENERS_SLOTS = [
@@ -4665,7 +4669,38 @@ def run_peripherals_engine(trigger, df_products, df_history, cluster_key):
                 pool.loc[match_mask, 'Final_Score'] += 150000
                 notes.append(f"Art Medium Match ({active_medium}): Boosted {match_mask.sum()} items")
 
-
+        # ── Kids vs Adult Coloring Activity Matching ──
+        if flags.get('match_coloring_activity'):
+            t_eidos = str(trigger.get('Είδος', '')).lower()
+            
+            # 1. Ελέγχουμε αν είναι όντως μαρκαδόρος ζωγραφικής (όχι π.χ. πίνακα ή υπογράμμισης)
+            is_art_marker = 'ζωγραφικής' in t_eidos or 'ζωγραφικής' in _tt_lower or 'drawing' in _tt_lower
+            
+            if not is_art_marker:
+                # Αν είναι απλός μαρκαδόρος, αδειάζουμε το pool για να παραλειφθεί εντελώς η ζωγραφική
+                notes.append("Not an art marker. Skipping coloring pad slot.")
+                pool = pool.head(0)
+            else:
+                # 2. Ανιχνεύουμε αν πρόκειται για παιδικό προϊόν ή ενηλίκων/επαγγελματικό
+                kids_brands = ['GIOTTO', 'CARIOCA', 'CRAYOLA', 'MAPED', 'FIBRAPEN', 'MILAN', 'BIC']
+                is_kid = tb in kids_brands or 'παιδ' in _tt_lower or 'kids' in _tt_lower or 'maxi' in _tt_lower or 'jumbo' in _tt_lower
+                
+                b4_col = len(pool)
+                if is_kid:
+                    # 👧 Παιδιά: Κρατάμε ΑΥΣΤΗΡΑ μόνο το "Είδος: Ζωγραφικής" και διώχνουμε τα Mandala
+                    is_drawing_pad = pool['Είδος'].fillna('').str.lower() == 'ζωγραφικής'
+                    is_drawing_pad |= pool['Title'].fillna('').str.lower().str.contains('μπλοκ ζωγραφικής|sketch pad|μπλοκ σχεδίου')
+                    is_adult = pool['Title'].fillna('').str.lower().str.contains('mandala|μαντάλα|ενηλίκων|adult')
+                    
+                    pool = pool[is_drawing_pad & ~is_adult]
+                    notes.append(f"Kids Marker -> Φιλτράρισμα σε 'Μπλοκ Ζωγραφικής' ({b4_col} → {len(pool)})")
+                else:
+                    # 🧑 Ενήλικες: Κρατάμε Adult Coloring Books & Ειδικά Χαρτιά Μαρκαδόρου (Marker Pads)
+                    is_adult = pool['Title'].fillna('').str.lower().str.contains('mandala|μαντάλα|ενηλίκων|adult|coloring book')
+                    is_pro_pad = pool['Title'].fillna('').str.lower().str.contains('bristol|marker pad|mixed media|moleskine')
+                    
+                    pool = pool[is_adult | is_pro_pad]
+                    notes.append(f"Adult Marker -> Φιλτράρισμα σε Adult Coloring / Marker Pads ({b4_col} → {len(pool)})")
 
                 
         # ── Deep Attribute Matching (Art Mediums & Techniques) ──
