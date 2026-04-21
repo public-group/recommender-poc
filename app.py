@@ -4277,6 +4277,23 @@ def run_peripherals_engine(trigger, df_products, df_history, cluster_key):
 
     used_materials = {tm}
 
+    used_materials = {tm}
+
+    # --- NEW: CO-PURCHASE HISTORY LOGIC ---
+    tcust = df_history[df_history['Material']==tm]['customerEmail'].unique() if not df_history.empty else []
+    bw = df_history[(df_history['customerEmail'].isin(tcust))&(df_history['Material']!=tm)] if not df_history.empty else pd.DataFrame()
+    fdf = bw['Material'].value_counts().reset_index() if not bw.empty else pd.DataFrame(columns=['NID', 'Frequency'])
+    
+    if not fdf.empty:
+        fdf.columns = ['NID', 'Frequency']
+        c = c.merge(fdf, left_on='Material', right_on='NID', how='left')
+        c['Frequency'] = c['Frequency'].fillna(0).astype(int)
+        c['History_Score'] = c['Frequency'].apply(lambda f: HISTORY_BOOST if f >= HISTORY_FREQ_MIN else 0)
+    else:
+        c['Frequency'] = 0
+        c['History_Score'] = 0
+    # --------------------------------------
+
     for idx, (role, hierarchies, flags) in enumerate(slots, start=1):
         notes = [f"Slot {idx}: {role}"]
 
@@ -4746,10 +4763,17 @@ def run_peripherals_engine(trigger, df_products, df_history, cluster_key):
                 if pool.empty:
                     continue
 
-                # Score
+                # ── Scoring ──
                 pool['Final_Score'] = 0.0
                 if 'AVAILABILITY' in pool.columns:
                     pool.loc[pool['AVAILABILITY'] == 'Άμεσα Διαθέσιμο', 'Final_Score'] += 100000
+                    
+                # 1. Primary: Actual co-purchase history (If people bought them together, boost it massively)
+                if 'History_Score' in pool.columns:
+                    pool['Final_Score'] += pool['History_Score']
+                    pool['Final_Score'] += pool['Frequency'] * 100  # Give a slight edge to items bought together more often
+
+                # 2. Secondary: Global Best Sellers (If no history exists, rely on overall popularity)
                 pool['Final_Score'] += pool['Sales_Tiebreaker'].fillna(0) * 0.1
 
                 # Brand boost (pass 1 only)
