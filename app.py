@@ -4648,6 +4648,46 @@ def run_peripherals_engine(trigger, df_products, df_history, cluster_key):
                 pool.loc[match_mask, 'Final_Score'] += 150000
                 notes.append(f"Art Medium Match ({active_medium}): Boosted {match_mask.sum()} items")
 
+
+
+                
+        # ── Deep Attribute Matching (Art Mediums & Techniques) ──
+        if flags.get('match_art_medium'):
+            # 1. Identify the trigger's medium from its Τύπος or Είδος
+            trigger_mediums = []
+            t_type = str(trigger.get('Τύπος', '')).lower()
+            t_eidos = str(trigger.get('Είδος', '')).lower()
+            combined_trigger_text = f"{t_type} {t_eidos} {_tt_lower}"
+            
+            # Mapping core mediums to their various Greek naming conventions
+            medium_map = {
+                'watercolor': ['ακουαρέλα', 'νερομπογιά', 'νερού'],
+                'oil': ['λαδιού', 'λαδοπαστέλ'],
+                'acrylic': ['ακρυλικ'],
+                'sketch': ['σχεδίου', 'μιλιμετρέ', 'κάρβουνο', 'γραφίτης'],
+                'pastel': ['παστέλ', 'κιμωλία']
+            }
+            
+            active_medium = None
+            for medium_key, keywords in medium_map.items():
+                if any(kw in combined_trigger_text for kw in keywords):
+                    active_medium = medium_key
+                    break
+            
+            # 2. Boost candidates that match the active medium
+            if active_medium:
+                candidate_text = pool['Τύπος'].fillna('').astype(str) + " " + pool['Είδος'].fillna('').astype(str) + " " + pool['Title'].fillna('').astype(str)
+                candidate_text = candidate_text.str.lower()
+                
+                # Create a mask for candidates containing the matching keywords
+                match_mask = pd.Series(False, index=pool.index)
+                for kw in medium_map[active_medium]:
+                    match_mask |= candidate_text.str.contains(kw, regex=False)
+                
+                # Massive boost for perfect medium match
+                pool.loc[match_mask, 'Final_Score'] += 150000
+                notes.append(f"Art Medium Match ({active_medium}): Boosted {match_mask.sum()} items")
+
         # ── DPI-based pad size (Gaming Mouse #17 L3) ──
         if flags.get('dpi_pad_size') and dpi_str:
             high_dpi = any(x in dpi_str for x in ['6401', '12801', '25600'])
