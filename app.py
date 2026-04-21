@@ -3768,9 +3768,9 @@ PENCILS_SLOTS = [
 ]
 
 MARKERS_SLOTS = [
-    # 1. Variant Matches (Εμφανίζονται ΜΟΝΟ αν ο τίτλος γράφει "Μαρκαδόρος" ενικό)
-    ("Alt Color Marker 1",['ΜΑΡΚΑΔΟΡΟΙ ΖΩΓΡΑΦΙΚΗΣ', 'ΜΑΡΚΑΔΟΡΟΙ ΥΠΟΓΡΑΜΜΙΣΗΣ', 'ΜΑΡΚΑΔΟΡΟΙ ΠΙΝΑΚΑ', 'ΜΑΡΚΑΔΟΡΟΙ ΑΝΕΞΙΤΗΛΟΙ', 'ΜΑΡΚΑΔΟΡΟΙ'], {'match_marker_variant': True}),
-    ("Alt Color Marker 2",['ΜΑΡΚΑΔΟΡΟΙ ΖΩΓΡΑΦΙΚΗΣ', 'ΜΑΡΚΑΔΟΡΟΙ ΥΠΟΓΡΑΜΜΙΣΗΣ', 'ΜΑΡΚΑΔΟΡΟΙ ΠΙΝΑΚΑ', 'ΜΑΡΚΑΔΟΡΟΙ ΑΝΕΞΙΤΗΛΟΙ', 'ΜΑΡΚΑΔΟΡΟΙ'], {'match_marker_variant': True}),
+    # 1. Variant Matches (Ίδιο Brand, Ίδια Μύτη, ΙΔΙΟ ΕΙΔΟΣ, Άλλο Χρώμα)
+    ("Alt Color Marker 1", ['ΜΑΡΚΑΔΟΡΟΙ ΖΩΓΡΑΦΙΚΗΣ', 'ΜΑΡΚΑΔΟΡΟΙ ΥΠΟΓΡΑΜΜΙΣΗΣ', 'ΜΑΡΚΑΔΟΡΟΙ ΠΙΝΑΚΑ', 'ΜΑΡΚΑΔΟΡΟΙ ΑΝΕΞΙΤΗΛΟΙ', 'ΜΑΡΚΑΔΟΡΟΙ'], {'match_marker_variant': True, 'match_eidos': True}),
+    ("Alt Color Marker 2", ['ΜΑΡΚΑΔΟΡΟΙ ΖΩΓΡΑΦΙΚΗΣ', 'ΜΑΡΚΑΔΟΡΟΙ ΥΠΟΓΡΑΜΜΙΣΗΣ', 'ΜΑΡΚΑΔΟΡΟΙ ΠΙΝΑΚΑ', 'ΜΑΡΚΑΔΟΡΟΙ ΑΝΕΞΙΤΗΛΟΙ', 'ΜΑΡΚΑΔΟΡΟΙ'], {'match_marker_variant': True, 'match_eidos': True}),
     
     # 2. Έξυπνα Art Slots (Εμφανίζονται ΜΟΝΟ αν ο μαρκαδόρος είναι "Ζωγραφικής")
     ("Coloring Pad 1",    ['ΜΠΛΟΚ-ΧΑΡΤΙΑ', 'ΧΑΡΤΙΑ - ΜΠΛΟΚ', 'ΜΠΛΟΚ - ΧΑΡΤΙΑ ΖΩΓΡΑΦΙΚΗΣ'], {'match_coloring_activity': True, 'match_nib_type': True}),
@@ -4473,6 +4473,20 @@ def run_peripherals_engine(trigger, df_products, df_history, cluster_key):
             
             if is_mx.any():
                 notes.append(f"Sub-series Match (MX): Boosted {is_mx.sum()} items (+100k)")
+         # ── Exact Eidos Match (Ταυτοποίηση βάσει 'Είδος') ──
+        if flags.get('match_eidos'):
+            t_eidos = str(trigger.get('Είδος', '')).strip().lower()
+            
+            if t_eidos and t_eidos not in ['nan', 'n/a', 'none', '0', '']:
+                p_eidos = pool['Είδος'].fillna('').astype(str).str.strip().str.lower()
+                is_same_eidos = p_eidos == t_eidos
+                
+                b4_eidos = len(pool)
+                pool = pool[is_same_eidos]
+                notes.append(f"Eidos Match ({t_eidos}): {b4_eidos} → {len(pool)}")
+            else:
+                notes.append("⚠ Missing 'Είδος' on trigger. Skipping slot.")
+                pool = pool.head(0)  # Αν δεν ξέρουμε το είδος, αδειάζουμε το pool για να μην φέρουμε άσχετα
                 
         # ── Connectivity mirror ──
         if flags.get('connectivity_mirror'):
