@@ -4204,8 +4204,8 @@ def run_peripherals_engine(trigger, df_products, df_history, cluster_key):
 
 
     # ── Pen Variant Match (Same Brand, Same Tip, Different Color) ──
-    if flags.get('match_pen_variant'):
-        t_tip = str(trigger.get('Πάχος Μύτης', '')).strip().lower()
+        if flags.get('match_pen_variant'):
+            t_tip = str(trigger.get('Πάχος Μύτης', '')).strip().lower()
             
             if tb and t_tip and do_color_match:
                 target_brands = pool['Κατασκευαστής'].fillna('').str.strip().str.upper()
@@ -4227,8 +4227,8 @@ def run_peripherals_engine(trigger, df_products, df_history, cluster_key):
                 # If trigger is missing tip, color, or brand, we can't do a variant match
                 notes.append("⚠ Missing Brand, Tip, or Color on trigger. Skipping variant match.")
                 pool = pool.head(0) # Empties the pool so the engine skips this slot
-                
-    # ── Writing Instrument Precision Matching ──
+
+        # ── Writing Instrument Precision Matching ──
         if flags.get('match_writing_type'):
             t_type = str(trigger.get('Τύπος', '')).lower()
             
@@ -4249,8 +4249,8 @@ def run_peripherals_engine(trigger, df_products, df_history, cluster_key):
                 is_barrel_sharpener = pool['Είδος'].fillna('').str.lower().str.contains('βαρελάκι|μανιβέλα')
                 pool.loc[is_barrel_sharpener, 'Final_Score'] += 80000
                 notes.append("Classic pencil detected -> Boosted 'Βαρελάκι' sharpeners")
-                
-    # ── Deep Attribute Matching (Art Mediums & Techniques) ──
+
+        # ── Deep Attribute Matching (Art Mediums & Techniques) ──
         if flags.get('match_art_medium'):
             # 1. Identify the trigger's medium from its Τύπος or Είδος
             trigger_mediums = []
