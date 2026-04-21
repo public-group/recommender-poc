@@ -1,6 +1,7 @@
 import streamlit as st
 import streamlit.components.v1 as components
 import pandas as pd
+import numpy as np
 import html as html_lib
 import re
 import io
@@ -4568,16 +4569,28 @@ def run_peripherals_engine(trigger, df_products, df_history, cluster_key):
         if flags.get('match_pen_variant'):
             t_tip = str(trigger.get('Πάχος Μύτης', '')).strip().lower()
             
+            # --- NEW: Έξυπνο Fallback ---
+            # Αν το Excel είναι άδειο, ψάχνει τον τίτλο (π.χ. "0.7mm" ή "0.8 mm")
+            if not t_tip:
+                tip_match = re.search(r'(\d[\.,]\d\s*mm)', _tt_lower)
+                if tip_match:
+                    t_tip = tip_match.group(1).replace(' ', '').replace(',', '.')
+
             if tb and t_tip and do_color_match:
                 target_brands = pool['Κατασκευαστής'].fillna('').str.strip().str.upper()
+                
+                # Διαβάζει το πάχος μύτης και στους υποψήφιους (ψάχνει και στους τίτλους τους)
                 pool_tips = pool['Πάχος Μύτης'].fillna('').astype(str).str.strip().str.lower()
+                pool_tips_fallback = pool['Title'].fillna('').astype(str).str.lower().str.extract(r'(\d[\.,]\d\s*mm)', expand=False).fillna('').str.replace(' ', '').str.replace(',', '.')
+                pool_tips = np.where(pool_tips == '', pool_tips_fallback, pool_tips)
+                
                 color_col = 'Χρώμα Γραφής' if 'Χρώμα Γραφής' in pool.columns else 'Χρώμα'
                 pool_colors = pool.get(color_col, pd.Series('', index=pool.index)).fillna('').astype(str).str.strip().str.upper()
                 trigger_color_upper = tcolor.upper()
                 
                 is_same_brand = target_brands == tb
                 is_same_tip = pool_tips == t_tip
-                # We want colors that are NOT blank and DO NOT contain the trigger's color
+                # Θέλουμε χρώματα που ΔΕΝ είναι κενά και ΔΕΝ περιέχουν το χρώμα του trigger
                 is_diff_color = (pool_colors != '') & (~pool_colors.str.contains(trigger_color_upper, regex=False, na=False))
                 
                 variant_mask = is_same_brand & is_same_tip & is_diff_color
@@ -4586,9 +4599,12 @@ def run_peripherals_engine(trigger, df_products, df_history, cluster_key):
                 pool = pool[variant_mask]
                 notes.append(f"Pen Variant filter (Brand={tb}, Tip={t_tip}, Color!={trigger_color_upper}): {b4_var} → {len(pool)}")
             else:
-                # If trigger is missing tip, color, or brand, we can't do a variant match
-                notes.append("⚠ Missing Brand, Tip, or Color on trigger. Skipping variant match.")
-                pool = pool.head(0) # Empties the pool so the engine skips this slot
+                missing_info = []
+                if not tb: missing_info.append("Brand")
+                if not t_tip: missing_info.append("Tip")
+                if not do_color_match: missing_info.append("Color")
+                notes.append(f"⚠ Missing {', '.join(missing_info)} on trigger. Skipping variant match.")
+                pool = pool.head(0) # Αδειάζει το pool για να πάει στο next slot
 
         # ── Writing Instrument Precision Matching ──
         if flags.get('match_writing_type'):
@@ -5125,7 +5141,8 @@ with st.expander("⚙️ System Diagnostics"):
     diag_export = f"Active Cluster: {active_cluster}\n\n"
     
     diag_export += "--- TRIGGER ATTRIBUTES ---\n"
-    for col in cols:
+    # Αντί για cols (που ανήκει στο UI), διαβάζουμε κατευθείαν το Excel row
+    for col in trigger.index: 
         try:
             if col in trigger.index:
                 val = trigger[col]
