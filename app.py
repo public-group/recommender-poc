@@ -7,10 +7,6 @@ import re
 import io
 import traceback
 from difflib import SequenceMatcher
-
-import os, datetime
-st.sidebar.error(f"📁 Running: {os.path.abspath(__file__)}\n🕒 Mtime: {datetime.datetime.fromtimestamp(os.path.getmtime(__file__))}")
-
 st.set_page_config(page_title="Smart Recommender POC", layout="wide")
 
 # ─────────────────────────────────────────────────────────────
