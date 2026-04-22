@@ -102,7 +102,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v22.1 — Peripherals: Mouse/KB/Gaming Mouse/Gaming KB + Streaming Είδος + Monitors (dedicated HDMI/DP/USB ports) + Backfill + Printers + Webcam + USB Hub
+        🟢 Engine v23 Markers
     </div>
 </div>
 """, unsafe_allow_html=True)
