@@ -3774,16 +3774,15 @@ PENCILS_SLOTS = [
 ]
 
 MARKERS_SLOTS = [
-    ("Alt Color Marker 1",['ΜΑΡΚΑΔΟΡΟΙ ΖΩΓΡΑΦΙΚΗΣ', 'ΜΑΡΚΑΔΟΡΟΙ ΥΠΟΓΡΑΜΜΙΣΗΣ', 'ΜΑΡΚΑΔΟΡΟΙ ΠΙΝΑΚΑ', 'ΜΑΡΚΑΔΟΡΟΙ ΑΝΕΞΙΤΗΛΟΙ', 'ΜΑΡΚΑΔΟΡΟΙ'], {'match_marker_variant': True}),
-    ("Alt Color Marker 2",['ΜΑΡΚΑΔΟΡΟΙ ΖΩΓΡΑΦΙΚΗΣ', 'ΜΑΡΚΑΔΟΡΟΙ ΥΠΟΓΡΑΜΜΙΣΗΣ', 'ΜΑΡΚΑΔΟΡΟΙ ΠΙΝΑΚΑ', 'ΜΑΡΚΑΔΟΡΟΙ ΑΝΕΞΙΤΗΛΟΙ', 'ΜΑΡΚΑΔΟΡΟΙ'], {'match_marker_variant': True}),
-    
-    # ΠΡΟΣΘΕΣΑΜΕ ΤΟ 'COLORING BOOKS' ΕΔΩ:
+    # Default fallback: used only for truly generic "ΜΑΡΚΑΔΟΡΟΙ" triggers without clear type in title.
+    # Most triggers get routed to HIGHLIGHTERS / WHITEBOARD / PERMANENT / WRITING / DRAWING variants above.
+    ("Alt Color Marker 1",['ΜΑΡΚΑΔΟΡΟΙ'], {'match_marker_variant': True}),
+    ("Alt Color Marker 2",['ΜΑΡΚΑΔΟΡΟΙ'], {'match_marker_variant': True}),
     ("Coloring Pad 1",    ['ΜΠΛΟΚ-ΧΑΡΤΙΑ', 'ΧΑΡΤΙΑ - ΜΠΛΟΚ', 'ΜΠΛΟΚ - ΧΑΡΤΙΑ ΖΩΓΡΑΦΙΚΗΣ', 'COLORING BOOKS'], {'match_coloring_activity': True, 'match_nib_type': True}),
     ("Coloring Pad 2",    ['ΜΠΛΟΚ-ΧΑΡΤΙΑ', 'ΧΑΡΤΙΑ - ΜΠΛΟΚ', 'ΜΠΛΟΚ - ΧΑΡΤΙΑ ΖΩΓΡΑΦΙΚΗΣ', 'COLORING BOOKS'], {'match_coloring_activity': True, 'match_nib_type': True}),
-    
     ("Notebook",          ['ΣΗΜΕΙΩΜΑΤΑΡΙΑ', 'ΤΕΤΡΑΔΙΑ'],                  {'match_nib_type': True, 'eidos_boost': ['Σημειώσεων'], 'title_boost': ['A4', 'A5', 'Lined', 'Γραμμές'], 'title_hide': ['Ιχνογραφίας', 'Πολυγράφου', 'Ακουαρέλας', 'Ριζόχαρτο']}),
-    ("Alt Markers",       ['ΜΑΡΚΑΔΟΡΟΙ ΥΠΟΓΡΑΜΜΙΣΗΣ', 'ΜΑΡΚΑΔΟΡΟΙ ΠΙΝΑΚΑ', 'ΜΑΡΚΑΔΟΡΟΙ ΑΝΕΞΙΤΗΛΟΙ', 'ΜΑΡΚΑΔΟΡΟΙ', 'ΜΑΡΚΑΔΟΡΟΙ ΖΩΓΡΑΦΙΚΗΣ'], {'match_nib_type': True, 'title_boost': ['Pastel', 'Neon', '12-pack', 'Extended']}),
-    ("Pen",               ['ΣΤΥΛΟ ΥΓΡΗΣ ΜΕΛΑΝΗΣ', 'ΣΤΥΛΟ GEL', 'ΜΟΛΥΒΙΑ'], {'title_boost': ['Black', 'Blue', '0.7mm']}),
+    ("Alt Markers",       ['ΜΑΡΚΑΔΟΡΟΙ'], {'match_nib_type': True, 'title_boost': ['Pastel', 'Neon', '12-pack', 'Extended']}),
+    ("Pen",               ['ΣΤΥΛΟ ΥΓΡΗΣ ΜΕΛΑΝΗΣ', 'ΣΤΥΛΟ GEL'],           {'title_boost': ['Black', 'Blue', '0.7mm']}),
     ("Sticky Notes",      ['POST-IT-ΧΑΡΤΑΚΙΑ ΣΗΜΕΙΩΣΕΩΝ', 'ΣΕΛΙΔΟΔΕΙΚΤΕΣ'], {'title_boost': ['Arrow', 'Flag', 'Index', 'Σημάδια']}),
     ("Pencil Case",       ['ΚΑΣΕΤΙΝΕΣ-ΘΗΚΕΣ', 'ΣΧΟΛΙΚΕΣ ΚΑΣΕΤΙΝΕΣ', 'ΜΟΛΥΒΟΘΗΚΕΣ'], {'title_boost': ['Wide', 'Large', 'Compartment', 'Φαρδιά']}),
     ("Correction",        ['ΔΙΟΡΘΩΤΙΚΑ'],                                 {'title_boost': ['Tape', 'Roller']}),
@@ -3820,12 +3819,30 @@ WHITEBOARD_MARKERS_SLOTS = [
     ("Pencil Case",       ['ΚΑΣΕΤΙΝΕΣ-ΘΗΚΕΣ', 'ΜΟΛΥΒΟΘΗΚΕΣ'], {}),
 ]
 
+# ── Writing Markers slots (Μαρκαδόροι Γραφής — fine-tip writing/drawing markers like Pilot Twin) ──
+# These are typically fine-tip black/blue markers for writing, often filed under ΜΑΡΚΑΔΟΡΟΙ ΑΝΕΞΙΤΗΛΟΙ
+# but they're NOT whiteboard or highlighter — they're writing markers.
+WRITING_MARKERS_SLOTS = [
+    ("Alt Writing Color 1",['ΜΑΡΚΑΔΟΡΟΙ ΑΝΕΞΙΤΗΛΟΙ', 'ΜΑΡΚΑΔΟΡΟΙ'], {'match_marker_variant': True, 'eidos_boost': ['Μαρκαδόροι Γραφής'], 'title_boost': ['Γραφής', 'Fine', 'Twin'], 'title_hide': ['Πίνακα', 'Υπογράμμισης', 'Ζωγραφικής', 'Whiteboard', 'Highlighter', 'Board marker']}),
+    ("Alt Writing Color 2",['ΜΑΡΚΑΔΟΡΟΙ ΑΝΕΞΙΤΗΛΟΙ', 'ΜΑΡΚΑΔΟΡΟΙ'], {'match_marker_variant': True, 'eidos_boost': ['Μαρκαδόροι Γραφής'], 'title_boost': ['Γραφής', 'Fine', 'Twin'], 'title_hide': ['Πίνακα', 'Υπογράμμισης', 'Ζωγραφικής', 'Whiteboard', 'Highlighter', 'Board marker']}),
+    ("Fine Pen Companion",['ΣΤΥΛΟ GEL', 'ΣΤΥΛΟ ΥΓΡΗΣ ΜΕΛΑΝΗΣ'], {'typos_boost': ['Gel', 'Υγρής Μελάνης', 'Fine'], 'title_boost': ['Fine', 'Black', 'Blue', '0.5', '0.7']}),
+    ("More Writing Markers",['ΜΑΡΚΑΔΟΡΟΙ ΑΝΕΞΙΤΗΛΟΙ', 'ΜΑΡΚΑΔΟΡΟΙ'], {'eidos_boost': ['Μαρκαδόροι Γραφής'], 'title_boost': ['Γραφής', 'Fine', 'Twin', 'Dual'], 'title_hide': ['Πίνακα', 'Υπογράμμισης', 'Ζωγραφικής', 'Whiteboard', 'Highlighter']}),
+    ("Notebook",          ['ΣΗΜΕΙΩΜΑΤΑΡΙΑ', 'ΤΕΤΡΑΔΙΑ'], {'eidos_boost': ['Σημειώσεων'], 'title_boost': ['A5', 'A4', 'Lined', 'Γραμμές'], 'title_hide': ['Ιχνογραφίας', 'Πολυγράφου', 'Ακουαρέλας', 'Ριζόχαρτο']}),
+    ("Permanent Marker",  ['ΜΑΡΚΑΔΟΡΟΙ ΑΝΕΞΙΤΗΛΟΙ'], {'title_boost': ['Ανεξίτηλος', 'Permanent', 'CD', 'DVD'], 'title_hide': ['Πίνακα']}),
+    ("Sticky Notes",      ['POST-IT-ΧΑΡΤΑΚΙΑ ΣΗΜΕΙΩΣΕΩΝ', 'ΣΕΛΙΔΟΔΕΙΚΤΕΣ'], {'title_boost': ['Flag', 'Arrow', 'Index']}),
+    ("Highlighter",       ['ΜΑΡΚΑΔΟΡΟΙ ΥΠΟΓΡΑΜΜΙΣΗΣ'], {'title_boost': ['Pastel', '4-pack', '6-pack']}),
+    ("Pencil Case",       ['ΚΑΣΕΤΙΝΕΣ-ΘΗΚΕΣ', 'ΜΟΛΥΒΟΘΗΚΕΣ'], {}),
+    ("Correction",        ['ΔΙΟΡΘΩΤΙΚΑ'], {'eidos_boost': ['Διορθωτική Ταινία'], 'title_boost': ['Tape', 'Roller']}),
+]
+
 # ── Permanent Markers-specific slots (ΜΑΡΚΑΔΟΡΟΙ ΑΝΕΞΙΤΗΛΟΙ) ──
+# NOTE: Data mixes writing markers (Μαρκαδόρος Γραφής) into this hierarchy.
+# We hide "Γραφής" titles to keep TRUE permanent markers in alt slots.
 PERMANENT_MARKERS_SLOTS = [
-    ("Alt Permanent 1",   ['ΜΑΡΚΑΔΟΡΟΙ ΑΝΕΞΙΤΗΛΟΙ'], {'match_marker_variant': True}),
-    ("Alt Permanent 2",   ['ΜΑΡΚΑΔΟΡΟΙ ΑΝΕΞΙΤΗΛΟΙ'], {'match_nib_type': True, 'title_boost': ['Fine', 'Medium', 'Chisel', 'Λεπτή', 'Μεσαία']}),
-    ("Label Maker",       ['ΒΟΗΘΗΤΙΚΑ ΠΑΡΟΥΣΙΑΣΗΣ', 'ΕΤΙΚΕΤΕΣ'], {'title_boost': ['Label', 'Ετικέτα', 'Sticker', 'Αυτοκόλλητ']}),
+    ("Alt Permanent 1",   ['ΜΑΡΚΑΔΟΡΟΙ ΑΝΕΞΙΤΗΛΟΙ'], {'match_marker_variant': True, 'title_boost': ['Ανεξίτηλος', 'Permanent'], 'title_hide': ['Γραφής', 'Twin', 'Fine writing']}),
+    ("Alt Permanent 2",   ['ΜΑΡΚΑΔΟΡΟΙ ΑΝΕΞΙΤΗΛΟΙ'], {'match_nib_type': True, 'title_boost': ['Ανεξίτηλος', 'Permanent', 'Fine', 'Medium', 'Chisel', 'Λεπτή', 'Μεσαία'], 'title_hide': ['Γραφής', 'Twin']}),
     ("CD/DVD Marker",     ['ΜΑΡΚΑΔΟΡΟΙ ΑΝΕΞΙΤΗΛΟΙ'], {'title_boost': ['CD', 'DVD', 'Ultra fine', '0.4', '0.7']}),
+    ("Label Maker",       ['ΒΟΗΘΗΤΙΚΑ ΠΑΡΟΥΣΙΑΣΗΣ', 'ΕΤΙΚΕΤΕΣ'], {'title_boost': ['Label', 'Ετικέτα', 'Sticker', 'Αυτοκόλλητ']}),
     ("Whiteboard Marker", ['ΜΑΡΚΑΔΟΡΟΙ ΠΙΝΑΚΑ'], {}),
     ("Notebook",          ['ΣΗΜΕΙΩΜΑΤΑΡΙΑ', 'ΤΕΤΡΑΔΙΑ'], {'eidos_boost': ['Σημειώσεων'], 'title_hide': ['Ιχνογραφίας', 'Πολυγράφου', 'Ακουαρέλας']}),
     ("Sticky Notes",      ['POST-IT-ΧΑΡΤΑΚΙΑ ΣΗΜΕΙΩΣΕΩΝ'], {}),
@@ -4644,16 +4661,22 @@ def run_peripherals_engine(trigger, df_products, df_history, cluster_key):
                 notes.append("⚠ Missing Brand or Color on trigger. Skipping variant match.")
                 pool = pool.head(0)
 
-        # ── Marker Variant Match (Single item, Same Brand, Same Variant, Different Color) ──
+        # ── Marker Variant Match (Same Brand, Same Variant/Type, Different Color) ──
+        # Handles BOTH singular "Μαρκαδόρος" triggers AND plural "Μαρκαδόροι" multi-packs.
         if flags.get('match_marker_variant'):
-            is_single_trigger = bool(re.search(r'\bμαρκαδόρος\b', _tt_lower)) and not bool(re.search(r'\bμαρκαδόροι\b|\d+\s*τεμ|\d+\s*χρώμ|σετ|pack', _tt_lower))
-            
-            if is_single_trigger and tb and do_color_match:
+            if tb:
                 target_brands = pool['Κατασκευαστής'].fillna('').str.strip().str.upper()
                 
                 na_vals = ['nan', 'n/a', 'none', '0', '#n/a', 'μη διαθέσιμη πληροφορία', 'null', '']
                 mm_regex = r'(\d+(?:[\.,]\d+)?(?:-\d+(?:[\.,]\d+)?)?\s*mm)'
                 
+                # Detect trigger shape: singular vs plural (multi-pack)
+                pack_pattern = r'\bμαρκαδόροι\b|\d+\s*τεμ|\d+\s*χρώμ|σετ|pack|set'
+                single_pattern = r'\bμαρκαδόρος\b'
+                is_single_trigger = bool(re.search(single_pattern, _tt_lower)) and not bool(re.search(pack_pattern, _tt_lower))
+                is_pack_trigger = bool(re.search(pack_pattern, _tt_lower))
+                
+                # Tip/variant extraction (same as before)
                 t_tip_raw = str(trigger.get('Πάχος Μύτης', '')).strip().lower()
                 t_nib_raw = str(trigger.get('Τύπος Μύτης', '')).strip().lower()
                 t_mm, t_text = '', ''
@@ -4684,44 +4707,69 @@ def run_peripherals_engine(trigger, df_products, df_history, cluster_key):
                 elif t_text: is_same_variant = p_text.apply(lambda x: t_text in x or x in t_text if x else False)
                 else: is_same_variant = pd.Series(True, index=pool.index)
                 
-                is_single_candidate = p_title.str.contains(r'\bμαρκαδόρος\b', regex=True) & ~p_title.str.contains(r'\bμαρκαδόροι\b|\d+\s*τεμ|\d+\s*χρώμ|σετ|pack', regex=True)
-
+                is_single_candidate = p_title.str.contains(single_pattern, regex=True) & ~p_title.str.contains(pack_pattern, regex=True)
+                is_pack_candidate = p_title.str.contains(pack_pattern, regex=True)
+                
+                is_same_brand = target_brands == tb
+                
+                # Color diff only meaningful for singulars; for packs, often "Πολύχρωμο"
                 color_col = 'Χρώμα Γραφής' if 'Χρώμα Γραφής' in pool.columns else 'Χρώμα'
                 color_na_vals = ['#N/A', 'ΜΗ ΔΙΑΘΕΣΙΜΗ ΠΛΗΡΟΦΟΡΙΑ', 'NULL', 'NAN', 'N/A', 'NONE', '0']
                 
                 pool_colors = pool.get(color_col, pd.Series('', index=pool.index)).fillna('').astype(str).str.strip().str.upper().replace(color_na_vals, '')
                 pool_colors_clean = pool_colors.str.replace('Ύ', 'Υ').str.replace('Ά', 'Α').str.replace('Έ', 'Ε').str.replace('Ί', 'Ι').str.replace('Ό', 'Ο').str.replace('Ή', 'Η').str.replace('Ώ', 'Ω')
                 trigger_color_clean = tcolor.upper().replace('Ύ', 'Υ').replace('Ά', 'Α').replace('Έ', 'Ε').replace('Ί', 'Ι').replace('Ό', 'Ο').replace('Ή', 'Η').replace('Ώ', 'Ω')
-                
                 candidate_titles_clean = p_title.str.upper().str.replace('Ύ', 'Υ').str.replace('Ά', 'Α').str.replace('Έ', 'Ε').str.replace('Ί', 'Ι').str.replace('Ό', 'Ο').str.replace('Ή', 'Η').str.replace('Ώ', 'Ω')
                 
                 has_col_diff = (pool_colors_clean != '') & (~pool_colors_clean.str.contains(trigger_color_clean, regex=False, na=False))
                 has_title_diff = (pool_colors_clean == '') & (~candidate_titles_clean.str.contains(trigger_color_clean, regex=False, na=False))
                 is_diff_color = has_col_diff | has_title_diff
                 
-                is_same_brand = target_brands == tb
-                
-                # --- CASCADE FALLBACK LOGIC ---
                 b4_var = len(pool)
-                strict_mask = is_same_brand & is_same_variant & is_diff_color & is_single_candidate
                 
-                if not pool[strict_mask].empty:
-                    pool = pool[strict_mask]
-                    notes.append(f"Marker Variant (Strict: Brand+Tip+Color+Single): {b4_var} → {len(pool)}")
-                elif not pool[is_same_brand & is_single_candidate & is_diff_color].empty:
-                    pool = pool[is_same_brand & is_single_candidate & is_diff_color]
-                    notes.append(f"Marker Variant (Fallback 1: Brand+Single+Color, Ignored Tip): {b4_var} → {len(pool)}")
-                elif not pool[is_same_brand & is_diff_color].empty:
-                    pool = pool[is_same_brand & is_diff_color]
-                    notes.append(f"Marker Variant (Fallback 2: Brand+Color, Any Pack Size): {b4_var} → {len(pool)}")
-                elif not pool[is_same_brand].empty:
-                    pool = pool[is_same_brand]
-                    notes.append(f"Marker Variant (Fallback 3: Any from Brand): {b4_var} → {len(pool)}")
+                if is_single_trigger:
+                    # ── SINGLE TRIGGER → prefer single candidates, different color ──
+                    strict_mask = is_same_brand & is_same_variant & is_diff_color & is_single_candidate
+                    if not pool[strict_mask].empty:
+                        pool = pool[strict_mask]
+                        notes.append(f"Marker Variant (Single/Strict: Brand+Tip+Color+Single): {b4_var} → {len(pool)}")
+                    elif not pool[is_same_brand & is_single_candidate & is_diff_color].empty:
+                        pool = pool[is_same_brand & is_single_candidate & is_diff_color]
+                        notes.append(f"Marker Variant (Single/Fallback 1: Brand+Single+Color): {b4_var} → {len(pool)}")
+                    elif not pool[is_same_brand & is_diff_color].empty:
+                        pool = pool[is_same_brand & is_diff_color]
+                        notes.append(f"Marker Variant (Single/Fallback 2: Brand+Color, Any Pack): {b4_var} → {len(pool)}")
+                    elif not pool[is_same_brand].empty:
+                        pool = pool[is_same_brand]
+                        notes.append(f"Marker Variant (Single/Fallback 3: Any from Brand): {b4_var} → {len(pool)}")
+                    else:
+                        notes.append("⚠ No brand match for single variant.")
+                        pool = pool.head(0)
+                elif is_pack_trigger:
+                    # ── PACK TRIGGER → prefer other packs from same brand, same tip type ──
+                    strict_mask = is_same_brand & is_pack_candidate & is_same_variant
+                    if not pool[strict_mask].empty:
+                        pool = pool[strict_mask]
+                        notes.append(f"Marker Variant (Pack/Strict: Brand+Tip+Pack): {b4_var} → {len(pool)}")
+                    elif not pool[is_same_brand & is_pack_candidate].empty:
+                        pool = pool[is_same_brand & is_pack_candidate]
+                        notes.append(f"Marker Variant (Pack/Fallback 1: Brand+Pack Any): {b4_var} → {len(pool)}")
+                    elif not pool[is_same_brand].empty:
+                        pool = pool[is_same_brand]
+                        notes.append(f"Marker Variant (Pack/Fallback 2: Any from Brand): {b4_var} → {len(pool)}")
+                    else:
+                        notes.append("⚠ No brand match for pack variant.")
+                        pool = pool.head(0)
                 else:
-                    notes.append("⚠ No brand match found. Skipping variant match.")
-                    pool = pool.head(0)
+                    # Neither clearly single nor pack: just brand match
+                    if not pool[is_same_brand].empty:
+                        pool = pool[is_same_brand]
+                        notes.append(f"Marker Variant (Generic/Brand only): {b4_var} → {len(pool)}")
+                    else:
+                        notes.append("⚠ No brand match.")
+                        pool = pool.head(0)
             else:
-                notes.append("⚠ Not a single marker ('Μαρκαδόρος' vs 'Μαρκαδόροι') or missing brand/color. Skipping variant match.")
+                notes.append("⚠ No brand on trigger. Skipping marker variant match.")
                 pool = pool.head(0)
        
        
@@ -5295,18 +5343,43 @@ elif active_cluster in STATIONERY_CLUSTERS:
     
     stat_slots = STATIONERY_CLUSTER_SLOTS.get(active_cluster, [])
     
-    # ── Markers sub-cluster routing: pick specialized slot list based on trigger hierarchy ──
-    # Highlighters, Whiteboard, Permanent markers each have distinct accessory needs.
+    # ── Markers sub-cluster routing: pick specialized slot list based on trigger TITLE first, then hierarchy ──
+    # Title is more reliable than hierarchy — the data has "Μαρκαδόρος Γραφής Pilot Twin" filed under
+    # ΜΑΡΚΑΔΟΡΟΙ ΑΝΕΞΙΤΗΛΟΙ even though it's actually a writing marker, AND has "Μαρκαδόρος Ανεξίτηλος Office Log"
+    # with Είδος="Μαρκαδόροι Γραφής" even though it's actually permanent. Title disambiguates both cases.
     if active_cluster == "Markers":
         trigger_hier = str(trigger.get('Hierarchy', '')).strip().upper()
-        trigger_title = str(trigger.get('Title', '')).strip()
-        if trigger_hier == 'ΜΑΡΚΑΔΟΡΟΙ ΥΠΟΓΡΑΜΜΙΣΗΣ' or 'υπογράμμισης' in trigger_title.lower():
+        trigger_title_lower = str(trigger.get('Title', '')).strip().lower()
+        trigger_eidos_lower = str(trigger.get('Είδος', '')).strip().lower()
+        
+        # Priority 1: TITLE-based detection (most reliable — the title is authored by humans and disambiguates)
+        if 'υπογράμμισης' in trigger_title_lower or 'highlighter' in trigger_title_lower:
             stat_slots = HIGHLIGHTERS_SLOTS
-        elif trigger_hier == 'ΜΑΡΚΑΔΟΡΟΙ ΠΙΝΑΚΑ' or 'πίνακα' in trigger_title.lower():
+        elif 'πίνακα' in trigger_title_lower or 'whiteboard' in trigger_title_lower or 'board marker' in trigger_title_lower:
             stat_slots = WHITEBOARD_MARKERS_SLOTS
-        elif trigger_hier == 'ΜΑΡΚΑΔΟΡΟΙ ΑΝΕΞΙΤΗΛΟΙ' or 'ανεξίτηλ' in trigger_title.lower():
+        elif 'ζωγραφικής' in trigger_title_lower or 'drawing' in trigger_title_lower:
+            stat_slots = DRAWING_MARKERS_SLOTS
+        elif 'ανεξίτηλ' in trigger_title_lower or 'permanent' in trigger_title_lower:
+            # Title takes precedence over Είδος — "Μαρκαδόρος Ανεξίτηλος" with Είδος="Γραφής" → permanent.
             stat_slots = PERMANENT_MARKERS_SLOTS
-        # else: fall through to default MARKERS_SLOTS (for generic ΜΑΡΚΑΔΟΡΟΙ / ΜΑΡΚΑΔΟΡΟΙ ΖΩΓΡΑΦΙΚΗΣ)
+        elif 'γραφής' in trigger_title_lower or 'writing marker' in trigger_title_lower:
+            # "Μαρκαδόρος Γραφής Pilot Twin" → writing markers
+            stat_slots = WRITING_MARKERS_SLOTS
+        # Priority 2: Είδος (Type) fallback — when title is generic
+        elif 'ζωγραφικής' in trigger_eidos_lower:
+            stat_slots = DRAWING_MARKERS_SLOTS
+        elif 'γραφής' in trigger_eidos_lower:
+            stat_slots = WRITING_MARKERS_SLOTS
+        # Priority 3: Hierarchy fallback (for truly ambiguous triggers)
+        elif trigger_hier == 'ΜΑΡΚΑΔΟΡΟΙ ΥΠΟΓΡΑΜΜΙΣΗΣ':
+            stat_slots = HIGHLIGHTERS_SLOTS
+        elif trigger_hier == 'ΜΑΡΚΑΔΟΡΟΙ ΠΙΝΑΚΑ':
+            stat_slots = WHITEBOARD_MARKERS_SLOTS
+        elif trigger_hier == 'ΜΑΡΚΑΔΟΡΟΙ ΖΩΓΡΑΦΙΚΗΣ':
+            stat_slots = DRAWING_MARKERS_SLOTS
+        elif trigger_hier == 'ΜΑΡΚΑΔΟΡΟΙ ΑΝΕΞΙΤΗΛΟΙ':
+            stat_slots = PERMANENT_MARKERS_SLOTS
+        # else: fall through to default MARKERS_SLOTS (for truly generic ΜΑΡΚΑΔΟΡΟΙ)
     
     if stat_slots:
         PERIPHERAL_CLUSTER_SLOTS[active_cluster] = stat_slots
