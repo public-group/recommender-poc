@@ -4867,7 +4867,7 @@ def run_peripherals_engine(trigger, df_products, df_history, cluster_key):
                     # ή ειδικά χαρτιά μαρκαδόρων από τα Χαρτικά!
                     is_coloring_book_hier = hier_col == 'COLORING BOOKS'
                     is_adult_title = pool['Title'].fillna('').str.lower().str.contains('mandala|μαντάλα|ενηλίκων|adult|coloring book')
-                    is_pro_pad = pool['Title'].fillna('').str.lower().str.contains('bristol|marker pad|mixed media|moleskine|μπλοκ σχεδίου|ακουαρέλας')
+                    is_pro_pad = pool['Title'].fillna('').str.lower().str.contains('coloring book')
                     
                     pool = pool[is_coloring_book_hier | is_adult_title | is_pro_pad]
                     notes.append(f"Adult Marker -> Φιλτράρισμα σε COLORING BOOKS / Pro Pads ({b4_col} → {len(pool)})")
