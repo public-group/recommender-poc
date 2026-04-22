@@ -226,8 +226,8 @@ STATIONERY_TRIGGERS = {
     "Colored Pencils Art": {"hierarchies": {"ΞΥΛΟΜΠΟΓΙΕΣ", "ΧΡΩΜΑΤΙΣΤΑ ΜΟΛΥΒΙΑ"}},
     "Drawing Markers":   {"hierarchies": {"ΜΑΡΚΑΔΟΡΟΙ ΖΩΓΡΑΦΙΚΗΣ"}},
     "Art Paper":         {"hierarchies": {"ΜΠΛΟΚ-ΧΑΡΤΙΑ", "ΧΑΡΤΙΑ - ΜΠΛΟΚ", "ΜΠΛΟΚ - ΧΑΡΤΙΑ ΖΩΓΡΑΦΙΚΗΣ"}},
-    "Notebooks":         {"hierarchies": {"ΤΕΤΡΑΔΙΟ"}},
-    "Notepads":          {"hierarchies": {"ΣΗΜΕΙΩΜΑΤΑΡΙΟ"}},
+    "Notebooks":         {"hierarchies": {"ΣΗΜΕΙΩΜΑΤΑΡΙΑ"}},
+    "Notepads":          {"hierarchies": {"ΤΕΤΡΑΔΙΑ", "ΗΜΕΡΟΛΟΓΙΑ", "ORGANISER"}},
 }# ─────────────────────────────────────────────────────────────
 # 🟢 KIDS BOOKS CONFIGURATION
 # ─────────────────────────────────────────────────────────────
@@ -3617,6 +3617,12 @@ PERIPHERAL_TRIGGERS = {
 # (role, hierarchies, flags)
 # flags keys:
 #   title_boost/title_hide: [str] — keyword boost/penalty
+#   eidos_include: [str] — filter pool to these Είδος values (OR title match)
+#   eidos_boost: [str] — +80k to items with these Είδος values
+#   eidos_exclude: [str] — hard-filter OUT items with these Είδος values
+#   typos_include: [str] — filter pool to these Τύπος values (OR title match)
+#   typos_boost: [str] — +80k to items with these Τύπος values
+#   typos_exclude: [str] — hard-filter OUT items with these Τύπος values
 #   brand_match: bool — same brand as trigger +80k
 #   connectivity_mirror: bool — match wired/wireless
 #   wrist_rest_only/xxl_only: bool — filter to specific pad types
@@ -3744,27 +3750,27 @@ MONITOR_MAINSTREAM_SLOTS = [
 PENS_SLOTS = [
     ("Alt Color Pen 1",   ['ΣΤΥΛΟ ΥΓΡΗΣ ΜΕΛΑΝΗΣ', 'ΣΤΥΛΟ GEL', 'ΣΤΥΛΟ ΔΙΑΡΚΕΙΑΣ'], {'match_pen_variant': True}),
     ("Alt Color Pen 2",   ['ΣΤΥΛΟ ΥΓΡΗΣ ΜΕΛΑΝΗΣ', 'ΣΤΥΛΟ GEL', 'ΣΤΥΛΟ ΔΙΑΡΚΕΙΑΣ'], {'match_pen_variant': True}),
-    ("Notebook",          ['ΣΗΜΕΙΩΜΑΤΑΡΙΑ'],       {'title_boost': ['A5', 'Medium', 'Standard']}),
-    ("Correction",        ['ΓΟΜΕΣ', 'ΔΙΟΡΘΩΤΙΚΑ'],                        {'match_writing_type': True, 'title_boost': ['Tape', 'Ταινία', 'Roller']}),
-    ("Highlighter",       ['ΜΑΡΚΑΔΟΡΟΙ ΥΠΟΓΡΑΜΜΙΣΗΣ', 'ΜΑΡΚΑΔΟΡΟΙ'],    {'title_boost': ['Pastel', '4-pack', '6-pack'], 'title_hide': ['Whiteboard', 'Πίνακα', 'CD-DVD', 'Ανεξίτηλοι']}),
+    ("Notebook",          ['ΣΗΜΕΙΩΜΑΤΑΡΙΑ', 'ΤΕΤΡΑΔΙΑ'],                  {'eidos_boost': ['Σημειώσεων'], 'title_boost': ['A5', 'Medium', 'Standard'], 'title_hide': ['Ιχνογραφίας', 'Πολυγράφου', 'Ακουαρέλας', 'Ριζόχαρτο']}),
+    ("Correction",        ['ΓΟΜΕΣ', 'ΔΙΟΡΘΩΤΙΚΑ'],                        {'match_writing_type': True, 'eidos_boost': ['Διορθωτική Ταινία'], 'title_boost': ['Tape', 'Ταινία', 'Roller']}),
+    ("Highlighter",       ['ΜΑΡΚΑΔΟΡΟΙ ΥΠΟΓΡΑΜΜΙΣΗΣ'],                    {'title_boost': ['Pastel', '4-pack', '6-pack'], 'title_hide': ['Whiteboard', 'Πίνακα', 'CD-DVD', 'Ανεξίτηλ']}),
     ("Pencil Case",       ['ΚΑΣΕΤΙΝΕΣ-ΘΗΚΕΣ', 'ΣΧΟΛΙΚΕΣ ΚΑΣΕΤΙΝΕΣ', 'ΜΟΛΥΒΟΘΗΚΕΣ'], {'title_boost': ['Zipper', 'Φερμουάρ', 'Simple', 'Basic']}),
     ("Sticky Notes",      ['POST-IT-ΧΑΡΤΑΚΙΑ ΣΗΜΕΙΩΣΕΩΝ'],               {'title_boost': ['3x3', 'Small', 'Square', 'Yellow']}),
-    ("Pencil",            ['ΜΟΛΥΒΙΑ', 'ΧΡΩΜΑΤΙΣΤΑ ΜΟΛΥΒΙΑ'],             {'title_boost': ['HB', '2B', 'Set', 'Pack']}),
+    ("Pencil",            ['ΜΟΛΥΒΙΑ'],                                    {'typos_boost': ['Μηχανικό Μολύβι', 'Απλό Μολύβι'], 'title_boost': ['HB', '2B', 'Set', 'Pack']}),
     ("Ruler",             ['ΓΕΩΜΕΤΡΙΚΑ ΟΡΓΑΝΑ', 'ΟΡΓΑΝΑ ΜΕΤΡΗΣΗΣ'],      {'title_boost': ['Ruler', 'Χάρακας', '15cm', '20cm', '30cm'], 'title_hide': ['Compass', 'Protractor', 'Set']}),
     ("Alternative Pen",   ['ΣΤΥΛΟ ΥΓΡΗΣ ΜΕΛΑΝΗΣ', 'ΣΤΥΛΟ GEL', 'ΣΤΥΛΟ ΔΙΑΡΚΕΙΑΣ'], {}),
 ]
 
 PENCILS_SLOTS = [
     ("Matching Accessory",['ΜΟΛΥΒΙΑ', 'ΞΥΣΤΡΕΣ'],                         {'match_writing_type': True}),
-    ("Eraser",            ['ΓΟΜΕΣ'],                                      {'title_boost': ['White', 'Λευκή', 'Soft', 'Μαλακή', 'Staedtler', 'Faber'], 'title_hide': ['Ταινία', 'Υγρό']}),
-    ("Pencil Case",       ['ΚΑΣΕΤΙΝΕΣ-ΘΗΚΕΣ', 'ΣΧΟΛΙΚΕΣ ΚΑΣΕΤΙΝΕΣ', 'ΜΟΛΥΒΟΘΗΚΕΣ'], {'title_boost': ['Large', 'Μεγάλη', 'Compartment', 'Θήκες']}),
-    ("Notebook",          ['ΤΕΤΡΑΔΙΟ', 'ΣΗΜΕΙΩΜΑΤΑΡΙΟ', 'ΜΠΛΟΚ-ΧΑΡΤΙΑ'], {}),
+    ("Sharpener",         ['ΞΥΣΤΡΕΣ'],                                    {'eidos_boost': ['Βαρελάκι', 'Κλασική', 'Με γόμα'], 'title_boost': ['Metal', 'Dual', 'Μεταλλική', 'Διπλή'], 'title_hide': ['Ηλεκτρική']}),
+    ("Eraser",            ['ΓΟΜΕΣ'],                                      {'eidos_boost': ['Γόμα'], 'title_boost': ['White', 'Λευκή', 'Soft', 'Μαλακή', 'Staedtler', 'Faber'], 'title_hide': ['Ταινία', 'Υγρό', 'Διορθωτικ']}),
+    ("Alt Pencils",       ['ΜΟΛΥΒΙΑ'],                                    {'typos_boost': ['Απλό Μολύβι', 'Μηχανικό Μολύβι', 'Με Γόμα'], 'title_boost': ['Set', 'Σετ', 'HB', '2B', '4B', '6B', 'Pack']}),
+    ("Pencil Case",       ['ΚΑΣΕΤΙΝΕΣ-ΘΗΚΕΣ', 'ΣΧΟΛΙΚΕΣ ΚΑΣΕΤΙΝΕΣ', 'ΜΟΛΥΒΟΘΗΚΕΣ'], {'title_boost': ['Large', 'Μεγάλη', 'Compartment', 'Θήκες', 'Zipper', 'Φερμουάρ']}),
     ("Pen",               ['ΣΤΥΛΟ ΥΓΡΗΣ ΜΕΛΑΝΗΣ', 'ΣΤΥΛΟ GEL', 'ΣΤΥΛΟ ΔΙΑΡΚΕΙΑΣ'], {'title_boost': ['Black', 'Blue', 'Μαύρο', 'Μπλε']}),
-    ("Geometric Tools",   ['ΓΕΩΜΕΤΡΙΚΑ ΟΡΓΑΝΑ', 'ΟΡΓΑΝΑ ΣΧΕΔΙΑΣΗΣ', 'ΟΡΓΑΝΑ ΜΕΤΡΗΣΗΣ'], {}),
-    ("Alt Pencils",       ['ΜΟΛΥΒΙΑ', 'ΧΡΩΜΑΤΙΣΤΑ ΜΟΛΥΒΙΑ'],             {'title_boost': ['Set', 'Σετ', 'HB', '2B', '4B', '6B']}),
-    ("Highlighter",       ['ΜΑΡΚΑΔΟΡΟΙ ΥΠΟΓΡΑΜΜΙΣΗΣ', 'ΜΑΡΚΑΔΟΡΟΙ'],    {'title_boost': ['Pastel', '4-pack', 'Soft'], 'title_hide': ['Permanent', 'Whiteboard', 'Neon']}),
-    ("Sticky Notes",      ['POST-IT-ΧΑΡΤΑΚΙΑ ΣΗΜΕΙΩΣΕΩΝ'],               {'title_boost': ['Small', '3x3', 'Yellow', 'Κίτρινο']}),
-    ("Art Upgrade",       ['ΧΡΩΜΑΤΙΣΤΑ ΜΟΛΥΒΙΑ', 'ΚΗΡΟΜΠΟΓΙΕΣ-ΠΑΣΤΕΛ', 'ΧΡΩΜΑΤΑ ΖΩΓΡΑΦΙΚΗΣ'], {}),
+    ("Notebook",          ['ΣΗΜΕΙΩΜΑΤΑΡΙΑ', 'ΤΕΤΡΑΔΙΑ'],                  {'eidos_boost': ['Σημειώσεων', 'Σχεδίου'], 'title_boost': ['A4', 'A5', 'Lined', 'Γραμμές', 'Καρέ'], 'title_hide': ['Ακουαρέλας', 'Ιχνογραφίας', 'Πολυγράφου', 'Κολάζ', 'Ριζόχαρτο']}),
+    ("Mechanical Lead",   ['ΜΟΛΥΒΙΑ'],                                    {'typos_include': ['Μύτες για Μηχανικό Μολύβι'], 'title_boost': ['0.5', '0.7', 'HB', '2B']}),
+    ("Geometric Tools",   ['ΓΕΩΜΕΤΡΙΚΑ ΟΡΓΑΝΑ', 'ΟΡΓΑΝΑ ΜΕΤΡΗΣΗΣ'],      {'title_boost': ['Ruler', 'Χάρακας', '15cm', '20cm', '30cm'], 'title_hide': ['Compass', 'Protractor', 'Set']}),
+    ("Highlighter",       ['ΜΑΡΚΑΔΟΡΟΙ ΥΠΟΓΡΑΜΜΙΣΗΣ'],                    {'title_boost': ['Pastel', '4-pack', 'Soft'], 'title_hide': ['Permanent', 'Whiteboard', 'Neon']}),
 ]
 
 MARKERS_SLOTS = [
@@ -3775,7 +3781,7 @@ MARKERS_SLOTS = [
     ("Coloring Pad 1",    ['ΜΠΛΟΚ-ΧΑΡΤΙΑ', 'ΧΑΡΤΙΑ - ΜΠΛΟΚ', 'ΜΠΛΟΚ - ΧΑΡΤΙΑ ΖΩΓΡΑΦΙΚΗΣ', 'COLORING BOOKS'], {'match_coloring_activity': True, 'match_nib_type': True}),
     ("Coloring Pad 2",    ['ΜΠΛΟΚ-ΧΑΡΤΙΑ', 'ΧΑΡΤΙΑ - ΜΠΛΟΚ', 'ΜΠΛΟΚ - ΧΑΡΤΙΑ ΖΩΓΡΑΦΙΚΗΣ', 'COLORING BOOKS'], {'match_coloring_activity': True, 'match_nib_type': True}),
     
-    ("Notebook",          ['ΤΕΤΡΑΔΙΟ', 'ΣΗΜΕΙΩΜΑΤΑΡΙΟ', 'ΜΠΛΟΚ'],       {'match_nib_type': True, 'title_boost': ['A4', 'A5', 'Lined', 'Γραμμές'], 'title_hide': ['Ιχνογραφίας', 'Πολυγράφου']}),
+    ("Notebook",          ['ΣΗΜΕΙΩΜΑΤΑΡΙΑ', 'ΤΕΤΡΑΔΙΑ'],                  {'match_nib_type': True, 'eidos_boost': ['Σημειώσεων'], 'title_boost': ['A4', 'A5', 'Lined', 'Γραμμές'], 'title_hide': ['Ιχνογραφίας', 'Πολυγράφου', 'Ακουαρέλας', 'Ριζόχαρτο']}),
     ("Alt Markers",       ['ΜΑΡΚΑΔΟΡΟΙ ΥΠΟΓΡΑΜΜΙΣΗΣ', 'ΜΑΡΚΑΔΟΡΟΙ ΠΙΝΑΚΑ', 'ΜΑΡΚΑΔΟΡΟΙ ΑΝΕΞΙΤΗΛΟΙ', 'ΜΑΡΚΑΔΟΡΟΙ', 'ΜΑΡΚΑΔΟΡΟΙ ΖΩΓΡΑΦΙΚΗΣ'], {'match_nib_type': True, 'title_boost': ['Pastel', 'Neon', '12-pack', 'Extended']}),
     ("Pen",               ['ΣΤΥΛΟ ΥΓΡΗΣ ΜΕΛΑΝΗΣ', 'ΣΤΥΛΟ GEL', 'ΜΟΛΥΒΙΑ'], {'title_boost': ['Black', 'Blue', '0.7mm']}),
     ("Sticky Notes",      ['POST-IT-ΧΑΡΤΑΚΙΑ ΣΗΜΕΙΩΣΕΩΝ', 'ΣΕΛΙΔΟΔΕΙΚΤΕΣ'], {'title_boost': ['Arrow', 'Flag', 'Index', 'Σημάδια']}),
@@ -3783,173 +3789,220 @@ MARKERS_SLOTS = [
     ("Correction",        ['ΔΙΟΡΘΩΤΙΚΑ'],                                 {'title_boost': ['Tape', 'Roller']}),
 ]
 
-SHARPENERS_SLOTS = [
-    ("Pencil",            ['ΜΟΛΥΒΙΑ', 'ΧΡΩΜΑΤΙΣΤΑ ΜΟΛΥΒΙΑ'],             {'title_boost': ['HB', '2B', 'School', 'Student', 'Σχολικά']}),
-    ("Eraser",            ['ΓΟΜΕΣ'],                                      {'title_boost': ['White', 'Λευκή', 'Soft', 'Pencil', 'Μολυβιού']}),
+# ── Highlighters-specific slots (ΜΑΡΚΑΔΟΡΟΙ ΥΠΟΓΡΑΜΜΙΣΗΣ) ──
+# Used when trigger hierarchy = ΜΑΡΚΑΔΟΡΟΙ ΥΠΟΓΡΑΜΜΙΣΗΣ (most highlighters are multi-packs).
+# Priority: alt highlighter packs first (brand match), then study-accessories.
+HIGHLIGHTERS_SLOTS = [
+    ("Alt Color Marker 1",['ΜΑΡΚΑΔΟΡΟΙ ΥΠΟΓΡΑΜΜΙΣΗΣ'], {'match_marker_variant': True}),
+    ("Alt Highlighter Pack",['ΜΑΡΚΑΔΟΡΟΙ ΥΠΟΓΡΑΜΜΙΣΗΣ'], {'title_boost': ['Pastel', 'Neon', '4-pack', '6-pack', '4 Τεμάχια', '6 Τεμάχια', 'Set'], 'title_hide': ['Permanent', 'Whiteboard', 'Πίνακα', 'Ανεξίτηλ']}),
+    ("Alt Nib Style",     ['ΜΑΡΚΑΔΟΡΟΙ ΥΠΟΓΡΑΜΜΙΣΗΣ'], {'match_nib_type': True, 'title_boost': ['Mini', 'Pocket', 'Soft', 'Light'], 'title_hide': ['Permanent', 'Whiteboard', 'Πίνακα']}),
+    ("Sticky Notes",      ['POST-IT-ΧΑΡΤΑΚΙΑ ΣΗΜΕΙΩΣΕΩΝ', 'ΣΕΛΙΔΟΔΕΙΚΤΕΣ'], {'eidos_boost': ['Σελιδοδείκτες'], 'title_boost': ['Index', 'Flag', 'Σημάδια', 'Tabs']}),
+    ("Notebook",          ['ΣΗΜΕΙΩΜΑΤΑΡΙΑ', 'ΤΕΤΡΑΔΙΑ'], {'eidos_boost': ['Σημειώσεων'], 'title_boost': ['A4', 'A5', 'Lined', 'Γραμμές'], 'title_hide': ['Ιχνογραφίας', 'Πολυγράφου', 'Ακουαρέλας', 'Ριζόχαρτο']}),
+    ("Pen",               ['ΣΤΥΛΟ GEL', 'ΣΤΥΛΟ ΥΓΡΗΣ ΜΕΛΑΝΗΣ', 'ΣΤΥΛΟ ΔΙΑΡΚΕΙΑΣ'], {'title_boost': ['Black', 'Blue', 'Erasable', '0.7']}),
+    ("Pencil",            ['ΜΟΛΥΒΙΑ'], {'typos_boost': ['Μηχανικό Μολύβι', 'Απλό Μολύβι'], 'title_boost': ['HB', '2B', 'Mechanical']}),
     ("Pencil Case",       ['ΚΑΣΕΤΙΝΕΣ-ΘΗΚΕΣ', 'ΣΧΟΛΙΚΕΣ ΚΑΣΕΤΙΝΕΣ', 'ΜΟΛΥΒΟΘΗΚΕΣ'], {}),
-    ("Notebook",          ['ΤΕΤΡΑΔΙΟ', 'ΣΗΜΕΙΩΜΑΤΑΡΙΟ', 'ΜΠΛΟΚ-ΧΑΡΤΙΑ'], {'title_boost': ['A5', 'Lined', 'Grid', 'Καρέ']}),
-    ("Alt Sharpener",     ['ΞΥΣΤΡΕΣ'],                                    {'title_boost': ['Dual', 'Double', 'Container', 'Δοχείο']}),
-    ("Colored Pencils",   ['ΧΡΩΜΑΤΙΣΤΑ ΜΟΛΥΒΙΑ', 'ΚΗΡΟΜΠΟΓΙΕΣ-ΠΑΣΤΕΛ'],  {'title_boost': ['12', '18', '24', 'Kids', 'Παιδικά']}),
-    ("Pen",               ['ΣΤΥΛΟ ΥΓΡΗΣ ΜΕΛΑΝΗΣ', 'ΣΤΥΛΟ GEL'],          {'title_boost': ['Black', 'Blue', 'Μαύρο', 'Μπλε']}),
-    ("Drawing Tools",     ['ΓΕΩΜΕΤΡΙΚΑ ΟΡΓΑΝΑ', 'ΟΡΓΑΝΑ ΣΧΕΔΙΑΣΗΣ'],     {'title_boost': ['Ruler', 'Χάρακας', '30cm']}),
-    ("Correction",        ['ΔΙΟΡΘΩΤΙΚΑ'],                                 {'title_boost': ['Tape', 'Roller', 'Ταινία']}),
+    ("Correction",        ['ΔΙΟΡΘΩΤΙΚΑ'], {'eidos_boost': ['Διορθωτική Ταινία'], 'title_boost': ['Tape', 'Roller']}),
+    ("Eraser",            ['ΓΟΜΕΣ'], {'eidos_boost': ['Γόμα'], 'title_boost': ['White', 'Λευκή', 'Soft']}),
+]
+
+# ── Whiteboard Markers-specific slots (ΜΑΡΚΑΔΟΡΟΙ ΠΙΝΑΚΑ) ──
+# Key insight from user: show other whiteboard markers + ΒΟΗΘΗΤΙΚΑ ΠΑΡΟΥΣΙΑΣΗΣ first.
+WHITEBOARD_MARKERS_SLOTS = [
+    ("Alt Whiteboard 1",  ['ΜΑΡΚΑΔΟΡΟΙ ΠΙΝΑΚΑ'], {'match_marker_variant': True}),
+    ("Alt Whiteboard 2",  ['ΜΑΡΚΑΔΟΡΟΙ ΠΙΝΑΚΑ'], {'match_nib_type': True, 'title_boost': ['Set', 'Pack', 'Πακέτο', '4 Τεμάχια', '6 Τεμάχια']}),
+    ("Whiteboard Eraser", ['ΒΟΗΘΗΤΙΚΑ ΠΑΡΟΥΣΙΑΣΗΣ'], {'title_boost': ['Eraser', 'Σβήστρα', 'Σβηστήρα', 'Γόμα Πίνακα', 'Σπόγγος', 'Σπογγάκι', 'Whiteboard']}),
+    ("Whiteboard Cleaner",['ΒΟΗΘΗΤΙΚΑ ΠΑΡΟΥΣΙΑΣΗΣ'], {'title_boost': ['Cleaner', 'Spray', 'Καθαριστικό', 'Καθαρισμός', 'Υγρό']}),
+    ("Presentation Acc.", ['ΒΟΗΘΗΤΙΚΑ ΠΑΡΟΥΣΙΑΣΗΣ'], {'title_boost': ['Magnet', 'Μαγνήτες', 'Pointer', 'Δείκτης', 'Pin']}),
+    ("Notebook",          ['ΣΗΜΕΙΩΜΑΤΑΡΙΑ', 'ΤΕΤΡΑΔΙΑ'], {'eidos_boost': ['Σημειώσεων'], 'title_hide': ['Ιχνογραφίας', 'Πολυγράφου', 'Ακουαρέλας']}),
+    ("Permanent Marker",  ['ΜΑΡΚΑΔΟΡΟΙ ΑΝΕΞΙΤΗΛΟΙ'], {'title_boost': ['Fine', 'Medium']}),
+    ("Sticky Notes",      ['POST-IT-ΧΑΡΤΑΚΙΑ ΣΗΜΕΙΩΣΕΩΝ'], {'title_boost': ['Large', 'Μεγάλο']}),
+    ("Pen",               ['ΣΤΥΛΟ GEL', 'ΣΤΥΛΟ ΥΓΡΗΣ ΜΕΛΑΝΗΣ'], {'title_boost': ['Black', 'Blue']}),
+    ("Pencil Case",       ['ΚΑΣΕΤΙΝΕΣ-ΘΗΚΕΣ', 'ΜΟΛΥΒΟΘΗΚΕΣ'], {}),
+]
+
+# ── Permanent Markers-specific slots (ΜΑΡΚΑΔΟΡΟΙ ΑΝΕΞΙΤΗΛΟΙ) ──
+PERMANENT_MARKERS_SLOTS = [
+    ("Alt Permanent 1",   ['ΜΑΡΚΑΔΟΡΟΙ ΑΝΕΞΙΤΗΛΟΙ'], {'match_marker_variant': True}),
+    ("Alt Permanent 2",   ['ΜΑΡΚΑΔΟΡΟΙ ΑΝΕΞΙΤΗΛΟΙ'], {'match_nib_type': True, 'title_boost': ['Fine', 'Medium', 'Chisel', 'Λεπτή', 'Μεσαία']}),
+    ("Label Maker",       ['ΒΟΗΘΗΤΙΚΑ ΠΑΡΟΥΣΙΑΣΗΣ', 'ΕΤΙΚΕΤΕΣ'], {'title_boost': ['Label', 'Ετικέτα', 'Sticker', 'Αυτοκόλλητ']}),
+    ("CD/DVD Marker",     ['ΜΑΡΚΑΔΟΡΟΙ ΑΝΕΞΙΤΗΛΟΙ'], {'title_boost': ['CD', 'DVD', 'Ultra fine', '0.4', '0.7']}),
+    ("Whiteboard Marker", ['ΜΑΡΚΑΔΟΡΟΙ ΠΙΝΑΚΑ'], {}),
+    ("Notebook",          ['ΣΗΜΕΙΩΜΑΤΑΡΙΑ', 'ΤΕΤΡΑΔΙΑ'], {'eidos_boost': ['Σημειώσεων'], 'title_hide': ['Ιχνογραφίας', 'Πολυγράφου', 'Ακουαρέλας']}),
+    ("Sticky Notes",      ['POST-IT-ΧΑΡΤΑΚΙΑ ΣΗΜΕΙΩΣΕΩΝ'], {}),
+    ("Pen",               ['ΣΤΥΛΟ GEL', 'ΣΤΥΛΟ ΥΓΡΗΣ ΜΕΛΑΝΗΣ'], {'title_boost': ['Black', 'Blue']}),
+    ("Pencil Case",       ['ΚΑΣΕΤΙΝΕΣ-ΘΗΚΕΣ', 'ΜΟΛΥΒΟΘΗΚΕΣ'], {}),
+    ("Correction",        ['ΔΙΟΡΘΩΤΙΚΑ'], {'title_boost': ['Tape']}),
+]
+
+SHARPENERS_SLOTS = [
+    ("Pencil",            ['ΜΟΛΥΒΙΑ'],                                    {'typos_boost': ['Απλό Μολύβι', 'Με Γόμα'], 'title_boost': ['HB', '2B', 'School', 'Student', 'Σχολικά'], 'title_hide': ['Μηχανικό']}),
+    ("Alt Sharpener",     ['ΞΥΣΤΡΕΣ'],                                    {'eidos_boost': ['Βαρελάκι', 'Με γόμα', 'Με Μανιβέλα'], 'title_boost': ['Dual', 'Double', 'Container', 'Δοχείο']}),
+    ("Eraser",            ['ΓΟΜΕΣ'],                                      {'eidos_boost': ['Γόμα'], 'title_boost': ['White', 'Λευκή', 'Soft', 'Pencil', 'Μολυβιού'], 'title_hide': ['Ταινία', 'Υγρό', 'Διορθωτικ']}),
+    ("Colored Pencils",   ['ΧΡΩΜΑΤΙΣΤΑ ΜΟΛΥΒΙΑ'],                        {'eidos_boost': ['Κλασσικές Ξυλομπογιές'], 'title_boost': ['12', '18', '24', 'Kids', 'Παιδικά']}),
+    ("Pencil Case",       ['ΚΑΣΕΤΙΝΕΣ-ΘΗΚΕΣ', 'ΣΧΟΛΙΚΕΣ ΚΑΣΕΤΙΝΕΣ', 'ΜΟΛΥΒΟΘΗΚΕΣ'], {}),
+    ("Notebook",          ['ΣΗΜΕΙΩΜΑΤΑΡΙΑ', 'ΤΕΤΡΑΔΙΑ'],                  {'eidos_boost': ['Σημειώσεων'], 'title_boost': ['A5', 'Lined', 'Grid', 'Καρέ'], 'title_hide': ['Ιχνογραφίας', 'Πολυγράφου', 'Ακουαρέλας']}),
+    ("Pen",               ['ΣΤΥΛΟ ΥΓΡΗΣ ΜΕΛΑΝΗΣ', 'ΣΤΥΛΟ GEL'],          {'typos_boost': ['Gel'], 'title_boost': ['Black', 'Blue', 'Μαύρο', 'Μπλε']}),
+    ("Ruler",             ['ΓΕΩΜΕΤΡΙΚΑ ΟΡΓΑΝΑ'],                          {'title_boost': ['Ruler', 'Χάρακας', '30cm']}),
+    ("Correction",        ['ΔΙΟΡΘΩΤΙΚΑ'],                                 {'eidos_boost': ['Διορθωτική Ταινία'], 'title_boost': ['Tape', 'Roller', 'Ταινία']}),
     ("Sticky Notes",      ['POST-IT-ΧΑΡΤΑΚΙΑ ΣΗΜΕΙΩΣΕΩΝ'],               {'title_boost': ['Small', '3x3', 'Yellow', 'Κίτρινο']}),
 ]
 
 ERASERS_SLOTS = [
-    ("Pencil",            ['ΜΟΛΥΒΙΑ', 'ΧΡΩΜΑΤΙΣΤΑ ΜΟΛΥΒΙΑ'],             {'title_boost': ['HB', '2B', 'School', 'Student']}),
-    ("Sharpener",         ['ΞΥΣΤΡΕΣ'],                                    {'title_boost': ['Dual', 'Container', 'Metal', 'Διπλή', 'Δοχείο']}),
+    ("Pencil",            ['ΜΟΛΥΒΙΑ'],                                    {'typos_boost': ['Απλό Μολύβι', 'Μηχανικό Μολύβι', 'Με Γόμα'], 'title_boost': ['HB', '2B', 'School', 'Student']}),
+    ("Sharpener",         ['ΞΥΣΤΡΕΣ'],                                    {'eidos_boost': ['Βαρελάκι', 'Με γόμα', 'Κλασική'], 'title_boost': ['Dual', 'Container', 'Metal', 'Διπλή', 'Δοχείο']}),
+    ("Alt Eraser",        ['ΓΟΜΕΣ'],                                      {'eidos_boost': ['Γόμα'], 'title_boost': ['Precision', 'Mechanical', 'Pen-style', 'Ακριβείας'], 'title_hide': ['Ταινία', 'Υγρό']}),
+    ("Correction",        ['ΔΙΟΡΘΩΤΙΚΑ'],                                 {'eidos_boost': ['Διορθωτική Ταινία', 'Διορθωτικό Υγρό', 'Διορθωτικό Στυλό'], 'title_boost': ['Tape', 'Roller', 'Ταινία']}),
     ("Pencil Case",       ['ΚΑΣΕΤΙΝΕΣ-ΘΗΚΕΣ', 'ΣΧΟΛΙΚΕΣ ΚΑΣΕΤΙΝΕΣ', 'ΜΟΛΥΒΟΘΗΚΕΣ'], {}),
-    ("Notebook",          ['ΤΕΤΡΑΔΙΟ', 'ΣΗΜΕΙΩΜΑΤΑΡΙΟ', 'ΜΠΛΟΚ-ΧΑΡΤΙΑ'], {'title_boost': ['A5', 'Lined', 'Grid']}),
-    ("Alt Eraser",        ['ΓΟΜΕΣ'],                                      {'title_boost': ['Precision', 'Mechanical', 'Pen-style', 'Ακριβείας']}),
-    ("Pen",               ['ΣΤΥΛΟ ΥΓΡΗΣ ΜΕΛΑΝΗΣ', 'ΣΤΥΛΟ GEL'],          {'title_boost': ['Black', 'Blue', 'Permanent']}),
-    ("Drawing Tools",     ['ΓΕΩΜΕΤΡΙΚΑ ΟΡΓΑΝΑ', 'ΟΡΓΑΝΑ ΣΧΕΔΙΑΣΗΣ'],     {'title_boost': ['Ruler', 'Χάρακας', '30cm']}),
-    ("Colored Pencils",   ['ΧΡΩΜΑΤΙΣΤΑ ΜΟΛΥΒΙΑ', 'ΚΗΡΟΜΠΟΓΙΕΣ-ΠΑΣΤΕΛ'],  {}),
-    ("Correction",        ['ΔΙΟΡΘΩΤΙΚΑ'],                                 {'title_boost': ['Tape', 'Roller', 'Ταινία']}),
+    ("Notebook",          ['ΣΗΜΕΙΩΜΑΤΑΡΙΑ', 'ΤΕΤΡΑΔΙΑ'],                  {'eidos_boost': ['Σημειώσεων'], 'title_boost': ['A5', 'Lined', 'Grid'], 'title_hide': ['Ιχνογραφίας', 'Πολυγράφου', 'Ακουαρέλας']}),
+    ("Pen",               ['ΣΤΥΛΟ ΥΓΡΗΣ ΜΕΛΑΝΗΣ', 'ΣΤΥΛΟ GEL'],          {'typos_boost': ['Gel'], 'title_boost': ['Black', 'Blue', 'Μαύρο', 'Μπλε']}),
+    ("Ruler",             ['ΓΕΩΜΕΤΡΙΚΑ ΟΡΓΑΝΑ'],                          {'title_boost': ['Ruler', 'Χάρακας', '30cm']}),
+    ("Colored Pencils",   ['ΧΡΩΜΑΤΙΣΤΑ ΜΟΛΥΒΙΑ'],                        {}),
     ("Sticky Notes",      ['POST-IT-ΧΑΡΤΑΚΙΑ ΣΗΜΕΙΩΣΕΩΝ'],               {'title_boost': ['Small', '3x3', 'Yellow']}),
 ]
 
 CORRECTION_SLOTS = [
-    ("Pen",               ['ΣΤΥΛΟ ΥΓΡΗΣ ΜΕΛΑΝΗΣ', 'ΣΤΥΛΟ GEL', 'ΣΤΥΛΟ ΔΙΑΡΚΕΙΑΣ'], {'title_boost': ['Black', 'Blue', '0.7mm', 'Medium']}),
-    ("Notebook",          ['ΤΕΤΡΑΔΙΟ', 'ΣΗΜΕΙΩΜΑΤΑΡΙΟ', 'ΜΠΛΟΚ'],       {'title_boost': ['A4', 'A5', 'Lined', 'Γραμμές']}),
-    ("Alt Correction",    ['ΔΙΟΡΘΩΤΙΚΑ'],                                 {'title_boost': ['Tape', 'Roller', 'Liquid', 'Fluid']}),
+    ("Alt Correction",    ['ΔΙΟΡΘΩΤΙΚΑ'],                                 {'eidos_boost': ['Διορθωτική Ταινία', 'Διορθωτικό Υγρό', 'Διορθωτικό Στυλό'], 'title_boost': ['Tape', 'Roller', 'Ταινία']}),
+    ("Correction Refill", ['ΔΙΟΡΘΩΤΙΚΑ'],                                 {'eidos_include': ['Ανταλλακτικά'], 'title_boost': ['Refill', 'Ανταλλακτικό']}),
+    ("Pen",               ['ΣΤΥΛΟ ΥΓΡΗΣ ΜΕΛΑΝΗΣ', 'ΣΤΥΛΟ GEL', 'ΣΤΥΛΟ ΔΙΑΡΚΕΙΑΣ'], {'typos_boost': ['Gel', 'Υγρής Μελάνης'], 'title_boost': ['Black', 'Blue', '0.7mm', 'Medium']}),
+    ("Pencil",            ['ΜΟΛΥΒΙΑ'],                                    {'typos_boost': ['Μηχανικό Μολύβι', 'Με Γόμα'], 'title_boost': ['HB', '2B', 'Mechanical', 'Μηχανικό']}),
+    ("Eraser",            ['ΓΟΜΕΣ'],                                      {'eidos_boost': ['Γόμα'], 'title_boost': ['White', 'Soft', 'Λευκή', 'Μαλακή'], 'title_hide': ['Ταινία', 'Υγρό', 'Διορθωτικ']}),
+    ("Notebook",          ['ΣΗΜΕΙΩΜΑΤΑΡΙΑ', 'ΤΕΤΡΑΔΙΑ'],                  {'eidos_boost': ['Σημειώσεων'], 'title_boost': ['A4', 'A5', 'Lined', 'Γραμμές'], 'title_hide': ['Ιχνογραφίας', 'Πολυγράφου', 'Ακουαρέλας', 'Ριζόχαρτο', 'Κολάζ']}),
+    ("Highlighter",       ['ΜΑΡΚΑΔΟΡΟΙ ΥΠΟΓΡΑΜΜΙΣΗΣ'],                    {'title_boost': ['Pastel', '4-pack', '6-pack'], 'title_hide': ['Whiteboard', 'Permanent', 'Πίνακα', 'Ανεξίτηλ']}),
     ("Pencil Case",       ['ΚΑΣΕΤΙΝΕΣ-ΘΗΚΕΣ', 'ΣΧΟΛΙΚΕΣ ΚΑΣΕΤΙΝΕΣ', 'ΜΟΛΥΒΟΘΗΚΕΣ'], {'title_boost': ['Simple', 'Zipper', 'Compact']}),
-    ("Highlighter",       ['ΜΑΡΚΑΔΟΡΟΙ ΥΠΟΓΡΑΜΜΙΣΗΣ', 'ΜΑΡΚΑΔΟΡΟΙ'],    {'title_boost': ['Pastel', '4-pack', '6-pack'], 'title_hide': ['Whiteboard', 'Permanent', 'Πίνακα']}),
     ("Sticky Notes",      ['POST-IT-ΧΑΡΤΑΚΙΑ ΣΗΜΕΙΩΣΕΩΝ'],               {'title_boost': ['Small', '3x3', 'Yellow', 'Κίτρινο']}),
-    ("Pencil",            ['ΜΟΛΥΒΙΑ'],                                    {'title_boost': ['HB', '2B', 'Mechanical', 'Μηχανικό']}),
-    ("Eraser",            ['ΓΟΜΕΣ'],                                      {'title_boost': ['White', 'Soft', 'Λευκή', 'Μαλακή']}),
-    ("Extra Pens",        ['ΣΤΥΛΟ ΥΓΡΗΣ ΜΕΛΑΝΗΣ', 'ΣΤΥΛΟ GEL'],          {}),
     ("Ruler",             ['ΓΕΩΜΕΤΡΙΚΑ ΟΡΓΑΝΑ'],                          {'title_boost': ['Ruler', 'Χάρακας', '30cm', 'Transparent']}),
 ]
 
 PENCIL_CASES_SLOTS = [
-    ("Pen",               ['ΣΤΥΛΟ ΥΓΡΗΣ ΜΕΛΑΝΗΣ', 'ΣΤΥΛΟ GEL', 'ΣΤΥΛΟ ΔΙΑΡΚΕΙΑΣ'], {}),
-    ("Pencil",            ['ΜΟΛΥΒΙΑ', 'ΧΡΩΜΑΤΙΣΤΑ ΜΟΛΥΒΙΑ'],             {'title_boost': ['HB', '2B', 'Pack', 'School']}),
-    ("Eraser",            ['ΓΟΜΕΣ'],                                      {'title_boost': ['White', 'Soft', 'Small', 'Λευκή', 'Μικρή']}),
-    ("Sharpener",         ['ΞΥΣΤΡΕΣ'],                                    {'title_boost': ['Compact', 'Dual', 'Container', 'Μικρή', 'Με δοχείο']}),
-    ("Highlighter",       ['ΜΑΡΚΑΔΟΡΟΙ ΥΠΟΓΡΑΜΜΙΣΗΣ', 'ΜΑΡΚΑΔΟΡΟΙ'],    {'title_boost': ['4-pack', 'Basic', 'Compact']}),
+    ("Pen",               ['ΣΤΥΛΟ ΥΓΡΗΣ ΜΕΛΑΝΗΣ', 'ΣΤΥΛΟ GEL', 'ΣΤΥΛΟ ΔΙΑΡΚΕΙΑΣ'], {'typos_boost': ['Gel', 'Διαρκείας']}),
+    ("Pencil",            ['ΜΟΛΥΒΙΑ'],                                    {'typos_boost': ['Απλό Μολύβι', 'Μηχανικό Μολύβι', 'Με Γόμα'], 'title_boost': ['HB', '2B', 'Pack', 'School']}),
+    ("Eraser",            ['ΓΟΜΕΣ'],                                      {'eidos_boost': ['Γόμα'], 'title_boost': ['White', 'Soft', 'Small', 'Λευκή', 'Μικρή'], 'title_hide': ['Ταινία', 'Υγρό', 'Διορθωτικ']}),
+    ("Sharpener",         ['ΞΥΣΤΡΕΣ'],                                    {'eidos_boost': ['Βαρελάκι', 'Κλασική', 'Με γόμα'], 'title_boost': ['Compact', 'Dual', 'Container', 'Μικρή', 'Με δοχείο']}),
+    ("Highlighter",       ['ΜΑΡΚΑΔΟΡΟΙ ΥΠΟΓΡΑΜΜΙΣΗΣ'],                    {'title_boost': ['4-pack', 'Basic', 'Compact']}),
     ("Ruler",             ['ΓΕΩΜΕΤΡΙΚΑ ΟΡΓΑΝΑ', 'ΟΡΓΑΝΑ ΜΕΤΡΗΣΗΣ'],      {'title_boost': ['15cm', '20cm', 'Flexible', 'Εύκαμπτος']}),
-    ("Correction",        ['ΔΙΟΡΘΩΤΙΚΑ'],                                 {'title_boost': ['Pen', 'Compact', 'Mini', 'Στυλό', 'Μίνι']}),
+    ("Correction",        ['ΔΙΟΡΘΩΤΙΚΑ'],                                 {'eidos_boost': ['Διορθωτικό Στυλό', 'Διορθωτική Ταινία'], 'title_boost': ['Pen', 'Compact', 'Mini', 'Στυλό', 'Μίνι']}),
+    ("Colored Pencils",   ['ΧΡΩΜΑΤΙΣΤΑ ΜΟΛΥΒΙΑ'],                        {'eidos_boost': ['Κλασσικές Ξυλομπογιές'], 'title_boost': ['12', '24', 'Set']}),
     ("Alt Case",          ['ΚΑΣΕΤΙΝΕΣ-ΘΗΚΕΣ', 'ΣΧΟΛΙΚΕΣ ΚΑΣΕΤΙΝΕΣ', 'ΜΟΛΥΒΟΘΗΚΕΣ'], {}),
-    ("Notebook",          ['ΤΕΤΡΑΔΙΟ', 'ΣΗΜΕΙΩΜΑΤΑΡΙΟ'],                 {'title_boost': ['A5', 'Lined', 'Grid', 'Καρέ']}),
-    ("Sticky Notes",      ['POST-IT-ΧΑΡΤΑΚΙΑ ΣΗΜΕΙΩΣΕΩΝ'],               {'title_boost': ['Small', '3x3', 'Compact', 'Μικρό']}),
+    ("Notebook",          ['ΣΗΜΕΙΩΜΑΤΑΡΙΑ', 'ΤΕΤΡΑΔΙΑ'],                  {'eidos_boost': ['Σημειώσεων'], 'title_boost': ['A5', 'Lined', 'Grid', 'Καρέ'], 'title_hide': ['Ιχνογραφίας', 'Πολυγράφου', 'Ακουαρέλας']}),
 ]
 
 GEOMETRIC_TOOLS_SLOTS = [
-    ("Pencil",            ['ΜΟΛΥΒΙΑ', 'ΧΡΩΜΑΤΙΣΤΑ ΜΟΛΥΒΙΑ'],             {'title_boost': ['HB', '2B', '4B', 'Technical', 'Τεχνικά', 'Set']}),
-    ("Eraser",            ['ΓΟΜΕΣ'],                                      {'title_boost': ['White', 'Λευκή', 'Precision', 'Ακριβείας']}),
-    ("Sharpener",         ['ΞΥΣΤΡΕΣ'],                                    {'title_boost': ['Metal', 'Dual', 'Premium', 'Μεταλλική']}),
-    ("Drawing Pad",       ['ΤΕΤΡΑΔΙΟ', 'ΣΗΜΕΙΩΜΑΤΑΡΙΟ', 'ΜΠΛΟΚ-ΧΑΡΤΙΑ'], {'title_boost': ['Grid', 'Graph', 'Καρέ', 'Μιλιμετρέ', 'Technical']}),
-    ("Pen",               ['ΣΤΥΛΟ ΥΓΡΗΣ ΜΕΛΑΝΗΣ', 'ΣΤΥΛΟ GEL'],          {'title_boost': ['0.5mm', '0.7mm', 'Fine', 'Technical', 'Λεπτή μύτη']}),
+    ("Pencil",            ['ΜΟΛΥΒΙΑ'],                                    {'typos_boost': ['Μηχανικό Μολύβι', 'Απλό Μολύβι'], 'title_boost': ['HB', '2B', '4B', 'Technical', 'Τεχνικά', 'Set']}),
+    ("Eraser",            ['ΓΟΜΕΣ'],                                      {'eidos_boost': ['Γόμα'], 'title_boost': ['White', 'Λευκή', 'Precision', 'Ακριβείας'], 'title_hide': ['Ταινία', 'Υγρό']}),
+    ("Sharpener",         ['ΞΥΣΤΡΕΣ'],                                    {'eidos_boost': ['Βαρελάκι', 'Κλασική'], 'title_boost': ['Metal', 'Dual', 'Premium', 'Μεταλλική']}),
+    ("Drawing Pad",       ['ΣΗΜΕΙΩΜΑΤΑΡΙΑ', 'ΤΕΤΡΑΔΙΑ', 'ΜΠΛΟΚ-ΧΑΡΤΙΑ', 'ΜΠΛΟΚ - ΧΑΡΤΙΑ ΖΩΓΡΑΦΙΚΗΣ'], {'eidos_boost': ['Μιλιμετρέ', 'Σχεδίου', 'Μπλοκ σχεδίου', 'Ημιλογαριθμικό', 'Λογαριθμικό', 'Χαρτογραφίας'], 'title_boost': ['Grid', 'Graph', 'Καρέ', 'Μιλιμετρέ', 'Technical']}),
+    ("Pen",               ['ΣΤΥΛΟ ΥΓΡΗΣ ΜΕΛΑΝΗΣ', 'ΣΤΥΛΟ GEL'],          {'typos_boost': ['Gel', 'Fine'], 'title_boost': ['0.5mm', '0.7mm', 'Fine', 'Technical', 'Λεπτή μύτη']}),
     ("Alt Tools",         ['ΓΕΩΜΕΤΡΙΚΑ ΟΡΓΑΝΑ', 'ΟΡΓΑΝΑ ΣΧΕΔΙΑΣΗΣ', 'ΟΡΓΑΝΑ ΜΕΤΡΗΣΗΣ'], {'title_boost': ['Set', 'Compass', 'Protractor', 'Σετ', 'Διαβήτης']}),
     ("Pencil Case",       ['ΚΑΣΕΤΙΝΕΣ-ΘΗΚΕΣ', 'ΜΟΛΥΒΟΘΗΚΕΣ'],           {}),
     ("Highlighter",       ['ΜΑΡΚΑΔΟΡΟΙ ΥΠΟΓΡΑΜΜΙΣΗΣ'],                   {'title_boost': ['Pastel', '4-pack', 'Thin', 'Λεπτή']}),
-    ("Correction",        ['ΔΙΟΡΘΩΤΙΚΑ'],                                 {'title_boost': ['Tape', 'Precision', 'Ταινία', 'Ακριβείας']}),
+    ("Correction",        ['ΔΙΟΡΘΩΤΙΚΑ'],                                 {'eidos_boost': ['Διορθωτική Ταινία'], 'title_boost': ['Tape', 'Precision', 'Ταινία', 'Ακριβείας']}),
     ("Sticky Notes",      ['POST-IT-ΧΑΡΤΑΚΙΑ ΣΗΜΕΙΩΣΕΩΝ'],               {'title_boost': ['Small', 'Flag', 'Arrow', 'Σημάδια']}),
 ]
 
 STATIONERY_SETS_SLOTS = [
-    ("Notebook",          ['ΤΕΤΡΑΔΙΟ', 'ΣΗΜΕΙΩΜΑΤΑΡΙΟ', 'ΜΠΛΟΚ'],       {'title_boost': ['A5', 'Lined', 'Grid', 'Γραμμές', 'Καρέ']}),
+    ("Notebook",          ['ΣΗΜΕΙΩΜΑΤΑΡΙΑ', 'ΤΕΤΡΑΔΙΑ'],                  {'eidos_boost': ['Σημειώσεων'], 'title_boost': ['A5', 'Lined', 'Grid', 'Γραμμές', 'Καρέ'], 'title_hide': ['Ιχνογραφίας', 'Πολυγράφου', 'Ακουαρέλας']}),
     ("Pencil Case",       ['ΚΑΣΕΤΙΝΕΣ-ΘΗΚΕΣ', 'ΣΧΟΛΙΚΕΣ ΚΑΣΕΤΙΝΕΣ', 'ΜΟΛΥΒΟΘΗΚΕΣ'], {}),
-    ("Refill Pens",       ['ΣΤΥΛΟ ΥΓΡΗΣ ΜΕΛΑΝΗΣ', 'ΣΤΥΛΟ GEL'],          {'title_boost': ['Blue', 'Black', '10-pack', 'Μπλε', 'Μαύρο']}),
-    ("Refill Pencils",    ['ΜΟΛΥΒΙΑ', 'ΧΡΩΜΑΤΙΣΤΑ ΜΟΛΥΒΙΑ'],             {'title_boost': ['HB', '2B', '12-pack', 'School']}),
+    ("Refill Pens",       ['ΣΤΥΛΟ ΥΓΡΗΣ ΜΕΛΑΝΗΣ', 'ΣΤΥΛΟ GEL'],          {'typos_boost': ['Gel', 'Ανταλλακτικά'], 'title_boost': ['Blue', 'Black', '10-pack', 'Μπλε', 'Μαύρο', 'Refill']}),
+    ("Refill Pencils",    ['ΜΟΛΥΒΙΑ'],                                    {'typos_boost': ['Απλό Μολύβι', 'Μύτες για Μηχανικό Μολύβι'], 'title_boost': ['HB', '2B', '12-pack', 'School']}),
     ("Highlighter",       ['ΜΑΡΚΑΔΟΡΟΙ ΥΠΟΓΡΑΜΜΙΣΗΣ'],                   {'title_boost': ['Pastel', '4-pack', '6-pack']}),
-    ("Correction",        ['ΔΙΟΡΘΩΤΙΚΑ'],                                 {'title_boost': ['Tape', 'Roller', 'Compact']}),
+    ("Correction",        ['ΔΙΟΡΘΩΤΙΚΑ'],                                 {'eidos_boost': ['Διορθωτική Ταινία'], 'title_boost': ['Tape', 'Roller', 'Compact']}),
     ("Sticky Notes",      ['POST-IT-ΧΑΡΤΑΚΙΑ ΣΗΜΕΙΩΣΕΩΝ'],               {'title_boost': ['Small', '3x3', 'Assorted', 'Ποικιλία']}),
     ("Geometric Tools",   ['ΓΕΩΜΕΤΡΙΚΑ ΟΡΓΑΝΑ', 'ΟΡΓΑΝΑ ΣΧΕΔΙΑΣΗΣ'],     {'title_boost': ['Ruler', 'Set', '30cm', 'Χάρακας']}),
-    ("Eraser/Sharpener",  ['ΓΟΜΕΣ', 'ΞΥΣΤΡΕΣ'],                          {}),
+    ("Eraser/Sharpener",  ['ΓΟΜΕΣ', 'ΞΥΣΤΡΕΣ'],                          {'eidos_boost': ['Γόμα', 'Βαρελάκι']}),
     ("Alt Set",           ['ΣΕΤ ΧΑΡΤΙΚΩΝ', 'ΣΕΤ ΖΩΓΡΑΦΙΚΗΣ'],           {}),
 ]
 
 PAINTS_SLOTS = [
-    ("Brushes",           ['ΠΙΝΕΛΑ'],                                     {'match_art_medium': True, 'title_boost': ['Set', 'Σετ', 'Assorted', 'Round', 'Flat', 'Ποικιλία']}),
-    ("Canvas/Paper",      ['ΚΑΜΒΑΔΕΣ', 'ΜΠΛΟΚ-ΧΑΡΤΙΑ', 'ΧΑΡΤΙΑ - ΜΠΛΟΚ'], {'match_art_medium': True, 'title_boost': ['Stretched', 'Τελαρωμένος', 'Set', 'Pack']}),
+    ("Brushes",           ['ΠΙΝΕΛΑ'],                                     {'match_art_medium': True, 'eidos_boost': ['Ακουαρέλας', 'Ακρυλικού', 'Λαδιού', 'Νερού', 'Σετ'], 'title_boost': ['Set', 'Σετ', 'Assorted', 'Round', 'Flat', 'Ποικιλία']}),
+    ("Canvas/Paper",      ['ΚΑΜΒΑΔΕΣ', 'ΜΠΛΟΚ-ΧΑΡΤΙΑ', 'ΧΑΡΤΙΑ - ΜΠΛΟΚ', 'ΜΠΛΟΚ - ΧΑΡΤΙΑ ΖΩΓΡΑΦΙΚΗΣ'], {'match_art_medium': True, 'eidos_boost': ['Ακουαρέλας', 'Ζωγραφικής', 'Καμβάς', 'Λαδιού', 'Μπλοκ σχεδίου'], 'title_boost': ['Stretched', 'Τελαρωμένος', 'Set', 'Pack']}),
     ("Water Cup",         ['ACCESSORIES ΖΩΓΡΑΦΙΚΗΣ'],                     {'title_boost': ['Water', 'Brush cleaner', 'Νερού', 'Καθαρισμού', 'Double']}),
     ("Palette",           ['ACCESSORIES ΖΩΓΡΑΦΙΚΗΣ'],                     {'title_boost': ['Palette', 'Παλέτα', 'Mixing', 'Plastic', 'Πλαστική']}),
+    ("Alt Paints",        ['ΧΡΩΜΑΤΑ ΖΩΓΡΑΦΙΚΗΣ'],                        {'typos_boost': ['Ακουαρέλα', 'Ακρυλικό', 'Ακρυλικά Χρώματα', 'Λαδιού', 'Νερομπογιά', 'Τέμπερα'], 'title_boost': ['Professional', 'Artist', 'Large', 'Μεγάλο', 'Επαγγελματικό']}),
     ("Easel",             ['ΚΑΒΑΛΕΤΑ'],                                   {'title_boost': ['Table', 'Desktop', 'Portable', 'Επιτραπέζιο', 'Φορητό']}),
-    ("Sketch Pencil",     ['ΜΟΛΥΒΙΑ', 'ΧΡΩΜΑΤΙΣΤΑ ΜΟΛΥΒΙΑ'],             {'title_boost': ['HB', '2B', 'Sketch', 'Drawing', 'Σκίτσου']}),
-    ("Eraser",            ['ΓΟΜΕΣ'],                                      {'title_boost': ['Kneaded', 'Putty', 'Art', 'Ζύμης', 'Πλαστική']}),
-    ("Alt Paints",        ['ΧΡΩΜΑΤΑ ΖΩΓΡΑΦΙΚΗΣ'],                        {'title_boost': ['Professional', 'Artist', 'Large', 'Μεγάλο', 'Επαγγελματικό']}),
+    ("Sketch Pencil",     ['ΜΟΛΥΒΙΑ'],                                    {'typos_boost': ['Απλό Μολύβι'], 'title_boost': ['HB', '2B', 'Sketch', 'Drawing', 'Σκίτσου']}),
+    ("Eraser",            ['ΓΟΜΕΣ'],                                      {'eidos_boost': ['Γόμα'], 'title_boost': ['Kneaded', 'Putty', 'Art', 'Ζύμης', 'Πλαστική'], 'title_hide': ['Ταινία', 'Υγρό']}),
     ("Paint Accessories", ['ACCESSORIES ΖΩΓΡΑΦΙΚΗΣ'],                     {'title_boost': ['Sponge', 'Σφουγγάρι', 'Palette knife', 'Σπάτουλα', 'Roller']}),
     ("Apron",             ['ACCESSORIES ΖΩΓΡΑΦΙΚΗΣ'],                     {'title_boost': ['Apron', 'Smock', 'Kids', 'Waterproof', 'Παιδική', 'Αδιάβροχη']}),
 ]
 
 BRUSHES_SLOTS = [
-    ("Paints",            ['ΧΡΩΜΑΤΑ ΖΩΓΡΑΦΙΚΗΣ'],                        {'match_art_medium': True}),
-    ("Canvas/Paper",      ['ΚΑΜΒΑΔΕΣ', 'ΜΠΛΟΚ-ΧΑΡΤΙΑ', 'ΧΑΡΤΙΑ - ΜΠΛΟΚ'], {'match_art_medium': True}),
+    ("Paints",            ['ΧΡΩΜΑΤΑ ΖΩΓΡΑΦΙΚΗΣ'],                        {'match_art_medium': True, 'typos_boost': ['Ακουαρέλα', 'Ακρυλικό', 'Ακρυλικά Χρώματα', 'Λαδιού', 'Νερομπογιά', 'Τέμπερα']}),
+    ("Canvas/Paper",      ['ΚΑΜΒΑΔΕΣ', 'ΜΠΛΟΚ-ΧΑΡΤΙΑ', 'ΧΑΡΤΙΑ - ΜΠΛΟΚ', 'ΜΠΛΟΚ - ΧΑΡΤΙΑ ΖΩΓΡΑΦΙΚΗΣ'], {'match_art_medium': True, 'eidos_boost': ['Ακουαρέλας', 'Καμβάς', 'Λαδιού', 'Ζωγραφικής']}),
     ("Brush Cleaner",     ['ACCESSORIES ΖΩΓΡΑΦΙΚΗΣ'],                     {'title_boost': ['Water', 'Brush cleaner', 'Soap', 'Νερού', 'Double']}),
     ("Brush Case",        ['ACCESSORIES ΖΩΓΡΑΦΙΚΗΣ', 'ΘΗΚΕΣ ΜΕΤΑΦΟΡΑΣ'], {'title_boost': ['Brush holder', 'Brush case', 'Roll', 'Θήκη πινέλων', 'Bamboo', 'Ρολό']}),
     ("Palette",           ['ACCESSORIES ΖΩΓΡΑΦΙΚΗΣ'],                     {'title_boost': ['Palette', 'Παλέτα', 'Plastic', 'Tear-off', 'Αποσπώμενη']}),
-    ("Alt Brushes",       ['ΠΙΝΕΛΑ'],                                     {}),
-    ("Sketch Pencil",     ['ΜΟΛΥΒΙΑ'],                                    {'title_boost': ['2B', '4B', 'Sketch', 'Drawing']}),
+    ("Alt Brushes",       ['ΠΙΝΕΛΑ'],                                     {'eidos_boost': ['Flat', 'Round', 'Ακουαρέλας', 'Ακρυλικού', 'Λαδιού', 'Σετ', 'Βεντάλια', 'Rigger', 'Flibert']}),
+    ("Sketch Pencil",     ['ΜΟΛΥΒΙΑ'],                                    {'typos_boost': ['Απλό Μολύβι'], 'title_boost': ['2B', '4B', 'Sketch', 'Drawing']}),
     ("Easel",             ['ΚΑΒΑΛΕΤΑ'],                                   {'title_boost': ['Table', 'Desktop', 'Portable', 'Επιτραπέζιο']}),
     ("Paint Accessories", ['ACCESSORIES ΖΩΓΡΑΦΙΚΗΣ'],                     {'title_boost': ['Palette knife', 'Sponge', 'Σπάτουλα', 'Σφουγγάρι']}),
     ("Apron",             ['ACCESSORIES ΖΩΓΡΑΦΙΚΗΣ'],                     {'title_boost': ['Apron', 'Artist', 'Painter', 'Waterproof']}),
 ]
 
 COLORED_PENCILS_ART_SLOTS = [
-    ("Drawing Paper",     ['ΜΠΛΟΚ-ΧΑΡΤΙΑ', 'ΧΑΡΤΙΑ - ΜΠΛΟΚ'],           {'match_art_medium': True, 'title_boost': ['Sketch', 'Drawing', 'Student', 'Σχεδίου', 'A4', 'A5']}),
-    ("Sharpener",         ['ΞΥΣΤΡΕΣ'],                                    {'title_boost': ['Metal', 'Dual', 'Container', 'Μεταλλική', 'Δοχείο']}),
-    ("Eraser",            ['ΓΟΜΕΣ', 'ACCESSORIES ΖΩΓΡΑΦΙΚΗΣ'],            {'title_boost': ['Kneaded', 'Putty', 'Precision', 'Ζύμης', 'Ακριβείας']}),
+    ("Drawing Paper",     ['ΜΠΛΟΚ-ΧΑΡΤΙΑ', 'ΧΑΡΤΙΑ - ΜΠΛΟΚ', 'ΜΠΛΟΚ - ΧΑΡΤΙΑ ΖΩΓΡΑΦΙΚΗΣ'], {'match_art_medium': True, 'eidos_boost': ['Σχεδίου', 'Μπλοκ σχεδίου', 'Ζωγραφικής', 'Ακουαρέλας'], 'title_boost': ['Sketch', 'Drawing', 'Student', 'Σχεδίου', 'A4', 'A5']}),
+    ("Sharpener",         ['ΞΥΣΤΡΕΣ'],                                    {'eidos_boost': ['Κλασική', 'Με γόμα', 'Βαρελάκι'], 'title_boost': ['Metal', 'Dual', 'Container', 'Μεταλλική', 'Δοχείο']}),
+    ("Eraser",            ['ΓΟΜΕΣ', 'ACCESSORIES ΖΩΓΡΑΦΙΚΗΣ'],            {'eidos_boost': ['Γόμα'], 'title_boost': ['Kneaded', 'Putty', 'Precision', 'Ζύμης', 'Ακριβείας'], 'title_hide': ['Ταινία', 'Υγρό']}),
     ("Art Case",          ['ΘΗΚΕΣ ΜΕΤΑΦΟΡΑΣ', 'ΚΑΣΕΤΙΝΕΣ-ΘΗΚΕΣ'],        {'title_boost': ['Art case', 'Portfolio', 'Large', 'Professional']}),
-    ("Sketch Pencil",     ['ΜΟΛΥΒΙΑ'],                                    {'title_boost': ['Sketch', 'Drawing', 'HB', '2B', '4B', '6B', 'Set']}),
-    ("Alt Colored",       ['ΧΡΩΜΑΤΙΣΤΑ ΜΟΛΥΒΙΑ', 'ΚΗΡΟΜΠΟΓΙΕΣ-ΠΑΣΤΕΛ'],  {}),
-    ("Precision Eraser",  ['ΓΟΜΕΣ'],                                      {'title_boost': ['Precision', 'Mechanical', 'Pen-style', 'Ακριβείας']}),
+    ("Sketch Pencil",     ['ΜΟΛΥΒΙΑ'],                                    {'typos_boost': ['Απλό Μολύβι', 'Μηχανικό Μολύβι'], 'title_boost': ['Sketch', 'Drawing', 'HB', '2B', '4B', '6B', 'Set']}),
+    ("Alt Colored",       ['ΧΡΩΜΑΤΙΣΤΑ ΜΟΛΥΒΙΑ', 'ΚΗΡΟΜΠΟΓΙΕΣ-ΠΑΣΤΕΛ'],  {'eidos_boost': ['Κλασσικές Ξυλομπογιές', 'Ξυλομπογιές Ακουαρέλας', 'Ξυλομπογιές Κραγιόν', 'Μισό - Μισό']}),
+    ("Crayons/Pastels",   ['ΚΗΡΟΜΠΟΓΙΕΣ-ΠΑΣΤΕΛ'],                        {'eidos_boost': ['Κηρομπογιά', 'Κραγιόν', 'Λαδοπαστέλ']}),
+    ("Fine Liners",       ['ΜΑΡΚΑΔΟΡΟΙ', 'ΜΑΡΚΑΔΟΡΟΙ ΖΩΓΡΑΦΙΚΗΣ'],      {'title_boost': ['Fine liner', 'Micron', '0.1mm', '0.3mm', '0.5mm'], 'title_hide': ['Υπογράμμισης', 'Πίνακα', 'Ανεξίτηλ']}),
     ("Fixative",          ['ACCESSORIES ΖΩΓΡΑΦΙΚΗΣ', 'ACCESSORIES ΧΕΙΡΟΤΕΧΝΙΑΣ'], {'title_boost': ['Fixative', 'Portfolio', 'Storage', 'Folder']}),
-    ("Fine Liners",       ['ΜΑΡΚΑΔΟΡΟΙ', 'ΜΑΡΚΑΔΟΡΟΙ ΖΩΓΡΑΦΙΚΗΣ'],      {'title_boost': ['Fine liner', 'Micron', '0.1mm', '0.3mm', '0.5mm']}),
     ("Markers",           ['ΜΑΡΚΑΔΟΡΟΙ ΖΩΓΡΑΦΙΚΗΣ', 'ACCESSORIES ΧΕΙΡΟΤΕΧΝΙΑΣ'], {}),
 ]
 
 DRAWING_MARKERS_SLOTS = [
-    ("Marker Paper",      ['ΜΠΛΟΚ-ΧΑΡΤΙΑ', 'ΧΑΡΤΙΑ - ΜΠΛΟΚ'],           {'match_art_medium': True, 'title_boost': ['Marker', 'Bristol', 'Bleedproof', 'Mixed media', 'Μαρκαδόρων', 'Smooth']}),
-    ("Fine Liners",       ['ΜΑΡΚΑΔΟΡΟΙ', 'ΚΗΡΟΜΠΟΓΙΕΣ-ΠΑΣΤΕΛ'],          {}),
-    ("Colored Pencils",   ['ΧΡΩΜΑΤΙΣΤΑ ΜΟΛΥΒΙΑ', 'ΚΗΡΟΜΠΟΓΙΕΣ-ΠΑΣΤΕΛ'],  {'title_boost': ['24', '36', '48', 'Professional', 'Artist']}),
-    ("Blending/Extra",    ['ΜΑΡΚΑΔΟΡΟΙ ΖΩΓΡΑΦΙΚΗΣ', 'ACCESSORIES ΖΩΓΡΑΦΙΚΗΣ'], {'title_boost': ['Blender', 'Colorless', 'Ανάμειξης', 'Άχρωμος']}),
+    ("Marker Paper",      ['ΜΠΛΟΚ-ΧΑΡΤΙΑ', 'ΧΑΡΤΙΑ - ΜΠΛΟΚ', 'ΜΠΛΟΚ - ΧΑΡΤΙΑ ΖΩΓΡΑΦΙΚΗΣ'], {'match_art_medium': True, 'eidos_boost': ['Μπλοκ σχεδίου', 'Σχεδίου', 'Ζωγραφικής'], 'title_boost': ['Marker', 'Bristol', 'Bleedproof', 'Mixed media', 'Μαρκαδόρων', 'Smooth']}),
+    # Adult drawing markers often live under ΜΑΡΚΑΔΟΡΟΙ (Copic, Winsor & Newton, etc.)
+    # Exclude highlighters/whiteboard/permanent so we only pick art markers.
+    ("Alt Markers",       ['ΜΑΡΚΑΔΟΡΟΙ ΖΩΓΡΑΦΙΚΗΣ', 'ΜΑΡΚΑΔΟΡΟΙ'],        {'title_boost': ['Copic', 'Sketch', 'Brush', 'Dual', 'Twin', 'Art', 'Illustration', 'Winsor'], 'title_hide': ['Υπογράμμισης', 'Πίνακα', 'Ανεξίτηλ', 'Whiteboard', 'Permanent', 'Highlighter', 'CD', 'DVD']}),
+    ("Fine Liners",       ['ΜΑΡΚΑΔΟΡΟΙ', 'ΜΑΡΚΑΔΟΡΟΙ ΖΩΓΡΑΦΙΚΗΣ'],       {'title_boost': ['Fine liner', 'Micron', '0.1mm', '0.3mm', '0.5mm', 'Σχεδίου'], 'title_hide': ['Υπογράμμισης', 'Πίνακα', 'Ανεξίτηλ', 'Whiteboard']}),
+    ("Colored Pencils",   ['ΧΡΩΜΑΤΙΣΤΑ ΜΟΛΥΒΙΑ', 'ΚΗΡΟΜΠΟΓΙΕΣ-ΠΑΣΤΕΛ'],  {'typos_boost': ['Ακρυλικό', 'Κάρβουνο'], 'title_boost': ['24', '36', '48', 'Professional', 'Artist']}),
+    ("Blending/Extra",    ['ΜΑΡΚΑΔΟΡΟΙ ΖΩΓΡΑΦΙΚΗΣ', 'ΜΑΡΚΑΔΟΡΟΙ', 'ACCESSORIES ΖΩΓΡΑΦΙΚΗΣ'], {'title_boost': ['Blender', 'Colorless', 'Ανάμειξης', 'Άχρωμος'], 'title_hide': ['Υπογράμμισης', 'Πίνακα', 'Ανεξίτηλ']}),
     ("Marker Case",       ['ΘΗΚΕΣ ΜΕΤΑΦΟΡΑΣ', 'ΚΑΣΕΤΙΝΕΣ-ΘΗΚΕΣ'],        {'title_boost': ['Marker case', 'Elastic', 'Roll', 'Art case']}),
-    ("Sketch Pencil",     ['ΜΟΛΥΒΙΑ'],                                    {'title_boost': ['HB', '2B', 'Mechanical', 'Sketch']}),
-    ("Alt Markers",       ['ΜΑΡΚΑΔΟΡΟΙ ΖΩΓΡΑΦΙΚΗΣ'],                     {}),
-    ("Portfolio",         ['ACCESSORIES ΖΩΓΡΑΦΙΚΗΣ', 'ACCESSORIES ΧΕΙΡΟΤΕΧΝΙΑΣ'], {'title_boost': ['Portfolio', 'Storage', 'Art folder', 'Stickers']}),
-    ("White Gel Pen",     ['ΣΤΥΛΟ GEL', 'ΜΑΡΚΑΔΟΡΟΙ'],                   {'title_boost': ['White', 'Metallic', 'Gel pen', 'Paint marker', 'Gold', 'Silver']}),
-    ("Eraser",            ['ΓΟΜΕΣ'],                                      {'title_boost': ['Kneaded', 'Precision', 'Mechanical']}),
+    ("Sketch Pencil",     ['ΜΟΛΥΒΙΑ'],                                    {'typos_boost': ['Μηχανικό Μολύβι', 'Απλό Μολύβι'], 'title_boost': ['HB', '2B', 'Mechanical', 'Sketch']}),
+    ("White Gel Pen",     ['ΣΤΥΛΟ GEL', 'ΜΑΡΚΑΔΟΡΟΙ'],                   {'title_boost': ['White', 'Metallic', 'Gel pen', 'Paint marker', 'Gold', 'Silver'], 'title_hide': ['Υπογράμμισης', 'Πίνακα', 'Ανεξίτηλ']}),
+    ("Portfolio",         ['ACCESSORIES ΖΩΓΡΑΦΙΚΗΣ', 'ACCESSORIES ΧΕΙΡΟΤΕΧΝΙΑΣ'], {'title_boost': ['Portfolio', 'Storage', 'Art folder']}),
+    ("Eraser",            ['ΓΟΜΕΣ'],                                      {'eidos_boost': ['Γόμα'], 'title_boost': ['Kneaded', 'Precision', 'Mechanical', 'Ζύμης'], 'title_hide': ['Ταινία', 'Υγρό']}),
 ]
 
 ART_PAPER_SLOTS = [
-    ("Art Supplies",      ['ΧΡΩΜΑΤΑ ΖΩΓΡΑΦΙΚΗΣ', 'ΧΡΩΜΑΤΙΣΤΑ ΜΟΛΥΒΙΑ', 'ΜΑΡΚΑΔΟΡΟΙ ΖΩΓΡΑΦΙΚΗΣ'], {'match_art_medium': True}),
-    ("Brushes",           ['ΠΙΝΕΛΑ'],                                     {'match_art_medium': True, 'title_boost': ['Set', 'Σετ', 'Assorted']}),
+    ("Art Supplies",      ['ΧΡΩΜΑΤΑ ΖΩΓΡΑΦΙΚΗΣ', 'ΧΡΩΜΑΤΙΣΤΑ ΜΟΛΥΒΙΑ', 'ΜΑΡΚΑΔΟΡΟΙ ΖΩΓΡΑΦΙΚΗΣ'], {'match_art_medium': True, 'typos_boost': ['Ακουαρέλα', 'Ακρυλικό', 'Ακρυλικά Χρώματα', 'Λαδιού', 'Νερομπογιά', 'Τέμπερα']}),
+    ("Brushes",           ['ΠΙΝΕΛΑ'],                                     {'match_art_medium': True, 'eidos_boost': ['Ακουαρέλας', 'Ακρυλικού', 'Λαδιού', 'Νερού', 'Σετ'], 'title_boost': ['Set', 'Σετ', 'Assorted']}),
     ("Palette",           ['ACCESSORIES ΖΩΓΡΑΦΙΚΗΣ'],                     {'title_boost': ['Palette', 'Παλέτα', 'Mixing']}),
     ("Water Cup",         ['ACCESSORIES ΖΩΓΡΑΦΙΚΗΣ'],                     {'title_boost': ['Water cup', 'Brush cleaner', 'Νερού']}),
-    ("Sketch Pencil",     ['ΜΟΛΥΒΙΑ'],                                    {'title_boost': ['2B', '4B', 'Sketch', 'Drawing', 'HB']}),
-    ("Alt Paper",         ['ΜΠΛΟΚ-ΧΑΡΤΙΑ', 'ΧΑΡΤΙΑ - ΜΠΛΟΚ'],            {}),
-    ("Eraser",            ['ΓΟΜΕΣ', 'ACCESSORIES ΖΩΓΡΑΦΙΚΗΣ'],            {'title_boost': ['Kneaded', 'Putty', 'Precision', 'Masking']}),
-    ("Detail Tools",      ['ΜΑΡΚΑΔΟΡΟΙ', 'ΠΙΝΕΛΑ'],                       {'title_boost': ['Fine', 'Detail', 'Liner', 'Small', '0.1mm', '0.3mm']}),
+    ("Sketch Pencil",     ['ΜΟΛΥΒΙΑ'],                                    {'typos_boost': ['Απλό Μολύβι', 'Μηχανικό Μολύβι'], 'title_boost': ['2B', '4B', 'Sketch', 'Drawing', 'HB']}),
+    ("Alt Paper",         ['ΜΠΛΟΚ-ΧΑΡΤΙΑ', 'ΧΑΡΤΙΑ - ΜΠΛΟΚ', 'ΜΠΛΟΚ - ΧΑΡΤΙΑ ΖΩΓΡΑΦΙΚΗΣ'], {'eidos_boost': ['Ακουαρέλας', 'Ζωγραφικής', 'Σχεδίου', 'Μπλοκ σχεδίου', 'Ριζόχαρτο', 'Κολάζ']}),
+    ("Eraser",            ['ΓΟΜΕΣ', 'ACCESSORIES ΖΩΓΡΑΦΙΚΗΣ'],            {'eidos_boost': ['Γόμα'], 'title_boost': ['Kneaded', 'Putty', 'Precision', 'Masking'], 'title_hide': ['Ταινία', 'Υγρό']}),
+    ("Detail Tools",      ['ΜΑΡΚΑΔΟΡΟΙ', 'ΠΙΝΕΛΑ'],                       {'title_boost': ['Fine', 'Detail', 'Liner', 'Small', '0.1mm', '0.3mm'], 'title_hide': ['Υπογράμμισης', 'Πίνακα', 'Ανεξίτηλ']}),
     ("Fixative",          ['ACCESSORIES ΖΩΓΡΑΦΙΚΗΣ'],                     {'title_boost': ['Portfolio', 'Storage', 'Folder', 'Φάκελος', 'Fixative']}),
     ("Accessories",       ['ACCESSORIES ΖΩΓΡΑΦΙΚΗΣ', 'ACCESSORIES ΧΕΙΡΟΤΕΧΝΙΑΣ'], {'title_boost': ['Sponge', 'Palette knife', 'Scissors', 'Σπάτουλα']}),
 ]
 
 NOTEBOOKS_SLOTS = [
-    ("Pen",               ['ΣΤΥΛΟ ΥΓΡΗΣ ΜΕΛΑΝΗΣ', 'ΣΤΥΛΟ GEL'],          {'title_boost': ['Blue', 'Black', 'Red', 'Multi-color', '4-pack', '6-pack', '10-pack', 'Μπλε', 'Μαύρο']}),
-    ("Pencil",            ['ΜΟΛΥΒΙΑ'],                                    {'title_boost': ['HB', '2B', 'School', 'Pack', '12-pack', 'Σχολικά']}),
+    ("Pen",               ['ΣΤΥΛΟ ΥΓΡΗΣ ΜΕΛΑΝΗΣ', 'ΣΤΥΛΟ GEL'],          {'typos_boost': ['Gel', 'Υγρής Μελάνης'], 'title_boost': ['Blue', 'Black', 'Red', 'Multi-color', '4-pack', '6-pack', '10-pack', 'Μπλε', 'Μαύρο']}),
+    ("Pencil",            ['ΜΟΛΥΒΙΑ'],                                    {'typos_boost': ['Μηχανικό Μολύβι', 'Απλό Μολύβι'], 'title_boost': ['HB', '2B', 'School', 'Pack', '12-pack', 'Σχολικά']}),
     ("Highlighter",       ['ΜΑΡΚΑΔΟΡΟΙ ΥΠΟΓΡΑΜΜΙΣΗΣ'],                   {'title_boost': ['Pastel', 'Neon', 'Bright', '4-pack', '6-pack', 'Φωτεινά']}),
     ("Sticky Notes",      ['POST-IT-ΧΑΡΤΑΚΙΑ ΣΗΜΕΙΩΣΕΩΝ'],               {'title_boost': ['Small', '3x3', 'Flag', 'Arrow', 'Colorful', 'Χρωματιστά']}),
-    ("Correction",        ['ΔΙΟΡΘΩΤΙΚΑ'],                                 {'title_boost': ['Tape', 'Roller', 'Pen', 'Compact']}),
+    ("Correction",        ['ΔΙΟΡΘΩΤΙΚΑ'],                                 {'eidos_boost': ['Διορθωτική Ταινία'], 'title_boost': ['Tape', 'Roller', 'Pen', 'Compact']}),
     ("Pencil Case",       ['ΚΑΣΕΤΙΝΕΣ-ΘΗΚΕΣ', 'ΣΧΟΛΙΚΕΣ ΚΑΣΕΤΙΝΕΣ'],    {'title_boost': ['Colorful', 'Fun', 'Simple', 'Zipper', 'School', 'Σχολική']}),
+    ("Bookmarks",         ['ΣΕΛΙΔΟΔΕΙΚΤΕΣ', 'POST-IT-ΧΑΡΤΑΚΙΑ ΣΗΜΕΙΩΣΕΩΝ'], {'eidos_boost': ['Σελιδοδείκτες'], 'title_boost': ['Bookmark', 'Σελιδοδείκτης', 'Magnetic', 'Μαγνητικός']}),
     ("Ruler",             ['ΓΕΩΜΕΤΡΙΚΑ ΟΡΓΑΝΑ'],                          {'title_boost': ['15cm', '20cm', '30cm', 'Transparent', 'Flexible', 'Διάφανος']}),
-    ("Book Covers",       ['ΔΙΑΧΩΡΙΣΤΙΚΑ', 'ΣΕΛΙΔΟΔΕΙΚΤΕΣ'],             {'title_boost': ['Book cover', 'Label', 'Sticker', 'Protective', 'Εξώφυλλο']}),
-    ("Sharpener/Eraser",  ['ΞΥΣΤΡΕΣ', 'ΓΟΜΕΣ'],                          {'title_boost': ['Dual', 'Container', 'Colorful', 'White', 'Soft']}),
-    ("More Notebooks",    ['ΤΕΤΡΑΔΙΟ'],                                   {'title_boost': ['Different color', 'Subject', 'Pack', 'Set', 'Grid', 'Ruled', 'Καρέ']}),
+    ("Sharpener/Eraser",  ['ΞΥΣΤΡΕΣ', 'ΓΟΜΕΣ'],                          {'eidos_boost': ['Γόμα', 'Βαρελάκι', 'Κλασική'], 'title_boost': ['Dual', 'Container', 'Colorful', 'White', 'Soft']}),
+    ("More Notebooks",    ['ΣΗΜΕΙΩΜΑΤΑΡΙΑ'],                              {'title_boost': ['Different color', 'Pack', 'Set', 'Grid', 'Ruled', 'Καρέ', 'Dot', 'Blank']}),
 ]
 
 NOTEPADS_SLOTS = [
-    ("Pro Pen",           ['ΣΤΥΛΟ ΥΓΡΗΣ ΜΕΛΑΝΗΣ', 'ΣΤΥΛΟ GEL', 'ΣΤΥΛΟ ΔΙΑΡΚΕΙΑΣ'], {'title_boost': ['Black', 'Blue', '0.7mm', 'Premium', 'Professional', 'Executive', 'Μαύρο', 'Μπλε'], 'title_hide': ['Multi-color', 'Glitter', 'Kids', 'Παιδικό']}),
-    ("Mechanical Pencil", ['ΜΟΛΥΒΙΑ'],                                    {'title_boost': ['Mechanical', '0.5mm', '0.7mm', 'Professional', 'Executive', 'Μηχανικό'], 'title_hide': ['Colored', 'Kids', 'Jumbo']}),
+    ("Pro Pen",           ['ΣΤΥΛΟ ΥΓΡΗΣ ΜΕΛΑΝΗΣ', 'ΣΤΥΛΟ GEL', 'ΣΤΥΛΟ ΔΙΑΡΚΕΙΑΣ'], {'typos_boost': ['Gel', 'Διαρκείας', 'Υγρής Μελάνης'], 'title_boost': ['Black', 'Blue', '0.7mm', 'Premium', 'Professional', 'Executive', 'Μαύρο', 'Μπλε'], 'title_hide': ['Multi-color', 'Glitter', 'Kids', 'Παιδικό']}),
+    ("Mechanical Pencil", ['ΜΟΛΥΒΙΑ'],                                    {'typos_include': ['Μηχανικό Μολύβι', 'Μύτες για Μηχανικό Μολύβι'], 'title_boost': ['Mechanical', '0.5mm', '0.7mm', 'Professional', 'Executive', 'Μηχανικό']}),
     ("Highlighter",       ['ΜΑΡΚΑΔΟΡΟΙ ΥΠΟΓΡΑΜΜΙΣΗΣ'],                   {'title_boost': ['Pastel', 'Subtle', 'Classic', 'Yellow', '4-pack'], 'title_hide': ['Neon', 'Glitter', 'Kids']}),
     ("Sticky Notes",      ['POST-IT-ΧΑΡΤΑΚΙΑ ΣΗΜΕΙΩΣΕΩΝ'],               {'title_boost': ['Yellow', 'Classic', '3x3', 'Professional', 'Lined'], 'title_hide': ['Fun shapes', 'Colorful', 'Kids']}),
-    ("Correction",        ['ΔΙΟΡΘΩΤΙΚΑ'],                                 {'title_boost': ['Tape', 'Roller', 'Professional', 'Ταινία']}),
+    ("Correction",        ['ΔΙΟΡΘΩΤΙΚΑ'],                                 {'eidos_boost': ['Διορθωτική Ταινία', 'Διορθωτικό Στυλό'], 'title_boost': ['Tape', 'Roller', 'Professional', 'Ταινία']}),
     ("Desk Organizer",    ['ΜΟΛΥΒΟΘΗΚΕΣ'],                               {'title_boost': ['Desk organizer', 'Pen holder', 'Professional', 'Metal', 'Γραφείου']}),
-    ("Page Flags",        ['ΣΕΛΙΔΟΔΕΙΚΤΕΣ', 'POST-IT-ΧΑΡΤΑΚΙΑ ΣΗΜΕΙΩΣΕΩΝ'], {'title_boost': ['Flag', 'Arrow', 'Index', 'Bookmark', 'Professional']}),
+    ("Page Flags",        ['ΣΕΛΙΔΟΔΕΙΚΤΕΣ', 'POST-IT-ΧΑΡΤΑΚΙΑ ΣΗΜΕΙΩΣΕΩΝ'], {'eidos_boost': ['Σελιδοδείκτες'], 'title_boost': ['Flag', 'Arrow', 'Index', 'Bookmark', 'Professional']}),
     ("Dividers",          ['ΔΙΑΧΩΡΙΣΤΙΚΑ'],                               {'title_boost': ['File divider', 'Folder', 'Tabbed', 'Professional']}),
-    ("More Notepads",     ['ΣΗΜΕΙΩΜΑΤΑΡΙΟ'],                             {'title_boost': ['A4', 'A5', 'Professional', 'Hardcover', 'Spiral', 'Perforated', 'Αποσπώμενο']}),
-    ("Eraser",            ['ΓΟΜΕΣ'],                                      {'title_boost': ['White', 'Soft', 'Λευκή']}),
+    ("More Notepads",     ['ΣΗΜΕΙΩΜΑΤΑΡΙΑ', 'ΤΕΤΡΑΔΙΑ', 'ΗΜΕΡΟΛΟΓΙΑ', 'ORGANISER'], {'title_boost': ['A4', 'A5', 'Professional', 'Hardcover', 'Spiral', 'Perforated', 'Αποσπώμενο']}),
+    ("Eraser",            ['ΓΟΜΕΣ'],                                      {'eidos_boost': ['Γόμα'], 'title_boost': ['White', 'Soft', 'Λευκή']}),
 ]
 
 STATIONERY_CLUSTER_SLOTS = {
@@ -4689,6 +4742,66 @@ def run_peripherals_engine(trigger, df_products, df_history, cluster_key):
             else:
                 notes.append(f"⚠ Eidos filter ({pat}) would empty pool, skipped")
 
+        # ── Eidos (Type) Boost — soft preference for these Είδος values ──
+        if flags.get('eidos_boost') and 'Είδος' in pool.columns:
+            pat = '|'.join(flags['eidos_boost'])
+            m_eidos = pool['Είδος'].fillna('').str.contains(pat, case=False, regex=True, na=False)
+            m_title = pool['Title'].fillna('').str.contains(pat, case=False, regex=True, na=False)
+            m_combined = m_eidos | m_title
+            if m_combined.any():
+                pool.loc[m_combined, 'Final_Score'] += 80000
+                notes.append(f"Eidos boost ({pat}): +80k to {m_combined.sum()} items")
+
+        # ── Eidos (Type) Exclude — hard-filter out these Είδος values ──
+        if flags.get('eidos_exclude') and 'Είδος' in pool.columns:
+            pat = '|'.join(flags['eidos_exclude'])
+            m_eidos = pool['Είδος'].fillna('').str.contains(pat, case=False, regex=True, na=False)
+            m_title = pool['Title'].fillna('').str.contains(pat, case=False, regex=True, na=False)
+            m_excl = m_eidos | m_title
+            if m_excl.any() and not pool[~m_excl].empty:
+                b4 = len(pool)
+                pool = pool[~m_excl]
+                notes.append(f"Eidos exclude ({pat}): {b4} → {len(pool)}")
+            elif m_excl.any():
+                pool.loc[m_excl, 'Final_Score'] -= 150000
+                notes.append(f"Eidos exclude ({pat}): would empty pool, penalized {m_excl.sum()}")
+
+        # ── Typos (Τύπος) Include Filter ──
+        if flags.get('typos_include') and 'Τύπος' in pool.columns:
+            pat = '|'.join(flags['typos_include'])
+            m_typos = pool['Τύπος'].fillna('').str.contains(pat, case=False, regex=True, na=False)
+            m_title = pool['Title'].fillna('').str.contains(pat, case=False, regex=True, na=False)
+            m_combined = m_typos | m_title
+            if m_combined.any():
+                b4 = len(pool)
+                pool = pool[m_combined]
+                notes.append(f"Typos filter ({pat}): {b4} → {len(pool)}")
+            else:
+                notes.append(f"⚠ Typos filter ({pat}) would empty pool, skipped")
+
+        # ── Typos (Τύπος) Boost ──
+        if flags.get('typos_boost') and 'Τύπος' in pool.columns:
+            pat = '|'.join(flags['typos_boost'])
+            m_typos = pool['Τύπος'].fillna('').str.contains(pat, case=False, regex=True, na=False)
+            m_title = pool['Title'].fillna('').str.contains(pat, case=False, regex=True, na=False)
+            m_combined = m_typos | m_title
+            if m_combined.any():
+                pool.loc[m_combined, 'Final_Score'] += 80000
+                notes.append(f"Typos boost ({pat}): +80k to {m_combined.sum()} items")
+
+        # ── Typos (Τύπος) Exclude ──
+        if flags.get('typos_exclude') and 'Τύπος' in pool.columns:
+            pat = '|'.join(flags['typos_exclude'])
+            m_typos = pool['Τύπος'].fillna('').str.contains(pat, case=False, regex=True, na=False)
+            m_title = pool['Title'].fillna('').str.contains(pat, case=False, regex=True, na=False)
+            m_excl = m_typos | m_title
+            if m_excl.any() and not pool[~m_excl].empty:
+                b4 = len(pool)
+                pool = pool[~m_excl]
+                notes.append(f"Typos exclude ({pat}): {b4} → {len(pool)}")
+            elif m_excl.any():
+                pool.loc[m_excl, 'Final_Score'] -= 150000
+
         # ── Χρήση (Usage) filter — hide/penalize products by their usage category ──
         if flags.get('usage_hide') and 'Χρήση' in pool.columns:
             hide_usages = flags['usage_hide']
@@ -5181,6 +5294,20 @@ elif active_cluster in STATIONERY_CLUSTERS:
     combined_stat_books = pd.concat([df_stationery, df_books], ignore_index=True)
     
     stat_slots = STATIONERY_CLUSTER_SLOTS.get(active_cluster, [])
+    
+    # ── Markers sub-cluster routing: pick specialized slot list based on trigger hierarchy ──
+    # Highlighters, Whiteboard, Permanent markers each have distinct accessory needs.
+    if active_cluster == "Markers":
+        trigger_hier = str(trigger.get('Hierarchy', '')).strip().upper()
+        trigger_title = str(trigger.get('Title', '')).strip()
+        if trigger_hier == 'ΜΑΡΚΑΔΟΡΟΙ ΥΠΟΓΡΑΜΜΙΣΗΣ' or 'υπογράμμισης' in trigger_title.lower():
+            stat_slots = HIGHLIGHTERS_SLOTS
+        elif trigger_hier == 'ΜΑΡΚΑΔΟΡΟΙ ΠΙΝΑΚΑ' or 'πίνακα' in trigger_title.lower():
+            stat_slots = WHITEBOARD_MARKERS_SLOTS
+        elif trigger_hier == 'ΜΑΡΚΑΔΟΡΟΙ ΑΝΕΞΙΤΗΛΟΙ' or 'ανεξίτηλ' in trigger_title.lower():
+            stat_slots = PERMANENT_MARKERS_SLOTS
+        # else: fall through to default MARKERS_SLOTS (for generic ΜΑΡΚΑΔΟΡΟΙ / ΜΑΡΚΑΔΟΡΟΙ ΖΩΓΡΑΦΙΚΗΣ)
+    
     if stat_slots:
         PERIPHERAL_CLUSTER_SLOTS[active_cluster] = stat_slots
     recs, diag, slot_notes, full_candidates = run_peripherals_engine(trigger, combined_stat_books, df_history, active_cluster)
