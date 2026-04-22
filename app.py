@@ -4841,35 +4841,36 @@ def run_peripherals_engine(trigger, df_products, df_history, cluster_key):
         # ── Kids vs Adult Coloring Activity Matching ──
         if flags.get('match_coloring_activity'):
             t_eidos = str(trigger.get('Είδος', '')).lower()
-            
-            # 1. Ελέγχουμε αν είναι όντως μαρκαδόρος ζωγραφικής (όχι π.χ. πίνακα ή υπογράμμισης)
             is_art_marker = 'ζωγραφικής' in t_eidos or 'ζωγραφικής' in _tt_lower or 'drawing' in _tt_lower
             
             if not is_art_marker:
-                # Αν είναι απλός μαρκαδόρος, αδειάζουμε το pool για να παραλειφθεί εντελώς η ζωγραφική
                 notes.append("Not an art marker. Skipping coloring pad slot.")
                 pool = pool.head(0)
             else:
-                # 2. Ανιχνεύουμε αν πρόκειται για παιδικό προϊόν ή ενηλίκων/επαγγελματικό
                 kids_brands = ['GIOTTO', 'CARIOCA', 'CRAYOLA', 'MAPED', 'FIBRAPEN', 'MILAN', 'BIC']
                 is_kid = tb in kids_brands or 'παιδ' in _tt_lower or 'kids' in _tt_lower or 'maxi' in _tt_lower or 'jumbo' in _tt_lower
                 
                 b4_col = len(pool)
+                hier_col = pool['Hierarchy'].fillna('').str.upper().str.strip()
+                
                 if is_kid:
-                    # 👧 Παιδιά: Κρατάμε ΑΥΣΤΗΡΑ μόνο το "Είδος: Ζωγραφικής" και διώχνουμε τα Mandala
+                    # 👧 Παιδιά: Απαγορεύουμε τα COLORING BOOKS ενηλίκων και ζητάμε αυστηρά είδη ζωγραφικής/μπλοκ
+                    is_coloring_book_hier = hier_col == 'COLORING BOOKS'
                     is_drawing_pad = pool['Είδος'].fillna('').str.lower() == 'ζωγραφικής'
                     is_drawing_pad |= pool['Title'].fillna('').str.lower().str.contains('μπλοκ ζωγραφικής|sketch pad|μπλοκ σχεδίου')
                     is_adult = pool['Title'].fillna('').str.lower().str.contains('mandala|μαντάλα|ενηλίκων|adult')
                     
-                    pool = pool[is_drawing_pad & ~is_adult]
+                    pool = pool[(is_drawing_pad) & (~is_adult) & (~is_coloring_book_hier)]
                     notes.append(f"Kids Marker -> Φιλτράρισμα σε 'Μπλοκ Ζωγραφικής' ({b4_col} → {len(pool)})")
                 else:
-                    # 🧑 Ενήλικες: Κρατάμε Adult Coloring Books & Ειδικά Χαρτιά Μαρκαδόρου (Marker Pads)
-                    is_adult = pool['Title'].fillna('').str.lower().str.contains('ενηλίκων|adult|coloring book')
-                    is_pro_pad = pool['Title'].fillna('').str.lower().str.contains('bristol|marker pad|mixed media|moleskine')
+                    # 🧑 Ενήλικες: Στοχεύουμε ΑΠΕΥΘΕΙΑΣ τη Hierarchy 'COLORING BOOKS' (από τα βιβλία)
+                    # ή ειδικά χαρτιά μαρκαδόρων από τα Χαρτικά!
+                    is_coloring_book_hier = hier_col == 'COLORING BOOKS'
+                    is_adult_title = pool['Title'].fillna('').str.lower().str.contains('mandala|μαντάλα|ενηλίκων|adult|coloring book')
+                    is_pro_pad = pool['Title'].fillna('').str.lower().str.contains('bristol|marker pad|mixed media|moleskine|μπλοκ σχεδίου|ακουαρέλας')
                     
-                    pool = pool[is_adult | is_pro_pad]
-                    notes.append(f"Adult Marker -> Φιλτράρισμα σε Adult Coloring / Marker Pads ({b4_col} → {len(pool)})")
+                    pool = pool[is_coloring_book_hier | is_adult_title | is_pro_pad]
+                    notes.append(f"Adult Marker -> Φιλτράρισμα σε COLORING BOOKS / Pro Pads ({b4_col} → {len(pool)})")
 
                 
         # ── Deep Attribute Matching (Art Mediums & Techniques) ──
