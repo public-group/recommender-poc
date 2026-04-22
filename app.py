@@ -3768,21 +3768,15 @@ PENCILS_SLOTS = [
 ]
 
 MARKERS_SLOTS = [
-    # 1. Variant Matches (Ίδιο Brand, Ίδια Μύτη, ΙΔΙΟ ΕΙΔΟΣ, Άλλο Χρώμα)
-    ("Alt Color Marker 1", ['ΜΑΡΚΑΔΟΡΟΙ ΖΩΓΡΑΦΙΚΗΣ', 'ΜΑΡΚΑΔΟΡΟΙ ΥΠΟΓΡΑΜΜΙΣΗΣ', 'ΜΑΡΚΑΔΟΡΟΙ ΠΙΝΑΚΑ', 'ΜΑΡΚΑΔΟΡΟΙ ΑΝΕΞΙΤΗΛΟΙ', 'ΜΑΡΚΑΔΟΡΟΙ'], {'match_marker_variant': True, 'match_eidos': True}),
-    ("Alt Color Marker 2", ['ΜΑΡΚΑΔΟΡΟΙ ΖΩΓΡΑΦΙΚΗΣ', 'ΜΑΡΚΑΔΟΡΟΙ ΥΠΟΓΡΑΜΜΙΣΗΣ', 'ΜΑΡΚΑΔΟΡΟΙ ΠΙΝΑΚΑ', 'ΜΑΡΚΑΔΟΡΟΙ ΑΝΕΞΙΤΗΛΟΙ', 'ΜΑΡΚΑΔΟΡΟΙ'], {'match_marker_variant': True, 'match_eidos': True}),
+    ("Alt Color Marker 1",['ΜΑΡΚΑΔΟΡΟΙ ΖΩΓΡΑΦΙΚΗΣ', 'ΜΑΡΚΑΔΟΡΟΙ ΥΠΟΓΡΑΜΜΙΣΗΣ', 'ΜΑΡΚΑΔΟΡΟΙ ΠΙΝΑΚΑ', 'ΜΑΡΚΑΔΟΡΟΙ ΑΝΕΞΙΤΗΛΟΙ', 'ΜΑΡΚΑΔΟΡΟΙ'], {'match_marker_variant': True}),
+    ("Alt Color Marker 2",['ΜΑΡΚΑΔΟΡΟΙ ΖΩΓΡΑΦΙΚΗΣ', 'ΜΑΡΚΑΔΟΡΟΙ ΥΠΟΓΡΑΜΜΙΣΗΣ', 'ΜΑΡΚΑΔΟΡΟΙ ΠΙΝΑΚΑ', 'ΜΑΡΚΑΔΟΡΟΙ ΑΝΕΞΙΤΗΛΟΙ', 'ΜΑΡΚΑΔΟΡΟΙ'], {'match_marker_variant': True}),
     
-    # 2. Έξυπνα Art Slots (Εμφανίζονται ΜΟΝΟ αν ο μαρκαδόρος είναι "Ζωγραφικής")
-    ("Coloring Pad 1",    ['ΜΠΛΟΚ-ΧΑΡΤΙΑ', 'ΧΑΡΤΙΑ - ΜΠΛΟΚ', 'ΜΠΛΟΚ - ΧΑΡΤΙΑ ΖΩΓΡΑΦΙΚΗΣ'], {'match_coloring_activity': True, 'match_nib_type': True}),
-    ("Coloring Pad 2",    ['ΜΠΛΟΚ-ΧΑΡΤΙΑ', 'ΧΑΡΤΙΑ - ΜΠΛΟΚ', 'ΜΠΛΟΚ - ΧΑΡΤΙΑ ΖΩΓΡΑΦΙΚΗΣ'], {'match_coloring_activity': True, 'match_nib_type': True}),
+    # ΠΡΟΣΘΕΣΑΜΕ ΤΟ 'COLORING BOOKS' ΕΔΩ:
+    ("Coloring Pad 1",    ['ΜΠΛΟΚ-ΧΑΡΤΙΑ', 'ΧΑΡΤΙΑ - ΜΠΛΟΚ', 'ΜΠΛΟΚ - ΧΑΡΤΙΑ ΖΩΓΡΑΦΙΚΗΣ', 'COLORING BOOKS'], {'match_coloring_activity': True, 'match_nib_type': True}),
+    ("Coloring Pad 2",    ['ΜΠΛΟΚ-ΧΑΡΤΙΑ', 'ΧΑΡΤΙΑ - ΜΠΛΟΚ', 'ΜΠΛΟΚ - ΧΑΡΤΙΑ ΖΩΓΡΑΦΙΚΗΣ', 'COLORING BOOKS'], {'match_coloring_activity': True, 'match_nib_type': True}),
     
-    # 3. Κλασικά Τετράδια (Κρύβει το ιχνογραφίας, boostάρει ανάλογα τη μύτη)
     ("Notebook",          ['ΤΕΤΡΑΔΙΟ', 'ΣΗΜΕΙΩΜΑΤΑΡΙΟ', 'ΜΠΛΟΚ'],       {'match_nib_type': True, 'title_boost': ['A4', 'A5', 'Lined', 'Γραμμές'], 'title_hide': ['Ιχνογραφίας', 'Πολυγράφου']}),
-    
-    # 4. Εναλλακτικοί Μαρκαδόροι (για UPSALE, π.χ. σετ μαρκαδόρων της ίδιας εταιρείας)
     ("Alt Markers",       ['ΜΑΡΚΑΔΟΡΟΙ ΥΠΟΓΡΑΜΜΙΣΗΣ', 'ΜΑΡΚΑΔΟΡΟΙ ΠΙΝΑΚΑ', 'ΜΑΡΚΑΔΟΡΟΙ ΑΝΕΞΙΤΗΛΟΙ', 'ΜΑΡΚΑΔΟΡΟΙ', 'ΜΑΡΚΑΔΟΡΟΙ ΖΩΓΡΑΦΙΚΗΣ'], {'match_nib_type': True, 'title_boost': ['Pastel', 'Neon', '12-pack', 'Extended']}),
-    
-    # 5. Υπόλοιπα Standard Αξεσουάρ
     ("Pen",               ['ΣΤΥΛΟ ΥΓΡΗΣ ΜΕΛΑΝΗΣ', 'ΣΤΥΛΟ GEL', 'ΜΟΛΥΒΙΑ'], {'title_boost': ['Black', 'Blue', '0.7mm']}),
     ("Sticky Notes",      ['POST-IT-ΧΑΡΤΑΚΙΑ ΣΗΜΕΙΩΣΕΩΝ', 'ΣΕΛΙΔΟΔΕΙΚΤΕΣ'], {'title_boost': ['Arrow', 'Flag', 'Index', 'Σημάδια']}),
     ("Pencil Case",       ['ΚΑΣΕΤΙΝΕΣ-ΘΗΚΕΣ', 'ΣΧΟΛΙΚΕΣ ΚΑΣΕΤΙΝΕΣ', 'ΜΟΛΥΒΟΘΗΚΕΣ'], {'title_boost': ['Wide', 'Large', 'Compartment', 'Φαρδιά']}),
@@ -4871,7 +4865,7 @@ def run_peripherals_engine(trigger, df_products, df_history, cluster_key):
                     notes.append(f"Kids Marker -> Φιλτράρισμα σε 'Μπλοκ Ζωγραφικής' ({b4_col} → {len(pool)})")
                 else:
                     # 🧑 Ενήλικες: Κρατάμε Adult Coloring Books & Ειδικά Χαρτιά Μαρκαδόρου (Marker Pads)
-                    is_adult = pool['Title'].fillna('').str.lower().str.contains('mandala|μαντάλα|ενηλίκων|adult|coloring book')
+                    is_adult = pool['Title'].fillna('').str.lower().str.contains('ενηλίκων|adult|coloring book')
                     is_pro_pad = pool['Title'].fillna('').str.lower().str.contains('bristol|marker pad|mixed media|moleskine')
                     
                     pool = pool[is_adult | is_pro_pad]
@@ -5182,12 +5176,13 @@ elif active_cluster in ("Mouse", "Keyboard", "Gaming Mouse", "Gaming Keyboard"):
     recs, diag, slot_notes, full_candidates = run_peripherals_engine(trigger, df_peripherals, df_history, active_cluster)
     slot_diag = []
 elif active_cluster in STATIONERY_CLUSTERS:
-    # Stationery uses the same peripherals engine with stationery-specific slots
+    # Συνδυάζουμε Stationery ΚΑΙ Books ώστε να μπορεί να "δει" τα Coloring Books!
+    combined_stat_books = pd.concat([df_stationery, df_books], ignore_index=True)
+    
     stat_slots = STATIONERY_CLUSTER_SLOTS.get(active_cluster, [])
     if stat_slots:
-        # Temporarily inject slots into PERIPHERAL_CLUSTER_SLOTS for the engine
         PERIPHERAL_CLUSTER_SLOTS[active_cluster] = stat_slots
-    recs, diag, slot_notes, full_candidates = run_peripherals_engine(trigger, df_stationery, df_history, active_cluster)
+    recs, diag, slot_notes, full_candidates = run_peripherals_engine(trigger, combined_stat_books, df_history, active_cluster)
     slot_diag = []
 elif active_cluster in ("Monitors", "Printers", "Webcam", "USB Hub"):
     recs, diag, slot_notes, full_candidates = run_peripherals_engine(trigger, df_peripherals, df_history, active_cluster)
