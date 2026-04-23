@@ -3820,15 +3820,15 @@ PENS_SLOTS = [
 ]
 
 PENCILS_SLOTS = [
+    ("Mechanical Lead",   ['ΜΟΛΥΒΙΑ'],                                    {'match_lead_mm': True, 'leads_only': True}),
     ("Matching Accessory",['ΜΟΛΥΒΙΑ', 'ΞΥΣΤΡΕΣ'],                         {'match_writing_type': True}),
     ("Sharpener",         ['ΞΥΣΤΡΕΣ'],                                    {'match_writing_type': True, 'eidos_boost': ['Βαρελάκι', 'Κλασική', 'Με γόμα'], 'title_boost': ['Metal', 'Dual', 'Μεταλλική', 'Διπλή'], 'title_hide': ['Ηλεκτρική']}),
-    ("Eraser",            ['ΓΟΜΕΣ'],                                      {'eidos_boost': ['Γόμα'], 'title_boost': ['White', 'Λευκή', 'Soft', 'Μαλακή', 'Staedtler', 'Faber'], 'title_hide': ['Ταινία', 'Υγρό', 'Διορθωτικ']}),
+    ("Eraser",            ['ΓΟΜΕΣ'],                                      {'eidos_boost': ['Γόμα'], 'title_boost': ['White', 'Λευκή', 'Soft', 'Pencil', 'Μολυβιού'], 'title_hide': ['Ταινία', 'Υγρό', 'Διορθωτικ']}),
     ("Alt Pencils",       ['ΜΟΛΥΒΙΑ'],                                    {'typos_boost': ['Απλό Μολύβι', 'Μηχανικό Μολύβι', 'Με Γόμα'], 'title_boost': ['Set', 'Σετ', 'HB', '2B', '4B', '6B', 'Pack']}),
     ("Pencil Case",       ['ΚΑΣΕΤΙΝΕΣ-ΘΗΚΕΣ', 'ΣΧΟΛΙΚΕΣ ΚΑΣΕΤΙΝΕΣ', 'ΜΟΛΥΒΟΘΗΚΕΣ'], {'title_boost': ['Large', 'Μεγάλη', 'Compartment', 'Θήκες', 'Zipper', 'Φερμουάρ']}),
     ("Pen",               ['ΣΤΥΛΟ ΥΓΡΗΣ ΜΕΛΑΝΗΣ', 'ΣΤΥΛΟ GEL', 'ΣΤΥΛΟ ΔΙΑΡΚΕΙΑΣ'], {'title_boost': ['Black', 'Blue', 'Μαύρο', 'Μπλε']}),
-    ("Notebook",          ['ΣΗΜΕΙΩΜΑΤΑΡΙΑ', 'ΤΕΤΡΑΔΙΑ'],                  {'eidos_boost': ['Σημειώσεων', 'Σχεδίου'], 'title_boost': ['A4', 'A5', 'Lined', 'Γραμμές', 'Καρέ'], 'title_hide': ['Ακουαρέλας', 'Ιχνογραφίας', 'Πολυγράφου', 'Κολάζ', 'Ριζόχαρτο']}),
-    ("Mechanical Lead",   ['ΜΟΛΥΒΙΑ'],                                    {'typos_include': ['Μύτες για Μηχανικό Μολύβι'], 'match_lead_mm': True, 'title_boost': ['HB', '2B']}),
-    ("Geometric Tools",   ['ΓΕΩΜΕΤΡΙΚΑ ΟΡΓΑΝΑ', 'ΟΡΓΑΝΑ ΜΕΤΡΗΣΗΣ'],      {'title_boost': ['Ruler', 'Χάρακας', '15cm', '20cm', '30cm'], 'title_hide': ['Compass', 'Protractor', 'Set']}),
+    ("Notebook",          ['ΣΗΜΕΙΩΜΑΤΑΡΙΑ', 'ΤΕΤΡΑΔΙΑ'],                   {'eidos_boost': ['Σημειώσεων', 'Σχεδίου'], 'title_boost': ['A4', 'A5', 'Lined', 'Γραμμές', 'Καρέ'], 'title_hide': ['Ακουαρέλας', 'Ιχνογραφίας', 'Πολυγράφου', 'Κολάζ', 'Ριζόχαρτο']}),
+    ("Geometric Tools",   ['ΓΕΩΜΕΤΡΙΚΑ ΟΡΓΑΝΑ', 'ΟΡΓΑΝΑ ΜΕΤΡΗΣΗΣ'],       {'title_boost': ['Ruler', 'Χάρακας', '15cm', '20cm', '30cm'], 'title_hide': ['Compass', 'Protractor', 'Set']}),
     ("Highlighter",       ['ΜΑΡΚΑΔΟΡΟΙ ΥΠΟΓΡΑΜΜΙΣΗΣ'],                    {'title_boost': ['Pastel', '4-pack', 'Soft'], 'title_hide': ['Permanent', 'Whiteboard', 'Neon']}),
 ]
 
@@ -5050,22 +5050,41 @@ def run_peripherals_engine(trigger, df_products, df_history, cluster_key):
                 notes.append("Classic pencil detected -> Boosted 'Βαρελάκι' sharpeners")
 
 
-        # ── Mechanical Lead Thickness Matching (0.5mm, 0.7mm, etc.) ──
+        # ── Mechanical Lead Logic (Priority Slot 1) ──
+        if flags.get('leads_only'):
+            # Ελέγχουμε αν το trigger είναι όντως μηχανικό μολύβι
+            is_mechanical = 'μηχανικό' in f"{str(trigger.get('Τύπος', '')).lower()} {_tt_lower}"
+            
+            if not is_mechanical:
+                # Αν δεν είναι μηχανικό, αδειάζουμε το pool ώστε το Slot 1 να προσπεραστεί
+                pool = pool.head(0)
+                notes.append("Not a mechanical pencil -> Skipping Lead slot")
+            else:
+                # Αυστηρό φίλτρο: Μόνο Μύτες
+                pool = pool[pool['Τύπος'].fillna('').str.contains('Μύτες για Μηχανικό Μολύβι', na=False, case=False)]
+                notes.append("Strict filter: Leads only")
+
         if flags.get('match_lead_mm'):
-            # Extract thickness from trigger title (e.g., 0.5, 0.7, 0.9, 1.0, 1.4, 2.0)
+            # Εξαγωγή mm από τον τίτλο του trigger (π.χ. 0.5)
             t_mm_match = re.search(r'(0\.[3579]|1\.0|1\.4|2\.0)\s*mm?', _tt_lower)
             if t_mm_match:
                 t_mm = t_mm_match.group(1)
+                
+                # Αναζήτηση στα πεδία Πάχος Γραφής ή στον Τίτλο των υποψηφίων
                 p_title = pool['Title'].fillna('').str.lower()
+                p_thickness = pool['Πάχος Γραφής'].fillna('').astype(str).str.lower()
                 
-                # Regex ensures we match exactly "0.5" and not "0.55"
-                is_same_mm = p_title.str.contains(rf'(?<!\d){re.escape(t_mm)}(?!\d)', regex=True)
+                # Το regex διασφαλίζει ότι το "0.5" δεν θα ταιριάξει με το "0.55"
+                is_same_mm = p_title.str.contains(rf'(?<!\d){re.escape(t_mm)}(?!\d)', regex=True) | \
+                             p_thickness.str.contains(rf'(?<!\d){re.escape(t_mm)}(?!\d)', regex=True)
                 
-                # Massive boost to guarantee the exact mm wins
+                # Τεράστιο boost για να σιγουρέψουμε ότι οι σωστές μύτες θα βγουν πρώτες
                 pool.loc[is_same_mm, 'Final_Score'] += 500000
-                notes.append(f"Lead Thickness Match ({t_mm}mm): Boosted {is_same_mm.sum()} items (+500k)")
+                # Penalty σε όσες μύτες έχουν λάθος mm
+                pool.loc[~is_same_mm, 'Final_Score'] -= 100000
+                notes.append(f"Matching Lead Thickness ({t_mm}mm): Boosted {is_same_mm.sum()} items")
             else:
-                notes.append("No mm thickness found on trigger. Proceeding with generic leads.")
+                notes.append("No mm thickness found on trigger pencil.")
 
                 
         # ── Deep Attribute Matching (Art Mediums & Techniques) ──
