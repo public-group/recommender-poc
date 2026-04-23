@@ -4302,12 +4302,11 @@ def run_peripherals_engine(trigger, df_products, df_history, cluster_key):
     has_rgb = 'rgb' in str(trigger.get('Πρόσθετα χαρακτηριστικά', '')).lower() or 'rgb' in _tt_lower
     no_battery = is_wired or is_apple
 
-    # ── Kid/whimsical theme detection ──
+# ── Kid/whimsical theme detection ──
     # Signal that trigger is a cutesy/kids product; used to decide whether to penalize kids-themed candidates.
     # Professional triggers (Pilot ballpoint, Tipp-Ex correction tape, etc.) should NOT get Kawaii Ladybug pencil cases.
     # Covers: cute names/motifs, kid-brand signals (Maxi/Jumbo sizes), and common typo variants.
-    KID_THEME_RE = r'kitty|kawaii|\bmeow\b|πεταλούδα|ladybug|παγωτό|γκλίτερ|glitter|unicorn|μονόκερος|teddy|\bkids\b|παιδικ|princess|πριγκίπισσα|disney|sparkle|σπάρκλ|rainbow|donut|cupcake|kawai|cute pet|μικροί ζωγράφο|fairy|νεράιδ|pixel|\bmaxi\b|\bjumbo\b|minnie|mickey|peppa|barbie|spiderman|spider-man|paw patrol|marvel|avengers|pj masks|frozen|elsa|anna|minions|hot wheels|lol surprise|l\.o\.l|super mario|sonic|batman|superman'    trigger_is_kid_theme = bool(re.search(KID_THEME_RE, _tt_lower))
-    # Also treat known kid-oriented brands as kid-themed triggers
+    KID_THEME_RE = r'kitty|kawaii|\bmeow\b|πεταλούδα|ladybug|παγωτό|γκλίτερ|glitter|unicorn|μονόκερος|teddy|\bkids\b|παιδικ|princess|πριγκίπισσα|disney|sparkle|σπάρκλ|rainbow|donut|cupcake|kawai|cute pet|μικροί ζωγράφο|fairy|νεράιδ|pixel|\bmaxi\b|\bjumbo\b|minnie|mickey|peppa|barbie|spiderman|spider-man|paw patrol|marvel|avengers|pj masks|frozen|elsa|anna|minions|hot wheels|lol surprise|l\.o\.l|super mario|sonic|batman|superman'
     _kid_brand_set = {'GIOTTO', 'CARIOCA', 'CRAYOLA', 'FIBRAPEN', 'MILAN'}
     if not trigger_is_kid_theme and tb in _kid_brand_set:
         trigger_is_kid_theme = True
