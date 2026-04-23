@@ -7,6 +7,8 @@ import re
 import io
 import traceback
 from difflib import SequenceMatcher
+
+
 st.set_page_config(page_title="Smart Recommender POC", layout="wide")
 
 # ─────────────────────────────────────────────────────────────
@@ -100,7 +102,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v23 Markers
+        🟢 Engine v22.1 — Peripherals: Mouse/KB/Gaming Mouse/Gaming KB + Streaming Είδος + Monitors (dedicated HDMI/DP/USB ports) + Backfill + Printers + Webcam + USB Hub
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -2579,6 +2581,17 @@ def run_laptops_engine(trigger, df_products, df_history):
     # Ports column sometimes only lists DisplayPort. Treat Surface as USB-C.
     is_surface = tb == 'MICROSOFT' and 'surface' in tt.lower()
 
+    # 2-in-1 convertibles: touchscreen + hinge laptops. Coolers don't fit these 
+    # (often used in tablet mode, detached from desk), and a Surface 2-in-1 
+    # benefits from a dedicated Surface Keyboard + Pen setup.
+    is_2in1 = '2 σε 1' in tusage or '2-in-1' in tusage or '2 in 1' in tusage or 'convertible' in tusage or 'συνδυαστικ' in tusage or '2σε1' in tusage
+    is_ms_2in1 = is_surface or (tb == 'MICROSOFT' and is_2in1)
+
+    # OLED screen detection — for OLED-laptop buyers we should prefer OLED monitors
+    # (color-accurate creative work, HDR media, etc.)
+    tscreen_tech = str(trigger.get('Τεχνολογία Οθόνης', '')).lower() + ' ' + str(trigger.get('Τύπος Οθόνης', '')).lower() + ' ' + tt.lower() + ' ' + tusage
+    trigger_is_oled = 'oled' in tscreen_tech or 'amoled' in tscreen_tech
+
     # --- 2026 GR Market Tier (Performance Pairing) ---
     laptop_tier = get_laptop_tier(tprice)
     tier_names = {1: "Budget/Entry", 2: "Mid-Range/AI-Ready", 3: "High-End/Pro", 4: "Extreme/Workstation"}
@@ -2588,7 +2601,7 @@ def run_laptops_engine(trigger, df_products, df_history):
     tres_str = str(trigger.get('Ανάλυση Οθόνης', ''))
     tres_tier = get_resolution_tier(tres_str)
  
-    diag.append(("0. Trigger", f"Brand={tb}, €{tprice:.0f}", f"Tier {laptop_tier} ({tier_label}), Screen={tscreen}\", Ports={tports[:60]}"))
+    diag.append(("0. Trigger", f"Brand={tb}, €{tprice:.0f}", f"Tier {laptop_tier} ({tier_label}), Screen={tscreen}\", 2-in-1={is_2in1}, OLED={trigger_is_oled}, Ports={tports[:60]}"))
  
     # ── Build candidate pool ──
     c = df_products[df_products['Material'] != tm].copy()
@@ -2640,6 +2653,25 @@ def run_laptops_engine(trigger, df_products, df_history):
  
     for slot_num, role, hierarchies, logic_key in LAPTOP_MAINSTREAM_SLOTS:
         notes = [f"Logic: {logic_key}", f"Target: {hierarchies}"]
+
+        # ── 2-in-1 override: skip Cooler slot entirely (useless for convertibles) ──
+        if is_2in1 and logic_key == 'STAND_SIZE':
+            notes.append("🚫 2-in-1 → skip Cooler (useless for convertibles)")
+            slot_notes[slot_num] = notes
+            diag.append((f"Slot {slot_num} ({role})", 0, "Skipped (2-in-1)"))
+            continue
+
+        # ── Microsoft 2-in-1 overrides: Surface Keyboard (slot 1), Surface Pen (slot 3) ──
+        if is_ms_2in1 and slot_num == 1:
+            # Slot 1 normally = "Τσάντα Laptop" → hijack to Surface Keyboard
+            hierarchies = ['KEYBOARDS WIRELESS', 'KEYBOARDS']
+            role = 'Microsoft Surface Keyboard'
+            notes.append("🪟 MS 2-in-1 → Slot 1 = Surface Keyboard")
+        elif is_ms_2in1 and slot_num == 3:
+            # Slot 3 normally = "Powerbank" → hijack to Surface Pen (stylus)
+            hierarchies = ['ΓΡΑΦΙΔΕΣ']
+            role = 'Microsoft Surface Pen'
+            notes.append("🪟 MS 2-in-1 → Slot 3 = Surface Pen")
  
         # Hierarchy match — exact first, substring fallback
         hier_upper = [h.upper().strip() for h in hierarchies]
@@ -2657,6 +2689,25 @@ def run_laptops_engine(trigger, df_products, df_history):
  
         notes.append(f"Pool: {len(pool)}")
         pool = pool[~pool['Material'].isin(used_materials)]
+
+        # ── Non-gaming laptop: hide RGB-titled products globally ──
+        # Gaming keyboards/mice with RGB don't fit professional/student/MS Surface laptops.
+        if not is_gaming and not pool.empty:
+            rgb_mask = pool['Title'].fillna('').str.contains(r'\brgb\b', case=False, regex=True, na=False)
+            if rgb_mask.any():
+                b4_rgb = len(pool)
+                pool = pool[~rgb_mask]
+                if b4_rgb > len(pool):
+                    notes.append(f"🚫 Non-gaming: removed {b4_rgb - len(pool)} RGB-titled items")
+
+        # ── Microsoft 2-in-1 slot 1/3 overrides: filter brand to MICROSOFT first ──
+        if is_ms_2in1 and slot_num in (1, 3) and not pool.empty:
+            ms_brand_mask = pool['Κατασκευαστής'].fillna('').astype(str).str.strip().str.upper() == 'MICROSOFT'
+            if ms_brand_mask.any():
+                pool = pool[ms_brand_mask]
+                notes.append(f"🪟 Filtered to Microsoft brand: {len(pool)}")
+            else:
+                notes.append(f"⚠ No Microsoft-brand items in {hierarchies}")
  
         if pool.empty:
             notes.append("❌ Empty after dedup")
@@ -2992,6 +3043,13 @@ def run_laptops_engine(trigger, df_products, df_history):
                 high_refresh = pool['Title'].fillna('').str.lower().str.contains('144hz|165hz|180hz|240hz|360hz', regex=True, na=False)
                 pool.loc[high_refresh, 'Final_Score'] += 30000
                 notes.append("High-refresh boost (≥144Hz) — match GPU performance")
+
+            # 🌈 OLED laptop → OLED monitor match (color-accurate creative pairing)
+            if trigger_is_oled:
+                oled_mon = pool['Title'].fillna('').str.lower().str.contains(r'\boled\b|\bamoled\b|\bqd-oled\b', regex=True, na=False)
+                pool.loc[oled_mon, 'Final_Score'] += 250000
+                if oled_mon.any():
+                    notes.append(f"🌈 OLED laptop → OLED monitor boost +250k ({oled_mon.sum()} items)")
 
 
             vesa_mon = pool['Title'].fillna('').str.lower().str.contains('vesa|ergonomic|pivot', regex=True, na=False)
@@ -3615,12 +3673,14 @@ PERIPHERAL_TRIGGERS = {
 # (role, hierarchies, flags)
 # flags keys:
 #   title_boost/title_hide: [str] — keyword boost/penalty
+#   title_include: [str] — HARD filter: only keep candidates whose title matches (use when boost isn't enough)
 #   eidos_include: [str] — filter pool to these Είδος values (OR title match)
 #   eidos_boost: [str] — +80k to items with these Είδος values
 #   eidos_exclude: [str] — hard-filter OUT items with these Είδος values
 #   typos_include: [str] — filter pool to these Τύπος values (OR title match)
 #   typos_boost: [str] — +80k to items with these Τύπος values
 #   typos_exclude: [str] — hard-filter OUT items with these Τύπος values
+#   allow_kids_theme: bool — skip the global kid-theme penalty (use for kids-specific slots)
 #   brand_match: bool — same brand as trigger +80k
 #   connectivity_mirror: bool — match wired/wireless
 #   wrist_rest_only/xxl_only: bool — filter to specific pad types
@@ -3661,38 +3721,38 @@ MOUSE_SLOTS = [
 KEYBOARD_SLOTS = [
     ("Mouse",               ['MOUSE WIRELESS', 'MOUSE WIRED', 'APPLE ORIGINAL WIRELESS MOUSE'], {'connectivity_mirror': True, 'brand_match': True, 'apple_force': 'APPLE ORIGINAL WIRELESS MOUSE', 'silent_match': True, 'ergo_match': True}),
     ("Desk Mat",            ['MOUSE PADS'],                   {'xxl_only': True}),
-    ("Batteries",           ['ΑΛΚΑΛΙΚΕΣ'],                    {'skip_if': 'no_battery', 'fallback_hier': ['USB HUB DEVICES'], 'title_hide': ['CR', 'Button', 'Coin', 'Λιθίου'], 'title_boost': ['AA', 'AAA', 'LR6', 'LR03']}),
-    ("Cleaning",            ['CLEANING PRODUCTS'],            {}),
+    ("Batteries/USB Hub",   ['ΑΛΚΑΛΙΚΕΣ'],                    {'skip_if': 'no_battery', 'fallback_hier': ['USB HUB DEVICES'], 'title_hide': ['CR', 'Button', 'Coin', 'Λιθίου'], 'title_boost': ['AA', 'AAA', 'LR6', 'LR03']}),
+    ("Cleaning",            ['CLEANING PRODUCTS'],            {'title_include': ['Αέρας', 'Σπρέι', 'Spray', 'Compressed air', 'Air duster', 'Πεπιεσμένου αέρα', 'Duster']}),
     ("PC Speakers",         ['PC SPEAKERS 2.0', 'PC SPEAKERS 1'], {}),
     ("PC Headset",          ['PC HEADSET/MICROPHONE', 'OVERHEAD'], {}),
-    ("Desk Lamp",           ['ΕΞΥΠΝΟΣ ΦΩΤΙΣΜΟΣ'],            {'title_boost': ['Desk', 'Γραφείου', 'Table', 'Επιτραπέζιο', 'Φωτιστικό'], 'title_hide': ['Ceiling', 'Bulb', 'Strip', 'Οροφής', 'Λάμπα', 'E27', 'E14', 'Ταινία', 'Λεντοταινία']}),
+    ("Desk Lamp",           ['ΕΞΥΠΝΟΣ ΦΩΤΙΣΜΟΣ'],            {'title_boost': ['Desk', 'Γραφείου', 'Table', 'Επιτραπέζιο', 'Φωτιστικό'], 'title_hide': ['Ceiling', 'Bulb', 'Strip', 'Οροφής', 'Λάμπα', 'Λαμπτήρας', 'E27', 'E14', 'Ταινία', 'Λεντοταινία']}),
     ("Wrist Rest",          ['MOUSE PADS'],                   {'wrist_rest_only': True}),
     ("Mouse 2",             ['MOUSE WIRELESS', 'MOUSE WIRED', 'APPLE ORIGINAL WIRELESS MOUSE'], {'connectivity_mirror': True, 'brand_match': True, 'apple_force': 'APPLE ORIGINAL WIRELESS MOUSE'}),
-    ("Keyboard 2",          ['KEYBOARDS WIRELESS', 'KEYBOARDS WIRED'], {'connectivity_mirror': True, 'brand_match': True, 'apple_force': 'APPLE ORIGINAL WIRELESS KEYBOARD'}),
+    ("Monitor Riser",       ['ΒΑΣΕΙΣ ΓΡΑΦΕΙΟΥ'],              {'title_boost': ['Riser', 'Stand', 'Drawer', 'Organizer'], 'title_hide': ['Wall Mount', 'Gas Spring', 'VESA', 'CPU', 'Υπολογιστή', 'Βραχίον']}),
 ]
 
 GAMING_MOUSE_SLOTS = [
     ("Gaming Pad",          ['GAMING MOUSE PADS'],            {'title_hide': ['Gel', 'Wrist'], 'sensor_surface': True, 'brand_match': True}),
     ("Gaming Keyboard",     ['GAMING KEYBOARDS'],             {'brand_match': True, 'rgb_match': True, 'button_kb_size': True, 'connectivity_mirror': True}),
-    ("Batteries/USB Hub",   ['ΑΛΚΑΛΙΚΕΣ'],                    {'skip_if': 'no_battery', 'fallback_hier': ['USB HUB DEVICES']}),
+    ("Batteries/USB Hub",   ['ΑΛΚΑΛΙΚΕΣ'],                    {'skip_if': 'no_battery', 'fallback_hier': ['USB HUB DEVICES'], 'title_hide': ['CR', 'Button', 'Coin', 'Λιθίου'], 'title_boost': ['AA', 'AAA', 'LR6', 'LR03']}),
     ("Gaming Headset",      ['GAMING AUDIO'],                 {'brand_match': True}),
     ("Αξεσουάρ Streaming",  ['STREAMING ACCESSORIES'],        {'eidos_include': ['Capture Card', 'Gaming Αξεσουάρ', 'Green Screen', 'LED ring light', 'Mic Arm', 'Prompter', 'RGB Controller', 'Ring Light', 'Selfie Stick', 'Stream Controller', 'Stream Deck', 'Streaming Kit', 'USB Hub', 'Web Camera', 'Άλλο', 'Ασύρματο μικρόφωνο για vlogging', 'Βάση Στήριξης', 'Βραχίονας μικροφώνου', 'Επαγγελματικά Μικρόφωνα', 'Επιτραπέζιο', 'Ηχοαπορροφητικά Πάνελ', 'Κάρτα καταγραφής βίντεο', 'Κάρτα καταγραφής βίντεο (Capture Card)', 'Μικρόφωνο', 'Μικρόφωνο streaming', 'Τηλεπρομπτέρ με ενσωματωμένη οθόνη', 'Φωτισμός', 'Φωτιστικό']}),
     ("Αξεσουάρ Streaming 2", ['STREAMING ACCESSORIES'],       {'eidos_include': ['Capture Card', 'Gaming Αξεσουάρ', 'Green Screen', 'LED ring light', 'Mic Arm', 'Prompter', 'RGB Controller', 'Ring Light', 'Selfie Stick', 'Stream Controller', 'Stream Deck', 'Streaming Kit', 'USB Hub', 'Web Camera', 'Άλλο', 'Ασύρματο μικρόφωνο για vlogging', 'Βάση Στήριξης', 'Βραχίονας μικροφώνου', 'Επαγγελματικά Μικρόφωνα', 'Επιτραπέζιο', 'Ηχοαπορροφητικά Πάνελ', 'Κάρτα καταγραφής βίντεο', 'Κάρτα καταγραφής βίντεο (Capture Card)', 'Μικρόφωνο', 'Μικρόφωνο streaming', 'Τηλεπρομπτέρ με ενσωματωμένη οθόνη', 'Φωτισμός', 'Φωτιστικό']}),
     ("Headset Stand",       ['GAMING HEADSET STANDS', 'PORTABLE ACCESSORIES'], {}),
-    ("Cleaning Product",    ['CLEANING PRODUCTS'],            {}),
-    ("Smart Lighting",      ['ΕΞΥΠΝΟΣ ΦΩΤΙΣΜΟΣ'],            {'title_hide': ['Ceiling', 'Bulb', 'Strip', 'Οροφής', 'Λάμπα', 'E27', 'E14', 'Ταινία', 'Λεντοταινία']}),
+    ("Cleaning Product",    ['CLEANING PRODUCTS'],            {'title_include': ['Αέρας', 'Σπρέι', 'Spray', 'Compressed air', 'Air duster', 'Πεπιεσμένου αέρα', 'Duster']}),
+    ("Smart Lighting",      ['ΕΞΥΠΝΟΣ ΦΩΤΙΣΜΟΣ'],            {'title_boost': ['Strip', 'LED', 'Bias', 'Backlight', 'RGB', 'Ταινία', 'Λεντοταινία'], 'title_hide': ['Ceiling', 'Bulb', 'Λάμπα', 'Λαμπτήρας', 'E27', 'E14', 'Οροφής', 'Επιτραπέζιο', 'Desk', 'Γραφείου']}),
 ]
 
 GAMING_KEYBOARD_SLOTS = [
     ("Gaming Mousepad",     ['GAMING MOUSE PADS'],            {'brand_match': True, 'title_hide': ['Gel', 'Wrist']}),
     ("Gaming Mouse",        ['GAMING MOUSE'],                 {'brand_match': True, 'rgb_match': True, 'connectivity_mirror': True}),
-    ("Batteries/USB Hub",   ['ΑΛΚΑΛΙΚΕΣ'],                    {'skip_if': 'no_battery', 'fallback_hier': ['USB HUB DEVICES']}),
+    ("Batteries/USB Hub",   ['ΑΛΚΑΛΙΚΕΣ'],                    {'skip_if': 'no_battery', 'fallback_hier': ['USB HUB DEVICES'], 'title_hide': ['CR', 'Button', 'Coin', 'Λιθίου'], 'title_boost': ['AA', 'AAA', 'LR6', 'LR03']}),
     ("Gaming Headset",      ['GAMING AUDIO', 'OVERHEAD'],     {'brand_match': True}),
     ("Αξεσουάρ Streaming",  ['STREAMING ACCESSORIES'],        {'eidos_include': ['Capture Card', 'Gaming Αξεσουάρ', 'Green Screen', 'LED ring light', 'Mic Arm', 'Prompter', 'RGB Controller', 'Ring Light', 'Selfie Stick', 'Stream Controller', 'Stream Deck', 'Streaming Kit', 'USB Hub', 'Web Camera', 'Άλλο', 'Ασύρματο μικρόφωνο για vlogging', 'Βάση Στήριξης', 'Βραχίονας μικροφώνου', 'Επαγγελματικά Μικρόφωνα', 'Επιτραπέζιο', 'Ηχοαπορροφητικά Πάνελ', 'Κάρτα καταγραφής βίντεο', 'Κάρτα καταγραφής βίντεο (Capture Card)', 'Μικρόφωνο', 'Μικρόφωνο streaming', 'Τηλεπρομπτέρ με ενσωματωμένη οθόνη', 'Φωτισμός', 'Φωτιστικό']}),
     ("Αξεσουάρ Streaming 2", ['STREAMING ACCESSORIES'],       {'eidos_include': ['Capture Card', 'Gaming Αξεσουάρ', 'Green Screen', 'LED ring light', 'Mic Arm', 'Prompter', 'RGB Controller', 'Ring Light', 'Selfie Stick', 'Stream Controller', 'Stream Deck', 'Streaming Kit', 'USB Hub', 'Web Camera', 'Άλλο', 'Ασύρματο μικρόφωνο για vlogging', 'Βάση Στήριξης', 'Βραχίονας μικροφώνου', 'Επαγγελματικά Μικρόφωνα', 'Επιτραπέζιο', 'Ηχοαπορροφητικά Πάνελ', 'Κάρτα καταγραφής βίντεο', 'Κάρτα καταγραφής βίντεο (Capture Card)', 'Μικρόφωνο', 'Μικρόφωνο streaming', 'Τηλεπρομπτέρ με ενσωματωμένη οθόνη', 'Φωτισμός', 'Φωτιστικό']}),
     ("Headset Stand",       ['GAMING HEADSET STANDS', 'PORTABLE ACCESSORIES'], {}),
-    ("Cleaning Product",    ['CLEANING PRODUCTS'],            {}),
-    ("Smart Lighting",      ['ΕΞΥΠΝΟΣ ΦΩΤΙΣΜΟΣ'],            {'title_hide': ['Ceiling', 'Bulb', 'Strip', 'Οροφής', 'Λάμπα', 'E27', 'E14', 'Ταινία', 'Λεντοταινία']}),
+    ("Cleaning Product",    ['CLEANING PRODUCTS'],            {'title_include': ['Αέρας', 'Σπρέι', 'Spray', 'Compressed air', 'Air duster', 'Πεπιεσμένου αέρα', 'Duster']}),
+    ("Smart Lighting",      ['ΕΞΥΠΝΟΣ ΦΩΤΙΣΜΟΣ'],            {'title_boost': ['Strip', 'LED', 'Bias', 'Backlight', 'RGB', 'Ταινία', 'Λεντοταινία'], 'title_hide': ['Ceiling', 'Bulb', 'Λάμπα', 'Λαμπτήρας', 'E27', 'E14', 'Οροφής', 'Επιτραπέζιο', 'Desk', 'Γραφείου']}),
 ]
 
 # ── Monitor sub-personas (detected from Χρήση or hierarchy) ──
@@ -3706,7 +3766,7 @@ MONITOR_GAMING_SLOTS = [
     ("LED Strip",           ['ΕΞΥΠΝΟΣ ΦΩΤΙΣΜΟΣ'],            {'title_boost': ['Strip', 'LED', 'Bias', 'Backlight'], 'usage_hide': ['Εξωτερική', 'Εξωτερικού χώρου', 'TV']}),
     ("Monitor Arm",         ['ΒΑΣΕΙΣ ΓΡΑΦΕΙΟΥ'],               {'vesa_match': True, 'title_hide': ['Wall Mount', 'CPU', 'Υπολογιστή', 'Riser', 'Drawer']}),
     ("Screen Cleaner",      ['CLEANING PRODUCTS'],            {}),
-    ("UPS",                 ['ΜΠΑΤΑΡΙΕΣ UPS'],                          {}),
+    ("UPS",                 ['LINE INTERACTIVE', 'ΜΠΑΤΑΡΙΕΣ UPS'],    {}),
 ]
 
 MONITOR_PRO_SLOTS = [
@@ -3719,7 +3779,7 @@ MONITOR_PRO_SLOTS = [
     ("USB-C Hub",           ['USB HUB DEVICES', 'DOCKING STATIONS LAPTOP'], {'title_boost': ['USB-C', 'Thunderbolt', 'Dock']}),
     ("PC Speakers",         ['PC SPEAKERS 2.0'],              {}),
     ("Screen Cleaner",      ['CLEANING PRODUCTS'],            {}),
-    ("UPS",                 ['ΜΠΑΤΑΡΙΕΣ UPS'],                          {}),
+    ("UPS",                 ['LINE INTERACTIVE', 'ΜΠΑΤΑΡΙΕΣ UPS'],    {}),
 ]
 
 MONITOR_MAINSTREAM_SLOTS = [
@@ -3732,7 +3792,8 @@ MONITOR_MAINSTREAM_SLOTS = [
     ("Webcam",              ['PC WEB CAMS'],                  {}),
     ("USB Hub",             ['USB HUB DEVICES'],              {}),
     ("Screen Cleaner",      ['CLEANING PRODUCTS'],            {}),
-    ("Desk Lamp",           ['ΕΞΥΠΝΟΣ ΦΩΤΙΣΜΟΣ'],            {'title_boost': ['Desk', 'Γραφείου', 'Table', 'Επιτραπέζιο', 'Φωτιστικό', 'ScreenBar', 'Monitor Light'], 'title_hide': ['Ceiling', 'Bulb', 'Strip', 'Οροφής', 'Λάμπα', 'E27', 'E14', 'Ταινία', 'Λεντοταινία'], 'usage_hide': ['Gaming', 'Εξωτερική', 'Εξωτερικού χώρου', 'TV']}),
+    ("Desk Lamp",           ['ΕΞΥΠΝΟΣ ΦΩΤΙΣΜΟΣ'],            {'title_boost': ['Desk', 'Γραφείου', 'Table', 'Επιτραπέζιο', 'Φωτιστικό', 'ScreenBar', 'Monitor Light'], 'title_hide': ['Ceiling', 'Bulb', 'Strip', 'Οροφής', 'Λάμπα', 'Λαμπτήρας', 'E27', 'E14', 'Ταινία', 'Λεντοταινία'], 'usage_hide': ['Gaming', 'Εξωτερική', 'Εξωτερικού χώρου', 'TV']}),
+    ("UPS",                 ['LINE INTERACTIVE', 'ΜΠΑΤΑΡΙΕΣ UPS'], {}),
 ]
 
 
@@ -3755,7 +3816,7 @@ PENS_SLOTS = [
     ("Sticky Notes",      ['POST-IT-ΧΑΡΤΑΚΙΑ ΣΗΜΕΙΩΣΕΩΝ'],               {'title_boost': ['3x3', 'Small', 'Square', 'Yellow']}),
     ("Pencil",            ['ΜΟΛΥΒΙΑ'],                                    {'typos_boost': ['Μηχανικό Μολύβι', 'Απλό Μολύβι'], 'title_boost': ['HB', '2B', 'Set', 'Pack']}),
     ("Ruler",             ['ΓΕΩΜΕΤΡΙΚΑ ΟΡΓΑΝΑ', 'ΟΡΓΑΝΑ ΜΕΤΡΗΣΗΣ'],      {'title_boost': ['Ruler', 'Χάρακας', '15cm', '20cm', '30cm'], 'title_hide': ['Compass', 'Protractor', 'Set']}),
-    ("Alternative Pen",   ['ΣΤΥΛΟ ΥΓΡΗΣ ΜΕΛΑΝΗΣ', 'ΣΤΥΛΟ GEL', 'ΣΤΥΛΟ ΔΙΑΡΚΕΙΑΣ'], {}),
+    ("Specialty Pen",     ['ΣΤΥΛΟ ΥΓΡΗΣ ΜΕΛΑΝΗΣ', 'ΣΤΥΛΟ GEL', 'ΣΤΥΛΟ ΔΙΑΡΚΕΙΑΣ'], {'title_boost': ['Fountain', 'Πένα', 'Fine liner', 'Fineliner', 'Calligraphy', 'Erasable', 'Metal', 'Luxury', 'Premium', 'Καλλιγραφίας']}),
 ]
 
 PENCILS_SLOTS = [
@@ -3807,11 +3868,11 @@ HIGHLIGHTERS_SLOTS = [
 WHITEBOARD_MARKERS_SLOTS = [
     ("Alt Whiteboard 1",  ['ΜΑΡΚΑΔΟΡΟΙ ΠΙΝΑΚΑ'], {'match_marker_variant': True}),
     ("Alt Whiteboard 2",  ['ΜΑΡΚΑΔΟΡΟΙ ΠΙΝΑΚΑ'], {'match_nib_type': True, 'title_boost': ['Set', 'Pack', 'Πακέτο', '4 Τεμάχια', '6 Τεμάχια']}),
-    ("Whiteboard Eraser", ['ΒΟΗΘΗΤΙΚΑ ΠΑΡΟΥΣΙΑΣΗΣ'], {'title_boost': ['Eraser', 'Σβήστρα', 'Σβηστήρα', 'Γόμα Πίνακα', 'Σπόγγος', 'Σπογγάκι', 'Whiteboard']}),
-    ("Whiteboard Cleaner",['ΒΟΗΘΗΤΙΚΑ ΠΑΡΟΥΣΙΑΣΗΣ'], {'title_boost': ['Cleaner', 'Spray', 'Καθαριστικό', 'Καθαρισμός', 'Υγρό']}),
-    ("Presentation Acc.", ['ΒΟΗΘΗΤΙΚΑ ΠΑΡΟΥΣΙΑΣΗΣ'], {'title_boost': ['Magnet', 'Μαγνήτες', 'Pointer', 'Δείκτης', 'Pin']}),
+    ("Whiteboard Eraser", ['ΒΟΗΘΗΤΙΚΑ ΠΑΡΟΥΣΙΑΣΗΣ'], {'title_include': ['Σβήστρα', 'Σβηστήρα', 'Γόμα Πίνακα', 'Σπόγγος', 'Σπογγάκι', 'Eraser', 'Whiteboard eraser']}),
+    ("Whiteboard Cleaner",['ΒΟΗΘΗΤΙΚΑ ΠΑΡΟΥΣΙΑΣΗΣ'], {'title_include': ['Cleaner', 'Spray', 'Καθαριστικό', 'Καθαρισμός', 'Υγρό', 'Whiteboard fluid']}),
+    ("Presentation Acc.", ['ΒΟΗΘΗΤΙΚΑ ΠΑΡΟΥΣΙΑΣΗΣ'], {'title_include': ['Magnet', 'Μαγνήτ', 'Pointer', 'Δείκτης', 'Pin', 'Flipchart', 'Chart']}),
     ("Notebook",          ['ΣΗΜΕΙΩΜΑΤΑΡΙΑ', 'ΤΕΤΡΑΔΙΑ'], {'eidos_boost': ['Σημειώσεων'], 'title_hide': ['Ιχνογραφίας', 'Πολυγράφου', 'Ακουαρέλας']}),
-    ("Permanent Marker",  ['ΜΑΡΚΑΔΟΡΟΙ ΑΝΕΞΙΤΗΛΟΙ'], {'title_boost': ['Fine', 'Medium']}),
+    ("Permanent Marker",  ['ΜΑΡΚΑΔΟΡΟΙ ΑΝΕΞΙΤΗΛΟΙ'], {'title_boost': ['Ανεξίτηλος', 'Permanent', 'Fine', 'Medium'], 'title_hide': ['Γραφής', 'Twin', 'Writing']}),
     ("Sticky Notes",      ['POST-IT-ΧΑΡΤΑΚΙΑ ΣΗΜΕΙΩΣΕΩΝ'], {'title_boost': ['Large', 'Μεγάλο']}),
     ("Pen",               ['ΣΤΥΛΟ GEL', 'ΣΤΥΛΟ ΥΓΡΗΣ ΜΕΛΑΝΗΣ'], {'title_boost': ['Black', 'Blue']}),
     ("Pencil Case",       ['ΚΑΣΕΤΙΝΕΣ-ΘΗΚΕΣ', 'ΜΟΛΥΒΟΘΗΚΕΣ'], {}),
@@ -4067,17 +4128,20 @@ PRINTER_LASER_SLOTS = [
 ]
 
 # ── Webcam ──
+# Reorder: Microphone is the highest-value co-purchase for a webcam → slot 1.
+# TRIPODS hierarchy removed from Webcam Mount — DSLR tripods aren't webcam clips.
+# Lighting slots use title_include to avoid ceiling/bulb false-positives (Λάμπα, Λαμπτήρας).
 WEBCAM_SLOTS = [
-    ("Ring Light",          ['ΕΞΥΠΝΟΣ ΦΩΤΙΣΜΟΣ', 'ΦΩΤΙΣΤΙΚΑ'],{'title_boost': ['Ring', 'LED Panel', 'Video Light', 'Streaming'], 'title_hide': ['Ceiling', 'Bulb', 'Strip']}),
-    ("Microphone",          ['PC MICROPHONES'],               {'title_boost': ['USB', 'Condenser', 'Streaming', 'Podcast']}),
-    ("Webcam Mount",        ['ΒΑΣΕΙΣ ΓΡΑΦΕΙΟΥ', 'TRIPODS'],   {'title_boost': ['Desktop', 'Mini', 'Webcam', 'Clip', 'Monitor Mount'], 'title_hide': ['Full Size', 'DSLR', 'Heavy Duty']}),
-    ("USB Extension",       ['USB CABLES'],                   {'title_boost': ['Extension', 'Extender', '3m', '5m'], 'title_hide': ['DisplayPort', 'Charging']}),
-    ("Lens Cleaner",        ['CLEANING PRODUCTS'],            {'title_boost': ['Lens', 'Screen', 'Camera', 'Microfiber', 'Wipes']}),
-    ("PC Headset",          ['PC HEADSET/MICROPHONE'],        {'title_boost': ['Noise Cancelling', 'Teams', 'Zoom', 'Conference']}),
-    ("Desk Lamp",           ['ΕΞΥΠΝΟΣ ΦΩΤΙΣΜΟΣ'],            {'title_boost': ['Desk', 'Γραφείου', 'Table', 'Επιτραπέζιο']}),
-    ("Cable Organizer",     ['CLEANING PRODUCTS', 'USB CABLES'], {}),
-    ("USB Hub",             ['USB HUB DEVICES'],              {'title_boost': ['Desk Mount', 'Clamp']}),
-    ("PC Speakers",         ['PC SPEAKERS 2.0', 'PC SPEAKERS 1'], {'title_boost': ['Desktop', 'USB Powered', 'Compact', '2.0'], 'title_hide': ['Soundbar', '5.1', 'Subwoofer', 'Gaming RGB']}),
+    ("Microphone",          ['PC MICROPHONES'],               {'brand_match': True, 'price_match_trigger': True, 'title_boost': ['USB', 'Condenser', 'Streaming', 'Podcast', 'Desktop', 'Επιτραπέζιο'], 'title_hide': ['Gaming RGB', 'Lavalier', 'Wireless lav']}),
+    ("Ring Light",          ['ΕΞΥΠΝΟΣ ΦΩΤΙΣΜΟΣ', 'ΦΩΤΙΣΤΙΚΑ'],{'title_include': ['Ring', 'LED Panel', 'Video Light', 'Streaming', 'Key Light', 'Softbox', 'Δακτύλιος'], 'title_hide': ['Ceiling', 'Bulb', 'Strip', 'Λάμπα', 'Λαμπτήρας', 'E27', 'E14', 'Smart Bulb', 'Λεντοταινία', 'Ταινία']}),
+    ("Webcam Mount",        ['ΒΑΣΕΙΣ ΓΡΑΦΕΙΟΥ'],               {'title_include': ['Webcam', 'Camera mount', 'Clip', 'Monitor Mount', 'Επιτραπέζι', 'Επιτοίχι', 'Clamp'], 'title_hide': ['Τρίποδο', 'Tripod', 'DSLR', 'Heavy Duty', 'CPU', 'Υπολογιστή', 'Riser', 'Drawer', 'Laptop', 'Notebook', 'Cooler', 'VESA']}),
+    ("USB Extension",       ['USB CABLES'],                   {'title_boost': ['Extension', 'Extender', '3m', '5m'], 'title_hide': ['DisplayPort', 'Charging', 'HDMI']}),
+    ("Lens Cleaner",        ['CLEANING PRODUCTS'],            {'title_include': ['Lens', 'Camera', 'Screen', 'Microfiber', 'Wipes', 'Optical', 'Σπρέι', 'Αέρας']}),
+    ("PC Headset",          ['PC HEADSET/MICROPHONE'],        {'brand_match': True, 'title_boost': ['Noise Cancelling', 'Teams', 'Zoom', 'Conference', 'USB']}),
+    ("Desk Lamp",           ['ΕΞΥΠΝΟΣ ΦΩΤΙΣΜΟΣ', 'ΦΩΤΙΣΤΙΚΑ'], {'title_include': ['Desk', 'Γραφείου', 'Table', 'Επιτραπέζιο', 'Φωτιστικό', 'ScreenBar', 'Monitor Light'], 'title_hide': ['Ceiling', 'Bulb', 'Strip', 'Οροφής', 'Λάμπα', 'Λαμπτήρας', 'E27', 'E14', 'Ταινία', 'Λεντοταινία', 'Smart Bulb']}),
+    ("USB Hub",             ['USB HUB DEVICES'],              {'title_boost': ['Desk Mount', 'Clamp', 'USB-A', 'USB-C']}),
+    ("Cable Organizer",     ['ACCESSORIES', 'USB CABLES'],    {'title_include': ['Cable', 'Organizer', 'Velcro', 'Clip', 'Οργάνωσης', 'Συγκράτησης']}),
+    ("PC Speakers",         ['PC SPEAKERS 2.0', 'PC SPEAKERS 1'], {'brand_match': True, 'title_boost': ['Desktop', 'USB Powered', 'Compact', '2.0'], 'title_hide': ['Soundbar', '5.1', 'Subwoofer', 'Gaming RGB']}),
 ]
 
 # ── USB Hub ──
@@ -4220,7 +4284,15 @@ def run_peripherals_engine(trigger, df_products, df_history, cluster_key):
 
     # Connectivity
     is_wireless = 'WIRELESS' in thier or 'ΑΣΥΡΜΑΤ' in tt.upper()
-    is_wired = 'WIRED' in thier and not is_wireless
+    # Wired detection: hierarchy OR connection-tech attribute OR title keywords
+    # Many gaming mice/kbs have hierarchy 'GAMING MOUSE' (no WIRED token) but are actually wired
+    _tconn = str(trigger.get('Τεχνολογία σύνδεσης', '')).lower()
+    is_wired = (
+        ('WIRED' in thier and not is_wireless)
+        or ('ενσύρματ' in _tconn and not is_wireless)
+        or ('wired' in _tconn and not is_wireless)
+        or ('ενσύρματ' in tt.lower() and not is_wireless)
+    )
     is_apple = tb == 'APPLE' or 'APPLE' in thier
 
     # Features
@@ -4229,6 +4301,17 @@ def run_peripherals_engine(trigger, df_products, df_history, cluster_key):
     is_ergo = str(trigger.get('Εργονομικό', '')).lower() in ('ναι', 'yes', 'true')
     has_rgb = 'rgb' in str(trigger.get('Πρόσθετα χαρακτηριστικά', '')).lower() or 'rgb' in _tt_lower
     no_battery = is_wired or is_apple
+
+    # ── Kid/whimsical theme detection ──
+    # Signal that trigger is a cutesy/kids product; used to decide whether to penalize kids-themed candidates.
+    # Professional triggers (Pilot ballpoint, Tipp-Ex correction tape, etc.) should NOT get Kawaii Ladybug pencil cases.
+    # Covers: cute names/motifs, kid-brand signals (Maxi/Jumbo sizes), and common typo variants.
+    KID_THEME_RE = r'kitty|kawaii|\bmeow\b|πεταλούδα|ladybug|παγωτό|γκλίτερ|glitter|unicorn|μονόκερος|teddy|\bkids\b|παιδικ|princess|πριγκίπισσα|disney|sparkle|σπάρκλ|rainbow|donut|cupcake|kawai|cute pet|μικροί ζωγράφο|fairy|νεράιδ|pixel|\bmaxi\b|\bjumbo\b'
+    trigger_is_kid_theme = bool(re.search(KID_THEME_RE, _tt_lower))
+    # Also treat known kid-oriented brands as kid-themed triggers
+    _kid_brand_set = {'GIOTTO', 'CARIOCA', 'CRAYOLA', 'FIBRAPEN', 'MILAN'}
+    if not trigger_is_kid_theme and tb in _kid_brand_set:
+        trigger_is_kid_theme = True
 
     # Gaming mouse deep attributes
     dpi_str = str(trigger.get('Ανάλυση κίνησης', ''))
@@ -4449,6 +4532,14 @@ def run_peripherals_engine(trigger, df_products, df_history, cluster_key):
                 min_p, max_p = get_stationery_budget(tprice, r_lower)
             else:
                 min_p, max_p = get_peripheral_budget(tprice, cat_key)
+
+            # price_match_trigger: override budget to ±50% of trigger price.
+            # Used for co-purchase slots where the accessory should sit in the same
+            # quality/price tier as the trigger (e.g. pricey webcam → pricey microphone).
+            if flags.get('price_match_trigger') and tprice > 0:
+                min_p = tprice * 0.5
+                max_p = tprice * 1.6
+                notes.append(f"Price-match-trigger override: €{min_p:.0f}-€{max_p:.0f} (trigger €{tprice:.0f})")
             
             # Find items in the sweet spot band
             in_band = (pool['_p'] >= min_p) & (pool['_p'] <= max_p)
@@ -4585,6 +4676,37 @@ def run_peripherals_engine(trigger, df_products, df_history, cluster_key):
             pat = '|'.join(flags['title_hide'])
             m = pool['Title'].fillna('').str.contains(pat, case=False, regex=True, na=False)
             pool.loc[m, 'Final_Score'] -= 100000
+
+        # ── Kid/whimsical theme penalty ──
+        # For adult/professional triggers, heavily penalize Kawaii-Meow-Glitter-Unicorn candidates
+        # so a Pilot ballpoint doesn't recommend a "Μπλοκ Σημειώσεων Παγωτό Γκλίτερ" notebook.
+        # EXCEPTION: if candidate brand matches the trigger brand, keep it (same-brand siblings are
+        # often legitimate, e.g. Legami-trigger → Legami-Kawaii is expected).
+        # Slots can also override globally by setting flags['allow_kids_theme']=True.
+        if not trigger_is_kid_theme and not flags.get('allow_kids_theme') and not cluster_key.startswith("Kids"):
+            kid_mask = pool['Title'].fillna('').str.lower().str.contains(KID_THEME_RE, regex=True, na=False)
+            if kid_mask.any():
+                # Don't penalize same-brand candidates
+                if tb and 'Κατασκευαστής' in pool.columns:
+                    same_brand_mask = pool['Κατασκευαστής'].fillna('').astype(str).str.strip().str.upper() == tb
+                    penalize_mask = kid_mask & ~same_brand_mask
+                else:
+                    penalize_mask = kid_mask
+                if penalize_mask.any():
+                    pool.loc[penalize_mask, 'Final_Score'] -= 150000
+                    notes.append(f"Kids-theme penalty: -150k to {penalize_mask.sum()} items")
+
+        # ── Title include (hard filter — used for slots where boost isn't enough) ──
+        if flags.get('title_include'):
+            pat = '|'.join(flags['title_include'])
+            m = pool['Title'].fillna('').str.contains(pat, case=False, regex=True, na=False)
+            if m.any():
+                b4 = len(pool)
+                pool = pool[m]
+                notes.append(f"Title include ({pat}): {b4} → {len(pool)}")
+            else:
+                notes.append(f"⚠ Title include ({pat}) would empty pool, slot will be empty")
+                pool = pool.head(0)
 
         # ── Pen Variant Match (Same Brand, Same Variant, Different Color) ──
         if flags.get('match_pen_variant'):
