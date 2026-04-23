@@ -5072,7 +5072,14 @@ def run_peripherals_engine(trigger, df_products, df_history, cluster_key):
                 
                 # Αναζήτηση στα πεδία Πάχος Γραφής ή στον Τίτλο των υποψηφίων
                 p_title = pool['Title'].fillna('').str.lower()
-                p_thickness = pool['Πάχος Γραφής'].fillna('').astype(str).str.lower()
+                
+                # Ασφαλής εξαγωγή στήλης για αποφυγή KeyError
+                if 'Πάχος Γραφής' in pool.columns:
+                    p_thickness = pool['Πάχος Γραφής'].fillna('').astype(str).str.lower()
+                elif 'Πάχος Μύτης' in pool.columns:
+                    p_thickness = pool['Πάχος Μύτης'].fillna('').astype(str).str.lower()
+                else:
+                    p_thickness = pd.Series('', index=pool.index)
                 
                 # Το regex διασφαλίζει ότι το "0.5" δεν θα ταιριάξει με το "0.55"
                 is_same_mm = p_title.str.contains(rf'(?<!\d){re.escape(t_mm)}(?!\d)', regex=True) | \
