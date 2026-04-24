@@ -2591,6 +2591,9 @@ def run_laptops_engine(trigger, df_products, df_history):
     # (color-accurate creative work, HDR media, etc.)
     tscreen_tech = str(trigger.get('Τεχνολογία Οθόνης', '')).lower() + ' ' + str(trigger.get('Τύπος Οθόνης', '')).lower() + ' ' + tt.lower() + ' ' + tusage
     trigger_is_oled = 'oled' in tscreen_tech or 'amoled' in tscreen_tech
+    # Retina detection (Apple). Retina laptops are premium — we should only pair with
+    # monitors that have a proper panel technology (IPS/VA/OLED/etc.), not generic TN.
+    trigger_is_retina = 'retina' in tscreen_tech
 
     # --- 2026 GR Market Tier (Performance Pairing) ---
     laptop_tier = get_laptop_tier(tprice)
@@ -2601,7 +2604,7 @@ def run_laptops_engine(trigger, df_products, df_history):
     tres_str = str(trigger.get('Ανάλυση Οθόνης', ''))
     tres_tier = get_resolution_tier(tres_str)
  
-    diag.append(("0. Trigger", f"Brand={tb}, €{tprice:.0f}", f"Tier {laptop_tier} ({tier_label}), Screen={tscreen}\", 2-in-1={is_2in1}, OLED={trigger_is_oled}, Ports={tports[:60]}"))
+    diag.append(("0. Trigger", f"Brand={tb}, €{tprice:.0f}", f"Tier {laptop_tier} ({tier_label}), Screen={tscreen}\", 2-in-1={is_2in1}, OLED={trigger_is_oled}, Retina={trigger_is_retina}, Ports={tports[:60]}"))
  
     # ── Build candidate pool ──
     c = df_products[df_products['Material'] != tm].copy()
@@ -3104,6 +3107,24 @@ def run_laptops_engine(trigger, df_products, df_history):
                 high_refresh = pool['Title'].fillna('').str.lower().str.contains('144hz|165hz|180hz|240hz|360hz', regex=True, na=False)
                 pool.loc[high_refresh, 'Final_Score'] += 30000
                 notes.append("High-refresh boost (≥144Hz) — match GPU performance")
+
+            # ── Retina laptop → premium panel technology only (HARD FILTER) ──
+            # A Retina MacBook is a color-accurate device. Pairing it with a generic TN panel
+            # or an unspecified "LED" monitor undermines the quality. Allow only the
+            # well-known premium panel technologies.
+            GOOD_PANEL_PAT = r'\bips\b|\bva\b|\btn\b|\boled\b|\bamoled\b|\bqd-oled\b|nano\s*ips|\bretina\b|\bads\b|micro\s*led|mini\s*led'
+            if trigger_is_retina:
+                tech_mask = pd.Series(False, index=pool.index)
+                if 'Τεχνολογία Οθόνης' in pool.columns:
+                    tech_mask = pool['Τεχνολογία Οθόνης'].fillna('').astype(str).str.lower().str.contains(GOOD_PANEL_PAT, regex=True, na=False)
+                # Also check title as fallback — many monitors spell the panel tech in the title
+                tech_mask = tech_mask | pool['Title'].fillna('').str.lower().str.contains(GOOD_PANEL_PAT, regex=True, na=False)
+                if tech_mask.any():
+                    b4 = len(pool)
+                    pool = pool[tech_mask]
+                    notes.append(f"🖼️ Retina laptop → panel tech filter (IPS/VA/TN/OLED/Nano IPS/Retina/ADS/Micro LED): {b4}→{len(pool)}")
+                else:
+                    notes.append("⚠ Retina laptop but no panel-tech matches in catalog — keeping all")
 
             # ── Req 6: OLED laptop → ONLY OLED monitors (HARD FILTER) ──
             if trigger_is_oled:
@@ -4238,15 +4259,13 @@ WEBCAM_SLOTS = [
     ("USB Hub",             ['USB HUB DEVICES'],              {'title_boost': ['Desk Mount', 'Clamp', 'USB-A', 'USB-C']}),
     ("Cable Organizer",     ['ACCESSORIES', 'USB CABLES'],    {'title_include': ['Cable', 'Organizer', 'Velcro', 'Clip', 'Οργάνωσης', 'Συγκράτησης']}),
     ("PC Speakers",         ['PC SPEAKERS 2.0', 'PC SPEAKERS 1'], {'brand_match': True, 'title_boost': ['Desktop', 'USB Powered', 'Compact', '2.0'], 'title_hide': ['Soundbar', '5.1', 'Subwoofer', 'Gaming RGB']}),
-    ("Microphone",          ['PC MICROPHONES'],               {'brand_match': True, 'price_match_trigger': True, 'title_boost': ['USB', 'Condenser', 'Streaming', 'Podcast', 'Desktop', 'Επιτραπέζιο'], 'title_hide': ['Gaming RGB', 'Lavalier', 'Wireless lav']}),
-
+    ("Privacy Cover",       ['ACCESSORIES', 'CLEANING PRODUCTS'], {'title_include': ['Privacy', 'Cover', 'Shutter', 'Κάλυμμα', 'Κάλυμμα Κάμερας', 'Webcam cover', 'Privacy Shield']}),
 ]
 
 # Gaming-webcam variant: Razer Kiyo, Logitech G StreamCam, etc.
 # Differences from WEBCAM_SLOTS: gaming audio instead of office headset, streaming accessories emphasis.
 WEBCAM_GAMING_SLOTS = [
     ("Microphone",          ['PC MICROPHONES'],               {'brand_match': True, 'price_match_trigger': True, 'title_boost': ['Streaming', 'USB', 'Condenser', 'Blue Yeti', 'Razer Seiren', 'HyperX QuadCast'], 'title_hide': ['Lavalier', 'Wireless lav']}),
-    ("Ring Light",          ['ΕΞΥΠΝΟΣ ΦΩΤΙΣΜΟΣ', 'ΦΩΤΙΣΤΙΚΑ'],{'title_include': ['Ring', 'LED Panel', 'Video Light', 'Streaming', 'Key Light', 'Softbox', 'Δακτύλιος'], 'title_hide': ['Ceiling', 'Bulb', 'Strip', 'Λάμπα', 'Λαμπτήρας', 'E27', 'E14', 'Smart Bulb', 'Λεντοταινία', 'Ταινία', 'Γιρλάντα', 'String Light', 'Outdoor', 'Εξωτερικ', 'Bedside', 'Κρεβατ', 'Nightlight']}),
     ("Gaming Headset",      ['GAMING AUDIO', 'OVERHEAD'],     {'brand_boost': True, 'color_match_all': True, 'title_boost': ['Gaming', 'Razer', 'Logitech G', 'HyperX', 'SteelSeries', 'Corsair', 'Astro'], 'title_hide': ['Earbuds', 'In-Ear', 'Lavalier']}),
     ("Webcam Mount",        ['ΒΑΣΕΙΣ ΓΡΑΦΕΙΟΥ'],               {'title_include': ['Webcam', 'Camera mount', 'Clip', 'Monitor Mount', 'Επιτραπέζι', 'Επιτοίχι', 'Clamp'], 'title_hide': ['Τρίποδο', 'Tripod', 'DSLR', 'Heavy Duty', 'CPU', 'Υπολογιστή', 'Riser', 'Drawer', 'Laptop', 'Notebook', 'Cooler', 'VESA']}),
     ("Streaming Accessories",['STREAMING ACCESSORIES'],       {'eidos_include': ['Capture Card', 'Gaming Αξεσουάρ', 'Green Screen', 'Mic Arm', 'Stream Controller', 'Stream Deck', 'Streaming Kit', 'Βραχίονας μικροφώνου', 'Ηχοαπορροφητικά Πάνελ', 'Κάρτα καταγραφής βίντεο']}),
@@ -4255,6 +4274,7 @@ WEBCAM_GAMING_SLOTS = [
     ("Smart Lighting",      ['ΕΞΥΠΝΟΣ ΦΩΤΙΣΜΟΣ'],             {'title_boost': ['Strip', 'LED', 'Bias', 'Backlight', 'RGB', 'Ταινία', 'Λεντοταινία'], 'title_hide': ['Ceiling', 'Bulb', 'Λάμπα', 'Λαμπτήρας', 'E27', 'E14', 'Οροφής', 'Γιρλάντα', 'String Light', 'Outdoor', 'Bedside']}),
     ("USB Hub",             ['USB HUB DEVICES'],              {'title_boost': ['Desk Mount', 'Clamp', 'USB-A', 'USB-C']}),
     ("PC Speakers",         ['PC SPEAKERS 2.0', 'PC SPEAKERS 1'], {'brand_boost': True, 'title_boost': ['Gaming', 'RGB', 'Desktop', '2.0'], 'title_hide': ['Soundbar', '5.1', 'Subwoofer']}),
+    ("Headset Stand",       ['GAMING HEADSET STANDS', 'PORTABLE ACCESSORIES'], {'title_boost': ['Stand', 'Hanger', 'Βάση Ακουστικών']}),
 ]
 
 # ── USB Hub ──
