@@ -944,32 +944,32 @@ else:
             sel = st.sidebar.selectbox("", phones['Title'].unique(), label_visibility="collapsed", key="sm_sel")
             trigger = phones[phones['Title']==sel].iloc[0] if sel else None
 
-elif active_cluster == "Laptops":
-        if df_laptops.empty:
-            st.sidebar.warning("Sheet 'Laptops' is empty or missing.")
-        else:
-            laptops = df_laptops[(df_laptops['Level 1']=='IT') & (df_laptops['Level 2'].isin(LAPTOP_L2_VALUES))]
-            if laptops.empty:
-                # Fallback: hierarchy-based
-                laptops = df_laptops[df_laptops['Hierarchy'].fillna('').astype(str).str.upper().str.contains('NOTEBOOK|LAPTOP', regex=True, na=False)]
-            
-            # ─────────────────────────────────────────────────────────────
-            # 🧪 TEST LIST: Restrict the dropdown to specific SKUs
-            # ─────────────────────────────────────────────────────────────
-            laptop_test_skus = {
-                "2032853", "2077374", "2114170", "2106436", "2076615", 
-                "1950043", "1950030", "1993377", "2056517", "1993362"
-            }
-            if not laptops.empty:
-                laptops = laptops[laptops['Material'].astype(str).str.strip().str.replace(r'\.0$', '', regex=True).isin(laptop_test_skus)]
-            # ─────────────────────────────────────────────────────────────
-
-            if laptops.empty:
-                st.sidebar.warning("Δεν βρέθηκαν test Laptops.")
+    elif active_cluster == "Laptops":
+            if df_laptops.empty:
+                st.sidebar.warning("Sheet 'Laptops' is empty or missing.")
             else:
-                st.sidebar.markdown('<p class="sidebar-section">Επιλέξτε Laptop</p>', unsafe_allow_html=True)
-                sel = st.sidebar.selectbox("", laptops['Title'].unique(), label_visibility="collapsed", key="lt_sel")
-                trigger = laptops[laptops['Title']==sel].iloc[0] if sel else None
+                laptops = df_laptops[(df_laptops['Level 1']=='IT') & (df_laptops['Level 2'].isin(LAPTOP_L2_VALUES))]
+                if laptops.empty:
+                    # Fallback: hierarchy-based
+                    laptops = df_laptops[df_laptops['Hierarchy'].fillna('').astype(str).str.upper().str.contains('NOTEBOOK|LAPTOP', regex=True, na=False)]
+                
+                # ─────────────────────────────────────────────────────────────
+                # 🧪 TEST LIST: Restrict the dropdown to specific SKUs
+                # ─────────────────────────────────────────────────────────────
+                laptop_test_skus = {
+                    "2032853", "2077374", "2114170", "2106436", "2076615", 
+                    "1950043", "1950030", "1993377", "2056517", "1993362"
+                }
+                if not laptops.empty:
+                    laptops = laptops[laptops['Material'].astype(str).str.strip().str.replace(r'\.0$', '', regex=True).isin(laptop_test_skus)]
+                # ─────────────────────────────────────────────────────────────
+    
+                if laptops.empty:
+                    st.sidebar.warning("Δεν βρέθηκαν test Laptops.")
+                else:
+                    st.sidebar.markdown('<p class="sidebar-section">Επιλέξτε Laptop</p>', unsafe_allow_html=True)
+                    sel = st.sidebar.selectbox("", laptops['Title'].unique(), label_visibility="collapsed", key="lt_sel")
+                    trigger = laptops[laptops['Title']==sel].iloc[0] if sel else None
 
     elif active_cluster == "Floor Care":
         if df_vacuums.empty:
