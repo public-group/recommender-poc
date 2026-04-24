@@ -3126,10 +3126,7 @@ def run_laptops_engine(trigger, df_products, df_history):
                     notes.append(f"🖼️ Retina laptop → premium panel tech filter (IPS/OLED/MiniLED only): {b4}→{len(pool)}")
                 else:
                     notes.append("⚠ Retina laptop but no premium panels found in catalog — keeping all")
-                else:
-                    notes.append("⚠ Retina laptop but no panel-tech matches in catalog — keeping all")
-
-            # ── Req 6: OLED laptop → ONLY OLED monitors (HARD FILTER) ──
+                    
             # ── Req 6: OLED laptop → Soft preference for OLED monitors ──
             if trigger_is_oled:
                 oled_mon = pool['Title'].fillna('').str.lower().str.contains(r'\boled\b|\bamoled\b|\bqd-oled\b', regex=True, na=False)
