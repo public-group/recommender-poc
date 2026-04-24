@@ -3225,6 +3225,13 @@ def run_laptops_engine(trigger, df_products, df_history):
                         # leaving the pool unfiltered.
                         fallback_mask, fallback_label = under15_mask, "fallback to Bluetooth OR Overhead+ON-EAR"
 
+                    # ========================================================
+                    # NEW: Protect Apple audio from being wiped out by the size filter
+                    apple_protect = (pool['Κατασκευαστής'].fillna('').str.strip().str.upper() == 'APPLE') | \
+                                    pool['Title'].fillna('').str.lower().str.contains(r'airpods|earpods', regex=True, na=False)
+                    # ========================================================
+
+                    
                     # Cascade: primary → fallback → skip
                     b4 = len(pool)
                     primary_keep = pool[primary_mask | is_office]
@@ -3298,6 +3305,17 @@ def run_laptops_engine(trigger, df_products, df_history):
                         pool.loc[apple_hp, 'Final_Score'] += 500000
                         notes.append(f"🍎 Apple HEADPHONES hard-boost +500k ({apple_hp.sum()} items)")
 
+
+                        # ========================================================
+                        # NEW: Ensure budget Macs get standard AirPods instead of Pros
+                        if tprice < 1200:
+                            pro_apple = apple_hp & (pool['_p'] > 180)
+                            pool.loc[pro_apple, 'Final_Score'] -= 150000
+                            if pro_apple.any():
+                                notes.append(f"🍎 Apple: <€1200 laptop → Preferred standard AirPods over Pro (-150k to {pro_apple.sum()} items)")
+                        # ========================================================
+
+                        
                         # Color match: if laptop has a Χρώμα, boost same-color headphones
                         tlaptop_color = str(trigger.get('Χρώμα', '')).strip()
                         if tlaptop_color and tlaptop_color.lower() not in ('nan', 'n/a', '', 'none'):
