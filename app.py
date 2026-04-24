@@ -970,9 +970,7 @@ else:
             else:
                 st.sidebar.markdown('<p class="sidebar-section">Επιλέξτε Laptop</p>', unsafe_allow_html=True)
                 sel = st.sidebar.selectbox("", laptops['Title'].unique(), label_visibility="collapsed", key="lt_sel")
-                trigger = laptops[laptops['Title']==sel].iloc[0] if sel else None
-
-    elif active_cluster == "Floor Care":
+                trigger = laptops[laptops['Title']==sel].iloc[0] if sel else Non
 
 
     elif active_cluster == "Floor Care":
