@@ -134,14 +134,14 @@ LAPTOP_L2_VALUES = {"Notebooks", "Laptops"}
 # (slot_num, role_label, [hierarchies], logic_key)
 LAPTOP_MAINSTREAM_SLOTS = [
     (1,  'Τσάντα Laptop',    ['NB BAGS'],                                    'BAG_SIZE'),
-    (2,  'Φορτιστής',        ['NB POWER SUPPLIERS'],                         'CHARGER_PORT'),
+    (2,  'Φορτιστής',        ['NB POWER SUPPLIERS', 'APPLE ORIGINAL POWER SUPPLY'], 'CHARGER_PORT'),
     (3,  'Powerbank',        ['POWER STATIONS'],                             'HIGH_WATT_PB'),
     (4,  'Ασύρματο Mouse',   ['MOUSE WIRELESS'],                             'MOUSE_LOGIC'),
     (5,  'Mousepad',         ['MOUSE PADS'],                                 'MOUSEPAD_LOGIC'),
     (6,  'Βάση / Cooler',    ['NOTEBOOK COOLERS', 'ΒΑΣΕΙΣ ΓΡΑΦΕΙΟΥ'],        'STAND_SIZE'),
     (7,  'Οθόνη',            ['TFT MONITOR'],                                'MONITOR_LOGIC'),
     (8,  'Αποθήκευση',       ['USB FLASH', 'EXTERNAL HDD USB', 'EXTERNAL SSD USB', 'PORTABLE SSD', 'SSD EXTERNAL'],              'STORAGE_LOGIC'),
-    (9,  'Headset / Office', ['OVERHEAD', 'BLUETOOTH', 'OFFICE SUITES'],     'OFFICE_HEADSET_LOGIC'),
+    (9,  'Headset / Office', ['OVERHEAD', 'BLUETOOTH', 'OFFICE SUITES', 'APPLE HEADPHONES', 'APPLE ORIGINAL HEADPHONES'], 'OFFICE_HEADSET_LOGIC'),
     (10, 'Θήκη Laptop',      ['ΘΗΚΕΣ SLEEVE LAPTOP'],                        'SLEEVE_SIZE'),
 ]
  
@@ -2753,27 +2753,47 @@ def run_laptops_engine(trigger, df_products, df_history):
                             pool = sizeless
                             notes.append(f"⚠ No size match for {tscreen}\", keeping ONLY sizeless items")
 
-            # Logic 4: Mainstream → Backpack preference
-            if logic_key == 'BAG_SIZE' and 'mainstream' in tusage:
-                if 'Τύπος τσάντας' in pool.columns:
-                    backpack = pool[pool['Τύπος τσάντας'].fillna('').astype(str).str.contains('Πλάτης|Backpack', case=False, regex=True, na=False)]
-                    if not backpack.empty:
-                        pool.loc[backpack.index, 'Final_Score'] += 50000
-                        notes.append(f"Mainstream → Backpack boost: {len(backpack)}")
-
-            # 🎮 Gaming Laptop → Gaming bag boost. Gaming bags (padded, armored-look,
-            # gaming-brand) match the persona and are usually backpacks with GPU slots.
-            if logic_key == 'BAG_SIZE' and is_gaming:
-                gaming_bag_mask = pool['Title'].fillna('').str.lower().str.contains(
-                    r'gaming|razer|asus rog|rog ranger|rog backpack|msi|hp omen|lenovo legion|predator',
+            # ── Bag TYPE priority by size and persona ──
+            # Big laptops (≥15") → Backpack (Πλάτης); gaming → Gaming-themed bags first;
+            # small laptops (<14") → Sleeve; fallback → Shoulder (Ώμου-χειρός)
+            if logic_key == 'BAG_SIZE' and 'Τύπος τσάντας' in pool.columns:
+                btype = pool['Τύπος τσάντας'].fillna('').astype(str)
+                is_backpack = btype.str.contains('Πλάτης|Backpack', case=False, regex=True, na=False)
+                is_sleeve = btype.str.contains('Sleeve|Θήκη|Μανικ', case=False, regex=True, na=False)
+                is_shoulder = btype.str.contains('Ώμου|Χειρός|Shoulder|Messenger|Hand', case=False, regex=True, na=False)
+                is_gaming_bag = pool['Title'].fillna('').str.lower().str.contains(
+                    r'gaming|razer|asus rog|rog ranger|rog backpack|msi\b|hp omen|lenovo legion|predator',
                     regex=True, na=False
                 )
-                pool.loc[gaming_bag_mask, 'Final_Score'] += 200000
-                # Also boost backpack type
-                if 'Τύπος τσάντας' in pool.columns:
-                    backpack = pool['Τύπος τσάντας'].fillna('').astype(str).str.contains('Πλάτης|Backpack', case=False, regex=True, na=False)
-                    pool.loc[backpack, 'Final_Score'] += 60000
-                notes.append(f"🎮 Gaming: Boosted gaming bags/backpacks +200k ({gaming_bag_mask.sum()} items)")
+
+                if is_gaming:
+                    # Gaming → gaming-themed first, then backpacks, then shoulder
+                    pool.loc[is_gaming_bag, 'Final_Score'] += 250000
+                    pool.loc[is_backpack & ~is_gaming_bag, 'Final_Score'] += 80000
+                    pool.loc[is_shoulder & ~is_backpack & ~is_gaming_bag, 'Final_Score'] += 20000
+                    notes.append(f"🎮 Gaming bag: Gaming+250k({is_gaming_bag.sum()}) / Backpack+80k({(is_backpack & ~is_gaming_bag).sum()})")
+                elif tscreen and tscreen >= 15.0:
+                    # Large laptop → Backpack first (Πλάτης), then Shoulder, then Sleeve
+                    pool.loc[is_backpack, 'Final_Score'] += 200000
+                    pool.loc[is_shoulder & ~is_backpack, 'Final_Score'] += 60000
+                    pool.loc[is_sleeve & ~is_backpack & ~is_shoulder, 'Final_Score'] += 10000
+                    notes.append(f"📏 Large ({tscreen}\"): Backpack+200k({is_backpack.sum()}) / Shoulder+60k")
+                elif tscreen and tscreen < 14.0:
+                    # Small laptop → Sleeve first, then Shoulder, then Backpack
+                    pool.loc[is_sleeve, 'Final_Score'] += 200000
+                    pool.loc[is_shoulder & ~is_sleeve, 'Final_Score'] += 60000
+                    pool.loc[is_backpack & ~is_sleeve & ~is_shoulder, 'Final_Score'] += 20000
+                    notes.append(f"📏 Small ({tscreen}\"): Sleeve+200k({is_sleeve.sum()}) / Shoulder+60k")
+                else:
+                    # Mid-size (14-15") or unknown → Shoulder first
+                    pool.loc[is_shoulder, 'Final_Score'] += 150000
+                    pool.loc[is_backpack, 'Final_Score'] += 100000
+                    pool.loc[is_sleeve, 'Final_Score'] += 50000
+                    notes.append("Mid-size: Shoulder-priority")
+
+                # Mainstream usage also wants backpacks (student/commute)
+                if 'mainstream' in tusage and not is_gaming:
+                    pool.loc[is_backpack, 'Final_Score'] += 40000
 
             # FLAT-RATE BUDGET: Bags/sleeves are roughly static (€30-€80). Don't
             # show €200 leather sleeves with a €4k laptop — feels like upselling.
@@ -2918,23 +2938,21 @@ def run_laptops_engine(trigger, df_products, df_history):
                     pool.loc[pool['_p'] < mouse_min * 0.5, 'Final_Score'] -= 100000
                 notes.append(f"Tier {laptop_tier} ({tier_label}): Boost €{mouse_min:.0f}–€{mouse_max:.0f} (+150k), overbuy >€{overbuy_threshold:.0f} (-250k)")
 
-            # Apple ecosystem priority — prioritize Mac-compatible mice
+            # Apple ecosystem: HARD FILTER to Magic Mouse or explicitly Mac-compatible mice.
+            # User rule: Apple laptop → only show Magic Mouse or mice that say "for Mac"/"για Mac".
             if is_apple:
                 apple_mice = pool['Κατασκευαστής'].fillna('').str.upper() == 'APPLE'
-                # Detect Mac-compatible products: brand-specific (MX Master/Anywhere)
-                # AND products explicitly labelled "για Mac" / "for Mac" in the title.
                 mac_title = pool['Title'].fillna('').str.lower().str.contains(
-                    r'για mac|for mac|mac edition|mx master|mx anywhere',
+                    r'για mac|for mac|mac edition|magic mouse',
                     regex=True, na=False
                 )
-                if tprice >= 1200:
-                    pool.loc[apple_mice, 'Final_Score'] += 100000
-                    pool.loc[mac_title & (pool['_p'] >= 70), 'Final_Score'] += 80000
-                    notes.append(f"Apple Ecosystem (premium): Magic Mouse + Mac-compatible mice ({mac_title.sum()} 'Mac' items)")
+                mac_compatible = apple_mice | mac_title
+                if mac_compatible.any():
+                    b4 = len(pool)
+                    pool = pool[mac_compatible].copy()
+                    notes.append(f"🍎 Apple-only mouse filter: Magic Mouse OR 'for Mac': {b4}→{len(pool)}")
                 else:
-                    pool.loc[mac_title & (pool['_p'] < 70), 'Final_Score'] += 100000
-                    pool.loc[apple_mice, 'Final_Score'] += 50000
-                    notes.append(f"Apple Ecosystem (budget): Mac-compatible mice boosted ({mac_title.sum()} 'Mac' items)")
+                    notes.append("⚠ No Magic Mouse / Mac-compatible mouse in catalog — falling back to all")
 
             # Microsoft Surface ecosystem — mirror the Apple pattern
             elif is_surface:
@@ -2984,20 +3002,65 @@ def run_laptops_engine(trigger, df_products, df_history):
 
 
 
-        # ── Logic: Persona-Driven Monitor (10-15% of Laptop Value) ──
+        # ── Logic: Persona-Driven Monitor (20-25% of Laptop Value) ──
         elif logic_key == 'MONITOR_LOGIC':
+
+            # ── Req 8: Match laptop Προτεινόμενη χρήση ↔ monitor Χρήση ──
+            # Gaming laptop → Gaming monitor. Επαγγελματική → Business. Mainstream → Mainstream.
+            # Non-gaming laptop → HARD EXCLUDE Χρήση=Gaming.
+            if 'Χρήση' in pool.columns:
+                mon_usage = pool['Χρήση'].fillna('').astype(str).str.lower()
+
+                # Determine target usage from laptop tusage (already lowercased above)
+                if is_gaming:
+                    matching_use = mon_usage.str.contains('gaming', regex=False, na=False)
+                    # Hard boost for matching use
+                    pool.loc[matching_use, 'Final_Score'] += 200000
+                    notes.append(f"🎯 Χρήση match (Gaming): +200k to {matching_use.sum()} monitors")
+                elif 'επαγγελματική' in tusage or 'premium' in tusage:
+                    matching_use = mon_usage.str.contains('business|επαγγελ', regex=True, na=False)
+                    # Non-gaming: hard-exclude gaming monitors
+                    gaming_use = mon_usage.str.contains('gaming', regex=False, na=False)
+                    if (~gaming_use).any():
+                        b4 = len(pool)
+                        pool = pool[~gaming_use]
+                        mon_usage = pool['Χρήση'].fillna('').astype(str).str.lower()
+                        matching_use = mon_usage.str.contains('business|επαγγελ', regex=True, na=False)
+                        notes.append(f"🚫 Χρήση=Gaming excluded: {b4}→{len(pool)}")
+                    pool.loc[matching_use, 'Final_Score'] += 150000
+                    notes.append(f"🎯 Χρήση match (Business/Επαγγελματική): +150k to {matching_use.sum()}")
+                elif 'mainstream' in tusage or 'καθημερινή' in tusage:
+                    matching_use = mon_usage.str.contains('mainstream|καθημερινή', regex=True, na=False)
+                    # Non-gaming: hard-exclude gaming monitors
+                    gaming_use = mon_usage.str.contains('gaming', regex=False, na=False)
+                    if (~gaming_use).any():
+                        b4 = len(pool)
+                        pool = pool[~gaming_use]
+                        mon_usage = pool['Χρήση'].fillna('').astype(str).str.lower()
+                        matching_use = mon_usage.str.contains('mainstream|καθημερινή', regex=True, na=False)
+                        notes.append(f"🚫 Χρήση=Gaming excluded: {b4}→{len(pool)}")
+                    pool.loc[matching_use, 'Final_Score'] += 150000
+                    notes.append(f"🎯 Χρήση match (Mainstream): +150k to {matching_use.sum()}")
+                else:
+                    # Unknown usage → still exclude gaming monitors unless the laptop is gaming
+                    gaming_use = mon_usage.str.contains('gaming', regex=False, na=False)
+                    if gaming_use.any() and (~gaming_use).any():
+                        b4 = len(pool)
+                        pool = pool[~gaming_use]
+                        notes.append(f"🚫 Non-gaming laptop: Χρήση=Gaming excluded: {b4}→{len(pool)}")
+
+            # Fallback for items without Χρήση attribute: title-based check
             if not is_gaming:
                 gaming_mon = pool['Title'].fillna('').str.lower().str.contains('gaming|odyssey|predator|144hz|165hz|180hz|240hz', regex=True, na=False)
-                pool, note = filter_or_penalize(pool, ~gaming_mon, "Visual Workstation: Exclude gaming monitors")
+                pool, note = filter_or_penalize(pool, ~gaming_mon, "Non-gaming: Exclude gaming-branded monitors (title)")
                 notes.append(note)
             else:
-                # 🎮 GAMING LAPTOP: positively boost gaming monitors (brand-line + high-refresh)
                 gaming_mon_mask = pool['Title'].fillna('').str.lower().str.contains(
                     r'gaming|odyssey|predator|aorus|rog swift|rog strix|ultragear|nitro|mag\b|viewsonic elite',
                     regex=True, na=False
                 )
                 pool.loc[gaming_mon_mask, 'Final_Score'] += 200000
-                notes.append(f"🎮 Gaming: Boosted gaming monitors +200k ({gaming_mon_mask.sum()} items)")
+                notes.append(f"🎮 Gaming: Boosted gaming-branded monitors +200k ({gaming_mon_mask.sum()} items)")
 
             if tres_tier > 0:
                 pool['_res_tier'] = pool['Ανάλυση Οθόνης'].apply(get_resolution_tier)
@@ -3005,68 +3068,66 @@ def run_laptops_engine(trigger, df_products, df_history):
                 pool, note = filter_or_penalize(pool, keep, f"Resolution ≥ tier {tres_tier}")
                 notes.append(note)
 
-            # FHD exclusion ONLY at Tier 3+ (€1200+). A €798 MacBook doesn't
-            # need QHD/4K — FHD fits the budget band and is a legitimate pairing.
             if (is_apple or is_premium) and laptop_tier >= 3:
                 fhd_mon = pool['Title'].fillna('').str.lower().str.contains('fhd|1080p|1920x1080', regex=True, na=False)
                 pool, note = filter_or_penalize(pool, ~fhd_mon, "Tier 3+ premium: Exclude FHD monitors")
                 notes.append(note)
 
-            # Tiered Performance Budgets (20% Rule: Monitor = 50% of bundle ≈ 10-15% of laptop)
+            # ── Req 7: Monitor budget = 20-25% of laptop price (replaces tier-based budget) ──
             pool['_p'] = pool['LIST PRICE'].apply(parse_euro_price)
             apple_monitors = pool['Κατασκευαστής'].fillna('').str.upper() == 'APPLE'
 
-            # Cheap-trap: no <€30 monitors on ≥€800 laptops (any monitor that cheap is a tiny portable)
             pool, trap_note = apply_cheap_trap(pool, tprice, 'MONITOR')
             if trap_note: notes.append(trap_note)
 
-            mon_min, mon_max = get_accessory_budget('MONITOR', laptop_tier)
-            if laptop_tier > 0:
-                in_band = (pool['_p'] >= mon_min) & (pool['_p'] <= mon_max)
-                # Boost is now +150k (was 60k) — has to outweigh ecosystem +100k boosts below
-                pool.loc[in_band, 'Final_Score'] += 150000
-
-                # ANTI-OVERBUY (NEW): hard penalty for monitors priced >2× the tier max.
-                # Fixes the case where a €798 Mac got paired with a €1k+ Dell UltraSharp.
-                # The 20% rule is a budget guide, not a suggestion.
-                overbuy_threshold = mon_max * 2.0
+            if tprice > 0:
+                mon_min = tprice * 0.20
+                mon_max = tprice * 0.25
+                # Widen sweet-spot band slightly to ±5% around the 20-25% range so the
+                # in-band pool isn't too tiny for budget laptops. Sweet spot is 15-30%.
+                sweet_min = tprice * 0.15
+                sweet_max = tprice * 0.30
+                in_sweet = (pool['_p'] >= sweet_min) & (pool['_p'] <= sweet_max)
+                in_band  = (pool['_p'] >= mon_min) & (pool['_p'] <= mon_max)
+                pool.loc[in_sweet, 'Final_Score'] += 100000
+                pool.loc[in_band, 'Final_Score'] += 100000  # stacks → 200k for the 20-25% core
+                # Overbuy penalty: monitor >50% of laptop price
+                overbuy_threshold = tprice * 0.50
                 pool.loc[pool['_p'] > overbuy_threshold, 'Final_Score'] -= 250000
-
-                # Anti-cheap-trap — no €100 monitor on a €3k laptop
+                # Cheap penalty for high-tier laptops only
                 if laptop_tier >= 3:
-                    pool.loc[pool['_p'] < mon_min * 0.5, 'Final_Score'] -= 100000
+                    pool.loc[pool['_p'] < sweet_min * 0.5, 'Final_Score'] -= 100000
+                notes.append(f"💶 Monitor budget 20-25% of €{tprice:.0f}: €{mon_min:.0f}-€{mon_max:.0f} (+200k sweet, overbuy >€{overbuy_threshold:.0f} -250k)")
 
-                notes.append(f"Tier {laptop_tier} ({tier_label}): Boost €{mon_min:.0f}–€{mon_max:.0f} (+150k), overbuy >€{overbuy_threshold:.0f} (-250k)")
-
-            # High-refresh boost for Tier 3+ (RTX/AI-class laptops need 144Hz+)
+            # High-refresh boost for gaming / Tier 3+
             if laptop_tier >= 3 or is_gaming:
                 high_refresh = pool['Title'].fillna('').str.lower().str.contains('144hz|165hz|180hz|240hz|360hz', regex=True, na=False)
                 pool.loc[high_refresh, 'Final_Score'] += 30000
                 notes.append("High-refresh boost (≥144Hz) — match GPU performance")
 
-            # 🌈 OLED laptop → OLED monitor match (color-accurate creative pairing)
+            # ── Req 6: OLED laptop → ONLY OLED monitors (HARD FILTER) ──
             if trigger_is_oled:
                 oled_mon = pool['Title'].fillna('').str.lower().str.contains(r'\boled\b|\bamoled\b|\bqd-oled\b', regex=True, na=False)
-                pool.loc[oled_mon, 'Final_Score'] += 250000
+                if 'Τεχνολογία Οθόνης' in pool.columns:
+                    oled_mon = oled_mon | pool['Τεχνολογία Οθόνης'].fillna('').astype(str).str.lower().str.contains(r'oled|amoled', regex=True, na=False)
                 if oled_mon.any():
-                    notes.append(f"🌈 OLED laptop → OLED monitor boost +250k ({oled_mon.sum()} items)")
-
+                    b4 = len(pool)
+                    pool = pool[oled_mon]
+                    notes.append(f"🌈 OLED laptop → HARD FILTER to OLED monitors only: {b4}→{len(pool)}")
+                else:
+                    notes.append("⚠ OLED laptop but no OLED monitors in catalog — keeping all")
 
             vesa_mon = pool['Title'].fillna('').str.lower().str.contains('vesa|ergonomic|pivot', regex=True, na=False)
             pool.loc[vesa_mon, 'Final_Score'] += 10000
 
             if is_apple:
                 usbc_mon = pool['Title'].fillna('').str.lower().str.contains('usb-c|type-c|thunderbolt|mac', regex=True, na=False)
-                # Ecosystem boost capped at 50k (was 100k) so it doesn't override
-                # tier budget enforcement. USB-C is a tiebreaker, not a bulldozer.
                 pool.loc[usbc_mon, 'Final_Score'] += 50000
                 if tprice >= 1400:
-                    pool.loc[apple_monitors, 'Final_Score'] += 500000 
+                    pool.loc[apple_monitors, 'Final_Score'] += 500000
                 else:
                     pool.loc[apple_monitors, 'Final_Score'] -= 300000
 
-            # Microsoft Surface — favour USB-C monitors (Surface single-cable docking).
-            # Microsoft doesn't sell monitors, so no brand-match here — just USB-C preference.
             elif is_surface:
                 usbc_mon = pool['Title'].fillna('').str.lower().str.contains('usb-c|type-c|thunderbolt', regex=True, na=False)
                 if usbc_mon.any():
@@ -3182,27 +3243,63 @@ def run_laptops_engine(trigger, df_products, df_history):
                 else:
                     notes.append("Persona: Boost skipped ('Προτεινόμενη χρήση' column missing from candidates)")
 
-                # Apple ecosystem — boost premium audio brands regardless of screen size.
-                # An Apple user buying a 13.6" Air or 15.3" Air or 16" Pro
-                # should get the same premium headset recommendations.
+                # Apple ecosystem — HARD PREFER Apple-branded headphones (AirPods family)
+                # and color-match the laptop color when possible.
                 if is_apple:
-                    premium_overhead = pool['Title'].fillna('').str.lower().str.contains(
-                        r'airpods|wh-1000xm|wh1000xm|quietcomfort|qc\d|momentum \d|bose 700|audio-technica|beats studio',
+                    # First, expand search to APPLE HEADPHONES hierarchy — these are
+                    # the AirPods listings and they should dominate the slot for Apple users.
+                    apple_brand = pool['Κατασκευαστής'].fillna('').str.strip().str.upper() == 'APPLE'
+                    airpods_title = pool['Title'].fillna('').str.lower().str.contains(
+                        r'airpods|beats (studio|fit|solo|flex)',
                         regex=True, na=False
                     )
-                    pool.loc[is_headset & premium_overhead, 'Final_Score'] += 100000
-                    if (is_headset & premium_overhead).any():
-                        notes.append(f"🍎 Apple Ecosystem: Premium audio brands boosted +100k ({(is_headset & premium_overhead).sum()} items)")
+                    apple_hp_hier = hier_upper.str.contains('APPLE HEADPHONES|APPLE ORIGINAL HEADPHONES', regex=True, na=False)
+                    apple_hp = (apple_brand | airpods_title | apple_hp_hier) & is_headset
 
-                # Headset Sane Price Tiering (Max ~15% of laptop price)
+                    if apple_hp.any():
+                        # HARD boost — put Apple headphones on top
+                        pool.loc[apple_hp, 'Final_Score'] += 300000
+                        notes.append(f"🍎 Apple HEADPHONES hard-boost +300k ({apple_hp.sum()} items)")
+
+                        # Color match: if laptop has a Χρώμα, boost same-color headphones
+                        tlaptop_color = str(trigger.get('Χρώμα', '')).strip()
+                        if tlaptop_color and tlaptop_color.lower() not in ('nan', 'n/a', '', 'none'):
+                            if 'Χρώμα' in pool.columns:
+                                color_match_mask = apple_hp & (
+                                    pool['Χρώμα'].fillna('').astype(str).str.strip().str.lower() == tlaptop_color.lower()
+                                )
+                                if color_match_mask.any():
+                                    pool.loc[color_match_mask, 'Final_Score'] += 150000
+                                    notes.append(f"🎨 Color match ({tlaptop_color}): +150k to {color_match_mask.sum()} Apple headphones")
+                                else:
+                                    # Fall back to title-based color match
+                                    color_title = apple_hp & pool['Title'].fillna('').str.lower().str.contains(
+                                        re.escape(tlaptop_color.lower()), regex=True, na=False
+                                    )
+                                    if color_title.any():
+                                        pool.loc[color_title, 'Final_Score'] += 100000
+                                        notes.append(f"🎨 Color match via title ({tlaptop_color}): +100k to {color_title.sum()}")
+                    else:
+                        # Fallback to premium audio brands only if no Apple headphones exist
+                        premium_overhead = pool['Title'].fillna('').str.lower().str.contains(
+                            r'wh-1000xm|wh1000xm|quietcomfort|qc\d|momentum \d|bose 700|audio-technica',
+                            regex=True, na=False
+                        )
+                        pool.loc[is_headset & premium_overhead, 'Final_Score'] += 100000
+                        if (is_headset & premium_overhead).any():
+                            notes.append(f"🍎 Apple fallback: Premium audio brands +100k ({(is_headset & premium_overhead).sum()} items)")
+
+                # Headset Sane Price Tiering — stricter for budget laptops
                 if tprice >= 2000:
-                    pass 
+                    pass
                 elif tprice >= 1000:
                     pool.loc[is_headset & (pool['_p'] > 250), 'Final_Score'] -= 100000
                 elif tprice > 0:
+                    # Sub-€1000 laptop: cap headsets at ~15% of laptop price
+                    # Previously allowed €250 AirPods on €798 laptop — now hard-capped
                     max_hs_price = max(50, tprice * 0.15)
-                    pool.loc[is_headset & (pool['_p'] > max_hs_price), 'Final_Score'] -= 100000
-                    notes.append(f"Price Tiering: Penalized headsets >€{max_hs_price:.0f}")
+                    pool.loc[is_headset & (pool['_p'] > max_hs_price), 'Final_Score'] -= 200000
+                    notes.append(f"Price Tiering: Hard penalty (-200k) for headsets >€{max_hs_price:.0f}")
  
 
 
@@ -3708,14 +3805,14 @@ PERIPHERAL_TRIGGERS = {
 MOUSE_SLOTS = [
     ("Mouse Pad",           ['MOUSE PADS'],                   {'title_hide': ['Gel', 'Wrist', 'Μαξιλαράκι']}),
     ("Keyboard",            ['KEYBOARDS WIRELESS', 'KEYBOARDS WIRED'], {'connectivity_mirror': True, 'brand_match': True, 'apple_force': 'APPLE ORIGINAL WIRELESS KEYBOARD', 'silent_match': True, 'ergo_match': True}),
-    ("Batteries",           ['ΑΛΚΑΛΙΚΕΣ'],                    {'skip_if': 'no_battery', 'title_hide': ['CR', 'Button', 'Coin', 'Λιθίου'], 'title_boost': ['AA', 'AAA', 'LR6', 'LR03']}),
-    ("Screen Cleaner",      ['CLEANING PRODUCTS'],            {}),
-    ("USB Hub",             ['USB HUB DEVICES'],              {}),
-    ("Headset",             ['PC HEADSET/MICROPHONE', 'OVERHEAD'], {}),
-    ("Desk Lamp",           ['ΕΞΥΠΝΟΣ ΦΩΤΙΣΜΟΣ'],            {'title_boost': ['Desk', 'Γραφείου', 'Table', 'Επιτραπέζιο', 'Φωτιστικό'], 'title_hide': ['Ceiling', 'Bulb', 'Strip', 'Οροφής', 'Λάμπα', 'E27', 'E14', 'Ταινία', 'Λεντοταινία']}),
+    ("Overhead Headset",    ['OVERHEAD', 'GAMING AUDIO', 'PC HEADSET/MICROPHONE'], {'brand_boost': True, 'color_match_all': True, 'title_boost': ['Overhead', 'Over-Ear', 'Wireless', 'Bluetooth'], 'title_hide': ['Earbuds', 'In-Ear', 'Neckband']}),
     ("Wrist Rest",          ['MOUSE PADS'],                   {'wrist_rest_only': True}),
+    ("USB Hub",             ['USB HUB DEVICES'],              {}),
+    ("Batteries",           ['ΑΛΚΑΛΙΚΕΣ'],                    {'skip_if': 'no_battery', 'title_hide': ['CR', 'Button', 'Coin', 'Λιθίου'], 'title_boost': ['AA', 'AAA', 'LR6', 'LR03']}),
+    ("Cleaning",            ['CLEANING PRODUCTS'],            {'title_include': ['Αέρας', 'Σπρέι', 'Spray', 'Compressed air', 'Air duster', 'Πεπιεσμένου αέρα', 'Duster']}),
+    ("Desk Lamp",           ['ΕΞΥΠΝΟΣ ΦΩΤΙΣΜΟΣ'],            {'title_boost': ['Desk', 'Γραφείου', 'Table', 'Επιτραπέζιο', 'Φωτιστικό'], 'title_hide': ['Ceiling', 'Bulb', 'Strip', 'Οροφής', 'Λάμπα', 'Λαμπτήρας', 'E27', 'E14', 'Ταινία', 'Λεντοταινία']}),
     ("Mouse Pad 2",         ['MOUSE PADS'],                   {'title_hide': ['Gel', 'Wrist', 'Μαξιλαράκι']}),
-    ("Keyboard 2",          ['KEYBOARDS WIRELESS', 'KEYBOARDS WIRED'], {'connectivity_mirror': True, 'brand_match': True, 'apple_force': 'APPLE ORIGINAL WIRELESS KEYBOARD'}),
+    ("Monitor Riser",       ['ΒΑΣΕΙΣ ΓΡΑΦΕΙΟΥ'],              {'title_boost': ['Riser', 'Stand', 'Drawer', 'Organizer'], 'title_hide': ['Wall Mount', 'Gas Spring', 'VESA', 'CPU', 'Υπολογιστή', 'Βραχίον']}),
 ]
 
 KEYBOARD_SLOTS = [
@@ -3820,15 +3917,15 @@ PENS_SLOTS = [
 ]
 
 PENCILS_SLOTS = [
-    ("Mechanical Lead",   ['ΜΟΛΥΒΙΑ'],                                    {'match_lead_mm': True, 'leads_only': True}),
     ("Matching Accessory",['ΜΟΛΥΒΙΑ', 'ΞΥΣΤΡΕΣ'],                         {'match_writing_type': True}),
-    ("Sharpener",         ['ΞΥΣΤΡΕΣ'],                                    {'match_writing_type': True, 'eidos_boost': ['Βαρελάκι', 'Κλασική', 'Με γόμα'], 'title_boost': ['Metal', 'Dual', 'Μεταλλική', 'Διπλή'], 'title_hide': ['Ηλεκτρική']}),
-    ("Eraser",            ['ΓΟΜΕΣ'],                                      {'eidos_boost': ['Γόμα'], 'title_boost': ['White', 'Λευκή', 'Soft', 'Pencil', 'Μολυβιού'], 'title_hide': ['Ταινία', 'Υγρό', 'Διορθωτικ']}),
+    ("Sharpener",         ['ΞΥΣΤΡΕΣ'],                                    {'eidos_boost': ['Βαρελάκι', 'Κλασική', 'Με γόμα'], 'title_boost': ['Metal', 'Dual', 'Μεταλλική', 'Διπλή'], 'title_hide': ['Ηλεκτρική']}),
+    ("Eraser",            ['ΓΟΜΕΣ'],                                      {'eidos_boost': ['Γόμα'], 'title_boost': ['White', 'Λευκή', 'Soft', 'Μαλακή', 'Staedtler', 'Faber'], 'title_hide': ['Ταινία', 'Υγρό', 'Διορθωτικ']}),
     ("Alt Pencils",       ['ΜΟΛΥΒΙΑ'],                                    {'typos_boost': ['Απλό Μολύβι', 'Μηχανικό Μολύβι', 'Με Γόμα'], 'title_boost': ['Set', 'Σετ', 'HB', '2B', '4B', '6B', 'Pack']}),
     ("Pencil Case",       ['ΚΑΣΕΤΙΝΕΣ-ΘΗΚΕΣ', 'ΣΧΟΛΙΚΕΣ ΚΑΣΕΤΙΝΕΣ', 'ΜΟΛΥΒΟΘΗΚΕΣ'], {'title_boost': ['Large', 'Μεγάλη', 'Compartment', 'Θήκες', 'Zipper', 'Φερμουάρ']}),
     ("Pen",               ['ΣΤΥΛΟ ΥΓΡΗΣ ΜΕΛΑΝΗΣ', 'ΣΤΥΛΟ GEL', 'ΣΤΥΛΟ ΔΙΑΡΚΕΙΑΣ'], {'title_boost': ['Black', 'Blue', 'Μαύρο', 'Μπλε']}),
-    ("Notebook",          ['ΣΗΜΕΙΩΜΑΤΑΡΙΑ', 'ΤΕΤΡΑΔΙΑ'],                   {'eidos_boost': ['Σημειώσεων', 'Σχεδίου'], 'title_boost': ['A4', 'A5', 'Lined', 'Γραμμές', 'Καρέ'], 'title_hide': ['Ακουαρέλας', 'Ιχνογραφίας', 'Πολυγράφου', 'Κολάζ', 'Ριζόχαρτο']}),
-    ("Geometric Tools",   ['ΓΕΩΜΕΤΡΙΚΑ ΟΡΓΑΝΑ', 'ΟΡΓΑΝΑ ΜΕΤΡΗΣΗΣ'],       {'title_boost': ['Ruler', 'Χάρακας', '15cm', '20cm', '30cm'], 'title_hide': ['Compass', 'Protractor', 'Set']}),
+    ("Notebook",          ['ΣΗΜΕΙΩΜΑΤΑΡΙΑ', 'ΤΕΤΡΑΔΙΑ'],                  {'eidos_boost': ['Σημειώσεων', 'Σχεδίου'], 'title_boost': ['A4', 'A5', 'Lined', 'Γραμμές', 'Καρέ'], 'title_hide': ['Ακουαρέλας', 'Ιχνογραφίας', 'Πολυγράφου', 'Κολάζ', 'Ριζόχαρτο']}),
+    ("Mechanical Lead",   ['ΜΟΛΥΒΙΑ'],                                    {'typos_include': ['Μύτες για Μηχανικό Μολύβι'], 'title_boost': ['0.5', '0.7', 'HB', '2B']}),
+    ("Geometric Tools",   ['ΓΕΩΜΕΤΡΙΚΑ ΟΡΓΑΝΑ', 'ΟΡΓΑΝΑ ΜΕΤΡΗΣΗΣ'],      {'title_boost': ['Ruler', 'Χάρακας', '15cm', '20cm', '30cm'], 'title_hide': ['Compass', 'Protractor', 'Set']}),
     ("Highlighter",       ['ΜΑΡΚΑΔΟΡΟΙ ΥΠΟΓΡΑΜΜΙΣΗΣ'],                    {'title_boost': ['Pastel', '4-pack', 'Soft'], 'title_hide': ['Permanent', 'Whiteboard', 'Neon']}),
 ]
 
@@ -4133,15 +4230,30 @@ PRINTER_LASER_SLOTS = [
 # Lighting slots use title_include to avoid ceiling/bulb false-positives (Λάμπα, Λαμπτήρας).
 WEBCAM_SLOTS = [
     ("Microphone",          ['PC MICROPHONES'],               {'brand_match': True, 'price_match_trigger': True, 'title_boost': ['USB', 'Condenser', 'Streaming', 'Podcast', 'Desktop', 'Επιτραπέζιο'], 'title_hide': ['Gaming RGB', 'Lavalier', 'Wireless lav']}),
-    ("Ring Light",          ['ΕΞΥΠΝΟΣ ΦΩΤΙΣΜΟΣ', 'ΦΩΤΙΣΤΙΚΑ'],{'title_include': ['Ring', 'LED Panel', 'Video Light', 'Streaming', 'Key Light', 'Softbox', 'Δακτύλιος'], 'title_hide': ['Ceiling', 'Bulb', 'Strip', 'Λάμπα', 'Λαμπτήρας', 'E27', 'E14', 'Smart Bulb', 'Λεντοταινία', 'Ταινία']}),
+    ("Ring Light",          ['ΕΞΥΠΝΟΣ ΦΩΤΙΣΜΟΣ', 'ΦΩΤΙΣΤΙΚΑ'],{'title_include': ['Ring', 'LED Panel', 'Video Light', 'Streaming', 'Key Light', 'Softbox', 'Δακτύλιος'], 'title_hide': ['Ceiling', 'Bulb', 'Strip', 'Λάμπα', 'Λαμπτήρας', 'E27', 'E14', 'Smart Bulb', 'Λεντοταινία', 'Ταινία', 'Γιρλάντα', 'String Light', 'Outdoor', 'Εξωτερικ', 'Bedside', 'Κρεβατ', 'Nightlight']}),
+    ("Overhead Headset",    ['OVERHEAD', 'PC HEADSET/MICROPHONE', 'BLUETOOTH'], {'brand_boost': True, 'color_match_all': True, 'title_boost': ['Overhead', 'Over-Ear', 'Noise Cancelling', 'Teams', 'Zoom', 'Conference'], 'title_hide': ['Earbuds', 'In-Ear', 'Neckband', 'Lavalier']}),
     ("Webcam Mount",        ['ΒΑΣΕΙΣ ΓΡΑΦΕΙΟΥ'],               {'title_include': ['Webcam', 'Camera mount', 'Clip', 'Monitor Mount', 'Επιτραπέζι', 'Επιτοίχι', 'Clamp'], 'title_hide': ['Τρίποδο', 'Tripod', 'DSLR', 'Heavy Duty', 'CPU', 'Υπολογιστή', 'Riser', 'Drawer', 'Laptop', 'Notebook', 'Cooler', 'VESA']}),
     ("USB Extension",       ['USB CABLES'],                   {'title_boost': ['Extension', 'Extender', '3m', '5m'], 'title_hide': ['DisplayPort', 'Charging', 'HDMI']}),
     ("Lens Cleaner",        ['CLEANING PRODUCTS'],            {'title_include': ['Lens', 'Camera', 'Screen', 'Microfiber', 'Wipes', 'Optical', 'Σπρέι', 'Αέρας']}),
-    ("PC Headset",          ['PC HEADSET/MICROPHONE'],        {'brand_match': True, 'title_boost': ['Noise Cancelling', 'Teams', 'Zoom', 'Conference', 'USB']}),
-    ("Desk Lamp",           ['ΕΞΥΠΝΟΣ ΦΩΤΙΣΜΟΣ', 'ΦΩΤΙΣΤΙΚΑ'], {'title_include': ['Desk', 'Γραφείου', 'Table', 'Επιτραπέζιο', 'Φωτιστικό', 'ScreenBar', 'Monitor Light'], 'title_hide': ['Ceiling', 'Bulb', 'Strip', 'Οροφής', 'Λάμπα', 'Λαμπτήρας', 'E27', 'E14', 'Ταινία', 'Λεντοταινία', 'Smart Bulb']}),
+    ("Desk Lamp",           ['ΕΞΥΠΝΟΣ ΦΩΤΙΣΜΟΣ', 'ΦΩΤΙΣΤΙΚΑ'], {'title_include': ['Desk', 'Γραφείου', 'Table', 'Επιτραπέζιο', 'Φωτιστικό', 'ScreenBar', 'Monitor Light'], 'title_hide': ['Ceiling', 'Bulb', 'Strip', 'Οροφής', 'Λάμπα', 'Λαμπτήρας', 'E27', 'E14', 'Ταινία', 'Λεντοταινία', 'Smart Bulb', 'Γιρλάντα', 'String Light', 'Outdoor', 'Εξωτερικ', 'Bedside', 'Κρεβατ']}),
     ("USB Hub",             ['USB HUB DEVICES'],              {'title_boost': ['Desk Mount', 'Clamp', 'USB-A', 'USB-C']}),
     ("Cable Organizer",     ['ACCESSORIES', 'USB CABLES'],    {'title_include': ['Cable', 'Organizer', 'Velcro', 'Clip', 'Οργάνωσης', 'Συγκράτησης']}),
     ("PC Speakers",         ['PC SPEAKERS 2.0', 'PC SPEAKERS 1'], {'brand_match': True, 'title_boost': ['Desktop', 'USB Powered', 'Compact', '2.0'], 'title_hide': ['Soundbar', '5.1', 'Subwoofer', 'Gaming RGB']}),
+]
+
+# Gaming-webcam variant: Razer Kiyo, Logitech G StreamCam, etc.
+# Differences from WEBCAM_SLOTS: gaming audio instead of office headset, streaming accessories emphasis.
+WEBCAM_GAMING_SLOTS = [
+    ("Microphone",          ['PC MICROPHONES'],               {'brand_match': True, 'price_match_trigger': True, 'title_boost': ['Streaming', 'USB', 'Condenser', 'Blue Yeti', 'Razer Seiren', 'HyperX QuadCast'], 'title_hide': ['Lavalier', 'Wireless lav']}),
+    ("Ring Light",          ['ΕΞΥΠΝΟΣ ΦΩΤΙΣΜΟΣ', 'ΦΩΤΙΣΤΙΚΑ'],{'title_include': ['Ring', 'LED Panel', 'Video Light', 'Streaming', 'Key Light', 'Softbox', 'Δακτύλιος'], 'title_hide': ['Ceiling', 'Bulb', 'Strip', 'Λάμπα', 'Λαμπτήρας', 'E27', 'E14', 'Smart Bulb', 'Λεντοταινία', 'Ταινία', 'Γιρλάντα', 'String Light', 'Outdoor', 'Εξωτερικ', 'Bedside', 'Κρεβατ', 'Nightlight']}),
+    ("Gaming Headset",      ['GAMING AUDIO', 'OVERHEAD'],     {'brand_boost': True, 'color_match_all': True, 'title_boost': ['Gaming', 'Razer', 'Logitech G', 'HyperX', 'SteelSeries', 'Corsair', 'Astro'], 'title_hide': ['Earbuds', 'In-Ear', 'Lavalier']}),
+    ("Webcam Mount",        ['ΒΑΣΕΙΣ ΓΡΑΦΕΙΟΥ'],               {'title_include': ['Webcam', 'Camera mount', 'Clip', 'Monitor Mount', 'Επιτραπέζι', 'Επιτοίχι', 'Clamp'], 'title_hide': ['Τρίποδο', 'Tripod', 'DSLR', 'Heavy Duty', 'CPU', 'Υπολογιστή', 'Riser', 'Drawer', 'Laptop', 'Notebook', 'Cooler', 'VESA']}),
+    ("Streaming Accessories",['STREAMING ACCESSORIES'],       {'eidos_include': ['Capture Card', 'Gaming Αξεσουάρ', 'Green Screen', 'Mic Arm', 'Stream Controller', 'Stream Deck', 'Streaming Kit', 'Βραχίονας μικροφώνου', 'Ηχοαπορροφητικά Πάνελ', 'Κάρτα καταγραφής βίντεο']}),
+    ("USB Extension",       ['USB CABLES'],                   {'title_boost': ['Extension', 'Extender', '3m', '5m'], 'title_hide': ['DisplayPort', 'Charging', 'HDMI']}),
+    ("Lens Cleaner",        ['CLEANING PRODUCTS'],            {'title_include': ['Lens', 'Camera', 'Screen', 'Microfiber', 'Wipes', 'Optical', 'Σπρέι', 'Αέρας']}),
+    ("Smart Lighting",      ['ΕΞΥΠΝΟΣ ΦΩΤΙΣΜΟΣ'],             {'title_boost': ['Strip', 'LED', 'Bias', 'Backlight', 'RGB', 'Ταινία', 'Λεντοταινία'], 'title_hide': ['Ceiling', 'Bulb', 'Λάμπα', 'Λαμπτήρας', 'E27', 'E14', 'Οροφής', 'Γιρλάντα', 'String Light', 'Outdoor', 'Bedside']}),
+    ("USB Hub",             ['USB HUB DEVICES'],              {'title_boost': ['Desk Mount', 'Clamp', 'USB-A', 'USB-C']}),
+    ("PC Speakers",         ['PC SPEAKERS 2.0', 'PC SPEAKERS 1'], {'brand_boost': True, 'title_boost': ['Gaming', 'RGB', 'Desktop', '2.0'], 'title_hide': ['Soundbar', '5.1', 'Subwoofer']}),
 ]
 
 # ── USB Hub ──
@@ -4302,14 +4414,12 @@ def run_peripherals_engine(trigger, df_products, df_history, cluster_key):
     has_rgb = 'rgb' in str(trigger.get('Πρόσθετα χαρακτηριστικά', '')).lower() or 'rgb' in _tt_lower
     no_battery = is_wired or is_apple
 
-# ── Kid/whimsical theme detection ──
+    # ── Kid/whimsical theme detection ──
     # Signal that trigger is a cutesy/kids product; used to decide whether to penalize kids-themed candidates.
     # Professional triggers (Pilot ballpoint, Tipp-Ex correction tape, etc.) should NOT get Kawaii Ladybug pencil cases.
     # Covers: cute names/motifs, kid-brand signals (Maxi/Jumbo sizes), and common typo variants.
-    KID_THEME_RE = r'kitty|kawaii|\bmeow\b|πεταλούδα|ladybug|παγωτό|γκλίτερ|glitter|unicorn|μονόκερος|teddy|\bkids\b|παιδικ|princess|πριγκίπισσα|disney|sparkle|σπάρκλ|rainbow|donut|cupcake|kawai|cute pet|μικροί ζωγράφο|fairy|νεράιδ|pixel|\bmaxi\b|\bjumbo\b|minnie|mickey|peppa|barbie|spiderman|spider-man|paw patrol|marvel|avengers|pj masks|frozen|elsa|anna|minions|hot wheels|lol surprise|l\.o\.l|super mario|sonic|batman|superman'
-    
+    KID_THEME_RE = r'kitty|kawaii|\bmeow\b|πεταλούδα|ladybug|παγωτό|γκλίτερ|glitter|unicorn|μονόκερος|teddy|\bkids\b|παιδικ|princess|πριγκίπισσα|disney|sparkle|σπάρκλ|rainbow|donut|cupcake|kawai|cute pet|μικροί ζωγράφο|fairy|νεράιδ|pixel|\bmaxi\b|\bjumbo\b'
     trigger_is_kid_theme = bool(re.search(KID_THEME_RE, _tt_lower))
-    
     # Also treat known kid-oriented brands as kid-themed triggers
     _kid_brand_set = {'GIOTTO', 'CARIOCA', 'CRAYOLA', 'FIBRAPEN', 'MILAN'}
     if not trigger_is_kid_theme and tb in _kid_brand_set:
@@ -4402,6 +4512,22 @@ def run_peripherals_engine(trigger, df_products, df_history, cluster_key):
             slots = PRINTER_INKJET_SLOTS
             persona = "Inkjet"
         diag.append(("0. Printer Persona", persona, f"Hierarchy='{thier}'"))
+    elif cluster_key == "Webcam":
+        # Webcam sub-cluster: gaming brands → gaming-variant slot list (gaming audio, streaming, RGB).
+        _gaming_webcam_brands = {'RAZER', 'LOGITECH G', 'CORSAIR', 'HYPERX', 'ASUS ROG', 'ROCCAT', 'ELGATO'}
+        _webcam_title_lower = tt.lower()
+        is_gaming_webcam = (
+            tb in _gaming_webcam_brands
+            or 'gaming' in _webcam_title_lower
+            or 'streamcam' in _webcam_title_lower
+            or 'kiyo' in _webcam_title_lower  # Razer Kiyo
+        )
+        if is_gaming_webcam:
+            slots = WEBCAM_GAMING_SLOTS
+            diag.append(("0. Webcam Persona", "Gaming", f"Brand={tb}, Title='{tt[:50]}'"))
+        else:
+            slots = WEBCAM_SLOTS
+            diag.append(("0. Webcam Persona", "Standard", f"Brand={tb}"))
     else:
         slots = PERIPHERAL_CLUSTER_SLOTS.get(cluster_key, [])
 
@@ -4589,6 +4715,40 @@ def run_peripherals_engine(trigger, df_products, df_history, cluster_key):
                 pool.loc[is_same_brand, 'Final_Score'] += 80000
                 if is_same_brand.any():
                     notes.append(f"Brand Match ({tb}): +80k points to {is_same_brand.sum()} items")
+
+            # brand_boost: softer version — same-brand is preferred but not enforced.
+            # Use this for slots where cross-brand is acceptable (e.g. Headset slot on Mouse cluster).
+            if flags.get('brand_boost'):
+                pool.loc[is_same_brand, 'Final_Score'] += 40000
+                if is_same_brand.any():
+                    notes.append(f"Brand Boost ({tb}): +40k to {is_same_brand.sum()} items (soft)")
+
+        # color_match_all: boost candidates whose Χρώμα matches the trigger color,
+        # regardless of slot role (overrides the default "keyboard/pad/mat only" filter).
+        # Used for slots like Headset where color coordination matters (pink mouse → pink headphones).
+        if flags.get('color_match_all') and do_color_match and 'Χρώμα' in pool.columns and tcolor:
+            target_colors = pool['Χρώμα'].fillna('').astype(str).str.strip().str.upper()
+            trigger_color_upper = tcolor.upper()
+            synonyms = [trigger_color_upper]
+            if trigger_color_upper in ['GRAPHITE', 'ΓΡΑΦΙΤΗΣ', 'GREY', 'GRAY', 'ΓΚΡΙ']:
+                synonyms.extend(['GRAPHITE', 'ΓΡΑΦΙΤΗΣ', 'ΓΚΡΙ', 'GREY', 'GRAY'])
+            elif trigger_color_upper in ['BLACK', 'ΜΑΥΡΟ']:
+                synonyms.extend(['BLACK', 'ΜΑΥΡΟ'])
+            elif trigger_color_upper in ['WHITE', 'ΛΕΥΚΟ']:
+                synonyms.extend(['WHITE', 'ΛΕΥΚΟ'])
+            elif trigger_color_upper in ['PINK', 'ΡΟΖ']:
+                synonyms.extend(['PINK', 'ΡΟΖ'])
+            elif trigger_color_upper in ['BLUE', 'ΜΠΛΕ']:
+                synonyms.extend(['BLUE', 'ΜΠΛΕ', 'INDIGO'])
+            elif trigger_color_upper in ['RED', 'ΚΟΚΚΙΝΟ']:
+                synonyms.extend(['RED', 'ΚΟΚΚΙΝΟ'])
+            # Match by attribute OR title
+            attr_match = target_colors.isin(synonyms)
+            title_match = pool['Title'].fillna('').str.upper().str.contains('|'.join(synonyms), regex=True, na=False)
+            color_hit = attr_match | title_match
+            if color_hit.any():
+                pool.loc[color_hit, 'Final_Score'] += 120000
+                notes.append(f"🎨 Color match-all ({tcolor}): +120k to {color_hit.sum()} items")
 
         # 2. Color Tiebreaker (+200k) - Eligible for Keyboards and Mousepads/Mats
         r_lower = role.lower()
@@ -5025,17 +5185,12 @@ def run_peripherals_engine(trigger, df_products, df_history, cluster_key):
         # ── Writing Instrument Precision Matching ──
         if flags.get('match_writing_type'):
             t_type = str(trigger.get('Τύπος', '')).lower()
-            combined_trigger = f"{t_type} {_tt_lower}"
             
-            # Rule 1: Mechanical Pencil -> Needs "Μύτες" (Leads), NO Sharpeners
-            if 'μηχανικό' in combined_trigger:
-                if 'ΞΥΣΤΡΕΣ' in pool['Hierarchy'].fillna('').str.upper().unique():
-                    pool = pool.head(0)
-                    notes.append("Mechanical Pencil detected -> Skipped Sharpener")
-                else:
-                    is_leads = pool['Τύπος'].fillna('').str.lower().str.contains('μύτες')
-                    pool.loc[is_leads, 'Final_Score'] += 200000
-                    notes.append("Mechanical Pencil detected -> Boosted 'Μύτες'")
+            # Rule 1: Mechanical Pencil -> Needs "Μύτες" (Leads)
+            if 'μηχανικό' in t_type:
+                is_leads = pool['Τύπος'].fillna('').str.lower().str.contains('μύτες')
+                pool.loc[is_leads, 'Final_Score'] += 200000
+                notes.append("Mechanical Pencil detected -> Boosted 'Μύτες'")
                 
             # Rule 2: Ink/Gel/Roller -> Needs Correction Tape/Fluid (not a classic eraser)
             elif any(x in t_type for x in ['gel', 'υγρής', 'roller', 'διαρκείας', 'πένα']):
@@ -5049,51 +5204,6 @@ def run_peripherals_engine(trigger, df_products, df_history, cluster_key):
                 pool.loc[is_barrel_sharpener, 'Final_Score'] += 80000
                 notes.append("Classic pencil detected -> Boosted 'Βαρελάκι' sharpeners")
 
-
-        # ── Mechanical Lead Logic (Priority Slot 1) ──
-        if flags.get('leads_only'):
-            # Ελέγχουμε αν το trigger είναι όντως μηχανικό μολύβι
-            is_mechanical = 'μηχανικό' in f"{str(trigger.get('Τύπος', '')).lower()} {_tt_lower}"
-            
-            if not is_mechanical:
-                # Αν δεν είναι μηχανικό, αδειάζουμε το pool ώστε το Slot 1 να προσπεραστεί
-                pool = pool.head(0)
-                notes.append("Not a mechanical pencil -> Skipping Lead slot")
-            else:
-                # Αυστηρό φίλτρο: Μόνο Μύτες
-                pool = pool[pool['Τύπος'].fillna('').str.contains('Μύτες για Μηχανικό Μολύβι', na=False, case=False)]
-                notes.append("Strict filter: Leads only")
-
-        if flags.get('match_lead_mm'):
-            # Εξαγωγή mm από τον τίτλο του trigger (π.χ. 0.5)
-            t_mm_match = re.search(r'(0\.[3579]|1\.0|1\.4|2\.0)\s*mm?', _tt_lower)
-            if t_mm_match:
-                t_mm = t_mm_match.group(1)
-                
-                # Αναζήτηση στα πεδία Πάχος Γραφής ή στον Τίτλο των υποψηφίων
-                p_title = pool['Title'].fillna('').str.lower()
-                
-                # Ασφαλής εξαγωγή στήλης για αποφυγή KeyError
-                if 'Πάχος Γραφής' in pool.columns:
-                    p_thickness = pool['Πάχος Γραφής'].fillna('').astype(str).str.lower()
-                elif 'Πάχος Μύτης' in pool.columns:
-                    p_thickness = pool['Πάχος Μύτης'].fillna('').astype(str).str.lower()
-                else:
-                    p_thickness = pd.Series('', index=pool.index)
-                
-                # Το regex διασφαλίζει ότι το "0.5" δεν θα ταιριάξει με το "0.55"
-                is_same_mm = p_title.str.contains(rf'(?<!\d){re.escape(t_mm)}(?!\d)', regex=True) | \
-                             p_thickness.str.contains(rf'(?<!\d){re.escape(t_mm)}(?!\d)', regex=True)
-                
-                # Τεράστιο boost για να σιγουρέψουμε ότι οι σωστές μύτες θα βγουν πρώτες
-                pool.loc[is_same_mm, 'Final_Score'] += 500000
-                # Penalty σε όσες μύτες έχουν λάθος mm
-                pool.loc[~is_same_mm, 'Final_Score'] -= 100000
-                notes.append(f"Matching Lead Thickness ({t_mm}mm): Boosted {is_same_mm.sum()} items")
-            else:
-                notes.append("No mm thickness found on trigger pencil.")
-
-                
         # ── Deep Attribute Matching (Art Mediums & Techniques) ──
         if flags.get('match_art_medium'):
             # 1. Identify the trigger's medium from its Τύπος or Είδος
@@ -5710,45 +5820,6 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 with st.expander("⚙️ System Diagnostics"):
-    # ─────────────────────────────────────────────────────────────
-    # ONE-CLICK COPYABLE DIAGNOSTICS
-    # ─────────────────────────────────────────────────────────────
-    st.markdown("### 📋 Copy Diagnostics")
-    
-    # Build the massive string
-    diag_export = f"Active Cluster: {active_cluster}\n\n"
-    
-    diag_export += "--- TRIGGER ATTRIBUTES ---\n"
-    # Αντί για cols (που ανήκει στο UI), διαβάζουμε κατευθείαν το Excel row
-    for col in trigger.index: 
-        try:
-            if col in trigger.index:
-                val = trigger[col]
-                if isinstance(val, pd.Series): val = val.iloc[0]
-            else:
-                val = 'N/A'
-        except Exception:
-            val = 'N/A'
-        diag_export += f"{col}: {val}\n"
-        
-    diag_export += "\n--- ENGINE FUNNEL ---\n"
-    for step in diag:
-        diag_export += f"{step[0]} | Count: {step[1]} | Note: {step[2]}\n"
-        
-    diag_export += "\n--- SLOT DETAILS ---\n"
-    for sn, notes in sorted(slot_notes.items()):
-        if notes:
-            diag_export += f"\nPriority {sn}\n"
-            for n in notes: 
-                diag_export += f"{n}\n"
-                
-    if not recs.empty:
-        diag_export += "\n--- FINAL RECOMMENDATIONS ---\n"
-        for _, r in recs.iterrows():
-            diag_export += f"Slot {r.get('Assigned_Slot', '?')}: {r.get('Title', 'Unknown')} (Score: {r.get('Final_Score', 0)})\n"
-
-    # Display it inside a code block which provides a native copy button
-    st.code(diag_export, language="text")
     st.markdown(f"### Active Cluster: **{active_cluster}**")
     
     if active_cluster == "Kids Books":
