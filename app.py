@@ -4230,7 +4230,6 @@ PRINTER_LASER_SLOTS = [
 # Lighting slots use title_include to avoid ceiling/bulb false-positives (Λάμπα, Λαμπτήρας).
 WEBCAM_SLOTS = [
     ("Microphone",          ['PC MICROPHONES'],               {'brand_match': True, 'price_match_trigger': True, 'title_boost': ['USB', 'Condenser', 'Streaming', 'Podcast', 'Desktop', 'Επιτραπέζιο'], 'title_hide': ['Gaming RGB', 'Lavalier', 'Wireless lav']}),
-    ("Ring Light",          ['ΕΞΥΠΝΟΣ ΦΩΤΙΣΜΟΣ', 'ΦΩΤΙΣΤΙΚΑ'],{'title_include': ['Ring', 'LED Panel', 'Video Light', 'Streaming', 'Key Light', 'Softbox', 'Δακτύλιος'], 'title_hide': ['Ceiling', 'Bulb', 'Strip', 'Λάμπα', 'Λαμπτήρας', 'E27', 'E14', 'Smart Bulb', 'Λεντοταινία', 'Ταινία', 'Γιρλάντα', 'String Light', 'Outdoor', 'Εξωτερικ', 'Bedside', 'Κρεβατ', 'Nightlight']}),
     ("Overhead Headset",    ['OVERHEAD', 'PC HEADSET/MICROPHONE', 'BLUETOOTH'], {'brand_boost': True, 'color_match_all': True, 'title_boost': ['Overhead', 'Over-Ear', 'Noise Cancelling', 'Teams', 'Zoom', 'Conference'], 'title_hide': ['Earbuds', 'In-Ear', 'Neckband', 'Lavalier']}),
     ("Webcam Mount",        ['ΒΑΣΕΙΣ ΓΡΑΦΕΙΟΥ'],               {'title_include': ['Webcam', 'Camera mount', 'Clip', 'Monitor Mount', 'Επιτραπέζι', 'Επιτοίχι', 'Clamp'], 'title_hide': ['Τρίποδο', 'Tripod', 'DSLR', 'Heavy Duty', 'CPU', 'Υπολογιστή', 'Riser', 'Drawer', 'Laptop', 'Notebook', 'Cooler', 'VESA']}),
     ("USB Extension",       ['USB CABLES'],                   {'title_boost': ['Extension', 'Extender', '3m', '5m'], 'title_hide': ['DisplayPort', 'Charging', 'HDMI']}),
@@ -4239,6 +4238,8 @@ WEBCAM_SLOTS = [
     ("USB Hub",             ['USB HUB DEVICES'],              {'title_boost': ['Desk Mount', 'Clamp', 'USB-A', 'USB-C']}),
     ("Cable Organizer",     ['ACCESSORIES', 'USB CABLES'],    {'title_include': ['Cable', 'Organizer', 'Velcro', 'Clip', 'Οργάνωσης', 'Συγκράτησης']}),
     ("PC Speakers",         ['PC SPEAKERS 2.0', 'PC SPEAKERS 1'], {'brand_match': True, 'title_boost': ['Desktop', 'USB Powered', 'Compact', '2.0'], 'title_hide': ['Soundbar', '5.1', 'Subwoofer', 'Gaming RGB']}),
+    ("Microphone",          ['PC MICROPHONES'],               {'brand_match': True, 'price_match_trigger': True, 'title_boost': ['USB', 'Condenser', 'Streaming', 'Podcast', 'Desktop', 'Επιτραπέζιο'], 'title_hide': ['Gaming RGB', 'Lavalier', 'Wireless lav']}),
+
 ]
 
 # Gaming-webcam variant: Razer Kiyo, Logitech G StreamCam, etc.
