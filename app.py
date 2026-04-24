@@ -3109,34 +3109,51 @@ def run_laptops_engine(trigger, df_products, df_history):
                 notes.append("High-refresh boost (≥144Hz) — match GPU performance")
 
             # ── Retina laptop → premium panel technology only (HARD FILTER) ──
-            # A Retina MacBook is a color-accurate device. Pairing it with a generic TN panel
-            # or an unspecified "LED" monitor undermines the quality. Allow only the
-            # well-known premium panel technologies.
-            GOOD_PANEL_PAT = r'\bips\b|\bva\b|\btn\b|\boled\b|\bamoled\b|\bqd-oled\b|nano\s*ips|\bretina\b|\bads\b|micro\s*led|mini\s*led'
+            # A Retina MacBook is a color-accurate device. Pairing it with a generic TN (terrible colors)
+            # or VA (color shifting) panel undermines the quality. Allow only the BEST premium panels.
+            GOOD_PANEL_PAT = r'\bips\b|\boled\b|\bamoled\b|\bqd-oled\b|nano\s*ips|\bretina\b|\bads\b|micro\s*led|mini\s*led'
+            
             if trigger_is_retina:
                 tech_mask = pd.Series(False, index=pool.index)
                 if 'Τεχνολογία Οθόνης' in pool.columns:
                     tech_mask = pool['Τεχνολογία Οθόνης'].fillna('').astype(str).str.lower().str.contains(GOOD_PANEL_PAT, regex=True, na=False)
                 # Also check title as fallback — many monitors spell the panel tech in the title
                 tech_mask = tech_mask | pool['Title'].fillna('').str.lower().str.contains(GOOD_PANEL_PAT, regex=True, na=False)
+                
                 if tech_mask.any():
                     b4 = len(pool)
                     pool = pool[tech_mask]
-                    notes.append(f"🖼️ Retina laptop → panel tech filter (IPS/VA/TN/OLED/Nano IPS/Retina/ADS/Micro LED): {b4}→{len(pool)}")
+                    notes.append(f"🖼️ Retina laptop → premium panel tech filter (IPS/OLED/MiniLED only): {b4}→{len(pool)}")
+                else:
+                    notes.append("⚠ Retina laptop but no premium panels found in catalog — keeping all")
                 else:
                     notes.append("⚠ Retina laptop but no panel-tech matches in catalog — keeping all")
 
             # ── Req 6: OLED laptop → ONLY OLED monitors (HARD FILTER) ──
+            # ── Req 6: OLED laptop → Soft preference for OLED monitors ──
             if trigger_is_oled:
                 oled_mon = pool['Title'].fillna('').str.lower().str.contains(r'\boled\b|\bamoled\b|\bqd-oled\b', regex=True, na=False)
                 if 'Τεχνολογία Οθόνης' in pool.columns:
                     oled_mon = oled_mon | pool['Τεχνολογία Οθόνης'].fillna('').astype(str).str.lower().str.contains(r'oled|amoled', regex=True, na=False)
+                
                 if oled_mon.any():
-                    b4 = len(pool)
-                    pool = pool[oled_mon]
-                    notes.append(f"🌈 OLED laptop → HARD FILTER to OLED monitors only: {b4}→{len(pool)}")
+                    # 1. Base boost for being OLED
+                    pool.loc[oled_mon, 'Final_Score'] += 150000
+                    
+                    # 2. Deboost extremely expensive OLEDs (> 60% of the laptop price)
+                    # (This stacks on top of the standard overbuy penalty to nuke it completely)
+                    extreme_price_threshold = tprice * 0.60
+                    extreme_oled = oled_mon & (pool['_p'] > extreme_price_threshold)
+                    pool.loc[extreme_oled, 'Final_Score'] -= 400000
+                    
+                    # 3. Slight deboost for gaming OLEDs if the user's laptop isn't specifically gaming
+                    if not is_gaming:
+                        gaming_oled = oled_mon & pool['Title'].fillna('').str.lower().str.contains(r'gaming|odyssey|predator|rog|alienware|aorus', regex=True, na=False)
+                        pool.loc[gaming_oled, 'Final_Score'] -= 80000
+                    
+                    notes.append(f"🌈 OLED laptop → Soft Boost to {oled_mon.sum()} OLEDs (+150k), Heavy penalty if >€{extreme_price_threshold:.0f}")
                 else:
-                    notes.append("⚠ OLED laptop but no OLED monitors in catalog — keeping all")
+                    notes.append("⚠ OLED laptop but no OLED monitors found — standard IPS/VA applies")
 
             vesa_mon = pool['Title'].fillna('').str.lower().str.contains('vesa|ergonomic|pivot', regex=True, na=False)
             pool.loc[vesa_mon, 'Final_Score'] += 10000
@@ -3278,9 +3295,11 @@ def run_laptops_engine(trigger, df_products, df_history):
                     apple_hp = (apple_brand | airpods_title | apple_hp_hier) & is_headset
 
                     if apple_hp.any():
-                        # HARD boost — put Apple headphones on top
-                        pool.loc[apple_hp, 'Final_Score'] += 300000
-                        notes.append(f"🍎 Apple HEADPHONES hard-boost +300k ({apple_hp.sum()} items)")
+                        # ========================================================
+                        # SUPER HARD boost — force Apple earbuds to the absolute top (+500k)
+                        # ========================================================
+                        pool.loc[apple_hp, 'Final_Score'] += 500000
+                        notes.append(f"🍎 Apple HEADPHONES hard-boost +500k ({apple_hp.sum()} items)")
 
                         # Color match: if laptop has a Χρώμα, boost same-color headphones
                         tlaptop_color = str(trigger.get('Χρώμα', '')).strip()
@@ -3309,7 +3328,7 @@ def run_laptops_engine(trigger, df_products, df_history):
                         pool.loc[is_headset & premium_overhead, 'Final_Score'] += 100000
                         if (is_headset & premium_overhead).any():
                             notes.append(f"🍎 Apple fallback: Premium audio brands +100k ({(is_headset & premium_overhead).sum()} items)")
-
+                            
                 # Headset Sane Price Tiering — stricter for budget laptops
                 if tprice >= 2000:
                     pass
@@ -4436,12 +4455,8 @@ def run_peripherals_engine(trigger, df_products, df_history, cluster_key):
     no_battery = is_wired or is_apple
 
     # ── Kid/whimsical theme detection ──
-    # Signal that trigger is a cutesy/kids product; used to decide whether to penalize kids-themed candidates.
-    # Professional triggers (Pilot ballpoint, Tipp-Ex correction tape, etc.) should NOT get Kawaii Ladybug pencil cases.
-    # Covers: cute names/motifs, kid-brand signals (Maxi/Jumbo sizes), and common typo variants.
     KID_THEME_RE = r'kitty|kawaii|\bmeow\b|πεταλούδα|ladybug|παγωτό|γκλίτερ|glitter|unicorn|μονόκερος|teddy|\bkids\b|παιδικ|princess|πριγκίπισσα|disney|sparkle|σπάρκλ|rainbow|donut|cupcake|kawai|cute pet|μικροί ζωγράφο|fairy|νεράιδ|pixel|\bmaxi\b|\bjumbo\b'
     trigger_is_kid_theme = bool(re.search(KID_THEME_RE, _tt_lower))
-    # Also treat known kid-oriented brands as kid-themed triggers
     _kid_brand_set = {'GIOTTO', 'CARIOCA', 'CRAYOLA', 'FIBRAPEN', 'MILAN'}
     if not trigger_is_kid_theme and tb in _kid_brand_set:
         trigger_is_kid_theme = True
@@ -4558,12 +4573,25 @@ def run_peripherals_engine(trigger, df_products, df_history, cluster_key):
     # ── Build candidate pool ──
     c = df_products[df_products['Material'] != tm].copy()
 
+    # =====================================================================
+    # 🚫 HARD FILTER: Exclude smart bulbs! Require 'Είδος' == 'Φωτιστικά'
+    # =====================================================================
+    if 'Είδος' in c.columns:
+        is_smart_lighting = c['Hierarchy'].fillna('').astype(str).str.upper().str.strip() == 'ΕΞΥΠΝΟΣ ΦΩΤΙΣΜΟΣ'
+        is_fotistika = c['Είδος'].fillna('').astype(str).str.upper().str.contains('ΦΩΤΙΣΤΙΚ', na=False)
+        b4_bulbs = len(c)
+        # Drop rows that are in 'ΕΞΥΠΝΟΣ ΦΩΤΙΣΜΟΣ' but are NOT 'Φωτιστικά'
+        c = c[~(is_smart_lighting & ~is_fotistika)]
+        if b4_bulbs > len(c):
+            diag.append(("1a. No Bulbs Filter", len(c), f"Removed {b4_bulbs - len(c)} items (Kept only Φωτιστικά)"))
+    # =====================================================================
+
     if 'CW Stock Units' in c.columns:
         stv = pd.to_numeric(c['CW Stock Units'], errors='coerce').fillna(0)
         pct = (stv > 0).sum() / len(c) if len(c) > 0 else 0
         if pct >= 0.10:
             c = c[stv > 0]
-            diag.append(("1. Stock", len(c), f"({pct:.0%})"))
+            diag.append(("1b. Stock", len(c), f"({pct:.0%})"))
 
     if 'Sum of Sales' in c.columns:
         c['Sales_Tiebreaker'] = pd.to_numeric(c['Sum of Sales'], errors='coerce').fillna(0)
@@ -4575,7 +4603,9 @@ def run_peripherals_engine(trigger, df_products, df_history, cluster_key):
         b4 = len(c)
         c = c[c['Κατασκευαστής'].fillna('').astype(str).str.strip().str.upper() != 'APPLE']
         if b4 > len(c):
-            diag.append(("1b. Apple ban", len(c), f"-{b4 - len(c)}"))
+            diag.append(("1c. Apple ban", len(c), f"-{b4 - len(c)}"))
+            
+    # ... rest of run_peripherals_engine code ...
 
     used_materials = {tm}
 
