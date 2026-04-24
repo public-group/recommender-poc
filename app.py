@@ -3285,7 +3285,7 @@ def run_laptops_engine(trigger, df_products, df_history):
                     # the AirPods listings and they should dominate the slot for Apple users.
                     apple_brand = pool['Κατασκευαστής'].fillna('').str.strip().str.upper() == 'APPLE'
                     airpods_title = pool['Title'].fillna('').str.lower().str.contains(
-                        r'airpods|beats (studio|fit|solo|flex)',
+                        r'airpods',
                         regex=True, na=False
                     )
                     apple_hp_hier = hier_upper.str.contains('APPLE HEADPHONES|APPLE ORIGINAL HEADPHONES', regex=True, na=False)
@@ -3330,13 +3330,14 @@ def run_laptops_engine(trigger, df_products, df_history):
                 if tprice >= 2000:
                     pass
                 elif tprice >= 1000:
-                    pool.loc[is_headset & (pool['_p'] > 250), 'Final_Score'] -= 100000
+                    # Added & ~apple_hp so Apple earbuds don't get penalized
+                    pool.loc[is_headset & (pool['_p'] > 250) & ~apple_hp, 'Final_Score'] -= 100000
                 elif tprice > 0:
                     # Sub-€1000 laptop: cap headsets at ~15% of laptop price
-                    # Previously allowed €250 AirPods on €798 laptop — now hard-capped
                     max_hs_price = max(50, tprice * 0.15)
-                    pool.loc[is_headset & (pool['_p'] > max_hs_price), 'Final_Score'] -= 200000
-                    notes.append(f"Price Tiering: Hard penalty (-200k) for headsets >€{max_hs_price:.0f}")
+                    # Added & ~apple_hp so Apple earbuds don't get penalized
+                    pool.loc[is_headset & (pool['_p'] > max_hs_price) & ~apple_hp, 'Final_Score'] -= 200000
+                    notes.append(f"Price Tiering: Hard penalty (-200k) for standard headsets >€{max_hs_price:.0f} (Apple HPs exempt)")
  
 
 
