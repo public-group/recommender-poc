@@ -2954,6 +2954,39 @@ def run_laptops_engine(trigger, df_products, df_history):
                     b4 = len(pool)
                     pool = pool[mac_compatible].copy()
                     notes.append(f"🍎 Apple-only mouse filter: Magic Mouse OR 'for Mac': {b4}→{len(pool)}")
+                    
+                    # ========================================================
+                    # NEW: Peripheral Color Match for Apple Mice
+                    # ========================================================
+                    tlaptop_color = str(trigger.get('Χρώμα', '')).strip()
+                    # Fallback: Extract color from title if column is empty (e.g. "Indigo", "Midnight")
+                    if not tlaptop_color:
+                        color_matches = re.search(r'\b(silver|space gray|space grey|midnight|starlight|gold|rose gold|indigo|black|white|μαύρο|λευκό|γκρι|ασημί)\b', _tt_lower)
+                        if color_matches: tlaptop_color = color_matches.group(1)
+
+                    if tlaptop_color and tlaptop_color.lower() not in ('nan', 'n/a', '', 'none'):
+                        t_col_upper = tlaptop_color.upper()
+                        synonyms = [t_col_upper]
+                        # Map Apple-specific colors to standard peripheral colors
+                        if t_col_upper in ['GRAPHITE', 'ΓΡΑΦΙΤΗΣ', 'GREY', 'GRAY', 'ΓΚΡΙ', 'SPACE GRAY', 'SPACE GREY']:
+                            synonyms.extend(['GRAPHITE', 'ΓΡΑΦΙΤΗΣ', 'ΓΚΡΙ', 'GREY', 'GRAY'])
+                        elif t_col_upper in ['BLACK', 'ΜΑΥΡΟ', 'MIDNIGHT']:
+                            synonyms.extend(['BLACK', 'ΜΑΥΡΟ', 'MIDNIGHT'])
+                        elif t_col_upper in ['WHITE', 'ΛΕΥΚΟ', 'ΑΣΠΡΟ', 'PALE GREY', 'STARLIGHT', 'SILVER', 'ΑΣΗΜΙ']:
+                            synonyms.extend(['WHITE', 'ΛΕΥΚΟ', 'PALE GREY', 'SILVER', 'ΑΣΗΜΙ'])
+                        elif t_col_upper in ['ROSE', 'ΡΟΖ', 'PINK', 'ROSE GOLD']:
+                            synonyms.extend(['ROSE', 'ΡΟΖ', 'PINK'])
+                        elif t_col_upper in ['BLUE', 'ΜΠΛΕ', 'INDIGO']:
+                            synonyms.extend(['BLUE', 'ΜΠΛΕ', 'INDIGO'])
+                        
+                        if 'Χρώμα' in pool.columns:
+                            attr_match = pool['Χρώμα'].fillna('').astype(str).str.strip().str.upper().isin(synonyms)
+                            title_match = pool['Title'].fillna('').str.upper().str.contains('|'.join(synonyms), regex=True, na=False)
+                            color_hit = attr_match | title_match
+                            if color_hit.any():
+                                pool.loc[color_hit, 'Final_Score'] += 150000
+                                notes.append(f"🎨 Mouse Color match ({tlaptop_color}): +150k to {color_hit.sum()} Mac mice")
+                    # ========================================================
                 else:
                     notes.append("⚠ No Magic Mouse / Mac-compatible mouse in catalog — falling back to all")
 
@@ -2975,34 +3008,67 @@ def run_laptops_engine(trigger, df_products, df_history):
                 else:
                     notes.append("🪟 Surface: No Microsoft mice in pool — no boost applied")
 
-        # ── Logic: Smart Mousepad (FLAT RATE — does NOT scale with laptop price) ──
-        elif logic_key == 'MOUSEPAD_LOGIC':
-            if not is_gaming:
-                not_gaming_mask = ~pool['Title'].fillna('').str.lower().str.contains('rgb|gaming', regex=True, na=False)
-                pool, note = filter_or_penalize(pool, not_gaming_mask, "Persona: Exclude gaming/RGB pads")
-                notes.append(note)
+       # ── Logic: Smart Mousepad (FLAT RATE — does NOT scale with laptop price) ──
+            elif logic_key == 'MOUSEPAD_LOGIC':
+                if not is_gaming:
+                    not_gaming_mask = ~pool['Title'].fillna('').str.lower().str.contains('rgb|gaming', regex=True, na=False)
+                    pool, note = filter_or_penalize(pool, not_gaming_mask, "Persona: Exclude gaming/RGB pads")
+                    notes.append(note)
 
-            pool['_p'] = pool['LIST PRICE'].apply(parse_euro_price)
+                pool['_p'] = pool['LIST PRICE'].apply(parse_euro_price)
 
-            if is_gaming:
-                # 🎮 GAMING LAPTOP: boost XL/gaming pads, relax the €30 cap (XL pads run €25-50)
-                gaming_mask = pool['Title'].fillna('').str.lower().str.contains(
-                    r'gaming|rgb|xl|xxl|qck|mm\d|razer goliathus|corsair mm|steelseries|hyperx|glorious|logitech g',
-                    regex=True, na=False
-                )
-                pool.loc[gaming_mask, 'Final_Score'] += 200000
-                # For gaming: boost €15-€45 (covers XL/gaming range)
-                pool.loc[(pool['_p'] >= 15) & (pool['_p'] <= 45), 'Final_Score'] += 50000
-                notes.append(f"🎮 Gaming: Boosted gaming/XL pads +200k ({gaming_mask.sum()} items), price band €15-€45")
-            else:
-                # FLAT RATE: A €15-€25 desk mat is sufficient for ANY setup.
-                mp_min, mp_max = get_accessory_budget('MOUSEPAD', laptop_tier or 1)
-                in_band = (pool['_p'] >= mp_min) & (pool['_p'] <= mp_max)
-                pool.loc[in_band, 'Final_Score'] += 50000
-                # Hard cap: penalise anything above €30 regardless of laptop price
-                pool.loc[pool['_p'] > 30, 'Final_Score'] -= 80000
-                notes.append(f"Flat Rate: Boost €{mp_min:.0f}–€{mp_max:.0f}, penalty >€30 (anti-gouging)")
+                if is_gaming:
+                    # 🎮 GAMING LAPTOP: boost XL/gaming pads, relax the €30 cap (XL pads run €25-50)
+                    gaming_mask = pool['Title'].fillna('').str.lower().str.contains(
+                        r'gaming|rgb|xl|xxl|qck|mm\d|razer goliathus|corsair mm|steelseries|hyperx|glorious|logitech g',
+                        regex=True, na=False
+                    )
+                    pool.loc[gaming_mask, 'Final_Score'] += 200000
+                    # For gaming: boost €15-€45 (covers XL/gaming range)
+                    pool.loc[(pool['_p'] >= 15) & (pool['_p'] <= 45), 'Final_Score'] += 50000
+                    notes.append(f"🎮 Gaming: Boosted gaming/XL pads +200k ({gaming_mask.sum()} items), price band €15-€45")
+                else:
+                    # FLAT RATE: A €15-€25 desk mat is sufficient for ANY setup.
+                    mp_min, mp_max = get_accessory_budget('MOUSEPAD', laptop_tier or 1)
+                    in_band = (pool['_p'] >= mp_min) & (pool['_p'] <= mp_max)
+                    pool.loc[in_band, 'Final_Score'] += 50000
+                    # Hard cap: penalise anything above €30 regardless of laptop price
+                    pool.loc[pool['_p'] > 30, 'Final_Score'] -= 80000
+                    notes.append(f"Flat Rate: Boost €{mp_min:.0f}–€{mp_max:.0f}, penalty >€30 (anti-gouging)")
 
+                # ========================================================
+                # NEW: Peripheral Color Match for Mousepads (Apple Focus)
+                # ========================================================
+                if is_apple:
+                    tlaptop_color = str(trigger.get('Χρώμα', '')).strip()
+                    if not tlaptop_color:
+                        color_matches = re.search(r'\b(silver|space gray|space grey|midnight|starlight|gold|rose gold|indigo|black|white|μαύρο|λευκό|γκρι|ασημί)\b', _tt_lower)
+                        if color_matches: tlaptop_color = color_matches.group(1)
+
+                    if tlaptop_color and tlaptop_color.lower() not in ('nan', 'n/a', '', 'none'):
+                        t_col_upper = tlaptop_color.upper()
+                        synonyms = [t_col_upper]
+                        
+                        if t_col_upper in ['GRAPHITE', 'ΓΡΑΦΙΤΗΣ', 'GREY', 'GRAY', 'ΓΚΡΙ', 'SPACE GRAY', 'SPACE GREY']:
+                            synonyms.extend(['GRAPHITE', 'ΓΡΑΦΙΤΗΣ', 'ΓΚΡΙ', 'GREY', 'GRAY'])
+                        elif t_col_upper in ['BLACK', 'ΜΑΥΡΟ', 'MIDNIGHT']:
+                            synonyms.extend(['BLACK', 'ΜΑΥΡΟ', 'MIDNIGHT'])
+                        elif t_col_upper in ['WHITE', 'ΛΕΥΚΟ', 'ΑΣΠΡΟ', 'PALE GREY', 'STARLIGHT', 'SILVER', 'ΑΣΗΜΙ']:
+                            synonyms.extend(['WHITE', 'ΛΕΥΚΟ', 'PALE GREY', 'SILVER', 'ΑΣΗΜΙ'])
+                        elif t_col_upper in ['ROSE', 'ΡΟΖ', 'PINK', 'ROSE GOLD']:
+                            synonyms.extend(['ROSE', 'ΡΟΖ', 'PINK'])
+                        elif t_col_upper in ['BLUE', 'ΜΠΛΕ', 'INDIGO']:
+                            synonyms.extend(['BLUE', 'ΜΠΛΕ', 'INDIGO'])
+                        
+                        if 'Χρώμα' in pool.columns:
+                            attr_match = pool['Χρώμα'].fillna('').astype(str).str.strip().str.upper().isin(synonyms)
+                            title_match = pool['Title'].fillna('').str.upper().str.contains('|'.join(synonyms), regex=True, na=False)
+                            color_hit = attr_match | title_match
+                            if color_hit.any():
+                                # Overrides the flat rate price bands so the colored pad wins
+                                pool.loc[color_hit, 'Final_Score'] += 150000
+                                notes.append(f"🎨 Pad Color match ({tlaptop_color}): +150k to {color_hit.sum()} mousepads")
+                # ========================================================
 
 
         # ── Logic: Persona-Driven Monitor (20-25% of Laptop Value) ──
@@ -3285,6 +3351,8 @@ def run_laptops_engine(trigger, df_products, df_history):
                 else:
                     notes.append("Persona: Boost skipped ('Προτεινόμενη χρήση' column missing from candidates)")
 
+                apple_hp = pd.Series(False, index=pool.index)
+                
                 # Apple ecosystem — HARD PREFER Apple-branded headphones (AirPods family)
                 # and color-match the laptop color when possible.
                 if is_apple:
