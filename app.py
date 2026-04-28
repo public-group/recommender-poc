@@ -5672,6 +5672,7 @@ if flags.get('eidos_include') and 'Είδος' in pool.columns:
                 notes.append(f"VESA match ({tvesa}): {vm.sum()}")
 
        # ── Cable port match (Monitors — uses dedicated HDMI/DP/USB columns) ──
+# ── Cable port match (Monitors — uses dedicated HDMI/DP/USB columns) ──
         if flags.get('cable_port_match'):
             port_keyword = flags['cable_port_match'].lower()
             # Map flag to dedicated port boolean
@@ -5686,17 +5687,17 @@ if flags.get('eidos_include') and 'Είδος' in pool.columns:
                 # Fallback to old Θύρες substring
                 port_present = port_keyword in tports
 
-        if port_present:
-            m = pool['Title'].fillna('').str.lower().str.contains(port_keyword, na=False)
-            pool.loc[m, 'Final_Score'] += 80000
-            notes.append(f"Port match ({port_keyword}): ✅ Monitor has this port, boosted {m.sum()}")
-        else:
-            # Monitor doesn't have this port → skip slot
-            notes.append(f"Port match ({port_keyword}): ❌ Monitor lacks this port → skipping")
-            slot_notes[idx] = notes
-            diag.append((f"Slot {idx} ({role})", 0, f"No {port_keyword} port"))
-            # This continue only works if this whole block is inside the 'for ... in slots' loop
-            continue
+            if port_present:
+                m = pool['Title'].fillna('').str.lower().str.contains(port_keyword, na=False)
+                pool.loc[m, 'Final_Score'] += 80000
+                notes.append(f"Port match ({port_keyword}): ✅ Monitor has this port, boosted {m.sum()}")
+            else:
+                # Monitor doesn't have this port → skip slot
+                notes.append(f"Port match ({port_keyword}): ❌ Monitor lacks this port → skipping")
+                slot_notes[idx] = notes
+                diag.append((f"Slot {idx} ({role})", 0, f"No {port_keyword} port"))
+                # This 'continue' is now correctly inside the 'for' loop
+                continue
 
         # ── Cable length boost (Monitors mainstream) ──
         if flags.get('cable_length_boost'):
