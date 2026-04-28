@@ -3121,7 +3121,10 @@ def run_laptops_engine(trigger, df_products, df_history):
                     notes.append("🎨 No distinct color found in winning Mouse, skipped color matching.")
             
             # Premium Fallback: If no color match was found, boost Logitech pads
-            if not color_match_found and (is_apple or laptop_tier >= 3) and not is_gaming:
+            f not color_match_found and (is_apple or laptop_tier >= 3) and not is_gaming:
+                logi_pads = pool['Κατασκευαστής'].fillna('').str.strip().str.upper() == 'LOGITECH'
+                pool.loc[logi_pads, 'Final_Score'] += 80000
+                notes.append("🍎 Premium pad fallback: Boosted Logitech pads")
                 # ========================================================
 
         # ── Logic: Persona-Driven Monitor (20-25% of Laptop Value) ──
