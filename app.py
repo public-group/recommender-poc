@@ -5671,7 +5671,7 @@ if flags.get('eidos_include') and 'Είδος' in pool.columns:
                 pool.loc[vm, 'Final_Score'] += 80000
                 notes.append(f"VESA match ({tvesa}): {vm.sum()}")
 
-        # ── Cable port match (Monitors — uses dedicated HDMI/DP/USB columns) ──
+       # ── Cable port match (Monitors — uses dedicated HDMI/DP/USB columns) ──
         if flags.get('cable_port_match'):
             port_keyword = flags['cable_port_match'].lower()
             # Map flag to dedicated port boolean
@@ -5695,6 +5695,7 @@ if flags.get('eidos_include') and 'Είδος' in pool.columns:
                 notes.append(f"Port match ({port_keyword}): ❌ Monitor lacks this port → skipping")
                 slot_notes[idx] = notes
                 diag.append((f"Slot {idx} ({role})", 0, f"No {port_keyword} port"))
+                # This continue only works if this whole block is inside the 'for ... in slots' loop
                 continue
 
         # ── Cable length boost (Monitors mainstream) ──
