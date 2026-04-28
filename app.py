@@ -5328,27 +5328,22 @@ def run_peripherals_engine(trigger, df_products, df_history, cluster_key):
        
        
                 
-        # ── Eidos (Type) Include Match ──
-if flags.get('eidos_include') and 'Είδος' in pool.columns:
-    # Use re.escape to handle any special characters in the Greek strings
-    allowed_types = flags['eidos_include']
-    pat = '|'.join(re.escape(str(x)) for x in allowed_types)
-    
-    # Check Είδος column and Title for safety
-    m_eidos = pool['Είδος'].fillna('').astype(str).str.contains(pat, case=False, regex=True, na=False)
-    m_title = pool['Title'].fillna('').astype(str).str.contains(pat, case=False, regex=True, na=False)
-    
-    m_combined = m_eidos | m_title
-    
-    if m_combined.any():
-        b4_eidos = len(pool)
-        pool = pool[m_combined].copy()
-        notes.append(f"Eidos filter ({pat}): {b4_eidos} → {len(pool)}")
-    else:
-        # CRITICAL: This is what was missing. 
-        # If no LED Strips or Panels exist, we empty the pool so a Bulb can't win.
-        pool = pool.head(0) 
-        notes.append(f"❌ Strict Eidos filter ({pat}) found 0 matches. Slot ignored.")
+       # ── Eidos (Type) Include Match ──
+        if flags.get('eidos_include') and 'Είδος' in pool.columns:
+            allowed_types = flags['eidos_include']
+            pat = '|'.join(re.escape(str(x)) for x in allowed_types)
+            
+            m_eidos = pool['Είδος'].fillna('').astype(str).str.contains(pat, case=False, regex=True, na=False)
+            m_title = pool['Title'].fillna('').astype(str).str.contains(pat, case=False, regex=True, na=False)
+            m_combined = m_eidos | m_title
+            
+            if m_combined.any():
+                b4_eidos = len(pool)
+                pool = pool[m_combined].copy()
+                notes.append(f"Eidos filter ({pat}): {b4_eidos} → {len(pool)}")
+            else:
+                pool = pool.head(0) 
+                notes.append(f"❌ Strict Eidos filter ({pat}) found 0 matches. Slot ignored.")
 
         # ── Eidos (Type) Boost — soft preference for these Είδος values ──
         if flags.get('eidos_boost') and 'Είδος' in pool.columns:
