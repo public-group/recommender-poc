@@ -2667,7 +2667,7 @@ def run_laptops_engine(trigger, df_products, df_history):
     # ── Iterate slots ──
     used_materials = {tm}
     used_hierarchies_count = {}
- 
+    selected_mouse_row = None 
     for slot_num, role, hierarchies, logic_key in LAPTOP_MAINSTREAM_SLOTS:
         notes = [f"Logic: {logic_key}", f"Target: {hierarchies}"]
 
@@ -2926,8 +2926,9 @@ def run_laptops_engine(trigger, df_products, df_history):
         # ── Logic: Smart Mouse Selection (Performance Pairing — Tier-Driven) ──
         elif logic_key == 'MOUSE_LOGIC':
             if not is_gaming:
-                not_gaming_mask = ~pool['Title'].fillna('').str.lower().str.contains('rgb|gaming', regex=True, na=False)
-                pool, note = filter_or_penalize(pool, not_gaming_mask, "Persona: Exclude gaming/RGB mice")
+                # STRICT BAN on gaming pads/brands (HyperX, Razer, Corsair, etc.)
+                not_gaming_mask = ~pool['Title'].fillna('').str.lower().str.contains(r'rgb|gaming|hyperx|razer|corsair|steelseries|rog\b|predator|legion', regex=True, na=False)
+                pool, note = filter_or_penalize(pool, not_gaming_mask, "Persona: Hard banned gaming/RGB/HyperX pads")
                 notes.append(note)
             else:
                 # 🎮 GAMING LAPTOP: actively BOOST gaming mice (high-DPI sensors,
@@ -3075,51 +3076,52 @@ def run_laptops_engine(trigger, df_products, df_history):
                 notes.append(f"Flat Rate: Boost €{mp_min:.0f}–€{mp_max:.0f}, penalty >€30 (anti-gouging)")
 
             # ========================================================
-            # NEW: Peripheral Color Match & Premium Brand Fallback (Apple Focus)
+            # UPDATED: Mousepad Color Match (reads from winning MOUSE)
             # ========================================================
             color_match_found = False
             
-            if is_apple:
-                tlaptop_color = str(trigger.get('Χρώμα', '')).strip()
-                if not tlaptop_color:
-                    color_matches = re.search(r'\b(silver|space gray|space grey|midnight|starlight|gold|rose gold|indigo|black|white|μαύρο|λευκό|γκρι|ασημί)\b', _tt_lower)
-                    if color_matches: tlaptop_color = color_matches.group(1)
-
-                if tlaptop_color and tlaptop_color.lower() not in ('nan', 'n/a', '', 'none'):
-                    t_col_upper = tlaptop_color.upper()
-                    synonyms = [t_col_upper]
-                    
-                    if t_col_upper in ['GRAPHITE', 'ΓΡΑΦΙΤΗΣ', 'GREY', 'GRAY', 'ΓΚΡΙ', 'SPACE GRAY', 'SPACE GREY']:
-                        synonyms.extend(['GRAPHITE', 'ΓΡΑΦΙΤΗΣ', 'ΓΚΡΙ', 'GREY', 'GRAY'])
-                    elif t_col_upper in ['BLACK', 'ΜΑΥΡΟ', 'MIDNIGHT']:
-                        synonyms.extend(['BLACK', 'ΜΑΥΡΟ', 'MIDNIGHT'])
-                    elif t_col_upper in ['WHITE', 'ΛΕΥΚΟ', 'ΑΣΠΡΟ', 'PALE GREY', 'STARLIGHT', 'SILVER', 'ΑΣΗΜΙ']:
-                        synonyms.extend(['WHITE', 'ΛΕΥΚΟ', 'PALE GREY', 'SILVER', 'ΑΣΗΜΙ'])
-                    elif t_col_upper in ['ROSE', 'ΡΟΖ', 'PINK', 'ROSE GOLD']:
-                        synonyms.extend(['ROSE', 'ΡΟΖ', 'PINK'])
-                    elif t_col_upper in ['BLUE', 'ΜΠΛΕ', 'INDIGO']:
-                        synonyms.extend(['BLUE', 'ΜΠΛΕ', 'INDIGO'])
-                    
+            if selected_mouse_row is not None:
+                mouse_title = str(selected_mouse_row.get('Title', '')).lower()
+                mouse_attr_color = str(selected_mouse_row.get('Χρώμα', '')).lower()
+                combined_mouse_color_text = f"{mouse_title} {mouse_attr_color}"
+                
+                # Define core colors and their synonyms
+                target_colors_map = {
+                    'μαύρο': ['μαύρο', 'black', 'γραφίτη', 'γραφίτης', 'graphite', 'midnight'],
+                    'λευκό': ['λευκό', 'white', 'άσπρο', 'starlight', 'pale grey'],
+                    'γκρι': ['γκρι', 'grey', 'gray', 'silver', 'ασημί'],
+                    'ροζ': ['ροζ', 'pink', 'rose'],
+                    'μπλε': ['μπλε', 'blue', 'γαλάζιο', 'indigo', 'blue grey'],
+                    'κόκκινο': ['κόκκινο', 'red']
+                }
+                
+                detected_color_group = None
+                for base_color, synonyms in target_colors_map.items():
+                    # Look for any of the synonyms in the mouse's text
+                    if any(re.search(rf'\b{re.escape(syn)}\b', combined_mouse_color_text) for syn in synonyms):
+                        detected_color_group = synonyms
+                        break
+                
+                if detected_color_group:
+                    # Found a color in the mouse, now look for it in the mousepads
                     if 'Χρώμα' in pool.columns:
-                        attr_match = pool['Χρώμα'].fillna('').astype(str).str.strip().str.upper().isin(synonyms)
-                        title_match = pool['Title'].fillna('').str.upper().str.contains('|'.join(synonyms), regex=True, na=False)
+                        attr_match = pool['Χρώμα'].fillna('').astype(str).str.lower().isin(detected_color_group)
+                        title_match = pool['Title'].fillna('').str.lower().str.contains('|'.join(detected_color_group), regex=True, na=False)
                         color_hit = attr_match | title_match
                         
-                        # Ensure the color match isn't an ugly wrist pad that somehow slipped through
+                        # Ensure the color match isn't an ugly wrist pad
                         color_hit = color_hit & ~gel_mask
                         
                         if color_hit.any():
                             # Overrides the flat rate price bands so the colored pad wins
                             pool.loc[color_hit, 'Final_Score'] += 150000
                             color_match_found = True
-                            notes.append(f"🎨 Pad Color match ({tlaptop_color}): +150k to {color_hit.sum()} mousepads")
+                            notes.append(f"🎨 Matched Mouse Color ({detected_color_group[0]}): +150k to {color_hit.sum()} mousepads")
+                else:
+                    notes.append("🎨 No distinct color found in winning Mouse, skipped color matching.")
             
-            # FIX 2: If we are Apple/Premium and no color match was found, boost Logitech pads
-            # so a nice Grey Studio Mat wins instead of a generic €5 pad.
+            # Premium Fallback: If no color match was found, boost Logitech pads
             if not color_match_found and (is_apple or laptop_tier >= 3) and not is_gaming:
-                logi_pads = pool['Κατασκευαστής'].fillna('').str.strip().str.upper() == 'LOGITECH'
-                pool.loc[logi_pads, 'Final_Score'] += 80000
-                notes.append(f"🍎 Premium pad fallback: Boosted {logi_pads.sum()} Logitech pads (+80k)")
                 # ========================================================
 
         # ── Logic: Persona-Driven Monitor (20-25% of Laptop Value) ──
@@ -3549,14 +3551,26 @@ def run_laptops_engine(trigger, df_products, df_history):
 
             # Gaming laptops benefit from active (fan) coolers; others lean to passive stands
             pool['_p'] = pool['LIST PRICE'].apply(parse_euro_price)
-            if is_gaming:
+            if is_apple:
+                # 🍎 Hard ban active fan coolers for MacBooks
+                active_cooling_mask = pool['Title'].fillna('').str.lower().str.contains('cooler|fan|cooling|ανεμιστήρ', regex=True, na=False)
+                b4_apple_coolers = len(pool)
+                pool = pool[~active_cooling_mask]
+                if b4_apple_coolers > len(pool):
+                    notes.append(f"🍎 Apple: Hard banned active fan coolers ({b4_apple_coolers}→{len(pool)})")
+                
+                # Boost passive stands massively
+                stand_mask = pool['Title'].fillna('').str.lower().str.contains('stand|βάση|aluminum|αλουμίνιο|ergonomic', regex=True, na=False)
+                pool.loc[stand_mask, 'Final_Score'] += 200000
+                notes.append("Premium/Apple: Passive ergonomic stand boost (+200k)")
+            elif is_gaming:
                 fan_mask = pool['Title'].fillna('').str.lower().str.contains('fan|cooler|ψύξη|rgb', regex=True, na=False)
                 pool.loc[fan_mask, 'Final_Score'] += 40000
                 notes.append("Gaming: Active cooler (fan) boost")
-            elif is_apple or is_premium:
+            elif is_premium:
                 stand_mask = pool['Title'].fillna('').str.lower().str.contains('stand|βάση|aluminum|αλουμίνιο|ergonomic', regex=True, na=False)
                 pool.loc[stand_mask, 'Final_Score'] += 40000
-                notes.append("Premium/Apple: Passive ergonomic stand boost")
+                notes.append("Premium: Passive ergonomic stand boost")
 
 
         # ── Logic: Storage (SSD for premium, HDD for budget) ──
@@ -3666,6 +3680,8 @@ def run_laptops_engine(trigger, df_products, df_history):
         used_hierarchies_count[chosen['Hierarchy']] = used_hierarchies_count.get(chosen['Hierarchy'], 0) + 1
         notes.append(f"✅ {str(chosen.get('Title',''))[:60]}")
         slot_notes[slot_num] = notes
+        if logic_key == 'MOUSE_LOGIC':
+            selected_mouse_row = chosen
         diag.append((f"Slot {slot_num} ({role})", 1, f"Score: {chosen.get('Final_Score', 0):.0f}"))
  
     diag.append(("TOTAL", len(all_recs), f"out of {len(LAPTOP_MAINSTREAM_SLOTS)}"))
