@@ -4083,12 +4083,12 @@ MONITOR_GAMING_SLOTS = [
     ("Gaming Keyboard",     ['GAMING KEYBOARDS'],             {'brand_match': True}),
     ("Gaming Mousepad",     ['GAMING MOUSE PADS'],            {'brand_match': True}),
     ("Gaming Headset",      ['GAMING AUDIO'],                 {'brand_match': True}),
-    ("DisplayPort Cable",   ['DISPLAY-PORT CABLES'],           {'cable_port_match': 'DisplayPort'}),
-    ("HDMI Cable",          ['GAMING HDMI CABLES', 'MONITOR CABLES'], {'cable_port_match': 'HDMI'}),
-    ("LED Strip",           ['ΕΞΥΠΝΟΣ ΦΩΤΙΣΜΟΣ'],            {'title_boost': ['Strip', 'LED', 'Bias', 'Backlight'], 'usage_hide': ['Εξωτερική', 'Εξωτερικού χώρου', 'TV']}),
-    ("Monitor Arm",         ['ΒΑΣΕΙΣ ΓΡΑΦΕΙΟΥ'],               {'vesa_match': True, 'title_hide': ['Wall Mount', 'CPU', 'Υπολογιστή', 'Riser', 'Drawer']}),
-    ("Screen Cleaner",      ['CLEANING PRODUCTS'],            {}),
-    ("UPS",                 ['LINE INTERACTIVE', 'ΜΠΑΤΑΡΙΕΣ UPS'],    {}),
+    ("Gaming Chair",        ['GAMING CHAIRS'],                {}),
+    ("Smart Lighting",      ['ΕΞΥΠΝΟΣ ΦΩΤΙΣΜΟΣ'],             {'title_boost': ['Strip', 'LED', 'Bias', 'Backlight', 'RGB', 'Ταινία', 'Λεντοταινία'], 'title_hide': ['Ceiling', 'Bulb', 'Λάμπα', 'Λαμπτήρας', 'E27', 'E14', 'Οροφής', 'Επιτραπέζιο', 'Desk', 'Γραφείου']}),
+    ("Steering Wheel",      ['STEERING WHEELS', 'GAMING WHEELS'], {}),
+    ("Gaming Desk",         ['GAMING DESKS'],                 {}),
+    ("UPS",                 ['LINE INTERACTIVE'],             {}),
+    ("Video Cable",         ['DISPLAY-PORT CABLES', 'GAMING HDMI CABLES', 'MONITOR CABLES'], {}),
 ]
 
 MONITOR_PRO_SLOTS = [
@@ -4101,7 +4101,7 @@ MONITOR_PRO_SLOTS = [
     ("USB-C Hub",           ['USB HUB DEVICES', 'DOCKING STATIONS LAPTOP'], {'title_boost': ['USB-C', 'Thunderbolt', 'Dock']}),
     ("PC Speakers",         ['PC SPEAKERS 2.0'],              {}),
     ("Screen Cleaner",      ['CLEANING PRODUCTS'],            {}),
-    ("UPS",                 ['LINE INTERACTIVE', 'ΜΠΑΤΑΡΙΕΣ UPS'],    {}),
+    ("UPS",                 ['LINE INTERACTIVE'],    {}),
 ]
 
 MONITOR_MAINSTREAM_SLOTS = [
@@ -4115,7 +4115,7 @@ MONITOR_MAINSTREAM_SLOTS = [
     ("USB Hub",             ['USB HUB DEVICES'],              {}),
     ("Screen Cleaner",      ['CLEANING PRODUCTS'],            {}),
     ("Desk Lamp",           ['ΕΞΥΠΝΟΣ ΦΩΤΙΣΜΟΣ'],            {'title_boost': ['Desk', 'Γραφείου', 'Table', 'Επιτραπέζιο', 'Φωτιστικό', 'ScreenBar', 'Monitor Light'], 'title_hide': ['Ceiling', 'Bulb', 'Strip', 'Οροφής', 'Λάμπα', 'Λαμπτήρας', 'E27', 'E14', 'Ταινία', 'Λεντοταινία'], 'usage_hide': ['Gaming', 'Εξωτερική', 'Εξωτερικού χώρου', 'TV']}),
-    ("UPS",                 ['LINE INTERACTIVE', 'ΜΠΑΤΑΡΙΕΣ UPS'], {}),
+    ("UPS",                 ['LINE INTERACTIVE'], {}),
 ]
 
 
@@ -4431,7 +4431,7 @@ PRINTER_INKJET_SLOTS = [
     ("A4 Paper",            ['INKJET PAPER', 'COPIERS PAPER'],{'paper_weight_max': 90}),
     ("Photo Paper",         ['SPECIAL PAPERS'],               {'paper_weight_min': 150, 'title_boost': ['Gloss', 'Matte', 'Photo']}),
     ("USB Printer Cable",   ['USB CABLES'],                   {'title_boost': ['USB-B', 'Printer', 'Type-B']}),
-    ("Surge Protector",     ['ΜΠΑΤΑΡΙΕΣ UPS'],                          {}),
+    ("Surge Protector",     ['LINE INTERACTIVE'],                          {}),
     ("Cleaning",            ['CLEANING PRODUCTS'],            {}),
     ("Cleaning 2",          ['CLEANING PRODUCTS'],            {}),
 ]
@@ -4597,6 +4597,10 @@ def get_monitor_peripheral_budget(monitor_price, category):
         if category == 'MOUSE': return (15, 40)
         if category == 'HEADSET': return (20, 50)
         if category == 'MOUSEPAD': return (5, 15)
+        if category == 'CHAIR': return (80, 150)
+        if category == 'DESK': return (50, 120)
+        if category == 'WHEEL': return (50, 150)
+        if category == 'UPS': return (40, 80)
         return (5, 25)
     # Mid-range (€100-€250)
     elif monitor_price < 250:
@@ -4604,6 +4608,10 @@ def get_monitor_peripheral_budget(monitor_price, category):
         if category == 'MOUSE': return (30, 60)
         if category == 'HEADSET': return (40, 80)
         if category == 'MOUSEPAD': return (10, 25)
+        if category == 'CHAIR': return (120, 250)
+        if category == 'DESK': return (80, 180)
+        if category == 'WHEEL': return (100, 300)
+        if category == 'UPS': return (60, 120)
         return (10, 40)
     # High-end (€250-€400)
     elif monitor_price < 400:
@@ -4611,6 +4619,10 @@ def get_monitor_peripheral_budget(monitor_price, category):
         if category == 'MOUSE': return (50, 100)
         if category == 'HEADSET': return (80, 150)
         if category == 'MOUSEPAD': return (20, 40)
+        if category == 'CHAIR': return (150, 350)
+        if category == 'DESK': return (120, 250)
+        if category == 'WHEEL': return (200, 500)
+        if category == 'UPS': return (80, 200)
         return (15, 60)
     # Premium (€400+)
     else:
@@ -4618,6 +4630,10 @@ def get_monitor_peripheral_budget(monitor_price, category):
         if category == 'MOUSE': return (80, 150)
         if category == 'HEADSET': return (100, 200)
         if category == 'MOUSEPAD': return (30, 60)
+        if category == 'CHAIR': return (200, 600)
+        if category == 'DESK': return (150, 400)
+        if category == 'WHEEL': return (300, 1000)
+        if category == 'UPS': return (100, 300)
         return (25, 100)
         
 def run_peripherals_engine(trigger, df_products, df_history, cluster_key):
@@ -4923,6 +4939,10 @@ def run_peripherals_engine(trigger, df_products, df_history, cluster_key):
             elif 'mouse' in r_lower and 'pad' not in r_lower: cat_key = 'MOUSE'
             elif 'headset' in r_lower: cat_key = 'HEADSET'
             elif 'pad' in r_lower or 'mat' in r_lower or 'rest' in r_lower: cat_key = 'MOUSEPAD'
+            elif 'chair' in r_lower: cat_key = 'CHAIR'
+            elif 'wheel' in r_lower: cat_key = 'WHEEL'
+            elif 'desk' in r_lower: cat_key = 'DESK'
+            elif 'ups' in r_lower: cat_key = 'UPS'
             else: cat_key = 'ACCESSORY'
 
             # Use cluster-specific pricing
