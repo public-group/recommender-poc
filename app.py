@@ -4052,7 +4052,7 @@ GAMING_MOUSE_SLOTS = [
     ("Αξεσουάρ Streaming",  ['STREAMING ACCESSORIES'],        {'eidos_include': ['Capture Card', 'Ring Light', 'Mic Arm']}),
     ("Cleaning Product",    ['CLEANING PRODUCTS'],            {'title_include': ['Αέρας', 'Σπρέι', 'Spray', 'Compressed air']}),
     # NEW SLOT 8: Strict Smart Lighting
-    ("Smart Lighting",      ['ΕΞΥΠΝΟΣ ΦΩΤΙΣΜΟΣ'],            {'eidos_include': ['Ταινίες LED', 'Πλακίδια'], 'title_boost': ['Strip', 'RGB', 'LED']}),
+    ("Smart Lighting",      ['ΕΞΥΠΝΟΣ ΦΩΤΙΣΜΟΣ'],            {'eidos_include': ['Ταινίες LED', 'Πλακίδια'], 'title_boost': ['Strip', 'Λωρίδα Φωτισμού', 'Ταινία LED']}),
     # NEW SLOTS 9 & 10: Furniture
     ("Gaming Chair",        ['GAMING CHAIRS'],                {'price_limit_furniture': True}),
     ("Gaming Desk",         ['GAMING DESKS'],                 {'price_limit_furniture': True}),
