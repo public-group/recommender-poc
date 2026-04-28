@@ -4012,52 +4012,68 @@ PERIPHERAL_TRIGGERS = {
 MOUSE_SLOTS = [
     ("Mouse Pad",           ['MOUSE PADS'],                   {'title_hide': ['Gel', 'Wrist', 'Μαξιλαράκι']}),
     ("Keyboard",            ['KEYBOARDS WIRELESS', 'KEYBOARDS WIRED'], {'connectivity_mirror': True, 'brand_match': True, 'apple_force': 'APPLE ORIGINAL WIRELESS KEYBOARD', 'silent_match': True, 'ergo_match': True}),
-    ("Overhead Headset",    ['OVERHEAD', 'GAMING AUDIO', 'PC HEADSET/MICROPHONE'], {'brand_boost': True, 'color_match_all': True, 'title_boost': ['Overhead', 'Over-Ear', 'Wireless', 'Bluetooth'], 'title_hide': ['Earbuds', 'In-Ear', 'Neckband']}),
+    # --- SLOT 3: DYNAMIC ---
+    ("Batteries",           ['ΑΛΚΑΛΙΚΕΣ'],                    {'skip_if_wired': True, 'title_hide': ['CR', 'Button', 'Coin', 'Λιθίου'], 'title_boost': ['AA', 'AAA']}),
+    ("USB Hub",             ['USB HUB DEVICES'],              {'skip_if_wireless': True}),
+    # -----------------------
+    ("Overhead Headset",    ['OVERHEAD', 'GAMING AUDIO', 'PC HEADSET/MICROPHONE'], {'brand_boost': True, 'color_match_all': True}),
     ("Wrist Rest",          ['MOUSE PADS'],                   {'wrist_rest_only': True}),
-    ("USB Hub",             ['USB HUB DEVICES'],              {}),
-    ("Batteries",           ['ΑΛΚΑΛΙΚΕΣ'],                    {'skip_if': 'no_battery', 'title_hide': ['CR', 'Button', 'Coin', 'Λιθίου'], 'title_boost': ['AA', 'AAA', 'LR6', 'LR03']}),
-    ("Cleaning",            ['CLEANING PRODUCTS'],            {'title_include': ['Αέρας', 'Σπρέι', 'Spray', 'Compressed air', 'Air duster', 'Πεπιεσμένου αέρα', 'Duster']}),
-    ("Desk Lamp",           ['ΕΞΥΠΝΟΣ ΦΩΤΙΣΜΟΣ'],            {'title_boost': ['Desk', 'Γραφείου', 'Table', 'Επιτραπέζιο', 'Φωτιστικό'], 'title_hide': ['Ceiling', 'Bulb', 'Strip', 'Οροφής', 'Λάμπα', 'Λαμπτήρας', 'E27', 'E14', 'Ταινία', 'Λεντοταινία']}),
+    ("Cleaning",            ['CLEANING PRODUCTS'],            {'title_include': ['Αέρας', 'Σπρέι', 'Spray', 'Compressed air']}),
+    ("Desk Lamp",           ['ΕΞΥΠΝΟΣ ΦΩΤΙΣΜΟΣ'],            {'title_boost': ['Desk', 'Γραφείου'], 'title_hide': ['Ceiling', 'Bulb']}),
     ("Mouse Pad 2",         ['MOUSE PADS'],                   {'title_hide': ['Gel', 'Wrist', 'Μαξιλαράκι']}),
-    ("Monitor Riser",       ['ΒΑΣΕΙΣ ΓΡΑΦΕΙΟΥ'],              {'title_boost': ['Riser', 'Stand', 'Drawer', 'Organizer'], 'title_hide': ['Wall Mount', 'Gas Spring', 'VESA', 'CPU', 'Υπολογιστή', 'Βραχίον']}),
+    ("Monitor Riser",       ['ΒΑΣΕΙΣ ΓΡΑΦΕΙΟΥ'],              {'title_boost': ['Riser', 'Stand']}),
 ]
 
 KEYBOARD_SLOTS = [
-    ("Mouse",               ['MOUSE WIRELESS', 'MOUSE WIRED', 'APPLE ORIGINAL WIRELESS MOUSE'], {'connectivity_mirror': True, 'brand_match': True, 'apple_force': 'APPLE ORIGINAL WIRELESS MOUSE', 'silent_match': True, 'ergo_match': True}),
+    # SWAPPED: Mouse Pad now Slot 1
     ("Desk Mat",            ['MOUSE PADS'],                   {'xxl_only': True}),
-    ("Batteries/USB Hub",   ['ΑΛΚΑΛΙΚΕΣ'],                    {'skip_if': 'no_battery', 'fallback_hier': ['USB HUB DEVICES'], 'title_hide': ['CR', 'Button', 'Coin', 'Λιθίου'], 'title_boost': ['AA', 'AAA', 'LR6', 'LR03']}),
-    ("Cleaning",            ['CLEANING PRODUCTS'],            {'title_include': ['Αέρας', 'Σπρέι', 'Spray', 'Compressed air', 'Air duster', 'Πεπιεσμένου αέρα', 'Duster']}),
+    # SWAPPED: Mouse now Slot 2
+    ("Mouse",               ['MOUSE WIRELESS', 'MOUSE WIRED', 'APPLE ORIGINAL WIRELESS MOUSE'], {'connectivity_mirror': True, 'brand_match': True, 'apple_force': 'APPLE ORIGINAL WIRELESS MOUSE', 'silent_match': True, 'ergo_match': True}),
+    # Slot 3 remains Dynamic (Batteries/Hub)
+    ("Batteries",           ['ΑΛΚΑΛΙΚΕΣ'],                    {'skip_if_wired': True, 'title_hide': ['CR', 'Button', 'Coin', 'Λιθίου'], 'title_boost': ['AA', 'AAA']}),
+    ("USB Hub",             ['USB HUB DEVICES'],              {'skip_if_wireless': True}),
+    # Remaining slots
+    ("Cleaning",            ['CLEANING PRODUCTS'],            {'title_include': ['Αέρας', 'Σπρέι', 'Spray']}),
     ("PC Headset",          ['PC HEADSET/MICROPHONE', 'OVERHEAD'], {}),
     ("PC Speakers",         ['PC SPEAKERS 2.0', 'PC SPEAKERS 1'], {}),
-    ("Desk Lamp",           ['ΕΞΥΠΝΟΣ ΦΩΤΙΣΜΟΣ'],            {'title_boost': ['Desk', 'Γραφείου', 'Table', 'Επιτραπέζιο', 'Φωτιστικό'], 'title_hide': ['Ceiling', 'Bulb', 'Strip', 'Οροφής', 'Λάμπα', 'Έξυπνη Λάμπα', 'Λαμπτήρας', 'E27', 'E14', 'Ταινία', 'Λεντοταινία']}),
+    ("Desk Lamp",           ['ΕΞΥΠΝΟΣ ΦΩΤΙΣΜΟΣ'],            {'title_boost': ['Desk', 'Γραφείου']}),
     ("Wrist Rest",          ['MOUSE PADS'],                   {'wrist_rest_only': True}),
-    ("Mouse 2",             ['MOUSE WIRELESS', 'MOUSE WIRED', 'APPLE ORIGINAL WIRELESS MOUSE'], {'connectivity_mirror': True, 'brand_match': True, 'apple_force': 'APPLE ORIGINAL WIRELESS MOUSE'}),
-    ("Monitor Riser",       ['ΒΑΣΕΙΣ ΓΡΑΦΕΙΟΥ'],              {'title_boost': ['Riser', 'Stand', 'Drawer', 'Organizer'], 'title_hide': ['Wall Mount', 'Gas Spring', 'VESA', 'CPU', 'Υπολογιστή', 'Βραχίον']}),
+    ("Monitor Riser",       ['ΒΑΣΕΙΣ ΓΡΑΦΕΙΟΥ'],              {'title_boost': ['Riser', 'Stand']}),
 ]
 
 GAMING_MOUSE_SLOTS = [
-    ("Gaming Pad",          ['GAMING MOUSE PADS'],            {'title_hide': ['Gel', 'Wrist'], 'sensor_surface': True, 'brand_match': True}),
-    ("Gaming Keyboard",     ['GAMING KEYBOARDS'],             {'brand_match': True, 'rgb_match': True, 'button_kb_size': True, 'connectivity_mirror': True}),
-    ("Batteries/USB Hub",   ['ΑΛΚΑΛΙΚΕΣ'],                    {'skip_if': 'no_battery', 'fallback_hier': ['USB HUB DEVICES'], 'title_hide': ['CR', 'Button', 'Coin', 'Λιθίου'], 'title_boost': ['AA', 'AAA', 'LR6', 'LR03']}),
+    ("Gaming Pad",          ['GAMING MOUSE PADS'],            {'title_hide': ['Gel', 'Wrist'], 'brand_match': True}),
+    ("Gaming Keyboard",     ['GAMING KEYBOARDS'],             {'brand_match': True, 'rgb_match': True, 'connectivity_mirror': True}),
+    # Slot 3: Dynamic Batteries/Hub
+    ("Batteries",           ['ΑΛΚΑΛΙΚΕΣ'],                    {'skip_if_wired': True, 'title_hide': ['CR', 'Button', 'Coin', 'Λιθίου'], 'title_boost': ['AA', 'AAA']}),
+    ("USB Hub",             ['USB HUB DEVICES'],              {'skip_if_wireless': True}),
+    # Mid Slots
     ("Gaming Headset",      ['GAMING AUDIO'],                 {'brand_match': True}),
-    ("Αξεσουάρ Streaming",  ['STREAMING ACCESSORIES'],        {'eidos_include': ['Capture Card', 'Gaming Αξεσουάρ', 'Green Screen', 'LED ring light', 'Mic Arm', 'Prompter', 'RGB Controller', 'Ring Light', 'Selfie Stick', 'Stream Controller', 'Stream Deck', 'Streaming Kit', 'USB Hub', 'Web Camera', 'Άλλο', 'Ασύρματο μικρόφωνο για vlogging', 'Βάση Στήριξης', 'Βραχίονας μικροφώνου', 'Επαγγελματικά Μικρόφωνα', 'Επιτραπέζιο', 'Ηχοαπορροφητικά Πάνελ', 'Κάρτα καταγραφής βίντεο', 'Κάρτα καταγραφής βίντεο (Capture Card)', 'Μικρόφωνο', 'Μικρόφωνο streaming', 'Τηλεπρομπτέρ με ενσωματωμένη οθόνη', 'Φωτισμός', 'Φωτιστικό']}),
-    ("Αξεσουάρ Streaming 2", ['STREAMING ACCESSORIES'],       {'eidos_include': ['Capture Card', 'Gaming Αξεσουάρ', 'Green Screen', 'LED ring light', 'Mic Arm', 'Prompter', 'RGB Controller', 'Ring Light', 'Selfie Stick', 'Stream Controller', 'Stream Deck', 'Streaming Kit', 'USB Hub', 'Web Camera', 'Άλλο', 'Ασύρματο μικρόφωνο για vlogging', 'Βάση Στήριξης', 'Βραχίονας μικροφώνου', 'Επαγγελματικά Μικρόφωνα', 'Επιτραπέζιο', 'Ηχοαπορροφητικά Πάνελ', 'Κάρτα καταγραφής βίντεο', 'Κάρτα καταγραφής βίντεο (Capture Card)', 'Μικρόφωνο', 'Μικρόφωνο streaming', 'Τηλεπρομπτέρ με ενσωματωμένη οθόνη', 'Φωτισμός', 'Φωτιστικό']}),
-    ("Headset Stand",       ['GAMING HEADSET STANDS', 'PORTABLE ACCESSORIES'], {}),
-    ("Cleaning Product",    ['CLEANING PRODUCTS'],            {'title_include': ['Αέρας', 'Σπρέι', 'Spray', 'Compressed air', 'Air duster', 'Πεπιεσμένου αέρα', 'Duster']}),
-    ("Smart Lighting",      ['ΕΞΥΠΝΟΣ ΦΩΤΙΣΜΟΣ'],            {'title_boost': ['Strip', 'LED', 'Bias', 'Backlight', 'RGB', 'Ταινία', 'Λεντοταινία'], 'title_hide': ['Ceiling', 'Bulb', 'Λάμπα', 'Λαμπτήρας', 'E27', 'E14', 'Οροφής', 'Επιτραπέζιο', 'Desk', 'Γραφείου']}),
+    ("Αξεσουάρ Streaming",  ['STREAMING ACCESSORIES'],        {'eidos_include': ['Capture Card', 'Ring Light', 'Mic Arm']}),
+    ("Headset Stand",       ['GAMING HEADSET STANDS'],        {}),
+    ("Smart Lighting",      ['ΕΞΥΠΝΟΣ ΦΩΤΙΣΜΟΣ'],            {'title_boost': ['Strip', 'RGB']}),
+    # NEW SLOTS
+    ("Gaming Chair",        ['GAMING CHAIRS'],                {'price_limit_furniture': True}),
+    ("Gaming Desk",         ['GAMING DESKS'],                 {'price_limit_furniture': True}),
 ]
 
 GAMING_KEYBOARD_SLOTS = [
     ("Gaming Mousepad",     ['GAMING MOUSE PADS'],            {'brand_match': True, 'title_hide': ['Gel', 'Wrist']}),
     ("Gaming Mouse",        ['GAMING MOUSE'],                 {'brand_match': True, 'rgb_match': True, 'connectivity_mirror': True}),
-    ("Batteries/USB Hub",   ['ΑΛΚΑΛΙΚΕΣ'],                    {'skip_if': 'no_battery', 'fallback_hier': ['USB HUB DEVICES'], 'title_hide': ['CR', 'Button', 'Coin', 'Λιθίου'], 'title_boost': ['AA', 'AAA', 'LR6', 'LR03']}),
+    # Slot 3: Dynamic Batteries/Hub
+    ("Batteries",           ['ΑΛΚΑΛΙΚΕΣ'],                    {'skip_if_wired': True, 'title_hide': ['CR', 'Button', 'Coin', 'Λιθίου'], 'title_boost': ['AA', 'AAA']}),
+    ("USB Hub",             ['USB HUB DEVICES'],              {'skip_if_wireless': True}),
+    # Mid Slots
     ("Gaming Headset",      ['GAMING AUDIO', 'OVERHEAD'],     {'brand_match': True}),
-    ("Αξεσουάρ Streaming",  ['STREAMING ACCESSORIES'],        {'eidos_include': ['Capture Card', 'Gaming Αξεσουάρ', 'Green Screen', 'LED ring light', 'Mic Arm', 'Prompter', 'RGB Controller', 'Ring Light', 'Selfie Stick', 'Stream Controller', 'Stream Deck', 'Streaming Kit', 'USB Hub', 'Web Camera', 'Άλλο', 'Ασύρματο μικρόφωνο για vlogging', 'Βάση Στήριξης', 'Βραχίονας μικροφώνου', 'Επαγγελματικά Μικρόφωνα', 'Επιτραπέζιο', 'Ηχοαπορροφητικά Πάνελ', 'Κάρτα καταγραφής βίντεο', 'Κάρτα καταγραφής βίντεο (Capture Card)', 'Μικρόφωνο', 'Μικρόφωνο streaming', 'Τηλεπρομπτέρ με ενσωματωμένη οθόνη', 'Φωτισμός', 'Φωτιστικό']}),
-    ("Αξεσουάρ Streaming 2", ['STREAMING ACCESSORIES'],       {'eidos_include': ['Capture Card', 'Gaming Αξεσουάρ', 'Green Screen', 'LED ring light', 'Mic Arm', 'Prompter', 'RGB Controller', 'Ring Light', 'Selfie Stick', 'Stream Controller', 'Stream Deck', 'Streaming Kit', 'USB Hub', 'Web Camera', 'Άλλο', 'Ασύρματο μικρόφωνο για vlogging', 'Βάση Στήριξης', 'Βραχίονας μικροφώνου', 'Επαγγελματικά Μικρόφωνα', 'Επιτραπέζιο', 'Ηχοαπορροφητικά Πάνελ', 'Κάρτα καταγραφής βίντεο', 'Κάρτα καταγραφής βίντεο (Capture Card)', 'Μικρόφωνο', 'Μικρόφωνο streaming', 'Τηλεπρομπτέρ με ενσωματωμένη οθόνη', 'Φωτισμός', 'Φωτιστικό']}),
-    ("Headset Stand",       ['GAMING HEADSET STANDS', 'PORTABLE ACCESSORIES'], {}),
-    ("Cleaning Product",    ['CLEANING PRODUCTS'],            {'title_include': ['Αέρας', 'Σπρέι', 'Spray', 'Compressed air', 'Air duster', 'Πεπιεσμένου αέρα', 'Duster']}),
-    ("Smart Lighting",      ['ΕΞΥΠΝΟΣ ΦΩΤΙΣΜΟΣ'],            {'title_boost': ['Strip', 'LED', 'Bias', 'Backlight', 'RGB', 'Ταινία', 'Λεντοταινία'], 'title_hide': ['Ceiling', 'Bulb', 'Λάμπα', 'Λαμπτήρας', 'E27', 'E14', 'Οροφής', 'Επιτραπέζιο', 'Desk', 'Γραφείου']}),
+    ("Αξεσουάρ Streaming",  ['STREAMING ACCESSORIES'],        {'eidos_include': ['Capture Card', 'Ring Light', 'Mic Arm']}),
+    ("Headset Stand",       ['GAMING HEADSET STANDS'],        {}),
+    ("Smart Lighting",      ['ΕΞΥΠΝΟΣ ΦΩΤΙΣΜΟΣ'],            {'title_boost': ['Strip', 'RGB']}),
+    # NEW SLOTS
+    ("Gaming Chair",        ['GAMING CHAIRS'],                {'price_limit_furniture': True}),
+    ("Gaming Desk",         ['GAMING DESKS'],                 {'price_limit_furniture': True}),
 ]
+
+
 
 # ── Monitor sub-personas (detected from Χρήση or hierarchy) ──
 MONITOR_GAMING_SLOTS = [
@@ -4554,7 +4570,21 @@ def get_stationery_budget(anchor_price, role_lower):
         return (3, 20)
     else:
         return (0.5, 6)
-
+def get_gaming_furniture_budget(trigger_price):
+    """
+    Logic for Gaming Chairs/Desks based on the price of the Mouse/Keyboard.
+    Prevents suggesting 'SecretLab' tier chairs to 'Budget' mouse buyers.
+    """
+    if trigger_price < 40:
+        # Entry peripherals -> Entry furniture
+        return (80, 160)
+    elif trigger_price < 90:
+        # Mid-tier peripherals -> Mid furniture
+        return (150, 280)
+    else:
+        # Pro/High-end peripherals -> Premium furniture
+        return (250, 600)
+        
 def get_monitor_peripheral_budget(monitor_price, category):
     """
     Returns (min_price, max_price) for peripherals recommended alongside monitors.
@@ -4795,7 +4825,17 @@ def run_peripherals_engine(trigger, df_products, df_history, cluster_key):
 
     for idx, (role, hierarchies, flags) in enumerate(slots, start=1):
         notes = [f"Slot {idx}: {role}"]
+        
+        # New Logic: Skip Batteries if trigger is Wired
+        if flags.get('skip_if_wired') and is_wired:
+            diag.append((f"Slot {idx} ({role})", 0, "Skipped (Wired trigger)"))
+            continue
 
+        # New Logic: Skip USB Hub if trigger is Wireless
+        if flags.get('skip_if_wireless') and is_wireless:
+            diag.append((f"Slot {idx} ({role})", 0, "Skipped (Wireless trigger)"))
+            continue
+            
         # ── Skip conditions ──
         skip = flags.get('skip_if', '')
         if skip == 'no_battery' and no_battery:
@@ -4860,7 +4900,19 @@ def run_peripherals_engine(trigger, df_products, df_history, cluster_key):
         # ── Price Proportionality & Tier Logic ──
         if 'LIST PRICE' in pool.columns and tprice > 0:
             pool['_p'] = pool['LIST PRICE'].apply(parse_euro_price)
-            
+
+
+        # NEW: Gaming Furniture Price Logic
+            if flags.get('price_limit_furniture'):
+                min_p, max_p = get_gaming_furniture_budget(tprice)
+                in_band = (pool['_p'] >= min_p) & (pool['_p'] <= max_p)
+                pool.loc[in_band, 'Final_Score'] += 200000 # Heavy boost for right tier
+                
+                # Penalty for extreme upselling (e.g. Chair 10x more expensive than mouse)
+                pool.loc[pool['_p'] > (max_p * 1.5), 'Final_Score'] -= 300000
+                notes.append(f"Furniture Tier: €{min_p}-{max_p} based on trigger €{tprice}")
+
+                
             # Identify the category for the current slot
             r_lower = role.lower()
             if cluster_key in STATIONERY_CLUSTERS:
