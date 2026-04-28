@@ -4050,9 +4050,10 @@ GAMING_MOUSE_SLOTS = [
     # Mid Slots
     ("Gaming Headset",      ['GAMING AUDIO'],                 {'brand_match': True}),
     ("Αξεσουάρ Streaming",  ['STREAMING ACCESSORIES'],        {'eidos_include': ['Capture Card', 'Ring Light', 'Mic Arm']}),
-    ("Headset Stand",       ['GAMING HEADSET STANDS'],        {}),
-    ("Smart Lighting",      ['ΕΞΥΠΝΟΣ ΦΩΤΙΣΜΟΣ'],            {'title_boost': ['Strip', 'RGB']}),
-    # NEW SLOTS
+    ("Cleaning Product",    ['CLEANING PRODUCTS'],            {'title_include': ['Αέρας', 'Σπρέι', 'Spray', 'Compressed air']}),
+    # NEW SLOT 8: Strict Smart Lighting
+    ("Smart Lighting",      ['ΕΞΥΠΝΟΣ ΦΩΤΙΣΜΟΣ'],            {'eidos_include': ['Ταινίες LED', 'Πλακίδια'], 'title_boost': ['Strip', 'RGB', 'LED']}),
+    # NEW SLOTS 9 & 10: Furniture
     ("Gaming Chair",        ['GAMING CHAIRS'],                {'price_limit_furniture': True}),
     ("Gaming Desk",         ['GAMING DESKS'],                 {'price_limit_furniture': True}),
 ]
@@ -4066,9 +4067,10 @@ GAMING_KEYBOARD_SLOTS = [
     # Mid Slots
     ("Gaming Headset",      ['GAMING AUDIO', 'OVERHEAD'],     {'brand_match': True}),
     ("Αξεσουάρ Streaming",  ['STREAMING ACCESSORIES'],        {'eidos_include': ['Capture Card', 'Ring Light', 'Mic Arm']}),
-    ("Headset Stand",       ['GAMING HEADSET STANDS'],        {}),
-    ("Smart Lighting",      ['ΕΞΥΠΝΟΣ ΦΩΤΙΣΜΟΣ'],            {'title_boost': ['Strip', 'RGB']}),
-    # NEW SLOTS
+    ("Cleaning Product",    ['CLEANING PRODUCTS'],            {'title_include': ['Αέρας', 'Σπρέι', 'Spray', 'Compressed air']}),
+    # NEW SLOT 8: Strict Smart Lighting
+    ("Smart Lighting",      ['ΕΞΥΠΝΟΣ ΦΩΤΙΣΜΟΣ'],            {'eidos_include': ['Ταινίες LED', 'Πλακίδια'], 'title_boost': ['Strip', 'RGB', 'LED']}),
+    # NEW SLOTS 9 & 10: Furniture
     ("Gaming Chair",        ['GAMING CHAIRS'],                {'price_limit_furniture': True}),
     ("Gaming Desk",         ['GAMING DESKS'],                 {'price_limit_furniture': True}),
 ]
@@ -5328,8 +5330,10 @@ def run_peripherals_engine(trigger, df_products, df_history, cluster_key):
                 
         # ── Eidos (Type) Include Match ──
         if flags.get('eidos_include') and 'Είδος' in pool.columns:
-            pat = '|'.join(flags['eidos_include'])
-            # Search in both Είδος and Title to be safe against bad data entry
+            # re.escape ensures that strings like "Σετ (3τμχ)" don't break the regex
+            pat = '|'.join(re.escape(str(x)) for x in flags['eidos_include'])
+            
+            # Search in both Είδος and Title
             m_eidos = pool['Είδος'].fillna('').str.contains(pat, case=False, regex=True, na=False)
             m_title = pool['Title'].fillna('').str.contains(pat, case=False, regex=True, na=False)
             
@@ -5337,10 +5341,13 @@ def run_peripherals_engine(trigger, df_products, df_history, cluster_key):
             
             if m_combined.any():
                 b4_eidos = len(pool)
-                pool = pool[m_combined]
+                pool = pool[m_combined].copy() # Use .copy() to avoid SettingWithCopy warnings
                 notes.append(f"Eidos/Title filter ({pat}): {b4_eidos} → {len(pool)}")
             else:
-                notes.append(f"⚠ Eidos filter ({pat}) would empty pool, skipped")
+                # CRITICAL: Decide if this slot should be empty or show generic items
+                # If the slot REQUIREMENT is specific (e.g. LED Strips), empty the pool:
+                pool = pool.head(0) 
+                notes.append(f"⚠ Eidos filter ({pat}) found no matches. Slot emptied.")
 
         # ── Eidos (Type) Boost — soft preference for these Είδος values ──
         if flags.get('eidos_boost') and 'Είδος' in pool.columns:
