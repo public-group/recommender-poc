@@ -212,14 +212,16 @@ STATIONERY_CLUSTERS = {
 }
 
 # Ορισμός εμφάνισης τετραδίων ανά τάξη (A, B, G, D, E, ST)
-NOTEBOOK_CLASS_MAP = {
-    'ΕΥΡΕΤΗΡΙΟ':    {'classes': {'A', 'B', 'G', 'D', 'E', 'ST'}, 'rank': 6},
-    'ΣΠΙΡΑΛ 2Θ':    {'classes': {'B', 'G', 'D', 'E', 'ST'},      'rank': 5},
-    'ΑΝΤΙΓΡΑΦΗΣ':   {'classes': {'A', 'B', 'G', 'D'},            'rank': 4},
-    'ΧΡΩΜΑΤΙΣΤΑ':   {'classes': {'A', 'B', 'G', 'D'},            'rank': 4},
-    'ΜΑΘΗΜΑΤΙΚΩΝ':  {'classes': {'A', 'B', 'G', 'D'},            'rank': 4},
-    'ΜΟΥΣΙΚΗΣ':     {'classes': {'G', 'D', 'E', 'ST'},           'rank': 4},
-    'ΚΛΑΣΙΚΟ ΜΠΛΕ': {'classes': {'D', 'E', 'ST'},                'rank': 3},
+# Χαρτογράφηση: Ποιο τετράδιο εμφανίζεται σε ποιες τάξεις
+# Rank = Συνολική εμφάνιση σε όλες τις τάξεις (για προτεραιότητα)
+NOTEBOOK_CATALOG_LOGIC = {
+    'ΕΥΡΕΤΗΡΙΟ':    {'grades': {'A', 'B', 'G', 'D', 'E', 'ST'}, 'rank': 6, 'keywords': ['ευρετήριο', 'ευρετηριο']},
+    'ΑΝΤΙΓΡΑΦΗΣ':   {'grades': {'A', 'B', 'G', 'D'},            'rank': 4, 'keywords': ['αντιγραφής', 'αντιγραφης', 'μισο μισο', 'μισό - μισό']},
+    'ΣΠΙΡΑΛ 2Θ':    {'grades': {'B', 'G', 'D', 'E', 'ST'},      'rank': 5, 'keywords': ['σπιράλ 2', 'σπιραλ 2', '2 θέματα', '2 θεματα']},
+    'ΜΑΘΗΜΑΤΙΚΩΝ':  {'grades': {'A', 'B', 'G', 'D'},            'rank': 4, 'keywords': ['μαθηματικών', 'μαθηματικων', 'τετραγωνάκια']},
+    'ΚΛΑΣΙΚΟ ΜΠΛΕ': {'grades': {'D', 'E', 'ST'},                'rank': 3, 'keywords': ['μπλε 50', 'κλασικό μπλε', 'κλασικο μπλε']},
+    'ΧΡΩΜΑΤΙΣΤΑ':   {'grades': {'A', 'B', 'G', 'D'},            'rank': 3, 'keywords': ['χρωματιστά', 'χρωματιστα']},
+    'ΜΟΥΣΙΚΗΣ':     {'grades': {'G', 'D', 'E', 'ST'},           'rank': 2, 'keywords': ['μουσικής', 'μουσικης', 'πλάγιο']},
 }
 
 STATIONERY_TRIGGERS = {
@@ -5097,47 +5099,66 @@ def run_peripherals_engine(trigger, df_products, df_history, cluster_key):
             if is_same_color.any():
                 notes.append(f"Color Match ({tcolor}): Boosted {is_same_color.sum()} Keyboards/Pads (+200k)")
 
-# =====================================================================
-        # 📚 ΝΕΑ ΛΟΓΙΚΗ: STATIONERY THEME & SCHOOL LIST MATCH
+        # =====================================================================
+        # 📚 ΑΥΣΤΗΡΗ ΛΟΓΙΚΗ ΣΧΟΛΙΚΩΝ ΛΙΣΤΩΝ (STATIONERY)
         # =====================================================================
         if cluster_key in STATIONERY_CLUSTERS:
-            # 1. Character / Theme Match (π.χ. Frozen, Spiderman)
-            theme_keywords = ['frozen', 'spiderman', 'mickey', 'minnie', 'cars', 'disney', 'marvel', 'nba', 'santoro', 'barbie']
+            _tt_lower = str(trigger.get('Title', '')).lower()
+            
+            # --- ΒΗΜΑ 1: Character / Theme Match (π.χ. Frozen) ---
+            # Υψηλότερη προτεραιότητα από όλα
+            theme_keywords = ['frozen', 'spiderman', 'mickey', 'minnie', 'cars', 'disney', 'marvel', 'nba', 'santoro', 'barbie', 'hello kitty']
             active_theme = next((w for w in theme_keywords if w in _tt_lower), None)
 
             if active_theme:
-                # Boost σε ό,τι έχει το ίδιο θέμα (π.χ. αν το τετράδιο είναι Frozen, δείξε και κασετίνα Frozen)
                 theme_mask = pool['Title'].fillna('').str.lower().str.contains(active_theme)
-                pool.loc[theme_mask, 'Final_Score'] += 250000
-                notes.append(f"✨ Theme Match Found ({active_theme}): +250k boost to {theme_mask.sum()} items")
+                pool.loc[theme_mask, 'Final_Score'] += 1000000 # Massive boost για theme match
+                notes.append(f"✨ Theme Set ({active_theme}): Forced to top")
 
-            # 2. Σχολική Λίστα & Τάξεις (Μόνο για Τετράδια)
-            trigger_type = None
-            trigger_classes = set()
-            for key, data in NOTEBOOK_CLASS_MAP.items():
-                if key.lower() in _tt_lower or (key == 'ΚΛΑΣΙΚΟ ΜΠΛΕ' and 'μπλε' in _tt_lower and '50' in _tt_lower):
-                    trigger_type = key
-                    trigger_classes = data['classes']
+            # --- ΒΗΜΑ 2: Notebook Grade Logic ---
+            # Εντοπισμός σε ποιες τάξεις ανήκει το trigger προϊόν
+            trigger_grades = set()
+            for item_type, info in NOTEBOOK_CATALOG_LOGIC.items():
+                if any(kw in _tt_lower for kw in info['keywords']):
+                    trigger_grades = info['grades']
+                    notes.append(f"🔍 Trigger recognized as: {item_type} (Valid for: {trigger_grades})")
                     break
 
-            if trigger_type:
-                notes.append(f"📚 Σχολική Λίστα: Αναγνωρίστηκε {trigger_type} (Τάξεις: {trigger_classes})")
-                
-                # Ελέγχουμε κάθε υποψήφιο προϊόν στο pool
-                for item_key, item_data in NOTEBOOK_CLASS_MAP.items():
-                    # Μην προτείνεις το ίδιο το trigger
-                    if item_key == trigger_type: continue
+            if trigger_grades:
+                # Εφαρμογή φίλτρου τάξης σε όλο το pool
+                for item_type, info in NOTEBOOK_CATALOG_LOGIC.items():
+                    # Φτιάχνουμε μάσκα για το συγκεκριμένο είδος τετραδίου στο pool
+                    item_mask = pd.Series(False, index=pool.index)
+                    for kw in info['keywords']:
+                        item_mask |= pool['Title'].fillna('').str.lower().str.contains(kw)
                     
-                    item_mask = pool['Title'].fillna('').str.upper().str.contains(item_key)
-                    if not item_mask.any(): continue
+                    if not item_mask.any():
+                        continue
 
-                    # Αν το τετράδιο στο pool ανήκει σε ΚΑΠΟΙΑ από τις τάξεις του trigger, δώσε boost
-                    if item_data['classes'].intersection(trigger_classes):
-                        boost_val = item_data['rank'] * 30000  # Rank 6 -> +180k, Rank 3 -> +90k
+                    # ΕΛΕΓΧΟΣ: Υπάρχει κοινή τάξη μεταξύ trigger και υποψήφιου;
+                    common_grades = info['grades'].intersection(trigger_grades)
+                    
+                    if common_grades:
+                        # Αν υπάρχει κοινή τάξη, δώσε boost βάσει του Rank (συχνότητα εμφάνισης)
+                        # Προσθέτουμε +500k για να σιγουρέψουμε ότι θα βγουν πάνω από άσχετα είδη
+                        boost_val = 500000 + (info['rank'] * 20000)
                         pool.loc[item_mask, 'Final_Score'] += boost_val
+                        # notes.append(f"✅ {item_type}: Boosted via list overlap")
                     else:
-                        # Αν ανήκει σε άσχετες τάξεις (π.χ. trigger=Α' Δημοτικού, item=Ε' Δημοτικού), ρίξε το κάτω
-                        pool.loc[item_mask, 'Final_Score'] -= 150000
+                        # ΑΥΣΤΗΡΟΣ ΑΠΟΚΛΕΙΣΜΟΣ: Αν δεν υπάρχει ΚΑΜΙΑ κοινή τάξη
+                        # (π.χ. βλέπει τετράδιο Α' Δημοτικού, κρύβουμε της ΣΤ')
+                        pool.loc[item_mask, 'Final_Score'] -= 800000
+                        # notes.append(f"🚫 {item_type}: Penalized (No grade overlap)")
+            
+            # --- ΒΗΜΑ 3: Backfill / Global Frequency ---
+            # Αν κάποια τετράδια δεν έχουν βαθμολογηθεί ακόμα, δώσε boost βάσει rank 
+            # για να γεμίσουν τα κενά slots με τα πιο "απαραίτητα" τετράδια γενικά.
+            for item_type, info in NOTEBOOK_CATALOG_LOGIC.items():
+                item_mask = pd.Series(False, index=pool.index)
+                for kw in info['keywords']:
+                    item_mask |= pool['Title'].fillna('').str.lower().str.contains(kw)
+                pool.loc[item_mask, 'Final_Score'] += (info['rank'] * 5000)
+
         # =====================================================================
                 
         # 3. Sub-Series / Ecosystem Match (e.g., Logitech MX)
