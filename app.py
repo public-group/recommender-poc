@@ -4666,10 +4666,12 @@ def run_peripherals_engine(trigger, df_products, df_history, cluster_key):
     all_recs = []
 
     tm = trigger['Material']
-    _tt_lower = str(trigger.get('Title', '')).lower()
+    tt = str(trigger.get('Title', '')) # <--- ΠΡΟΣΘΕΣΕ ΑΥΤΟ
+    _tt_lower = tt.lower()
     tb = str(trigger.get('Κατασκευαστής', '')).strip().upper()
     thier = str(trigger.get('Hierarchy', '')).strip().upper()
     tprice = parse_euro_price(trigger.get('LIST PRICE', 0))
+    tcolor = str(trigger.get('Χρώμα Γραφής', trigger.get('Χρώμα', ''))).strip()
 
     # --- ΒΗΜΑ Α: THEME DETECTION (Universal για όλα τα Stationery) ---
     theme_keywords = ['frozen', 'spiderman', 'mickey', 'minnie', 'cars', 'disney', 'marvel', 'nba', 'santoro', 'barbie', 'hello kitty', 'princess', 'unicorn', 'λουλούδια', 'space']
@@ -4876,12 +4878,8 @@ def run_peripherals_engine(trigger, df_products, df_history, cluster_key):
         if b4 > len(c):
             diag.append(("1c. Apple ban", len(c), f"-{b4 - len(c)}"))
             
+    used_materials = {tm}
     
-
-    used_materials = {tm}
-
-    used_materials = {tm}
-
     # --- NEW: CO-PURCHASE HISTORY LOGIC ---
     tcust = df_history[df_history['Material']==tm]['customerEmail'].unique() if not df_history.empty else []
     bw = df_history[(df_history['customerEmail'].isin(tcust))&(df_history['Material']!=tm)] if not df_history.empty else pd.DataFrame()
@@ -4897,124 +4895,103 @@ def run_peripherals_engine(trigger, df_products, df_history, cluster_key):
         c['History_Score'] = 0
     # --------------------------------------
 
-    for idx, (role, hierarchies, flags) in enumerate(slots, start=1):
+for idx, (role, hierarchies, flags) in enumerate(slots, start=1):
         notes = [f"Slot {idx}: {role}"]
         
-        # New Logic: Skip Batteries if trigger is Wired
+        # ── 1. SKIP CONDITIONS (ΔΙΑΤΗΡΗΣΗ ΛΕΙΤΟΥΡΓΙΚΟΤΗΤΑΣ) ──
+        # Μπαταρίες αν το trigger είναι Wired
         if flags.get('skip_if_wired') and is_wired:
             diag.append((f"Slot {idx} ({role})", 0, "Skipped (Wired trigger)"))
             continue
 
-        # New Logic: Skip USB Hub if trigger is Wireless
+        # Hub αν το trigger είναι Wireless
         if flags.get('skip_if_wireless') and is_wireless:
             diag.append((f"Slot {idx} ({role})", 0, "Skipped (Wireless trigger)"))
             continue
             
-        # ── Skip conditions ──
+        # No-battery skip
         skip = flags.get('skip_if', '')
         if skip == 'no_battery' and no_battery:
             fb = flags.get('fallback_hier')
             if fb:
                 hierarchies = fb
-                notes.append(f"↩ No-battery fallback → {fb}")
+                notes.append(f"↩ No-battery fallback")
             else:
-                notes.append("🚫 Skipped")
-                slot_notes[idx] = notes
-                diag.append((f"Slot {idx} ({role})", 0, "Skipped"))
+                diag.append((f"Slot {idx} ({role})", 0, "Skipped (No battery)"))
                 continue
 
-        # Powered hub only
+        # Powered hub check
         if flags.get('powered_hub_only'):
             if 'εξωτερική' not in hub_power and 'external' not in hub_power:
-                notes.append("🚫 Bus-powered hub → skip power supply")
-                slot_notes[idx] = notes
                 diag.append((f"Slot {idx} ({role})", 0, "Skipped (bus-powered)"))
                 continue
 
-        # Exclude if trigger has feature (e.g. hub has SD → skip card reader)
+        # Feature exclusion (π.χ. SD slot)
         excl_feat = flags.get('exclude_if_has_feature', '')
         if excl_feat and excl_feat.lower() in hub_expansion:
-            notes.append(f"🚫 Hub already has {excl_feat} → skipped")
-            slot_notes[idx] = notes
             diag.append((f"Slot {idx} ({role})", 0, f"Skipped (has {excl_feat})"))
             continue
 
         # Apple walled garden
         if is_apple and 'apple_force' in flags:
             hierarchies = [flags['apple_force']]
-            notes.append(f"🍎 Apple → {hierarchies}")
 
-            # --- ΕΦΑΡΜΟΓΗ ΘΕΜΑΤΙΚΟΥ BOOST (Frozen κτλ) ---
-        if active_theme and cluster_key in STATIONERY_CLUSTERS:
-            theme_mask = pool['Title'].fillna('').str.lower().str.contains(active_theme)
-            if theme_mask.any():
-                pool.loc[theme_mask, 'Final_Score'] += 1500000 # Τεράστιο boost για να βγει το σετ
-                notes.append(f"✨ Theme Match ({active_theme}): Forced to top")
-
-        # --- ΕΦΑΡΜΟΓΗ SCHOOL LIST LOGIC (Μόνο στα Notebook Slots) ---
-        if flags.get('school_list_mode') and trigger_grades:
-            for item_type, info in NOTEBOOK_CATALOG_LOGIC.items():
-                if item_type == trigger_type: continue
-                
-                # Φτιάχνουμε μάσκα για το συγκεκριμένο είδος τετραδίου
-                item_mask = pd.Series(False, index=pool.index)
-                for kw in info['keywords']:
-                    item_mask |= pool['Title'].fillna('').str.lower().str.contains(kw)
-                
-                if not item_mask.any(): continue
-
-                # Έλεγχος αν υπάρχει κοινή τάξη
-                if info['grades'].intersection(trigger_grades):
-                    # Boost βάσει του Rank (συχνότητα εμφάνισης)
-                    boost_val = 800000 + (info['rank'] * 50000)
-                    pool.loc[item_mask, 'Final_Score'] += boost_val
-                else:
-                    # Αποκλεισμός τετραδίων άσχετων τάξεων
-                    pool.loc[item_mask, 'Final_Score'] -= 500000
-
-        # ── Build pool ──
+        # ── 2. BUILD POOL (ΠΡΕΠΕΙ ΝΑ ΓΙΝΕΙ ΕΔΩ - ΠΡΙΝ ΤΑ SCORES) ──
         hier_upper = [h.upper().strip() for h in hierarchies]
         pool = c[c['Hierarchy'].fillna('').astype(str).str.upper().str.strip().isin(hier_upper)].copy()
+        
         if pool.empty:
             hier_col = c['Hierarchy'].fillna('').astype(str).str.upper().str.strip()
             mask = pd.Series(False, index=c.index)
             for hk in hier_upper:
                 if hk: mask |= hier_col.str.contains(re.escape(hk), regex=True, na=False)
             pool = c[mask].copy()
-            if not pool.empty: notes.append(f"⚠ Substring: {len(pool)}")
 
-        notes.append(f"Pool: {len(pool)}")
         pool = pool[~pool['Material'].isin(used_materials)]
 
         if pool.empty:
-            notes.append("❌ Empty")
-            slot_notes[idx] = notes
             diag.append((f"Slot {idx} ({role})", 0, "Empty"))
             continue
 
-        # ── Scoring ──
+        # ── 3. INITIAL SCORING ──
         pool['Final_Score'] = 0.0
         if 'AVAILABILITY' in pool.columns:
             pool.loc[pool['AVAILABILITY'] == 'Άμεσα Διαθέσιμο', 'Final_Score'] += 100000
         pool['Final_Score'] += pool['Sales_Tiebreaker'].fillna(0) * 0.1
+        if 'History_Score' in pool.columns:
+            pool['Final_Score'] += pool['History_Score']
 
+        # ── 4. THEMED BOOST (FROZEN / SPIDERMAN κτλ) ──
+        if active_theme and cluster_key in STATIONERY_CLUSTERS:
+            theme_mask = pool['Title'].fillna('').str.lower().str.contains(active_theme)
+            if theme_mask.any():
+                pool.loc[theme_mask, 'Final_Score'] += 1500000 
+                notes.append(f"✨ Theme Match ({active_theme}): Forced to top")
 
-        # ── Price Proportionality & Tier Logic ──
+        # ── 5. SCHOOL LIST LOGIC (NOTEBOOKS) ──
+        if flags.get('school_list_mode') and trigger_grades:
+            for item_type, info in NOTEBOOK_CATALOG_LOGIC.items():
+                if item_type == trigger_type: continue
+                item_mask = pd.Series(False, index=pool.index)
+                for kw in info['keywords']:
+                    item_mask |= pool['Title'].fillna('').str.lower().str.contains(kw)
+                if not item_mask.any(): continue
+                if info['grades'].intersection(trigger_grades):
+                    pool.loc[item_mask, 'Final_Score'] += (800000 + (info['rank'] * 50000))
+                else:
+                    pool.loc[item_mask, 'Final_Score'] -= 500000
+
+        # ── 6. PRICING & TIER LOGIC (Η ΥΠΑΡΧΟΥΣΑ ΛΟΓΙΚΗ ΣΟΥ) ──
         if 'LIST PRICE' in pool.columns and tprice > 0:
             pool['_p'] = pool['LIST PRICE'].apply(parse_euro_price)
 
-
-        # NEW: Gaming Furniture Price Logic
             if flags.get('price_limit_furniture'):
                 min_p, max_p = get_gaming_furniture_budget(tprice)
                 in_band = (pool['_p'] >= min_p) & (pool['_p'] <= max_p)
-                pool.loc[in_band, 'Final_Score'] += 200000 # Heavy boost for right tier
-                
-                # Penalty for extreme upselling (e.g. Chair 10x more expensive than mouse)
+                pool.loc[in_band, 'Final_Score'] += 200000
                 pool.loc[pool['_p'] > (max_p * 1.5), 'Final_Score'] -= 300000
-                notes.append(f"Furniture Tier: €{min_p}-{max_p} based on trigger €{tprice}")
-
-                
+                notes.append(f"Furniture Tier: €{min_p}-{max_p}")
+                            
             # Identify the category for the current slot
             r_lower = role.lower()
             if cluster_key in STATIONERY_CLUSTERS:
