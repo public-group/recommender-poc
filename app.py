@@ -211,6 +211,17 @@ STATIONERY_CLUSTERS = {
     "Notebooks", "Notepads",
 }
 
+# Ορισμός εμφάνισης τετραδίων ανά τάξη (A, B, G, D, E, ST)
+NOTEBOOK_CLASS_MAP = {
+    'ΕΥΡΕΤΗΡΙΟ':    {'classes': {'A', 'B', 'G', 'D', 'E', 'ST'}, 'rank': 6},
+    'ΣΠΙΡΑΛ 2Θ':    {'classes': {'B', 'G', 'D', 'E', 'ST'},      'rank': 5},
+    'ΑΝΤΙΓΡΑΦΗΣ':   {'classes': {'A', 'B', 'G', 'D'},            'rank': 4},
+    'ΧΡΩΜΑΤΙΣΤΑ':   {'classes': {'A', 'B', 'G', 'D'},            'rank': 4},
+    'ΜΑΘΗΜΑΤΙΚΩΝ':  {'classes': {'A', 'B', 'G', 'D'},            'rank': 4},
+    'ΜΟΥΣΙΚΗΣ':     {'classes': {'G', 'D', 'E', 'ST'},           'rank': 4},
+    'ΚΛΑΣΙΚΟ ΜΠΛΕ': {'classes': {'D', 'E', 'ST'},                'rank': 3},
+}
+
 STATIONERY_TRIGGERS = {
     "Pens":              {"hierarchies": {"ΣΤΥΛΟ ΥΓΡΗΣ ΜΕΛΑΝΗΣ", "ΣΤΥΛΟ GEL", "ΣΤΥΛΟ ΔΙΑΡΚΕΙΑΣ"}},
     "Pencils":           {"hierarchies": {"ΜΟΛΥΒΙΑ", "ΧΡΩΜΑΤΙΣΤΑ ΜΟΛΥΒΙΑ"}},
@@ -281,7 +292,7 @@ TOY_HIERARCHIES_ACTUAL = {
 }
 
 STATIONERY_HIERARCHIES_ACTUAL = {
-    "notebooks": ["ΣΗΜΕΙΩΜΑΤΑΡΙΑ", "ΤΕΤΡΑΔΙΑ"],
+    "": ["ΣΗΜΕΙΩΜΑΤΑΡΙΑ", "ΤΕΤΡΑΔΙΑ"],
     "water_bottles": ["ΘΕΡΜΟΣ - ΠΑΓΟΥΡΙΑ", "ΠΑΓΟΥΡΙΑ", "ΘΕΡΜΟΣ"],
     "arts_crafts": ["ΧΡΩΜΑΤΙΣΤΑ ΜΟΛΥΒΙΑ", "ΜΠΛΟΚ-ΧΑΡΤΙΑ", "ΚΑΣΕΤΙΝΕΣ", "ΜΑΡΚΑΔΟΡΟΙ", "ΜΑΡΚΑΔΟΡΟΙ ΣΧΕΔΙΟΥ-ΕΙΔΙΚΩΝ ΧΡΗΣΕΩΝ", "ΧΡΩΜΑΤΑ ΖΩΓΡΑΦΙΚΗΣ"],
     "reading": ["READING ACCESSORIES"],
@@ -717,7 +728,7 @@ L2_CHILDREN = {
                   {"key": "Colored Pencils Art","label": "Ξυλομπογιές", "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5'%3E%3Cpath d='M18.37 2.63a2 2 0 0 1 3 3L14 13l-4 1 1-4 7.37-7.37z'/%3E%3Cpath d='M9 14.5a4 4 0 0 1-4 4H3v-2a4 4 0 0 1 4-4'/%3E%3C/svg%3E"},
                   {"key": "Drawing Markers","label": "Μαρκαδόροι\nΖωγρ.", "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5'%3E%3Cpath d='M18.37 2.63a2 2 0 0 1 3 3L14 13l-4 1 1-4 7.37-7.37z'/%3E%3Cpath d='M9 14.5a4 4 0 0 1-4 4H3v-2a4 4 0 0 1 4-4'/%3E%3C/svg%3E"},
                   {"key": "Art Paper",      "label": "Μπλοκ\nΧαρτιά",   "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5'%3E%3Cpath d='M18.37 2.63a2 2 0 0 1 3 3L14 13l-4 1 1-4 7.37-7.37z'/%3E%3Cpath d='M9 14.5a4 4 0 0 1-4 4H3v-2a4 4 0 0 1 4-4'/%3E%3C/svg%3E"},
-                  {"key": "Notebooks",      "label": "Τετράδια",    "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5'%3E%3Cpath d='M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z'/%3E%3C/svg%3E"},
+                  {"key": "",      "label": "Τετράδια",    "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5'%3E%3Cpath d='M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z'/%3E%3C/svg%3E"},
                   {"key": "Notepads",       "label": "Σημειωμ.",    "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5'%3E%3Cpath d='M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z'/%3E%3C/svg%3E"},
                  ],
     "SDA":       [{"key": "Floor Care", "label": "Σκούπες",
@@ -2000,10 +2011,10 @@ def run_books_engine(trigger, df_all, df_history):
                             crosssell_count += 1
                             item4_found = True
             else:
-                notebooks = stationery[stationery['Hierarchy'].str.contains('ΣΗΜΕΙΩΜΑΤ', case=False, na=False)].copy()
-                notebooks = notebooks[notebooks.apply(lambda r: stationery_matches_gender(r.get('Title',''), r.get('Brand',''), detected_gender), axis=1)]
-                if not notebooks.empty:
-                    selected = get_rotated_selection(notebooks, tm, 'notebook', n=1)
+                 lifestyle = stationery[stationery['Hierarchy'].str.contains('ΣΗΜΕΙΩΜΑΤ', case=False, na=False)].copy()
+                 = [.apply(lambda r: stationery_matches_gender(r.get('Title',''), r.get('Brand',''), detected_gender), axis=1)]
+                if not .empty:
+                    selected = get_rotated_selection(, tm, 'notebook', n=1)
                     if not selected.empty:
                         best = selected.iloc[0]
                         if best['Material'] not in used_materials:
@@ -2623,7 +2634,7 @@ def run_laptops_engine(trigger, df_products, df_history):
     # ── Build candidate pool ──
     c = df_products[df_products['Material'] != tm].copy()
     b4 = len(c)
-    # Remove laptops/notebooks themselves from candidates
+    # Remove laptops/ themselves from candidates
     c = c[~((c['Level 1'] == 'IT') & (c['Level 2'].isin(LAPTOP_L2_VALUES)))]
     diag.append(("1. Excl laptops", len(c), f"Removed {b4 - len(c)}"))
  
@@ -4831,7 +4842,7 @@ def run_peripherals_engine(trigger, df_products, df_history, cluster_key):
         if b4 > len(c):
             diag.append(("1c. Apple ban", len(c), f"-{b4 - len(c)}"))
             
-    # ... rest of run_peripherals_engine code ...
+    
 
     used_materials = {tm}
 
@@ -5086,7 +5097,48 @@ def run_peripherals_engine(trigger, df_products, df_history, cluster_key):
             if is_same_color.any():
                 notes.append(f"Color Match ({tcolor}): Boosted {is_same_color.sum()} Keyboards/Pads (+200k)")
 
+# =====================================================================
+        # 📚 ΝΕΑ ΛΟΓΙΚΗ: STATIONERY THEME & SCHOOL LIST MATCH
+        # =====================================================================
+        if cluster_key in STATIONERY_CLUSTERS:
+            # 1. Character / Theme Match (π.χ. Frozen, Spiderman)
+            theme_keywords = ['frozen', 'spiderman', 'mickey', 'minnie', 'cars', 'disney', 'marvel', 'nba', 'santoro', 'barbie']
+            active_theme = next((w for w in theme_keywords if w in _tt_lower), None)
 
+            if active_theme:
+                # Boost σε ό,τι έχει το ίδιο θέμα (π.χ. αν το τετράδιο είναι Frozen, δείξε και κασετίνα Frozen)
+                theme_mask = pool['Title'].fillna('').str.lower().str.contains(active_theme)
+                pool.loc[theme_mask, 'Final_Score'] += 250000
+                notes.append(f"✨ Theme Match Found ({active_theme}): +250k boost to {theme_mask.sum()} items")
+
+            # 2. Σχολική Λίστα & Τάξεις (Μόνο για Τετράδια)
+            trigger_type = None
+            trigger_classes = set()
+            for key, data in NOTEBOOK_CLASS_MAP.items():
+                if key.lower() in _tt_lower or (key == 'ΚΛΑΣΙΚΟ ΜΠΛΕ' and 'μπλε' in _tt_lower and '50' in _tt_lower):
+                    trigger_type = key
+                    trigger_classes = data['classes']
+                    break
+
+            if trigger_type:
+                notes.append(f"📚 Σχολική Λίστα: Αναγνωρίστηκε {trigger_type} (Τάξεις: {trigger_classes})")
+                
+                # Ελέγχουμε κάθε υποψήφιο προϊόν στο pool
+                for item_key, item_data in NOTEBOOK_CLASS_MAP.items():
+                    # Μην προτείνεις το ίδιο το trigger
+                    if item_key == trigger_type: continue
+                    
+                    item_mask = pool['Title'].fillna('').str.upper().str.contains(item_key)
+                    if not item_mask.any(): continue
+
+                    # Αν το τετράδιο στο pool ανήκει σε ΚΑΠΟΙΑ από τις τάξεις του trigger, δώσε boost
+                    if item_data['classes'].intersection(trigger_classes):
+                        boost_val = item_data['rank'] * 30000  # Rank 6 -> +180k, Rank 3 -> +90k
+                        pool.loc[item_mask, 'Final_Score'] += boost_val
+                    else:
+                        # Αν ανήκει σε άσχετες τάξεις (π.χ. trigger=Α' Δημοτικού, item=Ε' Δημοτικού), ρίξε το κάτω
+                        pool.loc[item_mask, 'Final_Score'] -= 150000
+        # =====================================================================
                 
         # 3. Sub-Series / Ecosystem Match (e.g., Logitech MX)
         # Pad the title with spaces to ensure we match the isolated word "mx"
