@@ -241,7 +241,48 @@ STATIONERY_TRIGGERS = {
     "Art Paper":         {"hierarchies": {"ΜΠΛΟΚ-ΧΑΡΤΙΑ", "ΧΑΡΤΙΑ - ΜΠΛΟΚ", "ΜΠΛΟΚ - ΧΑΡΤΙΑ ΖΩΓΡΑΦΙΚΗΣ"}},
     "Notebooks":         {"hierarchies": {"ΣΗΜΕΙΩΜΑΤΑΡΙΑ"}},
     "Notepads":          {"hierarchies": {"ΤΕΤΡΑΔΙΑ", "ΗΜΕΡΟΛΟΓΙΑ", "ORGANISER"}},
-}# ─────────────────────────────────────────────────────────────
+}
+
+
+# ═════════════════════════════════════════════════════════════
+# 🟢 TV CONFIGURATION (Home Entertainment)
+# ═════════════════════════════════════════════════════════════
+
+TV_SLOTS = [
+    (1,  'Βάση Στήριξης',      ['MOUNTS & STANDS'],       'MOUNT_LOGIC'),
+    (2,  'Soundbar',           ['SOUNDBARS'],             'SOUND_LOGIC'),
+    (3,  'Καλώδιο HDMI',       ['HDMI'],                  'HDMI_LOGIC'),
+    (4,  'Προστασία Ρεύματος', ['SURGE PROTECTORS'],      'GENERIC'),
+    (5,  'Τηλεχειριστήριο',    ['REMOTE CONTROLS'],       'REMOTE_LOGIC'),
+    (6,  'Κεραία / Καλώδιο',   ['ANTENNAS', 'ΚΕΡΑΙΑΣ'],    'ANTENNA_LOGIC'),
+    (7,  'Μπαταρίες',          ['ΑΛΚΑΛΙΚΕΣ'],             'GENERIC'),
+    (8,  'Αποθήκευση USB',     ['USB FLASH DISK'],        'GENERIC'),
+    (9,  'Καθαρισμός',         ['CLEANING PRODUCTS'],     'GENERIC'),
+    (10, 'Αναβάθμιση Ήχου',    ['SOUNDBARS'],             'SOUND_LOGIC_2'),
+]
+
+# ═════════════════════════════════════════════════════════════
+# 🟢 TV CONFIGURATION (Home Entertainment)
+# ═════════════════════════════════════════════════════════════
+
+TV_MARKETING_COPY = {
+    "Βάση Στήριξης": "Ασφαλής και σταθερή τοποθέτηση για την τηλεόρασή σου.",
+    "Soundbar": "Αναβάθμισε τον ήχο σου με εντυπωσιακό βάθος.",
+    "Προστασία Ρεύματος": "Προστάτευσε την επένδυσή σου από υπερτάσεις.",
+    "Τηλεχειριστήριο": "Ο απόλυτος έλεγχος, τέλεια συμβατός.",
+    "Κεραία": "Κρυστάλλινο σήμα για όλα τα ελεύθερα κανάλια.",
+    "Καλώδιο Κεραίας": "Απρόσκοπτη σύνδεση με την κεραία σου.",
+    "Μπαταρίες": "Μην ξεμείνεις ποτέ από ενέργεια.",
+    "Καλώδιο HDMI": "Αξιόπιστη μεταφορά εικόνας υψηλής ανάλυσης 4K/8K.",
+    "Αποθήκευση USB": "Αποθήκευσε τα αγαπημένα σου προγράμματα.",
+    "Καθαρισμός": "Κρυστάλλινη εικόνα χωρίς σκόνη και δαχτυλιές.",
+    "Εναλλακτική Βάση": "Διαφορετικός τύπος βάσης για μεγαλύτερη ευελιξία.",
+    "Εφεδρικό HDMI": "Ένα ακόμα καλώδιο για τις κονσόλες σου.",
+}
+
+
+
+# ─────────────────────────────────────────────────────────────
 # 🟢 KIDS BOOKS CONFIGURATION
 # ─────────────────────────────────────────────────────────────
 KIDS_BOOKS_LEVEL2 = {"Greek Kids Books", "International Kids Books"}
@@ -689,6 +730,12 @@ L1_CATEGORIES = [
         "label": "Μικρές\nΣυσκευές",
         "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 2v8l4-2'/%3E%3Cpath d='M12 10l-4-2'/%3E%3Ccircle cx='12' cy='18' r='4'/%3E%3Cline x1='12' y1='10' x2='12' y2='14'/%3E%3C/svg%3E",
     },
+
+    {
+        "key": "TV",
+        "label": "Εικόνα\n& Ήχος",
+        "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='2' y='7' width='20' height='15' rx='2' ry='2'/%3E%3Cpolyline points='17 2 12 7 7 2'/%3E%3C/svg%3E",
+    },
 ]
 
 L2_CHILDREN = {
@@ -735,6 +782,8 @@ L2_CHILDREN = {
                  ],
     "SDA":       [{"key": "Floor Care", "label": "Σκούπες",
                    "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 2v8l4-2'/%3E%3Cpath d='M12 10l-4-2'/%3E%3Ccircle cx='12' cy='18' r='4'/%3E%3Cline x1='12' y1='10' x2='12' y2='14'/%3E%3C/svg%3E"}],
+    "TV": [{"key": "TVs", "label": "Τηλεοράσεις",
+            "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='2' y='7' width='20' height='15' rx='2' ry='2'/%3E%3Cpolyline points='17 2 12 7 7 2'/%3E%3C/svg%3E"}],
 }
 
 # Reverse: L2 key → parent L1 key (used to highlight which L2 is active)
@@ -985,7 +1034,16 @@ else:
                 sel = st.sidebar.selectbox("", laptops['Title'].unique(), label_visibility="collapsed", key="lt_sel")
                 trigger = laptops[laptops['Title']==sel].iloc[0] if sel else Non
 
-
+    elif active_cluster == "TVs":
+        if df_products.empty: st.stop()
+        tvs = df_products[df_products['Level 2'] == 'TV']
+        if tvs.empty:
+            st.sidebar.warning("Δεν βρέθηκαν Τηλεοράσεις.")
+        else:
+            st.sidebar.markdown('<p class="sidebar-section">Επιλέξτε Τηλεόραση</p>', unsafe_allow_html=True)
+            sel = st.sidebar.selectbox("", tvs['Title'].unique(), label_visibility="collapsed", key="tv_sel")
+            trigger = tvs[tvs['Title']==sel].iloc[0] if sel else None
+            
     elif active_cluster == "Floor Care":
         if df_vacuums.empty:
             st.sidebar.warning("Sheet 'Vacuums' is empty or missing.")
@@ -6024,6 +6082,214 @@ def run_peripherals_engine(trigger, df_products, df_history, cluster_key):
         return recs_df, diag, slot_notes, recs_df
     return pd.DataFrame(), diag, slot_notes, pd.DataFrame()
 
+
+# ═══════════════════════════════════════════════════════════════
+# 🟢 TV ENGINE — Deep Filtering & Ecosystem Sync
+# ═══════════════════════════════════════════════════════════════
+
+def run_tv_engine(trigger, df_products, df_history):
+    diag = []
+    slot_notes = {}
+    all_recs = []
+
+    tm = trigger['Material']
+    tt = str(trigger.get('Title', ''))
+    tb = str(trigger.get('Κατασκευαστής', '')).strip().upper()
+    tprice = parse_euro_price(trigger.get('LIST PRICE', 0))
+    
+    # --- Attribute Extraction ---
+    t_vesa = str(trigger.get('Πρότυπο VESA', '')).strip()
+    
+    t_weight = 0.0
+    try: 
+        t_weight = float(str(trigger.get('Βάρος', '0')).replace(',', '.').split()[0])
+    except: pass
+
+    t_ideal = str(trigger.get('Ιδανικό για ≡', '')).lower()
+    t_extra = str(trigger.get('Extra Χαρακτηριστικά', '')).lower()
+    
+    t_size_str = str(trigger.get('Μέγεθος', ''))
+    t_size = parse_screen_size(t_size_str)
+    inch_match = re.search(r'(\d{2})', t_size_str)
+    if not inch_match: inch_match = re.search(r'(\d{2})', tt)
+    t_inches = inch_match.group(1) if inch_match else ""
+
+    # Logic Triggers
+    is_gaming_tv = 'gaming' in t_ideal or '100hz' in t_extra or '120hz' in t_extra or '144hz' in t_extra
+    is_cinema_tv = 'cinema' in t_ideal or 'ταινίες' in t_ideal
+    is_the_frame = 'the frame' in tt.lower()
+    
+    # ── Νέοι Κανόνες Βάσει Τιμής & Μεγέθους ──
+    is_expensive = tprice > 800
+    is_large = t_size >= 65
+    is_cheap = tprice <= 800
+
+    diag.append(("0. Trigger", f"Brand={tb}, Size={t_size}\", Price=€{tprice:.0f}", f"Expensive={is_expensive}, Large={is_large}, Cheap={is_cheap}"))
+
+    # ── Δυναμική Λίστα Slots ──
+    potential_slots = [('Βάση Στήριξης', ['MOUNTS & STANDS'], 'MOUNT_LOGIC_1')]
+    
+    # Soundbar (Μόνο αν είναι > 65" ΚΑΙ > 800€)
+    if is_large and is_expensive:
+        potential_slots.append(('Soundbar', ['SOUNDBARS'], 'SOUND_LOGIC'))
+    
+    # Surge Protectors (Πάντα υπάρχει, αλλά θα πάρει το Slot 2 αν το Soundbar λείπει)
+    potential_slots.append(('Προστασία Ρεύματος', ['SURGE PROTECTORS'], 'GENERIC'))
+    
+    # Remotes (Μόνο σε φθηνές TV)
+    if is_cheap:
+        potential_slots.append(('Τηλεχειριστήριο', ['REMOTE CONTROLS'], 'REMOTE_LOGIC'))
+        
+    potential_slots.extend([
+        ('Κεραία', ['ANTENNAS'], 'ANTENNA_LOGIC'),
+        ('Καλώδιο Κεραίας', ['ΚΕΡΑΙΑΣ'], 'GENERIC'),
+        ('Μπαταρίες', ['ΑΛΚΑΛΙΚΕΣ'], 'GENERIC'),
+        ('Καλώδιο HDMI', ['HDMI'], 'HDMI_LOGIC'),
+        ('Αποθήκευση USB', ['USB FLASH DISK'], 'GENERIC'),
+        ('Καθαρισμός', ['CLEANING PRODUCTS'], 'GENERIC'),
+        ('Εναλλακτική Βάση', ['MOUNTS & STANDS'], 'MOUNT_LOGIC_2'),
+        ('Εφεδρικό HDMI', ['HDMI'], 'HDMI_LOGIC'), # Fallback
+    ])
+
+    # --- Base Candidate Pool & History ---
+    c = df_products[df_products['Material'] != tm].copy()
+    c['Sales_Tiebreaker'] = pd.to_numeric(c.get('Sum of Sales', 0), errors='coerce').fillna(0)
+
+    tcust = df_history[df_history['Material']==tm]['customerEmail'].unique() if not df_history.empty else []
+    bw = df_history[(df_history['customerEmail'].isin(tcust))&(df_history['Material']!=tm)] if not df_history.empty else pd.DataFrame()
+    fdf = bw['Material'].value_counts().reset_index() if not bw.empty else pd.DataFrame(columns=['NID', 'Frequency'])
+    if not fdf.empty:
+        fdf.columns = ['NID', 'Frequency']
+        c = c.merge(fdf, left_on='Material', right_on='NID', how='left')
+        c['Frequency'] = c['Frequency'].fillna(0).astype(int)
+    else:
+        c['Frequency'] = 0
+
+    used_materials = {tm}
+    current_slot = 1
+    mount_1_type = ""
+
+    for role, hierarchies, logic_key in potential_slots:
+        if current_slot > 10: break # Σταματάμε αυστηρά στα 10 slots
+        
+        notes = [f"Logic: {logic_key}"]
+        hier_upper = [h.upper().strip() for h in hierarchies]
+
+        pool = c[c['Hierarchy'].fillna('').astype(str).str.upper().str.strip().isin(hier_upper)].copy()
+        pool = pool[~pool['Material'].isin(used_materials)]
+
+        if pool.empty:
+            diag.append((f"Slot {current_slot}", 0, "Empty Hierarchy"))
+            continue
+
+        pool['Final_Score'] = 0.0
+        if 'AVAILABILITY' in pool.columns:
+            pool.loc[pool['AVAILABILITY'] == 'Άμεσα Διαθέσιμο', 'Final_Score'] += 100000
+        pool['Final_Score'] += pool['Sales_Tiebreaker'] * 0.1
+        pool['Final_Score'] += pool['Frequency'] * 100 
+
+        # ══════════════════════════════════════════════════════════════
+        # 🔴 DEEP ATTRIBUTE LOGIC
+        # ══════════════════════════════════════════════════════════════
+        
+        if 'MOUNT_LOGIC' in logic_key:
+            if is_the_frame:
+                frame_mask = pool['Title'].fillna('').str.lower().str.contains('the frame|πλαίσιο')
+                if frame_mask.any():
+                    pool = pool[frame_mask]
+                    notes.append("🖼️ OVERRIDE: The Frame Mount Logic Active")
+                    if t_inches:
+                        inch_mask = pool['Title'].fillna('').str.contains(t_inches)
+                        pool.loc[inch_mask, 'Final_Score'] += 500000
+            else:
+                if t_vesa and t_vesa not in ('nan', '', '0'):
+                    vesa_match = pool['Πρότυπο VESA'].fillna('').astype(str).str.contains(re.escape(t_vesa), na=False)
+                    pool.loc[vesa_match, 'Final_Score'] += 300000
+                
+                if t_weight > 0 and 'Μέγιστο Βάρος ≡' in pool.columns:
+                    try:
+                        pool_limit = pool['Μέγιστο Βάρος ≡'].astype(str).str.extract(r'(\d+)')[0].astype(float)
+                        safe_mask = (pool_limit >= t_weight) | pool_limit.isna()
+                        pool = pool[safe_mask]
+                    except: pass
+            
+            # Ενίσχυση ποικιλίας στο Slot της Εναλλακτικής Βάσης
+            if logic_key == 'MOUNT_LOGIC_2' and mount_1_type:
+                is_fixed = 'σταθερή' in mount_1_type or 'fixed' in mount_1_type
+                if is_fixed:
+                    motion_mask = ~pool.get('Τύπος Βάσης', pd.Series(dtype=str)).fillna('').str.lower().str.contains('σταθερή|fixed', na=False)
+                    pool.loc[motion_mask, 'Final_Score'] += 400000
+                    notes.append("Diversity: Boosted Motion/Arm mounts (Slot 1 was Fixed)")
+                else:
+                    fixed_mask = pool.get('Τύπος Βάσης', pd.Series(dtype=str)).fillna('').str.lower().str.contains('σταθερή|fixed', na=False)
+                    pool.loc[fixed_mask, 'Final_Score'] += 400000
+                    notes.append("Diversity: Boosted Fixed mounts (Slot 1 was Motion)")
+
+        elif logic_key == 'SOUND_LOGIC':
+            if tb:
+                brand_match = pool['Κατασκευαστής'].fillna('').str.strip().str.upper() == tb
+                b4 = len(pool)
+                pool = pool[brand_match]
+                notes.append(f"Strict Brand Match ({tb}) for Soundbars: {b4} -> {len(pool)}")
+            else:
+                pool = pool.head(0)
+                notes.append("No TV brand known, skipping Soundbar slot")
+            
+            subwoofer_mask = pool.get('Subwoofer', pd.Series(dtype=str)).fillna('').astype(str).str.contains('ναι|yes', case=False) | pool.get('Τύπος ≡', pd.Series(dtype=str)).fillna('').astype(str).str.contains('subwoofer', case=False)
+            if is_cinema_tv:
+                atmos_mask = pool.get('Τεχνολογίες ≡', pd.Series(dtype=str)).fillna('').str.lower().str.contains('atmos|dts')
+                pool.loc[atmos_mask & subwoofer_mask, 'Final_Score'] += 150000
+            else:
+                pool.loc[subwoofer_mask, 'Final_Score'] += 100000
+
+        elif logic_key == 'HDMI_LOGIC':
+            if is_gaming_tv:
+                hdmi21_mask = pool.get('Έκδοση ≡', pd.Series(dtype=str)).fillna('').astype(str).str.contains('2.1') | pool['Title'].fillna('').str.contains('2.1')
+                pool.loc[hdmi21_mask, 'Final_Score'] += 300000
+
+        elif logic_key == 'REMOTE_LOGIC':
+            if tb == 'LG':
+                magic_mask = pool['Title'].fillna('').str.lower().str.contains('magic remote', na=False)
+                if magic_mask.any():
+                    pool = pool[magic_mask]
+                    notes.append("LG TV -> Forced Magic Remote")
+            else:
+                generic_mask = pool['Title'].fillna('').str.lower().str.contains('universal|one for all|superior|αντικατάστασης|συμβατό|generic', regex=True, na=False)
+                pool.loc[generic_mask, 'Final_Score'] += 300000
+                if tb:
+                    brand_match = pool['Κατασκευαστής'].fillna('').str.strip().str.upper() == tb
+                    pool.loc[brand_match, 'Final_Score'] += 150000
+                notes.append("Boosted Generic/Universal & Brand Replacements")
+
+        elif logic_key == 'ANTENNA_LOGIC':
+            if 0 < t_size <= 54:
+                pool['Final_Score'] += 100000
+
+        # ── Selection ──
+        pool = pool.sort_values('Final_Score', ascending=False)
+        if not pool.empty:
+            chosen = pool.iloc[0]
+            
+            # Αποθήκευση τύπου βάσης για χρήση στο diversity match
+            if logic_key == 'MOUNT_LOGIC_1':
+                mount_1_type = str(chosen.get('Τύπος Βάσης', '')).lower()
+                
+            rc = chosen.copy()
+            rc['Assigned_Slot'] = current_slot
+            rc['Slot_Role'] = role
+            rc['Marketing_Copy'] = TV_MARKETING_COPY.get(role, "Ιδανική επιλογή.")
+            rc['Item_Rank'] = 1
+            all_recs.append(rc)
+            used_materials.add(chosen['Material'])
+            notes.append(f"✅ {str(chosen.get('Title',''))[:60]}")
+            slot_notes[current_slot] = notes
+            diag.append((f"Slot {current_slot} ({role})", 1, f"Score: {chosen['Final_Score']:.0f}"))
+            
+            current_slot += 1
+
+    recs_df = pd.DataFrame(all_recs) if all_recs else pd.DataFrame()
+    if not recs_df.empty: recs_df['Draft_Score'] = recs_df['Assigned_Slot']
+    return recs_df, diag, slot_notes, recs_df
 # ─────────────────────────────────────────────────────────────
 # RUN ENGINE
 # ─────────────────────────────────────────────────────────────
@@ -6039,6 +6305,10 @@ elif active_cluster == "Floor Care":
     combined_pool = pd.concat([df_products, df_vacuums], ignore_index=True)
     recs, diag, slot_notes, full_candidates = run_floor_care_engine(trigger, combined_pool, df_history)
     slot_diag = []
+elif active_cluster == "TVs":
+    recs, diag, slot_notes, full_candidates = run_tv_engine(trigger, df_products, df_history)
+    slot_diag = []
+
 elif active_cluster in ("Mouse", "Keyboard", "Gaming Mouse", "Gaming Keyboard"):
     recs, diag, slot_notes, full_candidates = run_peripherals_engine(trigger, df_peripherals, df_history, active_cluster)
     slot_diag = []
