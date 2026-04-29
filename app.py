@@ -6113,8 +6113,18 @@ def run_tv_engine(trigger, df_products, df_history):
     t_ideal = str(trigger.get('Ιδανικό για ≡', '')).lower()
     t_extra = str(trigger.get('Extra Χαρακτηριστικά', '')).lower()
     
-    t_size_str = str(trigger.get('Μέγεθος', ''))
+    # ── FIX: Έξυπνη Εξαγωγή Ιντσών (Ακόμα κι αν λείπει η στήλη) ──
+    t_size_str = str(trigger.get('Μέγεθος οθόνης', trigger.get('Μέγεθος', trigger.get('Ιντσες', ''))))
     t_size = parse_screen_size(t_size_str)
+    if t_size == 0.0:
+        # Ψάχνει μοτίβα όπως '65"' ή '65 inch' στον τίτλο της TV
+        match = re.search(r'(\d{2})\s*["”\']', tt)
+        if match: 
+            t_size = float(match.group(1))
+        else:
+            match2 = re.search(r'\b(\d{2})\b', t_size_str)
+            if match2: t_size = float(match2.group(1))
+
     inch_match = re.search(r'(\d{2})', t_size_str)
     if not inch_match: inch_match = re.search(r'(\d{2})', tt)
     t_inches = inch_match.group(1) if inch_match else ""
@@ -6124,26 +6134,28 @@ def run_tv_engine(trigger, df_products, df_history):
     is_cinema_tv = 'cinema' in t_ideal or 'ταινίες' in t_ideal
     is_the_frame = 'the frame' in tt.lower()
     
-    # ── Νέοι Κανόνες Βάσει Τιμής & Μεγέθους ──
+    # ── Κανόνες Βάσει Τιμής & Μεγέθους ──
     is_expensive = tprice > 800
     is_large = t_size >= 65
     is_cheap = tprice <= 800
 
     diag.append(("0. Trigger", f"Brand={tb}, Size={t_size}\", Price=€{tprice:.0f}", f"Expensive={is_expensive}, Large={is_large}, Cheap={is_cheap}"))
 
-    # ── Δυναμική Λίστα Slots ──
-    potential_slots = [('Βάση Στήριξης', ['MOUNTS & STANDS'], 'MOUNT_LOGIC_1')]
+    # ── Δυναμική Λίστα Slots (Η 10άδα σου) ──
+    potential_slots = [('Βάση Στήριξης', ['MOUNTS & STANDS'], 'MOUNT_LOGIC_FIXED')]
     
-    # Soundbar (Μόνο αν είναι > 65" ΚΑΙ > 800€)
+    # Soundbar (Μόνο αν είναι >= 65" ΚΑΙ > 800€)
     if is_large and is_expensive:
         potential_slots.append(('Soundbar', ['SOUNDBARS'], 'SOUND_LOGIC'))
     
-    # Surge Protectors (Πάντα υπάρχει, αλλά θα πάρει το Slot 2 αν το Soundbar λείπει)
+    # Surge Protectors (Πάντα υπάρχει)
     potential_slots.append(('Προστασία Ρεύματος', ['SURGE PROTECTORS'], 'GENERIC'))
     
-    # Remotes (Μόνο σε φθηνές TV)
-    if is_cheap:
-        potential_slots.append(('Τηλεχειριστήριο', ['REMOTE CONTROLS'], 'REMOTE_LOGIC'))
+    # ── Remote Control Rules ──
+    if tb == 'LG' and is_expensive:
+        potential_slots.append(('Τηλεχειριστήριο', ['REMOTE CONTROLS'], 'REMOTE_LOGIC_PREMIUM_LG'))
+    elif is_cheap:
+        potential_slots.append(('Τηλεχειριστήριο', ['REMOTE CONTROLS'], 'REMOTE_LOGIC_CHEAP'))
         
     potential_slots.extend([
         ('Κεραία', ['ANTENNAS'], 'ANTENNA_LOGIC'),
@@ -6152,13 +6164,14 @@ def run_tv_engine(trigger, df_products, df_history):
         ('Καλώδιο HDMI', ['HDMI'], 'HDMI_LOGIC'),
         ('Αποθήκευση USB', ['USB FLASH DISK'], 'GENERIC'),
         ('Καθαρισμός', ['CLEANING PRODUCTS'], 'GENERIC'),
-        ('Εναλλακτική Βάση', ['MOUNTS & STANDS'], 'MOUNT_LOGIC_2'),
-        ('Εφεδρικό HDMI', ['HDMI'], 'HDMI_LOGIC'), # Fallback
+        ('Εναλλακτική Βάση', ['MOUNTS & STANDS'], 'MOUNT_LOGIC_MOTION'),
+        ('Εφεδρικό HDMI', ['HDMI'], 'HDMI_LOGIC'), # Fallback για να κλείσει 10άδα
     ])
 
     # --- Base Candidate Pool & History ---
     c = df_products[df_products['Material'] != tm].copy()
     c['Sales_Tiebreaker'] = pd.to_numeric(c.get('Sum of Sales', 0), errors='coerce').fillna(0)
+    c['_p'] = c['LIST PRICE'].apply(parse_euro_price) # Υπολογισμός τιμής αξεσουάρ εκ των προτέρων
 
     tcust = df_history[df_history['Material']==tm]['customerEmail'].unique() if not df_history.empty else []
     bw = df_history[(df_history['customerEmail'].isin(tcust))&(df_history['Material']!=tm)] if not df_history.empty else pd.DataFrame()
@@ -6172,7 +6185,6 @@ def run_tv_engine(trigger, df_products, df_history):
 
     used_materials = {tm}
     current_slot = 1
-    mount_1_type = ""
 
     for role, hierarchies, logic_key in potential_slots:
         if current_slot > 10: break # Σταματάμε αυστηρά στα 10 slots
@@ -6194,9 +6206,19 @@ def run_tv_engine(trigger, df_products, df_history):
         pool['Final_Score'] += pool['Frequency'] * 100 
 
         # ══════════════════════════════════════════════════════════════
+        # 🔴 ΑΣΠΙΔΑ ΥΠΕΡΒΟΛΙΚΗΣ ΤΙΜΗΣ (Anti-Overbuy)
+        # ══════════════════════════════════════════════════════════════
+        if is_cheap:
+            # Κανένα αξεσουάρ να μην ξεπερνά το 40% της τιμής της τηλεόρασης (min 30€)
+            max_price_cap = max(30.0, tprice * 0.40)
+            overpriced_mask = pool['_p'] > max_price_cap
+            pool.loc[overpriced_mask, 'Final_Score'] -= 800000
+            if overpriced_mask.any():
+                notes.append(f"Price Cap (€{max_price_cap:.0f}): Penalized {overpriced_mask.sum()} expensive items")
+
+        # ══════════════════════════════════════════════════════════════
         # 🔴 DEEP ATTRIBUTE LOGIC
         # ══════════════════════════════════════════════════════════════
-        
         if 'MOUNT_LOGIC' in logic_key:
             if is_the_frame:
                 frame_mask = pool['Title'].fillna('').str.lower().str.contains('the frame|πλαίσιο')
@@ -6218,27 +6240,21 @@ def run_tv_engine(trigger, df_products, df_history):
                         pool = pool[safe_mask]
                     except: pass
             
-            # Ενίσχυση ποικιλίας στο Slot της Εναλλακτικής Βάσης
-            if logic_key == 'MOUNT_LOGIC_2' and mount_1_type:
-                is_fixed = 'σταθερή' in mount_1_type or 'fixed' in mount_1_type
-                if is_fixed:
-                    motion_mask = ~pool.get('Τύπος Βάσης', pd.Series(dtype=str)).fillna('').str.lower().str.contains('σταθερή|fixed', na=False)
-                    pool.loc[motion_mask, 'Final_Score'] += 400000
-                    notes.append("Diversity: Boosted Motion/Arm mounts (Slot 1 was Fixed)")
-                else:
-                    fixed_mask = pool.get('Τύπος Βάσης', pd.Series(dtype=str)).fillna('').str.lower().str.contains('σταθερή|fixed', na=False)
-                    pool.loc[fixed_mask, 'Final_Score'] += 400000
-                    notes.append("Diversity: Boosted Fixed mounts (Slot 1 was Motion)")
+            # ΔΙΑΧΩΡΙΣΜΟΣ ΣΤΑΘΕΡΗΣ / ΜΕ ΒΡΑΧΙΟΝΑ (Fixed vs Motion)
+            is_fixed_mask = pool.get('Τύπος Βάσης', pd.Series(dtype=str)).fillna('').str.lower().str.contains('σταθερή|fixed', na=False)
+            
+            if logic_key == 'MOUNT_LOGIC_FIXED':
+                pool.loc[is_fixed_mask, 'Final_Score'] += 400000
+                notes.append("Forced Slot 1 to Fixed Mount (+400k)")
+            elif logic_key == 'MOUNT_LOGIC_MOTION':
+                pool.loc[~is_fixed_mask, 'Final_Score'] += 400000
+                notes.append("Forced Alt Mount to Motion/Arm Mount (+400k)")
 
         elif logic_key == 'SOUND_LOGIC':
             if tb:
                 brand_match = pool['Κατασκευαστής'].fillna('').str.strip().str.upper() == tb
-                b4 = len(pool)
-                pool = pool[brand_match]
-                notes.append(f"Strict Brand Match ({tb}) for Soundbars: {b4} -> {len(pool)}")
-            else:
-                pool = pool.head(0)
-                notes.append("No TV brand known, skipping Soundbar slot")
+                pool.loc[brand_match, 'Final_Score'] += 250000
+                notes.append(f"Brand Match ({tb}) boosted (+250k)")
             
             subwoofer_mask = pool.get('Subwoofer', pd.Series(dtype=str)).fillna('').astype(str).str.contains('ναι|yes', case=False) | pool.get('Τύπος ≡', pd.Series(dtype=str)).fillna('').astype(str).str.contains('subwoofer', case=False)
             if is_cinema_tv:
@@ -6252,19 +6268,26 @@ def run_tv_engine(trigger, df_products, df_history):
                 hdmi21_mask = pool.get('Έκδοση ≡', pd.Series(dtype=str)).fillna('').astype(str).str.contains('2.1') | pool['Title'].fillna('').str.contains('2.1')
                 pool.loc[hdmi21_mask, 'Final_Score'] += 300000
 
-        elif logic_key == 'REMOTE_LOGIC':
-            if tb == 'LG':
-                magic_mask = pool['Title'].fillna('').str.lower().str.contains('magic remote', na=False)
-                if magic_mask.any():
-                    pool = pool[magic_mask]
-                    notes.append("LG TV -> Forced Magic Remote")
+        elif logic_key == 'REMOTE_LOGIC_PREMIUM_LG':
+            magic_mask = pool['Title'].fillna('').str.lower().str.contains('magic remote', na=False)
+            if magic_mask.any():
+                pool = pool[magic_mask]
+                notes.append("LG Premium TV -> Forced Magic Remote Match")
             else:
-                generic_mask = pool['Title'].fillna('').str.lower().str.contains('universal|one for all|superior|αντικατάστασης|συμβατό|generic', regex=True, na=False)
-                pool.loc[generic_mask, 'Final_Score'] += 300000
-                if tb:
-                    brand_match = pool['Κατασκευαστής'].fillna('').str.strip().str.upper() == tb
-                    pool.loc[brand_match, 'Final_Score'] += 150000
-                notes.append("Boosted Generic/Universal & Brand Replacements")
+                pool = pool.head(0) # Hide slot if Magic Remote is completely out of stock
+                
+        elif logic_key == 'REMOTE_LOGIC_CHEAP':
+            generic_mask = pool['Title'].fillna('').str.lower().str.contains('universal|one for all|superior|αντικατάστασης|συμβατό|generic', regex=True, na=False)
+            pool.loc[generic_mask, 'Final_Score'] += 300000
+            
+            if tb:
+                brand_match = pool['Κατασκευαστής'].fillna('').str.strip().str.upper() == tb
+                pool.loc[brand_match, 'Final_Score'] += 150000
+            
+            # Απαγόρευση του Magic Remote στις φθηνές
+            magic_mask = pool['Title'].fillna('').str.lower().str.contains('magic remote', na=False)
+            pool.loc[magic_mask, 'Final_Score'] -= 1000000
+            notes.append("Cheap TV -> Boosted Generic/Universal Replacements, Banned Magic Remote")
 
         elif logic_key == 'ANTENNA_LOGIC':
             if 0 < t_size <= 54:
@@ -6275,10 +6298,6 @@ def run_tv_engine(trigger, df_products, df_history):
         if not pool.empty:
             chosen = pool.iloc[0]
             
-            # Αποθήκευση τύπου βάσης για χρήση στο diversity match
-            if logic_key == 'MOUNT_LOGIC_1':
-                mount_1_type = str(chosen.get('Τύπος Βάσης', '')).lower()
-                
             rc = chosen.copy()
             rc['Assigned_Slot'] = current_slot
             rc['Slot_Role'] = role
@@ -6295,6 +6314,9 @@ def run_tv_engine(trigger, df_products, df_history):
     recs_df = pd.DataFrame(all_recs) if all_recs else pd.DataFrame()
     if not recs_df.empty: recs_df['Draft_Score'] = recs_df['Assigned_Slot']
     return recs_df, diag, slot_notes, recs_df
+
+
+    
 # ─────────────────────────────────────────────────────────────
 # RUN ENGINE
 # ─────────────────────────────────────────────────────────────
