@@ -2011,10 +2011,10 @@ def run_books_engine(trigger, df_all, df_history):
                             crosssell_count += 1
                             item4_found = True
             else:
-                 lifestyle = stationery[stationery['Hierarchy'].str.contains('ΣΗΜΕΙΩΜΑΤ', case=False, na=False)].copy()
-                 = [.apply(lambda r: stationery_matches_gender(r.get('Title',''), r.get('Brand',''), detected_gender), axis=1)]
-                if not .empty:
-                    selected = get_rotated_selection(, tm, 'notebook', n=1)
+                lifestyle = stationery[stationery['Hierarchy'].str.contains('ΣΗΜΕΙΩΜΑΤ', case=False, na=False)].copy()
+                lifestyle = lifestyle[lifestyle.apply(lambda r: stationery_matches_gender(r.get('Title',''), r.get('Brand',''), detected_gender), axis=1)]
+                if not lifestyle.empty:
+                    selected = get_rotated_selection(lifestyle, tm, 'notebook', n=1)
                     if not selected.empty:
                         best = selected.iloc[0]
                         if best['Material'] not in used_materials:
