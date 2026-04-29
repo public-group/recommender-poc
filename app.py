@@ -1022,7 +1022,7 @@ else:
     elif active_cluster == "TVs":
         if df_products.empty: st.stop()
         
-        # FIX: Robust filtering ignores uppercase/lowercase & trailing spaces in Excel!
+        # Robust filtering ignores uppercase/lowercase & trailing spaces in Excel!
         lvl2 = df_products['Level 2'].fillna('').astype(str).str.strip().str.upper()
         tvs = df_products[lvl2 == 'TV']
         
@@ -1031,12 +1031,25 @@ else:
             hier = df_products['Hierarchy'].fillna('').astype(str).str.strip().str.upper()
             tvs = df_products[hier == 'TV']
 
+        # ─────────────────────────────────────────────────────────────
+        # 🧪 TEST LIST: Restrict the dropdown to specific SKUs
+        # ─────────────────────────────────────────────────────────────
+        tv_test_skus = {
+            "2027797", "2027771", "2035104", "2089142", "2035099"
+        }
+        if not tvs.empty:
+            t_filtered = tvs[tvs['Material'].astype(str).str.strip().str.replace(r'\.0$', '', regex=True).isin(tv_test_skus)]
+            if not t_filtered.empty:
+                tvs = t_filtered
+        # ─────────────────────────────────────────────────────────────
+
         if tvs.empty:
-            st.sidebar.warning("Δεν βρέθηκαν Τηλεοράσεις.")
+            st.sidebar.warning("Δεν βρέθηκαν test Τηλεοράσεις.")
         else:
             st.sidebar.markdown('<p class="sidebar-section">Επιλέξτε Τηλεόραση</p>', unsafe_allow_html=True)
             sel = st.sidebar.selectbox("", tvs['Title'].unique(), label_visibility="collapsed", key="tv_sel")
             trigger = tvs[tvs['Title']==sel].iloc[0] if sel else None
+            
 
 
     elif active_cluster == "TVs":
