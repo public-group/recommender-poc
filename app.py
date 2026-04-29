@@ -4893,10 +4893,10 @@ def run_peripherals_engine(trigger, df_products, df_history, cluster_key):
     else:
         c['Frequency'] = 0
         c['History_Score'] = 0
-    # --------------------------------------
+# --------------------------------------
 
-for idx, (role, hierarchies, flags) in enumerate(slots, start=1):
-        notes = [f"Slot {idx}: {role}"]
+    for idx, (role, hierarchies, flags) in enumerate(slots, start=1):
+        notes = [f"Slot {idx}: {role}"]
         
         # ── 1. SKIP CONDITIONS (ΔΙΑΤΗΡΗΣΗ ΛΕΙΤΟΥΡΓΙΚΟΤΗΤΑΣ) ──
         # Μπαταρίες αν το trigger είναι Wired
