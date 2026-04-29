@@ -4105,17 +4105,16 @@ MONITOR_PRO_SLOTS = [
 ]
 
 MONITOR_MAINSTREAM_SLOTS = [
-    ("Mouse+KB Combo",      ['KEYBOARDS WIRELESS'],           {'title_hide': ['Gaming', 'RGB']}),
-    ("Wireless Mouse",      ['MOUSE WIRELESS'],               {'title_hide': ['Gaming', 'RGB']}),
-    ("Mouse Pad",           ['MOUSE PADS'],                   {'title_hide': ['XXL', 'Extended', 'Gaming', 'Gel', 'Wrist', 'Μαξιλαράκι'], 'usage_hide': ['Gaming']}),
-    ("HDMI Cable",          ['MONITOR CABLES'],               {'cable_port_match': 'HDMI', 'cable_length_boost': True}),
-    ("Monitor Riser",       ['ΒΑΣΕΙΣ ΓΡΑΦΕΙΟΥ'],               {'title_boost': ['Riser', 'Stand', 'Drawer', 'Organizer'], 'title_hide': ['Wall Mount', 'Gas Spring', 'VESA', 'CPU', 'Υπολογιστή']}),
-    ("PC Speakers",         ['PC SPEAKERS 2.0'],              {}),
-    ("Webcam",              ['PC WEB CAMS'],                  {}),
-    ("USB Hub",             ['USB HUB DEVICES'],              {}),
-    ("Screen Cleaner",      ['CLEANING PRODUCTS'],            {}),
-    ("Desk Lamp",           ['ΕΞΥΠΝΟΣ ΦΩΤΙΣΜΟΣ'],            {'title_boost': ['Desk', 'Γραφείου', 'Table', 'Επιτραπέζιο', 'Φωτιστικό', 'ScreenBar', 'Monitor Light'], 'title_hide': ['Ceiling', 'Bulb', 'Strip', 'Οροφής', 'Λάμπα', 'Λαμπτήρας', 'E27', 'E14', 'Ταινία', 'Λεντοταινία'], 'usage_hide': ['Gaming', 'Εξωτερική', 'Εξωτερικού χώρου', 'TV']}),
-    ("UPS",                 ['LINE INTERACTIVE'], {}),
+    ("Keyboard x Mouse Set", ['DESKTOP KEYBOARDS', 'MOUSE WIRELESS'], {'title_boost': ['Set', 'Combo', 'Desktop'], 'persona_match': ['Γραφείο', 'Υπολογιστής', 'Mac']}),
+    ("Speakers 2.0",         ['SPEAKERS'],                     {'title_boost': ['2.0'], 'title_hide': ['2.1', '5.1', 'Subwoofer', 'Soundbar']}),
+    ("Mousepad",             ['MOUSE PADS'],                   {'title_hide': ['Gaming', 'RGB']}),
+    ("Headphones",           ['OVERHEAD'],                     {'title_hide': ['Gaming', 'RGB']}),
+    ("Webcam",               ['WEB CAMERAS'],                  {}),
+    ("USB Hub",              ['USB HUB'],                      {}),
+    ("USB Stick",            ['USB FLASH'],                    {}),
+    ("Screen Cleaner",       ['SCREEN CLEANER'],               {}),
+    ("Printer",              ['PRINTERS'],                     {}),
+    ("UPS",                  ['LINE INTERACTIVE'],             {}),
 ]
 
 
@@ -4601,6 +4600,10 @@ def get_monitor_peripheral_budget(monitor_price, category):
         if category == 'DESK': return (50, 120)
         if category == 'WHEEL': return (50, 150)
         if category == 'UPS': return (40, 80)
+        if category == 'WEBCAM': return (20, 45)
+        if category == 'HUB': return (15, 30)
+        if category == 'PRINTER': return (60, 120)
+        if category == 'SPEAKERS': return (15, 40)
         return (5, 25)
     # Mid-range (€100-€250)
     elif monitor_price < 250:
@@ -4612,6 +4615,10 @@ def get_monitor_peripheral_budget(monitor_price, category):
         if category == 'DESK': return (80, 180)
         if category == 'WHEEL': return (100, 300)
         if category == 'UPS': return (60, 120)
+        if category == 'WEBCAM': return (40, 80)
+        if category == 'HUB': return (25, 50)
+        if category == 'PRINTER': return (100, 200)
+        if category == 'SPEAKERS': return (30, 70)
         return (10, 40)
     # High-end (€250-€400)
     elif monitor_price < 400:
@@ -4623,6 +4630,10 @@ def get_monitor_peripheral_budget(monitor_price, category):
         if category == 'DESK': return (120, 250)
         if category == 'WHEEL': return (200, 500)
         if category == 'UPS': return (80, 200)
+        if category == 'WEBCAM': return (70, 150)
+        if category == 'HUB': return (40, 100)
+        if category == 'PRINTER': return (180, 400)
+        if category == 'SPEAKERS': return (60, 150)
         return (15, 60)
     # Premium (€400+)
     else:
@@ -4937,12 +4948,19 @@ def run_peripherals_engine(trigger, df_products, df_history, cluster_key):
                 cat_key = 'STATIONERY'
             elif 'keyboard' in r_lower: cat_key = 'KEYBOARD'
             elif 'mouse' in r_lower and 'pad' not in r_lower: cat_key = 'MOUSE'
-            elif 'headset' in r_lower: cat_key = 'HEADSET'
-            elif 'pad' in r_lower or 'mat' in r_lower or 'rest' in r_lower: cat_key = 'MOUSEPAD'
+            elif 'headset' in r_lower or 'headphones' in r_lower: cat_key = 'HEADSET'
+            elif 'pad' in r_lower or 'mat' in r_lower: cat_key = 'MOUSEPAD'
             elif 'chair' in r_lower: cat_key = 'CHAIR'
             elif 'wheel' in r_lower: cat_key = 'WHEEL'
             elif 'desk' in r_lower: cat_key = 'DESK'
             elif 'ups' in r_lower: cat_key = 'UPS'
+            # --- NEW CATEGORIES ---
+            elif 'webcam' in r_lower: cat_key = 'WEBCAM'
+            elif 'hub' in r_lower: cat_key = 'HUB'
+            elif 'stick' in r_lower or 'flash' in r_lower: cat_key = 'STORAGE'
+            elif 'cleaner' in r_lower: cat_key = 'CLEANER'
+            elif 'printer' in r_lower: cat_key = 'PRINTER'
+            elif 'speakers' in r_lower: cat_key = 'SPEAKERS'
             else: cat_key = 'ACCESSORY'
 
             # Use cluster-specific pricing
