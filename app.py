@@ -4661,17 +4661,49 @@ def get_monitor_peripheral_budget(monitor_price, category):
         return (25, 100)
         
 def run_peripherals_engine(trigger, df_products, df_history, cluster_key):
-    """Unified peripheral engine for all IT clusters."""
     diag = []
     slot_notes = {}
     all_recs = []
 
     tm = trigger['Material']
-    tt = str(trigger.get('Title', ''))
+    _tt_lower = str(trigger.get('Title', '')).lower()
     tb = str(trigger.get('Κατασκευαστής', '')).strip().upper()
     thier = str(trigger.get('Hierarchy', '')).strip().upper()
     tprice = parse_euro_price(trigger.get('LIST PRICE', 0))
-    tcolor = str(trigger.get('Χρώμα Γραφής', trigger.get('Χρώμα', ''))).strip()
+
+    # --- ΒΗΜΑ Α: THEME DETECTION (Universal για όλα τα Stationery) ---
+    theme_keywords = ['frozen', 'spiderman', 'mickey', 'minnie', 'cars', 'disney', 'marvel', 'nba', 'santoro', 'barbie', 'hello kitty', 'princess', 'unicorn', 'λουλούδια', 'space']
+    active_theme = next((w for w in theme_keywords if w in _tt_lower), None)
+
+    # --- ΒΗΜΑ Β: SCHOOL LIST DETECTION (Μόνο για Τετράδια) ---
+    trigger_grades = set()
+    trigger_type = None
+    if cluster_key in ["Notebooks", "Notepads"] or "ΤΕΤΡΑΔΙ" in _tt_lower.upper():
+        for item_type, info in NOTEBOOK_CATALOG_LOGIC.items():
+            if any(kw in _tt_lower for kw in info['keywords']):
+                trigger_grades = info['grades']
+                trigger_type = item_type
+                break
+
+    # Αν βρήκαμε ότι είναι σχολικό τετράδιο, αλλάζουμε τη δομή των slots δυναμικά
+    if trigger_grades:
+        diag.append(("School Mode", "Enabled", f"Trigger: {trigger_type} for Grades: {trigger_grades}"))
+        # Slots: 5 slots για άλλα τετράδια της λίστας, 5 slots για συνοδευτικά
+        slots = [
+            ("Τετράδιο Λίστας 1", ['ΤΕΤΡΑΔΙΑ', 'ΣΗΜΕΙΩΜΑΤΑΡΙΑ'], {'school_list_mode': True}),
+            ("Τετράδιο Λίστας 2", ['ΤΕΤΡΑΔΙΑ', 'ΣΗΜΕΙΩΜΑΤΑΡΙΑ'], {'school_list_mode': True}),
+            ("Τετράδιο Λίστας 3", ['ΤΕΤΡΑΔΙΑ', 'ΣΗΜΕΙΩΜΑΤΑΡΙΑ'], {'school_list_mode': True}),
+            ("Τετράδιο Λίστας 4", ['ΤΕΤΡΑΔΙΑ', 'ΣΗΜΕΙΩΜΑΤΑΡΙΑ'], {'school_list_mode': True}),
+            ("Τετράδιο Λίστας 5", ['ΤΕΤΡΑΔΙΑ', 'ΣΗΜΕΙΩΜΑΤΑΡΙΑ'], {'school_list_mode': True}),
+            ("Κασετίνα", ['ΣΧΟΛΙΚΕΣ ΚΑΣΕΤΙΝΕΣ', 'ΚΑΣΕΤΙΝΕΣ-ΘΗΚΕΣ'], {'brand_match': True}),
+            ("Μολύβια", ['ΜΟΛΥΒΙΑ'], {'brand_match': True}),
+            ("Στυλό", ['ΣΤΥΛΟ ΥΓΡΗΣ ΜΕΛΑΝΗΣ', 'ΣΤΥΛΟ GEL'], {'brand_match': True}),
+            ("Γόμα/Ξύστρα", ['ΓΟΜΕΣ', 'ΞΥΣΤΡΕΣ'], {}),
+            ("Μαρκαδόροι", ['ΜΑΡΚΑΔΟΡΟΙ'], {}),
+        ]
+    else:
+        # Standard slots από το config
+        slots = PERIPHERAL_CLUSTER_SLOTS.get(cluster_key, [])
 
     # Connectivity
     is_wireless = 'WIRELESS' in thier or 'ΑΣΥΡΜΑΤ' in tt.upper()
@@ -4911,6 +4943,34 @@ def run_peripherals_engine(trigger, df_products, df_history, cluster_key):
         if is_apple and 'apple_force' in flags:
             hierarchies = [flags['apple_force']]
             notes.append(f"🍎 Apple → {hierarchies}")
+
+            # --- ΕΦΑΡΜΟΓΗ ΘΕΜΑΤΙΚΟΥ BOOST (Frozen κτλ) ---
+        if active_theme and cluster_key in STATIONERY_CLUSTERS:
+            theme_mask = pool['Title'].fillna('').str.lower().str.contains(active_theme)
+            if theme_mask.any():
+                pool.loc[theme_mask, 'Final_Score'] += 1500000 # Τεράστιο boost για να βγει το σετ
+                notes.append(f"✨ Theme Match ({active_theme}): Forced to top")
+
+        # --- ΕΦΑΡΜΟΓΗ SCHOOL LIST LOGIC (Μόνο στα Notebook Slots) ---
+        if flags.get('school_list_mode') and trigger_grades:
+            for item_type, info in NOTEBOOK_CATALOG_LOGIC.items():
+                if item_type == trigger_type: continue
+                
+                # Φτιάχνουμε μάσκα για το συγκεκριμένο είδος τετραδίου
+                item_mask = pd.Series(False, index=pool.index)
+                for kw in info['keywords']:
+                    item_mask |= pool['Title'].fillna('').str.lower().str.contains(kw)
+                
+                if not item_mask.any(): continue
+
+                # Έλεγχος αν υπάρχει κοινή τάξη
+                if info['grades'].intersection(trigger_grades):
+                    # Boost βάσει του Rank (συχνότητα εμφάνισης)
+                    boost_val = 800000 + (info['rank'] * 50000)
+                    pool.loc[item_mask, 'Final_Score'] += boost_val
+                else:
+                    # Αποκλεισμός τετραδίων άσχετων τάξεων
+                    pool.loc[item_mask, 'Final_Score'] -= 500000
 
         # ── Build pool ──
         hier_upper = [h.upper().strip() for h in hierarchies]
