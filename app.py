@@ -890,11 +890,13 @@ st.sidebar.markdown('''
 if st.session_state.nav_level == 1:
     st.sidebar.markdown('<p class="sidebar-section">Προϊόντα</p>', unsafe_allow_html=True)
 
-    # Render dynamic icon CSS for each L1 column position
-    icon_css = "<style>"
-    for i, l1 in enumerate(L1_CATEGORIES, start=1):
+    # 1. FIX: Dynamic CSS targeting exactly the correct row and column!
+    icon_css = "<style>\n"
+    for i, l1 in enumerate(L1_CATEGORIES):
+        row_idx = (i // 2) + 1  # 1st row = 1, 2nd row = 2, etc.
+        col_idx = (i % 2) + 1   # 1st col = 1, 2nd col = 2
         icon_css += f"""
-        [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] > div:nth-child({i}) button::before {{
+        [data-testid="stSidebar"] [data-testid="stHorizontalBlock"]:nth-of-type({row_idx}) > div:nth-child({col_idx}) button::before {{
             content: ''; display: block; width: 32px; height: 32px;
             background-image: url("data:image/svg+xml,{l1['icon_svg']}");
             background-size: contain; background-repeat: no-repeat; background-position: center;
@@ -904,8 +906,7 @@ if st.session_state.nav_level == 1:
     icon_css += "</style>"
     st.sidebar.markdown(icon_css, unsafe_allow_html=True)
 
-    # 2-column grid (3 categories: 2 in row 1, 1 in row 2... or use columns dynamically)
-    # We'll show pairs of 2 to match the screenshot
+    # 2. Render 2-column grid
     n_l1 = len(L1_CATEGORIES)
     for row_start in range(0, n_l1, 2):
         row_items = L1_CATEGORIES[row_start:row_start + 2]
@@ -923,10 +924,8 @@ if st.session_state.nav_level == 1:
                         st.session_state.active_cluster = None
                     st.rerun()
 
-    # No active cluster yet → stop here, nothing to recommend
     sel = None
     trigger = None
-
 
 # ─────────────────────────────────────────────────────────────
 # LEVEL 2 VIEW — Show L2 tiles + product selector + trigger card
@@ -936,9 +935,7 @@ else:
     selected_l1 = next((x for x in L1_CATEGORIES if x["key"] == selected_l1_key), None)
     children = L2_CHILDREN.get(selected_l1_key, [])
 
-    # Breadcrumb row: ‹ back arrow + parent label
-    # Rendered as label first, then a small back button — avoiding st.columns
-    # which created a tall vertical strip for the narrow back column.
+    # Breadcrumb row
     label_clean = (selected_l1["label"] if selected_l1 else "").replace("\n", " ")
     st.sidebar.markdown(f'<div class="l2-breadcrumb-label" style="margin-bottom:6px;">‹&nbsp;&nbsp;{label_clean}</div>', unsafe_allow_html=True)
     if st.sidebar.button("↩ Πίσω", key="back_to_l1", use_container_width=True):
@@ -947,7 +944,41 @@ else:
         st.session_state.active_cluster = None
         st.rerun()
 
-    # L2 tiles — render after the breadcrumb (in their own horizontal block)
+    st.sidebar.markdown('<hr class="section-divider">', unsafe_allow_html=True)
+
+    # 1. FIX: Exact row/col CSS targeting for L2
+    active_cluster = st.session_state.active_cluster
+    border_css = "<style>\n"
+    for i, child in enumerate(children):
+        row_idx = (i // 2) + 1
+        col_idx = (i % 2) + 1
+        border = "2px solid #ff5e00" if child["key"] == active_cluster else "1px solid #eaeaea"
+        
+        border_css += f"""
+        [data-testid="stSidebar"] [data-testid="stHorizontalBlock"]:nth-of-type({row_idx}) > div:nth-child({col_idx}) button {{
+            border: {border} !important;
+        }}
+        [data-testid="stSidebar"] [data-testid="stHorizontalBlock"]:nth-of-type({row_idx}) > div:nth-child({col_idx}) button::before {{
+            content: ''; display: block; width: 32px; height: 32px;
+            background-image: url("data:image/svg+xml,{child['icon_svg']}");
+            background-size: contain; background-repeat: no-repeat; background-position: center;
+            position: absolute; top: 14px; left: 50%; transform: translateX(-50%);
+        }}
+        """
+    border_css += "</style>"
+    st.sidebar.markdown(border_css, unsafe_allow_html=True)
+
+    # 2. Render L2 tiles in pairs
+    n_l2 = len(children)
+    for row_start in range(0, n_l2, 2):
+        row_items = children[row_start:row_start + 2]
+        cols = st.sidebar.columns(2)
+        for col, child in zip(cols, row_items):
+            with col:
+                if st.button(child["label"], key=f"l2_{child['key']}", use_container_width=True):
+                    st.session_state.active_cluster = child["key"]
+                    st.rerun()
+
     st.sidebar.markdown('<hr class="section-divider">', unsafe_allow_html=True)
 
     # Active border CSS for L2 tiles
@@ -1032,7 +1063,7 @@ else:
             else:
                 st.sidebar.markdown('<p class="sidebar-section">Επιλέξτε Laptop</p>', unsafe_allow_html=True)
                 sel = st.sidebar.selectbox("", laptops['Title'].unique(), label_visibility="collapsed", key="lt_sel")
-                trigger = laptops[laptops['Title']==sel].iloc[0] if sel else Non
+                trigger = laptops[laptops['Title']==sel].iloc[0] if sel else None
 
     elif active_cluster == "TVs":
         if df_products.empty: st.stop()
