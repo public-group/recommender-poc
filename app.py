@@ -891,11 +891,11 @@ st.sidebar.markdown('''
 if st.session_state.nav_level == 1:
     st.sidebar.markdown('<p class="sidebar-section">Προϊόντα</p>', unsafe_allow_html=True)
 
-    # 1. FIX: Dynamic CSS targeting exactly the correct row and column!
+    # Dynamic CSS targeting exactly the correct row and column!
     icon_css = "<style>\n"
     for i, l1 in enumerate(L1_CATEGORIES):
-        row_idx = (i // 2) + 1  # 1st row = 1, 2nd row = 2, etc.
-        col_idx = (i % 2) + 1   # 1st col = 1, 2nd col = 2
+        row_idx = (i // 2) + 1  
+        col_idx = (i % 2) + 1   
         icon_css += f"""
         [data-testid="stSidebar"] [data-testid="stHorizontalBlock"]:nth-of-type({row_idx}) > div:nth-child({col_idx}) button::before {{
             content: ''; display: block; width: 32px; height: 32px;
@@ -907,14 +907,14 @@ if st.session_state.nav_level == 1:
     icon_css += "</style>"
     st.sidebar.markdown(icon_css, unsafe_allow_html=True)
 
-    # 2. Render 2-column grid
+    # Render 2-column grid
     n_l1 = len(L1_CATEGORIES)
     for row_start in range(0, n_l1, 2):
         row_items = L1_CATEGORIES[row_start:row_start + 2]
         cols = st.sidebar.columns(2)
         for col, l1 in zip(cols, row_items):
             with col:
-                if st.button(l1["label"], key=f"l1_{l1['key']}", use_container_width=True):
+                if st.button(l1["label"], key=f"l1_btn_{l1['key']}", use_container_width=True):
                     st.session_state.nav_level = 2
                     st.session_state.selected_l1 = l1["key"]
                     # Auto-select the first L2 child if there's only one
@@ -947,7 +947,7 @@ else:
 
     st.sidebar.markdown('<hr class="section-divider">', unsafe_allow_html=True)
 
-    # 1. FIX: Exact row/col CSS targeting for L2
+    # Exact row/col CSS targeting for L2
     active_cluster = st.session_state.active_cluster
     border_css = "<style>\n"
     for i, child in enumerate(children):
@@ -969,64 +969,19 @@ else:
     border_css += "</style>"
     st.sidebar.markdown(border_css, unsafe_allow_html=True)
 
-    # 2. Render L2 tiles in pairs
+    # Render L2 tiles in pairs (Unbreakable version)
     n_l2 = len(children)
     for i, row_start in enumerate(range(0, n_l2, 2)):
         row_items = children[row_start:row_start + 2]
         cols = st.sidebar.columns(2)
         for j, (col, child) in enumerate(zip(cols, row_items)):
             with col:
-                # Προσθήκη μοναδικού index (i, j) στο key για να μην υπάρξει ποτέ ξανά DuplicateKeyError
                 btn_key = f"l2_btn_{child['key']}_{i}_{j}"
-                
                 if st.button(child["label"], key=btn_key, use_container_width=True):
                     st.session_state.active_cluster = child["key"]
                     st.rerun()
 
     st.sidebar.markdown('<hr class="section-divider">', unsafe_allow_html=True)
-
-    # Active border CSS for L2 tiles
-    active_cluster = st.session_state.active_cluster
-    border_css = "<style>"
-    for i, child in enumerate(children, start=1):
-        border = "2px solid #ff5e00" if child["key"] == active_cluster else "1px solid #eaeaea"
-        border_css += f"""
-        [data-testid="stSidebar"] [data-testid="stHorizontalBlock"]:not(:first-of-type) > div:nth-child({i}) button {{
-            border: {border} !important;
-        }}
-        [data-testid="stSidebar"] [data-testid="stHorizontalBlock"]:not(:first-of-type) > div:nth-child({i}) button::before {{
-            content: ''; display: block; width: 32px; height: 32px;
-            background-image: url("data:image/svg+xml,{child['icon_svg']}");
-            background-size: contain; background-repeat: no-repeat; background-position: center;
-            position: absolute; top: 14px; left: 50%; transform: translateX(-50%);
-        }}
-        """
-    border_css += "</style>"
-    st.sidebar.markdown(border_css, unsafe_allow_html=True)
-
-    # Render L2 tiles in pairs
-    n_l2 = len(children)
-    for row_start in range(0, n_l2, 2):
-        row_items = children[row_start:row_start + 2]
-        # Pad to 2 columns for consistent layout
-        if len(row_items) == 1:
-            cols = st.sidebar.columns(2)
-            with cols[0]:
-                child = row_items[0]
-                if st.button(child["label"], key=f"l2_{child['key']}", use_container_width=True):
-                    st.session_state.active_cluster = child["key"]
-                    st.rerun()
-            # cols[1] left empty
-        else:
-            cols = st.sidebar.columns(2)
-            for col, child in zip(cols, row_items):
-                with col:
-                    if st.button(child["label"], key=f"l2_{child['key']}", use_container_width=True):
-                        st.session_state.active_cluster = child["key"]
-                        st.rerun()
-
-    st.sidebar.markdown('<hr class="section-divider">', unsafe_allow_html=True)
-
 
 # ───── Product selector + trigger setup based on active_cluster ─────
     sel = None
@@ -1048,19 +1003,14 @@ else:
         else:
             laptops = df_laptops[(df_laptops['Level 1']=='IT') & (df_laptops['Level 2'].isin(LAPTOP_L2_VALUES))]
             if laptops.empty:
-                # Fallback: hierarchy-based
                 laptops = df_laptops[df_laptops['Hierarchy'].fillna('').astype(str).str.upper().str.contains('NOTEBOOK|LAPTOP', regex=True, na=False)]
             
-            # ─────────────────────────────────────────────────────────────
-            # 🧪 TEST LIST: Restrict the dropdown to specific SKUs
-            # ─────────────────────────────────────────────────────────────
             laptop_test_skus = {
                 "2032853", "2077374", "2114170", "2106436", "2076615", 
                 "1950043", "1950030", "1993377", "2056517", "1993362"
             }
             if not laptops.empty:
                 laptops = laptops[laptops['Material'].astype(str).str.strip().str.replace(r'\.0$', '', regex=True).isin(laptop_test_skus)]
-            # ─────────────────────────────────────────────────────────────
 
             if laptops.empty:
                 st.sidebar.warning("Δεν βρέθηκαν test Laptops.")
@@ -1068,6 +1018,26 @@ else:
                 st.sidebar.markdown('<p class="sidebar-section">Επιλέξτε Laptop</p>', unsafe_allow_html=True)
                 sel = st.sidebar.selectbox("", laptops['Title'].unique(), label_visibility="collapsed", key="lt_sel")
                 trigger = laptops[laptops['Title']==sel].iloc[0] if sel else None
+
+    elif active_cluster == "TVs":
+        if df_products.empty: st.stop()
+        
+        # FIX: Robust filtering ignores uppercase/lowercase & trailing spaces in Excel!
+        lvl2 = df_products['Level 2'].fillna('').astype(str).str.strip().str.upper()
+        tvs = df_products[lvl2 == 'TV']
+        
+        # Ultimate Fallback: Just in case it's in Level 1 or Hierarchy instead of Level 2
+        if tvs.empty:
+            hier = df_products['Hierarchy'].fillna('').astype(str).str.strip().str.upper()
+            tvs = df_products[hier == 'TV']
+
+        if tvs.empty:
+            st.sidebar.warning("Δεν βρέθηκαν Τηλεοράσεις.")
+        else:
+            st.sidebar.markdown('<p class="sidebar-section">Επιλέξτε Τηλεόραση</p>', unsafe_allow_html=True)
+            sel = st.sidebar.selectbox("", tvs['Title'].unique(), label_visibility="collapsed", key="tv_sel")
+            trigger = tvs[tvs['Title']==sel].iloc[0] if sel else None
+
 
     elif active_cluster == "TVs":
         if df_products.empty: st.stop()
