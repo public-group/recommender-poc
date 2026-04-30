@@ -6150,15 +6150,28 @@ def run_tv_engine(trigger, df_products, df_history):
     # ── Κανόνες Βάσει Τιμής & Μεγέθους ──
     is_expensive = tprice > 800
     is_large = t_size >= 65
-    is_cheap = tprice <= 800
+    is_value = tprice <= 400      # bedroom/kitchen TVs
+    is_mid   = 400 < tprice <= 1000
+    is_premium = tprice > 1000
+    
+    # Then in the price-cap block:
+    if is_value:
+        cap = max(30.0, tprice * 0.40)
+    elif is_mid:
+        cap = max(60.0, tprice * 0.50)
+    # is_premium: no cap, sales/quality decides
 
     diag.append(("0. Trigger", f"Brand={tb}, Size={t_size}\", Price=€{tprice:.0f}", f"Expensive={is_expensive}, Large={is_large}, Cheap={is_cheap}"))
 
     # ── Δυναμική Λίστα Slots (Η 10άδα σου) ──
     potential_slots = [('Βάση Στήριξης', ['MOUNTS & STANDS'], 'MOUNT_LOGIC_FIXED')]
     
-    # Soundbar (Μόνο αν είναι >= 65" ΚΑΙ > 800€)
-    if is_large and is_expensive:
+# Soundbar — open to any reasonably-priced TV, not just large+premium.
+    # Rationale: TV speakers are weak across the board; soundbar is one of the
+    # highest-converting TV cross-sells. The accessory price cap (40-50% of TV
+    # price, applied later) keeps this AOV-sane for cheaper triggers.
+    is_soundbar_candidate = tprice >= 350 or is_large or is_expensive
+    if is_soundbar_candidate:
         potential_slots.append(('Soundbar', ['SOUNDBARS'], 'SOUND_LOGIC'))
     
     # Surge Protectors (Πάντα υπάρχει)
@@ -6170,7 +6183,7 @@ def run_tv_engine(trigger, df_products, df_history):
     elif is_cheap:
         potential_slots.append(('Τηλεχειριστήριο', ['REMOTE CONTROLS'], 'REMOTE_LOGIC_CHEAP'))
         
-    potential_slots.extend([
+potential_slots.extend([
         ('Κεραία', ['ANTENNAS'], 'ANTENNA_LOGIC'),
         ('Καλώδιο Κεραίας', ['ΚΕΡΑΙΑΣ'], 'GENERIC'),
         ('Μπαταρίες', ['ΑΛΚΑΛΙΚΕΣ'], 'GENERIC'),
@@ -6178,8 +6191,23 @@ def run_tv_engine(trigger, df_products, df_history):
         ('Αποθήκευση USB', ['USB FLASH DISK'], 'GENERIC'),
         ('Καθαρισμός', ['CLEANING PRODUCTS'], 'GENERIC'),
         ('Εναλλακτική Βάση', ['MOUNTS & STANDS'], 'MOUNT_LOGIC_MOTION'),
-        ('Εφεδρικό HDMI', ['HDMI'], 'HDMI_LOGIC'), # Fallback για να κλείσει 10άδα
     ])
+
+    # ── Slot 10: dynamic closer ──
+    # Premium TVs already get a soundbar in slot 2-ish, so close with a
+    # cinema-grade HDMI 2.1 spare (different from slot 7's pick).
+    # Mid-tier 4K TVs without a soundbar get a budget soundbar as the closer
+    # (much higher AOV impact than a 2nd HDMI cable).
+    # Cheap TVs fall back to a spare HDMI cable.
+    if is_soundbar_candidate and not (is_expensive or is_large):
+        # Mid-tier 4K TV, no soundbar yet in this bundle's path → push one
+        potential_slots.append(('Αναβάθμιση Ήχου', ['SOUNDBARS'], 'SOUND_LOGIC_BUDGET'))
+    elif is_expensive or is_large:
+        # Premium TV with soundbar already → premium HDMI 2.1 spare
+        potential_slots.append(('Εφεδρικό HDMI 2.1', ['HDMI'], 'HDMI_LOGIC_PREMIUM_SPARE'))
+    else:
+        # Cheap TV → keep the original spare HDMI behavior
+        potential_slots.append(('Εφεδρικό HDMI', ['HDMI'], 'HDMI_LOGIC'))
 
     # --- Base Candidate Pool & History ---
     c = df_products[df_products['Material'] != tm].copy()
@@ -6276,10 +6304,53 @@ def run_tv_engine(trigger, df_products, df_history):
             else:
                 pool.loc[subwoofer_mask, 'Final_Score'] += 100000
 
+        elif logic_key == 'SOUND_LOGIC_BUDGET':
+                    # Closer slot: budget soundbar, no brand boost (don't duplicate slot 2 logic)
+                    cap = tprice * 0.30
+                    pool.loc[pool['_p'] <= cap, 'Final_Score'] += 200000
+                    pool.loc[pool['_p'] > cap, 'Final_Score'] -= 300000
+                    notes.append(f"Budget soundbar (cap €{cap:.0f})")
+
         elif logic_key == 'HDMI_LOGIC':
-            if is_gaming_tv:
-                hdmi21_mask = pool.get('Έκδοση ≡', pd.Series(dtype=str)).fillna('').astype(str).str.contains('2.1') | pool['Title'].fillna('').str.contains('2.1')
-                pool.loc[hdmi21_mask, 'Final_Score'] += 300000
+            # Tier the cable to the TV
+            needs_hdmi_21 = (
+                is_gaming_tv
+                or 'oled' in tt.lower()
+                or is_expensive          # tprice > 800
+                or t_size >= 65
+            )
+            needs_hdmi_20_min = tprice >= 250  # any modern 4K TV
+        
+            ver_col = pool.get('Έκδοση ≡', pd.Series('', index=pool.index)).fillna('').astype(str)
+            title_col = pool['Title'].fillna('')
+        
+            is_21 = ver_col.str.contains('2.1') | title_col.str.contains('2.1')
+            is_20 = ver_col.str.contains('2.0') | title_col.str.contains(r'\b2\.0\b', regex=True)
+            is_14 = ver_col.str.contains('1.4') | ver_col.str.contains('1.3') | ver_col.str.contains('1.2')
+        
+            if needs_hdmi_21:
+                pool.loc[is_21, 'Final_Score'] += 400000
+                pool.loc[is_20, 'Final_Score'] += 50000
+                pool.loc[is_14, 'Final_Score'] -= 200000   # actively penalize, not just under-boost
+                notes.append("Premium TV → forced HDMI 2.1")
+            elif needs_hdmi_20_min:
+                pool.loc[is_20 | is_21, 'Final_Score'] += 200000
+                pool.loc[is_14, 'Final_Score'] -= 100000
+                notes.append("4K TV → boosted HDMI 2.0+")
+            # else: cheap HD-ready TV (Kydos 32"), HDMI 1.4 is fine — no special boost
+
+
+        elif logic_key == 'HDMI_LOGIC_PREMIUM_SPARE':
+                    ver_col = pool.get('Έκδοση ≡', pd.Series('', index=pool.index)).fillna('').astype(str)
+                    title_col = pool['Title'].fillna('')
+                    is_21 = ver_col.str.contains('2.1', na=False) | title_col.str.contains('2.1', na=False)
+                    pool.loc[is_21, 'Final_Score'] += 400000
+                    pool.loc[~is_21, 'Final_Score'] -= 200000
+                    # Slight nudge toward longer cables since the user already has one short
+                    is_long = title_col.str.contains(r'\b(3m|5m|3\.0m|5\.0m)\b', regex=True, na=False)
+                    pool.loc[is_long & is_21, 'Final_Score'] += 50000
+                    notes.append("Premium spare → HDMI 2.1, length-diversified")
+
 
         elif logic_key == 'REMOTE_LOGIC_PREMIUM_LG':
             magic_mask = pool['Title'].fillna('').str.lower().str.contains('magic remote', na=False)
@@ -6303,8 +6374,14 @@ def run_tv_engine(trigger, df_products, df_history):
             notes.append("Cheap TV -> Boosted Generic/Universal Replacements, Banned Magic Remote")
 
         elif logic_key == 'ANTENNA_LOGIC':
-            if 0 < t_size <= 54:
-                pool['Final_Score'] += 100000
+            # Prefer mid-gain DVB-T2 antennas over low-end 24dB units for any price tier
+            title_l = pool['Title'].fillna('').str.lower()
+            is_dvbt2 = title_l.str.contains('dvb-t2|pro50|221083|221082', regex=True, na=False)
+            pool.loc[is_dvbt2, 'Final_Score'] += 200000
+        
+            # Penalize the 24dB unit so it can't auto-win on sales alone
+            is_low_gain = title_l.str.contains('24db', na=False)
+            pool.loc[is_low_gain, 'Final_Score'] -= 150000
 
         # ── Selection ──
         pool = pool.sort_values('Final_Score', ascending=False)
@@ -6328,7 +6405,28 @@ def run_tv_engine(trigger, df_products, df_history):
     if not recs_df.empty: recs_df['Draft_Score'] = recs_df['Assigned_Slot']
     return recs_df, diag, slot_notes, recs_df
 
+def _get_size_bucket(inches: float) -> str:
+    if inches <= 29: return 'έως 29"'
+    if inches <= 39: return '30" - 39"'
+    if inches <= 44: return '40" - 44"'
+    if inches <= 54: return '45" - 54"'  # also '45"- 54"' variant exists
+    if inches <= 64: return '55" - 64"'
+    if inches <= 74: return '65" - 74"'
+    return '75"+'
 
+# Inside the MOUNT_LOGIC branch, BEFORE the fixed/motion split:
+if t_size > 0:
+    bucket = _get_size_bucket(t_size)
+    bucket_alt = bucket.replace(' - ', '- ')   # catalog has both '45" - 54"' and '45"- 54"'
+    ideal_col = pool.get('Ιδανικό\xa0για ≡', pd.Series('', index=pool.index)).fillna('').astype(str)
+    size_ok = ideal_col.str.contains(re.escape(bucket), na=False) | ideal_col.str.contains(re.escape(bucket_alt), na=False)
+    # Hard filter when we have any compatible mounts; soft penalty otherwise so we always have a candidate
+    if size_ok.sum() >= 3:
+        pool = pool[size_ok]
+        notes.append(f"Size filter: kept mounts compatible with {bucket}")
+    else:
+        pool.loc[~size_ok, 'Final_Score'] -= 500000
+        notes.append(f"Size filter (soft): penalized non-{bucket} mounts")
     
 # ─────────────────────────────────────────────────────────────
 # RUN ENGINE
