@@ -1077,8 +1077,20 @@ else:
         if projs.empty:
             projs = df_products[df_products['Hierarchy'].fillna('').astype(str).str.strip().str.upper().isin(['PROJECTORS', 'ΒΙΝΤΕΟΠΡΟΒΟΛΕΙΣ'])].copy()
             
+        # ─────────────────────────────────────────────────────────────
+        # 🧪 TEST LIST: Restrict the dropdown to specific SKUs
+        # ─────────────────────────────────────────────────────────────
+        projector_test_skus = {
+            "2013266", "1866727", "1903449", "1968623"
+        }
+        if not projs.empty:
+            p_filtered = projs[projs['Material'].astype(str).str.strip().str.replace(r'\.0$', '', regex=True).isin(projector_test_skus)]
+            if not p_filtered.empty:
+                projs = p_filtered
+        # ─────────────────────────────────────────────────────────────
+
         if projs.empty:
-            st.sidebar.warning("Δεν βρέθηκαν Projectors.")
+            st.sidebar.warning("Δεν βρέθηκαν test Projectors.")
         else:
             st.sidebar.markdown('<p class="sidebar-section">Επιλέξτε Projector</p>', unsafe_allow_html=True)
             sel = st.sidebar.selectbox("", projs['Title'].unique(), label_visibility="collapsed", key="proj_sel")
