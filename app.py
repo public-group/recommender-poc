@@ -1038,7 +1038,7 @@ else:
         # 🧪 TEST LIST: Restrict the dropdown to specific SKUs
         # ─────────────────────────────────────────────────────────────
         tv_test_skus = {
-            "2027797", "2027771", "2035104", "2089142", "2035099", "1786394" 
+            "2027797", "2027771", "2035104", "2089142", "2035099"
         }
         if not tvs.empty:
             t_filtered = tvs[tvs['Material'].astype(str).str.strip().str.replace(r'\.0$', '', regex=True).isin(tv_test_skus)]
@@ -6171,16 +6171,16 @@ def run_tv_engine(trigger, df_products, df_history):
     else:
         price_tier = 'flagship'
 
-    # Generic-accessory price caps (% of TV price). Used by GENERIC slots.
-    # Mount caps INCREASED for premium/flagship (user request: premium TVs deserve
-    # premium mounts like Vogel's Elite series, One For All ULTRA, Hama 220844).
-    # Surge caps INCREASED for premium tiers and DECREASED for budget (user request:
-    # cheap TVs get cheap surge protectors).
+    # Generic-accessory price caps. Tuned to REAL Greek buyer behavior, not theoretical:
+    # - Mounts: most Greek buyers won't pay >€80 for a TV mount even on a €1700 OLED
+    # - Surge protectors: 90% buy €10-20 strips; €25-45 only for OLED+soundbar setups
+    # - Other accessories: scaled gently with TV price tier
+    # Caps are absolute MAX (€); use min(pct*tprice, hard_max) to enforce reality.
     GENERIC_CAPS = {
-        'budget':   {'mount': 0.20, 'surge': 0.10, 'hdmi': 0.12, 'antenna': 0.15, 'cleaning': 0.15, 'battery': 0.10, 'cable': 0.10, 'usb': 0.15, 'soundbar': 0.40},
-        'mid':      {'mount': 0.10, 'surge': 0.05, 'hdmi': 0.04, 'antenna': 0.06, 'cleaning': 0.04, 'battery': 0.03, 'cable': 0.03, 'usb': 0.04, 'soundbar': 0.45},
-        'premium':  {'mount': 0.10, 'surge': 0.04, 'hdmi': 0.03, 'antenna': 0.04, 'cleaning': 0.03, 'battery': 0.02, 'cable': 0.02, 'usb': 0.03, 'soundbar': 0.55},
-        'flagship': {'mount': 0.08, 'surge': 0.03, 'hdmi': 0.02, 'antenna': 0.03, 'cleaning': 0.02, 'battery': 0.02, 'cable': 0.02, 'usb': 0.03, 'soundbar': 0.55},
+        'budget':   {'mount': (0.15, 35),  'surge': (0.08, 20),  'hdmi': (0.12, 25),  'antenna': (0.15, 25),  'cleaning': (0.15, 12), 'battery': (0.10, 10), 'cable': (0.10, 10), 'usb': (0.15, 20),  'soundbar': (0.40, 150)},
+        'mid':      {'mount': (0.06, 50),  'surge': (0.04, 25),  'hdmi': (0.04, 30),  'antenna': (0.06, 35),  'cleaning': (0.04, 15), 'battery': (0.03, 10), 'cable': (0.03, 12), 'usb': (0.04, 30),  'soundbar': (0.45, 350)},
+        'premium':  {'mount': (0.05, 80),  'surge': (0.03, 45),  'hdmi': (0.03, 50),  'antenna': (0.04, 45),  'cleaning': (0.03, 20), 'battery': (0.02, 10), 'cable': (0.02, 15), 'usb': (0.03, 40),  'soundbar': (0.55, 900)},
+        'flagship': {'mount': (0.04, 100), 'surge': (0.02, 50),  'hdmi': (0.02, 60),  'antenna': (0.03, 50),  'cleaning': (0.02, 25), 'battery': (0.02, 12), 'cable': (0.02, 18), 'usb': (0.03, 50),  'soundbar': (0.55, 3000)},
     }
     # Floor prices so the cap never collapses to a few cents on cheap TVs
     GENERIC_FLOORS = {'mount': 25, 'surge': 12, 'hdmi': 10, 'antenna': 12, 'cleaning': 8, 'battery': 6, 'cable': 6, 'usb': 10, 'soundbar': 70}
@@ -6293,13 +6293,15 @@ def run_tv_engine(trigger, df_products, df_history):
         # ══════════════════════════════════════════════════════════════
         # 🔴 ΑΣΠΙΔΑ ΥΠΕΡΒΟΛΙΚΗΣ ΤΙΜΗΣ (Anti-Overbuy) — TIERED & PER-SLOT
         # ══════════════════════════════════════════════════════════════
-        # Cap scales with TV price tier AND slot type. Cheaper TVs get tighter
-        # caps; flagship TVs allow premium accessories.
+        # Cap = max(floor, min(pct*tprice, hard_max)) — three-way clamp:
+        #   floor   prevents the cap from collapsing on very cheap TVs
+        #   pct     scales softly with TV price
+        #   hard_max enforces real Greek buyer behavior (e.g. mounts cap €80)
         cap_key = SLOT_CAP_KEY.get(role)
         if cap_key:
-            pct = GENERIC_CAPS[price_tier][cap_key]
+            pct, hard_max = GENERIC_CAPS[price_tier][cap_key]
             floor = GENERIC_FLOORS[cap_key]
-            max_price_cap = max(float(floor), tprice * pct)
+            max_price_cap = max(float(floor), min(tprice * pct, float(hard_max)))
             overpriced_mask = pool['_p'] > max_price_cap
             pool.loc[overpriced_mask, 'Final_Score'] -= 800000
             if overpriced_mask.any():
@@ -6349,17 +6351,21 @@ def run_tv_engine(trigger, df_products, df_history):
                     pool.loc[~size_ok, 'Final_Score'] -= 500000
                     notes.append(f"Size filter (soft): penalized non-{bucket} mounts (only {size_ok.sum()} matches)")
             
-            # ── PREMIUM-TIER MOUNT BOOST (user request: premium TVs deserve premium mounts) ──
-            # Pull premium mounts (Vogel's, One For All ULTRA, Hama 220844, Meliconi Slimstyle, etc)
-            # to the top for premium/flagship TVs instead of the €18 budget mount auto-winning.
+            # ── PREMIUM-TIER MOUNT BOOST (Greek market reality: €40-€80 sweet spot) ──
+            # Boost solid mid-tier mounts that real Greek buyers pick (Hama 220824, One For
+            # All WM2251/WM2651, Meliconi Flatstyle, Vogel's TVM3403/3405). Avoid overpriced
+            # Vogel's Elite / Sbox FS-305 which buyers balk at.
             if price_tier in ('premium', 'flagship'):
-                premium_mount_kw = pool['Title'].fillna('').str.lower().str.contains(
-                    r'vogels?|ultra|220844|220809|slimstyle|wm6812|wm4452|wm6661|hama 220|neomounts|meliconi',
+                title_l = pool['Title'].fillna('').str.lower()
+                # Realistic premium mount keywords (€40-80 range)
+                sweet_spot_kw = title_l.str.contains(
+                    r'220824|wm2251|wm2651|wm2421|flatstyle|tvm 340|tvm340|220844|220809|220810',
                     regex=True, na=False
                 )
-                pool.loc[premium_mount_kw & (pool['_p'] >= 50), 'Final_Score'] += 250000
-                pool.loc[pool['_p'] < 25, 'Final_Score'] -= 100000  # de-rank cheap mounts
-                notes.append(f"Premium-tier mount boost active ({price_tier})")
+                pool.loc[sweet_spot_kw, 'Final_Score'] += 200000
+                # De-rank the cheapest €15-20 mounts (premium TV deserves a bit more)
+                pool.loc[pool['_p'] < 22, 'Final_Score'] -= 100000
+                notes.append(f"Premium mount boost: €40-80 sweet spot ({price_tier})")
             
             # ΔΙΑΧΩΡΙΣΜΟΣ ΣΤΑΘΕΡΗΣ / ΜΕ ΒΡΑΧΙΟΝΑ (Fixed vs Motion)
             is_fixed_mask = pool.get('Τύπος Βάσης', pd.Series(dtype=str)).fillna('').str.lower().str.contains('σταθερή|fixed', na=False)
