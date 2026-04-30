@@ -2322,7 +2322,7 @@ def run_engine(trigger, df_products, df_history, df_slots):
     # 🟢 NEW: Premium phone absolute brand preference & High-End Best Seller Fallback
     PREMIUM_PRICE_THRESHOLD = 850
     PREMIUM_BRAND_BOOST = 5000000.0  # Massive absolute boost to guarantee brand matches win
-    BEST_SELLER_BOOST = 300000.0
+    BEST_SELLER_BOOST = 200000.0
     EXPENSIVE_BOOST = 100000.0
     PREMIUM_ACC_MIN_PRICE = 25.0
     
@@ -6457,11 +6457,12 @@ def run_tv_engine(trigger, df_products, df_history):
             pool.loc[pool['_p'] < target_lo * 0.7, 'Final_Score'] -= 200000
 
             # Brand match boost — kept across all tiers (Q-Symphony, LG WOW Sync, etc.)
-            # Greek retailers heavily push brand-matched bundles.
+            # Greek retailers heavily push brand-matched bundles. Boosted to +300k so brand
+            # match wins over close-window competitors when both tier and channel config match.
             if tb:
                 brand_match = pool['Κατασκευαστής'].fillna('').str.strip().str.upper() == tb
-                pool.loc[brand_match, 'Final_Score'] += 200000
-                notes.append(f"Brand Match ({tb}) boosted (+200k)")
+                pool.loc[brand_match, 'Final_Score'] += 300000
+                notes.append(f"Brand Match ({tb}) boosted (+300k)")
 
             # Cinema TV → still prefer Atmos/DTS within the chosen tier
             if is_cinema_tv:
