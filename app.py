@@ -786,8 +786,12 @@ L2_CHILDREN = {
                  ],
     "SDA":       [{"key": "Floor Care", "label": "Σκούπες",
                    "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 2v8l4-2'/%3E%3Cpath d='M12 10l-4-2'/%3E%3Ccircle cx='12' cy='18' r='4'/%3E%3Cline x1='12' y1='10' x2='12' y2='14'/%3E%3C/svg%3E"}],
-    "TV": [{"key": "TVs", "label": "Τηλεοράσεις",
-            "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='2' y='7' width='20' height='15' rx='2' ry='2'/%3E%3Cpolyline points='17 2 12 7 7 2'/%3E%3C/svg%3E"}],
+    "TV": [
+        {"key": "TVs", "label": "Τηλεοράσεις",
+            "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='2' y='7' width='20' height='15' rx='2' ry='2'/%3E%3Cpolyline points='17 2 12 7 7 2'/%3E%3C/svg%3E"},
+        {"key": "Projectors", "label": "Projectors",
+            "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='4' y='6' width='16' height='12' rx='2' ry='2'/%3E%3Ccircle cx='12' cy='12' r='3'/%3E%3Cline x1='2' y1='12' x2='4' y2='12'/%3E%3Cline x1='20' y1='12' x2='22' y2='12'/%3E%3C/svg%3E"}
+    ],
 }
 
 # Reverse: L2 key → parent L1 key (used to highlight which L2 is active)
@@ -1064,6 +1068,31 @@ else:
             st.sidebar.markdown('<p class="sidebar-section">Επιλέξτε Τηλεόραση</p>', unsafe_allow_html=True)
             sel = st.sidebar.selectbox("", tvs['Title'].unique(), label_visibility="collapsed", key="tv_sel")
             trigger = tvs[tvs['Title']==sel].iloc[0] if sel else None
+
+    elif active_cluster == "Projectors":
+        if df_products.empty: st.stop()
+        # Fetch by Level 2 or Hierarchy depending on your Excel mapping
+        projs = df_products[df_products['Level 2'].fillna('').astype(str).str.strip().str.upper() == 'PROJECTORS'].copy()
+        if projs.empty:
+            projs = df_products[df_products['Hierarchy'].fillna('').astype(str).str.strip().str.upper().isin(['PROJECTORS', 'ΒΙΝΤΕΟΠΡΟΒΟΛΕΙΣ'])].copy()
+            
+        # ─────────────────────────────────────────────────────────────
+        # 🧪 TEST LIST: Restrict the dropdown to specific SKUs
+        # ─────────────────────────────────────────────────────────────
+        projector_test_skus = {
+            "2013266", "1866727", "1903449", "1968623"
+        }
+        if not projs.empty:
+            p_filtered = projs[projs['Material'].astype(str).str.strip().str.replace(r'\.0$', '', regex=True).isin(projector_test_skus)]
+            if not p_filtered.empty:
+                projs = p_filtered
+        # ─────────────────────────────────────────────────────────────
+        if projs.empty:
+            st.sidebar.warning("Δεν βρέθηκαν test Projectors.")
+        else:
+            st.sidebar.markdown('<p class="sidebar-section">Επιλέξτε Projector</p>', unsafe_allow_html=True)
+            sel = st.sidebar.selectbox("", projs['Title'].unique(), label_visibility="collapsed", key="proj_sel")
+            trigger = projs[projs['Title']==sel].iloc[0] if sel else None
             
     elif active_cluster == "Floor Care":
         if df_vacuums.empty:
