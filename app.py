@@ -1038,7 +1038,7 @@ else:
         # 🧪 TEST LIST: Restrict the dropdown to specific SKUs
         # ─────────────────────────────────────────────────────────────
         tv_test_skus = {
-            "2027797", "2027771", "2035104", "2089142", "2035099"
+            "2027797", "2027771", "2035104", "2089142", "2035099", "1786394"
         }
         if not tvs.empty:
             t_filtered = tvs[tvs['Material'].astype(str).str.strip().str.replace(r'\.0$', '', regex=True).isin(tv_test_skus)]
@@ -6421,10 +6421,10 @@ def run_tv_engine(trigger, df_products, df_history):
             is_premium_atmos  = (height >= 1) | ((front >= 4) & (sub >= 1) & (height >= 1))
 
             # Per-tier price target windows (matching Greek market spec from Achilleas):
-            # Budget   TV €250-€400  → Soundbar €70-€150  (basic 2.0/2.1)
-            # Mid      TV €400-€900  → Soundbar €200-€350 (3.1.2/5.1 with sub, basic Atmos)
-            # Premium  TV €900-€1800 → Soundbar €500-€900 (5.1.2/7.1.2 true surround Atmos)
-            # Flagship TV >€1800     → Soundbar €1000+    (9.1.4/11.1.4 flagship Atmos)
+            # Budget   TV €250-€400  → Soundbar €20-€80  (basic 2.0/2.1)
+            # Mid      TV €400-€900  → Soundbar €80-€300 (3.1.2/5.1 with sub, basic Atmos)
+            # Premium  TV €900-€1800 → Soundbar €300-€600 (5.1.2/7.1.2 true surround Atmos)
+            # Flagship TV >€1800     → Soundbar €600+    (9.1.4/11.1.4 flagship Atmos)
             if logic_key == 'SOUND_LOGIC_TIER_BUDGET':
                 target_lo, target_hi = 70, 150
                 pool.loc[is_bar_sub, 'Final_Score'] += 250000
