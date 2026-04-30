@@ -6183,15 +6183,15 @@ def run_tv_engine(trigger, df_products, df_history):
     elif is_cheap:
         potential_slots.append(('Τηλεχειριστήριο', ['REMOTE CONTROLS'], 'REMOTE_LOGIC_CHEAP'))
         
-potential_slots.extend([
-        ('Κεραία', ['ANTENNAS'], 'ANTENNA_LOGIC'),
-        ('Καλώδιο Κεραίας', ['ΚΕΡΑΙΑΣ'], 'GENERIC'),
-        ('Μπαταρίες', ['ΑΛΚΑΛΙΚΕΣ'], 'GENERIC'),
-        ('Καλώδιο HDMI', ['HDMI'], 'HDMI_LOGIC'),
-        ('Αποθήκευση USB', ['USB FLASH DISK'], 'GENERIC'),
-        ('Καθαρισμός', ['CLEANING PRODUCTS'], 'GENERIC'),
-        ('Εναλλακτική Βάση', ['MOUNTS & STANDS'], 'MOUNT_LOGIC_MOTION'),
-    ])
+    potential_slots.extend([
+            ('Κεραία', ['ANTENNAS'], 'ANTENNA_LOGIC'),
+            ('Καλώδιο Κεραίας', ['ΚΕΡΑΙΑΣ'], 'GENERIC'),
+            ('Μπαταρίες', ['ΑΛΚΑΛΙΚΕΣ'], 'GENERIC'),
+            ('Καλώδιο HDMI', ['HDMI'], 'HDMI_LOGIC'),
+            ('Αποθήκευση USB', ['USB FLASH DISK'], 'GENERIC'),
+            ('Καθαρισμός', ['CLEANING PRODUCTS'], 'GENERIC'),
+            ('Εναλλακτική Βάση', ['MOUNTS & STANDS'], 'MOUNT_LOGIC_MOTION'),
+        ])
 
     # ── Slot 10: dynamic closer ──
     # Premium TVs already get a soundbar in slot 2-ish, so close with a
