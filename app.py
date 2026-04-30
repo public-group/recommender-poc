@@ -6711,13 +6711,23 @@ def run_projectors_engine(trigger, df_products, df_history):
     ]
 
     # ── Brand-specific overrides ──
-    # XGIMI/AURZEN: replace screen slot with stand (ΒΑΣΕΙΣ PROJECTOR), and replace
-    # the slot-7 accessory pool with a SECOND stand/bag from the brand ecosystem.
+    # XGIMI/AURZEN: surface BOTH brand items in the FIRST 2 SLOTS (Bag at 1, Stand at 2),
+    # demote HDMI cable to slot 3, drop the screen slot (the stand replaces it),
+    # and add a SECOND brand accessory at slot 7.
     if is_xgimi or is_aurzen:
-        slots[2] = (3, 'Βάση Στήριξης', ['ΒΑΣΕΙΣ PROJECTOR'], 'STAND_LOGIC', 'screen')
-        # Slot 7 now pulls a secondary brand accessory (2nd stand or 2nd bag in the brand line).
-        # The hierarchy cap of 2 still allows another item from ΒΑΣΕΙΣ or ΤΣΑΝΤΕΣ.
-        slots[6] = (7, 'Brand Accessory', ['ΒΑΣΕΙΣ PROJECTOR', 'ΤΣΑΝΤΕΣ PROJECTOR', 'ΔΙΑΦΟΡΑ ΑΞΕΣΟΥΑΡ PROJECTOR'], 'BRAND_ACCESSORY_LOGIC', 'lamp')
+        new_slots = [
+            (1,  'Τσάντα Μεταφοράς',  ['ΤΣΑΝΤΕΣ PROJECTOR'],                                                        'BAG_LOGIC',             'bag'),
+            (2,  'Βάση Στήριξης',     ['ΒΑΣΕΙΣ PROJECTOR'],                                                          'STAND_LOGIC',           'screen'),
+            (3,  'Καλώδιο Σύνδεσης',  ['HDMI'],                                                                       'CABLE_LOGIC',           'cable'),
+            (4,  'Ηχείο',             ['ΗΧΕΙΑ ΦΟΡΗΤΟΥ ΗΧΟΥ'],                                                         'AUDIO_LOGIC',           'speaker'),
+            (5,  'Μπαταρίες',         ['ΑΛΚΑΛΙΚΕΣ'],                                                                  'BATTERY_LOGIC',         'battery'),
+            (6,  'Προστασία Τάσης',   ['SURGE PROTECTORS'],                                                           'POWER_LOGIC',           'surge'),
+            (7,  'Brand Accessory',   ['ΒΑΣΕΙΣ PROJECTOR', 'ΤΣΑΝΤΕΣ PROJECTOR', 'ΔΙΑΦΟΡΑ ΑΞΕΣΟΥΑΡ PROJECTOR'],         'BRAND_ACCESSORY_LOGIC', 'lamp'),
+            (8,  'Ποντίκι',           ['MOUSE WIRELESS'],                                                             'INPUT_LOGIC',           'mouse'),
+            (9,  'Πληκτρολόγιο',      ['KEYBOARDS WIRELESS'],                                                         'KEYBOARD_LOGIC',        'keyboard'),
+            (10, 'Party Ήχος',        ['PARTY SPEAKERS'],                                                             'GENERIC',               'party'),
+        ]
+        slots = new_slots
     
     # Samsung Freestyle: surface BOTH official Samsung accessories in the FIRST 2 SLOTS
     # (Case in slot 1, Battery in slot 2). Drop the standard batteries slot and the
