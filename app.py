@@ -786,12 +786,8 @@ L2_CHILDREN = {
                  ],
     "SDA":       [{"key": "Floor Care", "label": "Σκούπες",
                    "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 2v8l4-2'/%3E%3Cpath d='M12 10l-4-2'/%3E%3Ccircle cx='12' cy='18' r='4'/%3E%3Cline x1='12' y1='10' x2='12' y2='14'/%3E%3C/svg%3E"}],
-    "TV": [
-            {"key": "TVs", "label": "Τηλεοράσεις",
-                "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='2' y='7' width='20' height='15' rx='2' ry='2'/%3E%3Cpolyline points='17 2 12 7 7 2'/%3E%3C/svg%3E"},
-            {"key": "Projectors", "label": "Projectors",
-                "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='4' y='6' width='16' height='12' rx='2' ry='2'/%3E%3Ccircle cx='12' cy='12' r='3'/%3E%3Cline x1='2' y1='12' x2='4' y2='12'/%3E%3Cline x1='20' y1='12' x2='22' y2='12'/%3E%3C/svg%3E"}
-        ],
+    "TV": [{"key": "TVs", "label": "Τηλεοράσεις",
+            "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='2' y='7' width='20' height='15' rx='2' ry='2'/%3E%3Cpolyline points='17 2 12 7 7 2'/%3E%3C/svg%3E"}],
 }
 
 # Reverse: L2 key → parent L1 key (used to highlight which L2 is active)
@@ -1042,7 +1038,7 @@ else:
         # 🧪 TEST LIST: Restrict the dropdown to specific SKUs
         # ─────────────────────────────────────────────────────────────
         tv_test_skus = {
-            "2027797", "2027771", "2035104", "2089142", "2035099", "1786394"
+            "2027797", "2027771", "2035104", "2089142", "2035099"
         }
         if not tvs.empty:
             t_filtered = tvs[tvs['Material'].astype(str).str.strip().str.replace(r'\.0$', '', regex=True).isin(tv_test_skus)]
@@ -1068,33 +1064,6 @@ else:
             st.sidebar.markdown('<p class="sidebar-section">Επιλέξτε Τηλεόραση</p>', unsafe_allow_html=True)
             sel = st.sidebar.selectbox("", tvs['Title'].unique(), label_visibility="collapsed", key="tv_sel")
             trigger = tvs[tvs['Title']==sel].iloc[0] if sel else None
-
-
-    elif active_cluster == "Projectors":
-        if df_products.empty: st.stop()
-        # Fetch by Level 2 or Hierarchy depending on your Excel mapping
-        projs = df_products[df_products['Level 2'].fillna('').astype(str).str.strip().str.upper() == 'PROJECTORS'].copy()
-        if projs.empty:
-            projs = df_products[df_products['Hierarchy'].fillna('').astype(str).str.strip().str.upper().isin(['PROJECTORS', 'ΒΙΝΤΕΟΠΡΟΒΟΛΕΙΣ'])].copy()
-            
-        # ─────────────────────────────────────────────────────────────
-        # 🧪 TEST LIST: Restrict the dropdown to specific SKUs
-        # ─────────────────────────────────────────────────────────────
-        projector_test_skus = {
-            "2013266", "1866727", "1903449", "1968623"
-        }
-        if not projs.empty:
-            p_filtered = projs[projs['Material'].astype(str).str.strip().str.replace(r'\.0$', '', regex=True).isin(projector_test_skus)]
-            if not p_filtered.empty:
-                projs = p_filtered
-        # ─────────────────────────────────────────────────────────────
-
-        if projs.empty:
-            st.sidebar.warning("Δεν βρέθηκαν test Projectors.")
-        else:
-            st.sidebar.markdown('<p class="sidebar-section">Επιλέξτε Projector</p>', unsafe_allow_html=True)
-            sel = st.sidebar.selectbox("", projs['Title'].unique(), label_visibility="collapsed", key="proj_sel")
-            trigger = projs[projs['Title']==sel].iloc[0] if sel else None
             
     elif active_cluster == "Floor Care":
         if df_vacuums.empty:
@@ -3823,176 +3792,7 @@ def run_laptops_engine(trigger, df_products, df_history):
 
 
 
-# ═════════════════════════════════════════════════════════════
-# 🟢 PROJECTORS ENGINE (The Big Screen)
-# ═════════════════════════════════════════════════════════════
-def run_projectors_engine(trigger, df_products, df_history):
-    diag = []
-    slot_notes = {}
-    all_recs = []
 
-    tm = trigger['Material']
-    tt = str(trigger.get('Title', ''))
-    tprice = parse_euro_price(trigger.get('LIST PRICE', 0))
-    
-    # Extract Trigger Attributes for Deep Filters
-    tusage = str(trigger.get('Προτεινόμενη χρήση', '')).lower()
-    ttech = str(trigger.get('Τεχνολογία οθόνης', '')).lower()
-    tres = str(trigger.get('Ανάλυση', '')).lower()
-    tdyn = str(trigger.get('Δυνατότητες', '')).lower()
-
-    # Attribute Logic Checks
-    is_cinema = 'home cinema' in tusage or 'gaming' in tusage
-    is_pro = 'επαγγελματική' in tusage
-    is_class = 'classroom' in tusage
-    is_portable = 'φορητός' in tdyn or 'φορητός' in tt.lower()
-    is_laser_led = 'laser' in ttech or 'led' in ttech
-    is_4k = '4k' in tres or 'uhd' in tres
-
-    diag.append(("0. Trigger Context", f"Usage: {tusage}", f"Tech: {ttech}, Res: {tres}, Portable: {is_portable}"))
-
-    # Base Candidate Pool
-    c = df_products[df_products['Material'] != tm].copy()
-    if 'Sum of Sales' in c.columns:
-        c['Sales_Tiebreaker'] = pd.to_numeric(c['Sum of Sales'], errors='coerce').fillna(0)
-    else:
-        c['Sales_Tiebreaker'] = 0
-
-    # The New Slot Strategy
-    slots = [
-        (1, 'Τσάντα Μεταφοράς', ['ΤΣΑΝΤΕΣ PROJECTOR'], 'BAG_LOGIC'),
-        (2, 'Καλώδιο Σύνδεσης', ['HDMI'], 'CABLE_LOGIC'),
-        (3, 'Μπαταρίες', ['ΑΛΚΑΛΙΚΕΣ'], 'BATTERY_LOGIC'),
-        (4, 'Οθόνη Προβολής', ['ΟΘΟΝΕΣ PROJECTOR'], 'CANVAS_LOGIC'),
-        (5, 'Ήχος', ['ΗΧΕΙΑ ΦΟΡΗΤΟΥ ΗΧΟΥ'], 'AUDIO_LOGIC'),
-        (6, 'Προστασία Τάσης', ['SURGE PROTECTORS'], 'POWER_LOGIC'),
-        (7, 'Συντήρηση / Αναβάθμιση', ['ΛΑΜΠΕΣ PROJECTOR'], 'MAINTENANCE_LOGIC'),
-        (8, 'Ποντίκι', ['MOUSE WIRELESS'], 'INPUT_LOGIC'),
-        (9, 'Πληκτρολόγιο / Hub', ['KEYBOARDS WIRELESS'], 'HUB_LOGIC'),
-        (10, 'Party Ήχος', ['PARTY SPEAKERS'], 'GENERIC'),
-    ]
-
-    used_materials = {tm}
-    used_hierarchies_count = {}
-
-    for slot_num, role, hierarchies, logic_key in slots:
-        notes = [f"Logic: {logic_key}"]
-        
-        # ── Deep Filter Slot Overrides ──
-        if logic_key == 'CABLE_LOGIC':
-            if is_class:
-                hierarchies = ['VGA CABLES', 'HDMI']
-                notes.append("Classroom Logic: Added VGA to cable options.")
-        
-        elif logic_key == 'AUDIO_LOGIC':
-            if is_cinema:
-                hierarchies = ['SOUNDBARS']
-                role = 'Soundbar'
-                notes.append("Cinema Logic: Swapped to Soundbars.")
-            elif is_class:
-                hierarchies = ['PC SPEAKERS 2.0', 'PC SPEAKERS 1']
-                role = 'PC Speakers'
-                notes.append("Classroom Logic: Swapped to PC Speakers.")
-        
-        elif logic_key == 'MAINTENANCE_LOGIC':
-            if is_cinema:
-                hierarchies = ['MEDIA PLAYERS']
-                role = 'Media Player'
-                notes.append("Cinema Logic: Swapped to Media Players.")
-            elif is_laser_led:
-                hierarchies = ['CLEANING PRODUCTS']
-                role = 'Κιτ Καθαρισμού'
-                notes.append("Tech Logic (Laser/LED): Swapped Lamps to Cleaning Kit.")
-        
-        elif logic_key == 'HUB_LOGIC':
-            if is_pro:
-                hierarchies = ['USB HUB DEVICES']
-                role = 'USB Hub'
-                notes.append("Pro Logic: Swapped Keyboard to USB Hub.")
-
-        # Pool Filtering
-        hier_upper = [h.upper().strip() for h in hierarchies]
-        pool = c[c['Hierarchy'].fillna('').astype(str).str.upper().str.strip().isin(hier_upper)].copy()
-
-        if pool.empty:
-            hier_col = c['Hierarchy'].fillna('').astype(str).str.upper().str.strip()
-            mask = pd.Series(False, index=c.index)
-            for hk in hier_upper:
-                if hk: mask |= hier_col.str.contains(re.escape(hk), regex=True, na=False)
-            pool = c[mask].copy()
-
-        pool = pool[~pool['Material'].isin(used_materials)]
-
-        if pool.empty:
-            notes.append("❌ Empty after filtering")
-            slot_notes[slot_num] = notes
-            diag.append((f"Slot {slot_num} ({role})", 0, "Empty"))
-            continue
-
-        pool['Final_Score'] = 0.0
-        if 'AVAILABILITY' in pool.columns:
-            pool.loc[pool['AVAILABILITY'] == 'Άμεσα Διαθέσιμο', 'Final_Score'] += 100000
-        pool['Final_Score'] += pool['Sales_Tiebreaker'].fillna(0) * 0.1
-
-        # ── Attribute Logic Scoring ──
-        if logic_key == 'CABLE_LOGIC':
-            if is_cinema:
-                if 'Μήκος Καλωδίου6' in pool.columns:
-                    long_cables = pool['Μήκος Καλωδίου6'].fillna('').str.contains(r'10|15|20', regex=True)
-                    pool.loc[long_cables, 'Final_Score'] += 50000
-                    notes.append("Cinema: Boosted 10m+ cables.")
-            if is_4k:
-                hdmi_21 = pool['Title'].fillna('').str.lower().str.contains('2.1|8k|4k')
-                if 'Έκδοση' in pool.columns:
-                    hdmi_21 |= pool['Έκδοση'].fillna('').astype(str).str.contains('2.1|2.0')
-                pool.loc[hdmi_21, 'Final_Score'] += 80000
-                notes.append("4K Res: Boosted HDMI 2.1/2.0.")
-
-        elif logic_key == 'HUB_LOGIC' and is_pro:
-            hdmi_hubs = pool['Title'].fillna('').str.lower().str.contains('hdmi')
-            if 'Θύρες επέκτασης' in pool.columns:
-                hdmi_hubs |= pool['Θύρες επέκτασης'].fillna('').str.lower().str.contains('hdmi')
-            pool.loc[hdmi_hubs, 'Final_Score'] += 60000
-            notes.append("Pro Hub: Boosted HDMI expansion.")
-
-        pool = pool.sort_values('Final_Score', ascending=False)
-        
-        chosen = None
-        for _, row in pool.iterrows():
-            h = row['Hierarchy']
-            if used_hierarchies_count.get(h, 0) < 2:
-                chosen = row
-                break
-        
-        if chosen is None:
-            notes.append("❌ Hierarchy cap blocked items")
-            slot_notes[slot_num] = notes
-            diag.append((f"Slot {slot_num} ({role})", 0, "Hier cap"))
-            continue
-
-        row_copy = chosen.copy()
-        row_copy['Assigned_Slot'] = slot_num
-        row_copy['Slot_Role'] = role
-        row_copy['Marketing_Copy'] = "Απαραίτητος εξοπλισμός για την προβολή σας."
-        row_copy['Item_Rank'] = 1
-        all_recs.append(row_copy)
-        
-        used_materials.add(chosen['Material'])
-        used_hierarchies_count[chosen['Hierarchy']] = used_hierarchies_count.get(chosen['Hierarchy'], 0) + 1
-        notes.append(f"✅ {str(chosen.get('Title', ''))[:60]}")
-        slot_notes[slot_num] = notes
-        diag.append((f"Slot {slot_num} ({role})", 1, f"Score: {chosen.get('Final_Score', 0):.0f}"))
-
-    diag.append(("TOTAL", len(all_recs), f"out of {len(slots)}"))
-
-    if all_recs:
-        recs_df = pd.DataFrame(all_recs)
-        recs_df['Draft_Score'] = recs_df['Assigned_Slot']
-        return recs_df, diag, slot_notes, recs_df
-    return pd.DataFrame(), diag, slot_notes, pd.DataFrame()
-
-
-    
 # ═══════════════════════════════════════════════════════════════
 # 🟢 FLOOR CARE ENGINE — "Perfect Fit" Ecosystem
 # ═══════════════════════════════════════════════════════════════
@@ -6621,10 +6421,10 @@ def run_tv_engine(trigger, df_products, df_history):
             is_premium_atmos  = (height >= 1) | ((front >= 4) & (sub >= 1) & (height >= 1))
 
             # Per-tier price target windows (matching Greek market spec from Achilleas):
-            # Budget   TV €250-€400  → Soundbar €20-€80  (basic 2.0/2.1)
-            # Mid      TV €400-€900  → Soundbar €80-€300 (3.1.2/5.1 with sub, basic Atmos)
-            # Premium  TV €900-€1800 → Soundbar €300-€600 (5.1.2/7.1.2 true surround Atmos)
-            # Flagship TV >€1800     → Soundbar €600+    (9.1.4/11.1.4 flagship Atmos)
+            # Budget   TV €250-€400  → Soundbar €70-€150  (basic 2.0/2.1)
+            # Mid      TV €400-€900  → Soundbar €200-€350 (3.1.2/5.1 with sub, basic Atmos)
+            # Premium  TV €900-€1800 → Soundbar €500-€900 (5.1.2/7.1.2 true surround Atmos)
+            # Flagship TV >€1800     → Soundbar €1000+    (9.1.4/11.1.4 flagship Atmos)
             if logic_key == 'SOUND_LOGIC_TIER_BUDGET':
                 target_lo, target_hi = 70, 150
                 pool.loc[is_bar_sub, 'Final_Score'] += 250000
@@ -6791,6 +6591,358 @@ def run_tv_engine(trigger, df_products, df_history):
 
 
     
+# ═════════════════════════════════════════════════════════════
+# 🟢 PROJECTORS ENGINE — REWRITE
+# ═════════════════════════════════════════════════════════════
+# Slot order (per Achilleas' spec):
+#   1. ΤΣΑΝΤΕΣ PROJECTOR              (brand-matched bag)
+#   2. HDMI                            (cable, version-tiered)
+#   3. ΟΘΟΝΕΣ PROJECTOR or ΒΑΣΕΙΣ      (screen, OR stand for XGIMI/AURZEN)
+#   4. ΗΧΕΙΑ ΦΟΡΗΤΟΥ ΗΧΟΥ              (portable speaker, price-tiered)
+#   5. ΑΛΚΑΛΙΚΕΣ                       (batteries — skipped if Samsung Freestyle)
+#   6. SURGE PROTECTORS                (price-tiered)
+#   7. ΛΑΜΠΕΣ + ΔΙΑΦΟΡΑ ΑΞΕΣΟΥΑΡ      (lamp/accessory, brand-specific)
+#   8. MOUSE WIRELESS
+#   9. KEYBOARDS WIRELESS
+#  10. PARTY SPEAKERS
+#
+# Brand overrides:
+#   • SAMSUNG Freestyle: Slot 1 = Freestyle Case, Slot 7 = Freestyle Battery Base
+#   • XGIMI: Slot 1 = XGIMI bag (model-matched), Slot 3 = XGIMI Stand, Slot 7 = XGIMI accessory
+#   • AURZEN: Slot 1 = AURZEN CasePlay, Slot 3 = AURZEN MagPlay/PowerPlay, Slot 7 = AURZEN accessory
+#
+def run_projectors_engine(trigger, df_products, df_history):
+    diag = []
+    slot_notes = {}
+    all_recs = []
+
+    tm = trigger['Material']
+    tt = str(trigger.get('Title', ''))
+    tt_l = tt.lower()
+    tbrand = str(trigger.get('Κατασκευαστής', '')).strip().upper()
+    tmodel = str(trigger.get('Μοντέλο', '')).strip()
+    tprice = parse_euro_price(trigger.get('LIST PRICE', 0))
+
+    # Trigger attributes for deep filtering
+    tusage = str(trigger.get('Προτεινόμενη χρήση', '')).lower()
+    ttech  = str(trigger.get('Τεχνολογία οθόνης', '')).lower()
+    tres   = str(trigger.get('Ανάλυση', '')).lower()
+    tdyn   = str(trigger.get('Δυνατότητες', '')).lower()
+
+    is_cinema    = 'home cinema' in tusage or 'gaming' in tusage
+    is_pro       = 'επαγγελματική' in tusage
+    is_class     = 'classroom' in tusage
+    is_portable  = 'φορητός' in tdyn or 'φορητός' in tt_l or 'mogo' in tt_l or 'freestyle' in tt_l or 'aurzen' in tt_l
+    is_laser_led = 'laser' in ttech or 'led' in ttech
+    is_4k        = '4k' in tres or 'uhd' in tres
+
+    # Brand-specific flags
+    is_samsung_freestyle = tbrand == 'SAMSUNG' and 'freestyle' in tt_l
+    is_xgimi             = tbrand == 'XGIMI'
+    is_aurzen            = tbrand == 'AURZEN'
+
+    # ── Price tier (projector market — tighter than TVs) ──
+    # budget : ≤€200    → cheap accessories, no fancy bag/stand
+    # mid    : €200-600 → mid speaker, brand bag if available
+    # premium: >€600    → premium speaker, brand-matched accessories
+    if tprice <= 200:
+        ptier = 'budget'
+    elif tprice <= 600:
+        ptier = 'mid'
+    else:
+        ptier = 'premium'
+
+    # Per-slot price caps for projectors: (pct_of_trigger, hard_max_eur)
+    PROJ_CAPS = {
+        'budget':  {'bag': (0.40, 50),  'cable': (0.15, 25), 'screen': (0.40, 80),  'speaker': (0.30, 50),  'battery': (0.10, 12), 'surge': (0.15, 25), 'lamp': (0.50, 100), 'mouse': (0.15, 30), 'keyboard': (0.30, 60), 'party': (0.50, 100)},
+        'mid':     {'bag': (0.20, 90),  'cable': (0.08, 35), 'screen': (0.30, 150), 'speaker': (0.30, 200), 'battery': (0.05, 15), 'surge': (0.08, 35), 'lamp': (0.40, 200), 'mouse': (0.10, 50), 'keyboard': (0.20, 100), 'party': (0.40, 250)},
+        'premium': {'bag': (0.18, 150), 'cable': (0.06, 60), 'screen': (0.30, 400), 'speaker': (0.45, 500), 'battery': (0.04, 20), 'surge': (0.05, 60), 'lamp': (0.40, 400), 'mouse': (0.08, 80), 'keyboard': (0.18, 150), 'party': (0.40, 600)},
+    }
+    PROJ_FLOORS = {'bag': 30, 'cable': 8, 'screen': 30, 'speaker': 25, 'battery': 5, 'surge': 10, 'lamp': 15, 'mouse': 10, 'keyboard': 25, 'party': 60}
+
+    diag.append((
+        "0. Trigger Context",
+        f"Brand={tbrand}, Price=€{tprice:.0f}, Tier={ptier}",
+        f"Tech={ttech}, Cinema={is_cinema}, Portable={is_portable}, Freestyle={is_samsung_freestyle}, XGIMI={is_xgimi}, AURZEN={is_aurzen}"
+    ))
+
+    # ── Build slot list ──
+    # Default slot order
+    slots = [
+        (1,  'Τσάντα Μεταφοράς',    ['ΤΣΑΝΤΕΣ PROJECTOR'],                              'BAG_LOGIC',     'bag'),
+        (2,  'Καλώδιο Σύνδεσης',    ['HDMI'],                                            'CABLE_LOGIC',   'cable'),
+        (3,  'Οθόνη Προβολής',      ['ΟΘΟΝΕΣ PROJECTOR'],                                'CANVAS_LOGIC',  'screen'),
+        (4,  'Ηχείο',               ['ΗΧΕΙΑ ΦΟΡΗΤΟΥ ΗΧΟΥ'],                              'AUDIO_LOGIC',   'speaker'),
+        (5,  'Μπαταρίες',           ['ΑΛΚΑΛΙΚΕΣ'],                                       'BATTERY_LOGIC', 'battery'),
+        (6,  'Προστασία Τάσης',     ['SURGE PROTECTORS'],                                'POWER_LOGIC',   'surge'),
+        (7,  'Αξεσουάρ Συσκευής',   ['ΛΑΜΠΕΣ PROJECTOR', 'ΔΙΑΦΟΡΑ ΑΞΕΣΟΥΑΡ PROJECTOR'],   'ACCESSORY_LOGIC','lamp'),
+        (8,  'Ποντίκι',             ['MOUSE WIRELESS'],                                  'INPUT_LOGIC',   'mouse'),
+        (9,  'Πληκτρολόγιο',        ['KEYBOARDS WIRELESS'],                              'KEYBOARD_LOGIC','keyboard'),
+        (10, 'Party Ήχος',          ['PARTY SPEAKERS'],                                  'GENERIC',       'party'),
+    ]
+
+    # ── Brand-specific overrides ──
+    # XGIMI/AURZEN: replace screen slot with stand (ΒΑΣΕΙΣ PROJECTOR)
+    if is_xgimi or is_aurzen:
+        slots[2] = (3, 'Βάση Στήριξης', ['ΒΑΣΕΙΣ PROJECTOR'], 'STAND_LOGIC', 'screen')
+    
+    # Samsung Freestyle: skip batteries slot (it has its own battery base in slot 7)
+    if is_samsung_freestyle:
+        slots = [s for s in slots if s[0] != 5]
+        # Re-number remaining slots to fill gap
+        slots = [(i+1, *s[1:]) for i, s in enumerate(slots)]
+
+    # Base candidate pool
+    c = df_products[df_products['Material'] != tm].copy()
+    if 'Sum of Sales' in c.columns:
+        c['Sales_Tiebreaker'] = pd.to_numeric(c['Sum of Sales'], errors='coerce').fillna(0)
+    else:
+        c['Sales_Tiebreaker'] = 0
+    c['_p'] = pd.to_numeric(c['LIST PRICE'], errors='coerce').fillna(0)
+
+    used_materials = {tm}
+    used_hierarchies_count = {}
+
+    for slot_num, role, hierarchies, logic_key, cap_key in slots:
+        notes = [f"Logic: {logic_key}"]
+
+        # Pool filtering
+        hier_upper = [h.upper().strip() for h in hierarchies]
+        pool = c[c['Hierarchy'].fillna('').astype(str).str.upper().str.strip().isin(hier_upper)].copy()
+        pool = pool[~pool['Material'].isin(used_materials)]
+
+        # Drop blank-title placeholder rows (catalog has some Material rows with NaN Title)
+        pool = pool[pool['Title'].notna() & (pool['Title'].astype(str).str.strip() != '')]
+
+        if pool.empty:
+            slot_notes[slot_num] = notes + ["❌ Empty hierarchy"]
+            diag.append((f"Slot {slot_num} ({role})", 0, "Empty"))
+            continue
+
+        # Base score: availability + sales tiebreaker
+        pool['Final_Score'] = 0.0
+        if 'AVAILABILITY' in pool.columns:
+            pool.loc[pool['AVAILABILITY'] == 'Άμεσα Διαθέσιμο', 'Final_Score'] += 100000
+        pool['Final_Score'] += pool['Sales_Tiebreaker'].fillna(0) * 0.1
+
+        # ── Price cap (soft penalty, like the TV engine) ──
+        if cap_key in PROJ_CAPS[ptier]:
+            pct, hard_max = PROJ_CAPS[ptier][cap_key]
+            floor = PROJ_FLOORS[cap_key]
+            cap_eur = max(float(floor), min(tprice * pct, float(hard_max)))
+            overpriced = pool['_p'] > cap_eur
+            pool.loc[overpriced, 'Final_Score'] -= 800000
+            if overpriced.any():
+                notes.append(f"Price Cap (€{cap_eur:.0f}, {ptier}/{cap_key}): {overpriced.sum()} penalized")
+
+        # ══════════════════════════════════════════════════════════════
+        # PER-SLOT LOGIC
+        # ══════════════════════════════════════════════════════════════
+
+        if logic_key == 'BAG_LOGIC':
+            title_l = pool['Title'].fillna('').str.lower()
+            if is_samsung_freestyle:
+                m = title_l.str.contains('freestyle', na=False)
+                pool.loc[m, 'Final_Score'] += 800000
+                pool = pool[m]  # hard filter — only Freestyle bag
+                notes.append("🟢 Samsung Freestyle bag forced")
+            elif is_xgimi:
+                m_xgimi = title_l.str.contains('xgimi', na=False)
+                pool = pool[m_xgimi]  # hard filter to XGIMI
+                title_l = pool['Title'].fillna('').str.lower()
+                pool.loc[:, 'Final_Score'] += 600000
+                # Model-specific match (e.g., "MoGo 3 Pro" → bag with that model)
+                if tmodel and not pool.empty:
+                    m_model = title_l.str.contains(re.escape(tmodel.lower()), na=False)
+                    pool.loc[m_model, 'Final_Score'] += 400000
+                    if m_model.any():
+                        notes.append(f"🟢 XGIMI bag exact model match: {tmodel}")
+                    else:
+                        notes.append("🟡 XGIMI bag (no exact model match)")
+            elif is_aurzen:
+                m_aur = title_l.str.contains('aurzen|caseplay', na=False, regex=True)
+                pool = pool[m_aur]  # hard filter to AURZEN
+                pool.loc[:, 'Final_Score'] += 600000
+                notes.append("🟢 AURZEN bag forced")
+            else:
+                # Generic projector — no brand-specific bag fits. Skip this slot to avoid
+                # recommending an XGIMI MoGo bag for a Philips NeoPix.
+                pool = pool.head(0)
+                notes.append("Generic projector — no brand bag, slot skipped")
+
+        elif logic_key == 'CABLE_LOGIC':
+            title_l = pool['Title'].fillna('').str.lower()
+            ver_col = pool.get('Έκδοση ≡', pd.Series('', index=pool.index)).fillna('').astype(str)
+
+            if is_class:
+                # Classroom: VGA cables aren't in this catalog (HDMI hierarchy only),
+                # so we just keep HDMI but don't penalize older versions.
+                notes.append("Classroom: HDMI primary, no VGA in catalog")
+            
+            if is_4k or ptier == 'premium':
+                is_21 = ver_col.str.contains('2.1', na=False) | title_l.str.contains('2.1', na=False)
+                pool.loc[is_21, 'Final_Score'] += 200000
+                notes.append("Boosted HDMI 2.1 (4K/premium)")
+            elif ptier == 'mid':
+                is_20p = ver_col.str.contains('2.0|2.1', na=False, regex=True) | title_l.str.contains(r'2\.0|2\.1', na=False, regex=True)
+                pool.loc[is_20p, 'Final_Score'] += 120000
+                notes.append("Boosted HDMI 2.0+")
+            
+            if is_cinema:
+                if 'Μήκος' in pool.columns:
+                    long_cab = pool['Μήκος'].fillna('').astype(str).str.contains(r'5|10|15|20', regex=True)
+                    pool.loc[long_cab, 'Final_Score'] += 50000
+                    notes.append("Cinema: boosted longer cables")
+
+        elif logic_key == 'CANVAS_LOGIC':
+            # Generic screen — ΟΘΟΝΕΣ PROJECTOR. Boost 100"+ for cinema usage.
+            title_l = pool['Title'].fillna('').str.lower()
+            if is_cinema:
+                large = title_l.str.contains(r'100|108|110|112|120|135', regex=True, na=False)
+                pool.loc[large, 'Final_Score'] += 150000
+                notes.append("Cinema: boosted ≥100\" screens")
+            else:
+                # Smaller portable projectors → boost smaller affordable screens
+                small = title_l.str.contains(r'\b60|\b80|\b84', regex=True, na=False)
+                pool.loc[small, 'Final_Score'] += 80000
+                notes.append("Boosted compact screens")
+
+        elif logic_key == 'STAND_LOGIC':
+            # XGIMI / AURZEN brand-locked stand. Match brand first, then model if possible.
+            title_l = pool['Title'].fillna('').str.lower()
+            mfr_col = pool['Κατασκευαστής'].fillna('').str.upper().str.strip()
+            
+            if is_xgimi:
+                m_xgimi = mfr_col == 'XGIMI'
+                pool.loc[m_xgimi, 'Final_Score'] += 700000
+                # PowerBase MoGo 3 Pro → forced exact match if model matches
+                if tmodel and 'mogo' in tmodel.lower():
+                    m_mogo = title_l.str.contains('mogo', na=False)
+                    pool.loc[m_mogo, 'Final_Score'] += 500000
+                    notes.append("🟢 XGIMI MoGo PowerBase forced")
+                else:
+                    notes.append("🟢 XGIMI stand forced")
+            elif is_aurzen:
+                m_aur = mfr_col == 'AURZEN'
+                pool.loc[m_aur, 'Final_Score'] += 700000
+                notes.append("🟢 AURZEN stand forced")
+
+        elif logic_key == 'AUDIO_LOGIC':
+            # NO MORE soundbar swap (catalog has none). Cinema usage → boost premium portable.
+            title_l = pool['Title'].fillna('').str.lower()
+            
+            if is_cinema and ptier in ('mid', 'premium'):
+                # Boost Marshall + JBL Xtreme + Sony ULT FIELD — premium room-filling speakers
+                premium_kw = title_l.str.contains(r'marshall|xtreme|ult field|partybox', regex=True, na=False)
+                pool.loc[premium_kw, 'Final_Score'] += 300000
+                notes.append("Cinema: boosted premium room speakers")
+            
+            if is_portable:
+                # Compact speakers (JBL Go/Flip/Charge, Sony SRS) preferred
+                compact_kw = title_l.str.contains(r'\bgo\b|flip|charge|grip|srs|hifuture', regex=True, na=False)
+                pool.loc[compact_kw, 'Final_Score'] += 100000
+                notes.append("Portable: compact speakers boosted")
+
+        elif logic_key == 'BATTERY_LOGIC':
+            # Just need AA alkaline 4-pack-ish (for the remote). No extra logic.
+            pass
+
+        elif logic_key == 'POWER_LOGIC':
+            # Surge protector — price tier already enforced via cap
+            pass
+
+        elif logic_key == 'ACCESSORY_LOGIC':
+            # Slot 7: brand-specific accessory (Samsung Freestyle Battery, XGIMI screen, AURZEN PowerPlay).
+            title_l = pool['Title'].fillna('').str.lower()
+            mfr_col = pool['Κατασκευαστής'].fillna('').str.upper().str.strip()
+            
+            if is_samsung_freestyle:
+                # ΛΑΜΠΕΣ PROJECTOR has the Freestyle Battery (mislabeled)
+                m_fr = title_l.str.contains('freestyle', na=False)
+                pool.loc[m_fr, 'Final_Score'] += 800000
+                notes.append("🟢 Samsung Freestyle Battery forced")
+            elif is_xgimi:
+                # Hard-exclude Samsung Freestyle Battery — it's in the same hierarchy but not relevant
+                pool = pool[~title_l.str.contains('freestyle', na=False)]
+                title_l = pool['Title'].fillna('').str.lower()
+                mfr_col = pool['Κατασκευαστής'].fillna('').str.upper().str.strip()
+                m_xgimi = mfr_col == 'XGIMI'
+                pool.loc[m_xgimi, 'Final_Score'] += 600000
+                notes.append("🟢 XGIMI accessory forced (Freestyle excluded)")
+            elif is_aurzen:
+                pool = pool[~title_l.str.contains('freestyle', na=False)]
+                title_l = pool['Title'].fillna('').str.lower()
+                mfr_col = pool['Κατασκευαστής'].fillna('').str.upper().str.strip()
+                m_aur = mfr_col == 'AURZEN'
+                pool.loc[m_aur, 'Final_Score'] += 600000
+                notes.append("🟢 AURZEN accessory forced (Freestyle excluded)")
+            else:
+                # Generic projector — the only items here are Samsung Freestyle Battery
+                # (irrelevant) and BlitzWolf tripod. Force the tripod, exclude Freestyle.
+                pool = pool[~title_l.str.contains('freestyle', na=False)]
+                if pool.empty:
+                    notes.append("Generic projector — no relevant accessory")
+                else:
+                    m_acc = pool['Hierarchy'].fillna('').str.upper().str.contains('ΑΞΕΣΟΥΑΡ', na=False)
+                    pool.loc[m_acc, 'Final_Score'] += 200000
+                    notes.append("Generic: tripod/accessory boosted")
+
+        elif logic_key == 'INPUT_LOGIC':
+            # Wireless mouse — for projectors, prefer compact/silent ones.
+            title_l = pool['Title'].fillna('').str.lower()
+            compact = title_l.str.contains(r'silent|compact|portable|m171|m220|m280', regex=True, na=False)
+            pool.loc[compact, 'Final_Score'] += 80000
+
+        elif logic_key == 'GENERIC':
+            # Party Speakers — the catalog has some non-speaker items (e.g. JBL battery
+            # packs) in this hierarchy. Filter to actual speakers via title keywords.
+            title_l = pool['Title'].fillna('').str.lower()
+            non_speaker = title_l.str.contains(r'μπαταρία|powerbank|battery|charger', regex=True, na=False)
+            pool = pool[~non_speaker]
+            if pool.empty:
+                notes.append("No real party speakers after filter")
+
+        elif logic_key == 'KEYBOARD_LOGIC':
+            # Wireless keyboard — for projectors, prefer compact/multi-device.
+            title_l = pool['Title'].fillna('').str.lower()
+            compact = title_l.str.contains(r'compact|portable|multi.?device|k380|k480', regex=True, na=False)
+            pool.loc[compact, 'Final_Score'] += 80000
+
+        # ── Selection (with hierarchy cap of 2) ──
+        pool = pool.sort_values('Final_Score', ascending=False)
+        chosen = None
+        for _, row in pool.iterrows():
+            h = row['Hierarchy']
+            if used_hierarchies_count.get(h, 0) < 2:
+                chosen = row
+                break
+
+        if chosen is None:
+            slot_notes[slot_num] = notes + ["❌ Hierarchy cap blocked"]
+            diag.append((f"Slot {slot_num} ({role})", 0, "Hier cap"))
+            continue
+
+        rc = chosen.copy()
+        rc['Assigned_Slot'] = slot_num
+        rc['Slot_Role']     = role
+        rc['Marketing_Copy']= "Απαραίτητος εξοπλισμός για την προβολή σας."
+        rc['Item_Rank']     = 1
+        all_recs.append(rc)
+        used_materials.add(chosen['Material'])
+        used_hierarchies_count[chosen['Hierarchy']] = used_hierarchies_count.get(chosen['Hierarchy'], 0) + 1
+        notes.append(f"✅ {str(chosen.get('Title', ''))[:60]}")
+        slot_notes[slot_num] = notes
+        diag.append((f"Slot {slot_num} ({role})", 1, f"Score: {chosen.get('Final_Score', 0):.0f}"))
+
+    diag.append(("TOTAL", len(all_recs), f"out of {len(slots)}"))
+
+    if all_recs:
+        recs_df = pd.DataFrame(all_recs)
+        recs_df['Draft_Score'] = recs_df['Assigned_Slot']
+        return recs_df, diag, slot_notes, recs_df
+    return pd.DataFrame(), diag, slot_notes, pd.DataFrame()
+
+
 # ─────────────────────────────────────────────────────────────
 # RUN ENGINE
 # ─────────────────────────────────────────────────────────────
@@ -6809,9 +6961,11 @@ elif active_cluster == "Floor Care":
 elif active_cluster == "TVs":
     recs, diag, slot_notes, full_candidates = run_tv_engine(trigger, df_products, df_history)
     slot_diag = []
+
 elif active_cluster == "Projectors":
-        recs, diag, slot_notes, _ = run_projectors_engine(trigger, df_products, df_history)
-        
+    recs, diag, slot_notes, full_candidates = run_projectors_engine(trigger, df_products, df_history)
+    slot_diag = []
+
 elif active_cluster in ("Mouse", "Keyboard", "Gaming Mouse", "Gaming Keyboard"):
     recs, diag, slot_notes, full_candidates = run_peripherals_engine(trigger, df_peripherals, df_history, active_cluster)
     slot_diag = []
