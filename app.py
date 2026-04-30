@@ -6711,15 +6711,33 @@ def run_projectors_engine(trigger, df_products, df_history):
     ]
 
     # ── Brand-specific overrides ──
-    # XGIMI/AURZEN: replace screen slot with stand (ΒΑΣΕΙΣ PROJECTOR)
+    # XGIMI/AURZEN: replace screen slot with stand (ΒΑΣΕΙΣ PROJECTOR), and replace
+    # the slot-7 accessory pool with a SECOND stand/bag from the brand ecosystem.
     if is_xgimi or is_aurzen:
         slots[2] = (3, 'Βάση Στήριξης', ['ΒΑΣΕΙΣ PROJECTOR'], 'STAND_LOGIC', 'screen')
+        # Slot 7 now pulls a secondary brand accessory (2nd stand or 2nd bag in the brand line).
+        # The hierarchy cap of 2 still allows another item from ΒΑΣΕΙΣ or ΤΣΑΝΤΕΣ.
+        slots[6] = (7, 'Brand Accessory', ['ΒΑΣΕΙΣ PROJECTOR', 'ΤΣΑΝΤΕΣ PROJECTOR', 'ΔΙΑΦΟΡΑ ΑΞΕΣΟΥΑΡ PROJECTOR'], 'BRAND_ACCESSORY_LOGIC', 'lamp')
     
-    # Samsung Freestyle: skip batteries slot (it has its own battery base in slot 7)
+    # Samsung Freestyle: surface BOTH official Samsung accessories in the FIRST 2 SLOTS
+    # (Case in slot 1, Battery in slot 2). Drop the standard batteries slot and the
+    # generic accessory slot since Samsung's are now front-loaded.
     if is_samsung_freestyle:
-        slots = [s for s in slots if s[0] != 5]
-        # Re-number remaining slots to fill gap
-        slots = [(i+1, *s[1:]) for i, s in enumerate(slots)]
+        # Pull Battery up to slot 2 (replacing HDMI cable in slot 2)
+        # New order: Bag(1), Battery(2), Cable(3), Screen(4), Speaker(5), Surge(6),
+        #            Mouse(7), Keyboard(8), Party(9)
+        new_slots = [
+            (1, 'Τσάντα Μεταφοράς', ['ΤΣΑΝΤΕΣ PROJECTOR'],   'BAG_LOGIC',         'bag'),
+            (2, 'Μπαταρία Συσκευής', ['ΛΑΜΠΕΣ PROJECTOR'],    'ACCESSORY_LOGIC',   'lamp'),
+            (3, 'Καλώδιο Σύνδεσης',  ['HDMI'],                'CABLE_LOGIC',       'cable'),
+            (4, 'Οθόνη Προβολής',    ['ΟΘΟΝΕΣ PROJECTOR'],    'CANVAS_LOGIC',      'screen'),
+            (5, 'Ηχείο',             ['ΗΧΕΙΑ ΦΟΡΗΤΟΥ ΗΧΟΥ'],  'AUDIO_LOGIC',       'speaker'),
+            (6, 'Προστασία Τάσης',   ['SURGE PROTECTORS'],    'POWER_LOGIC',       'surge'),
+            (7, 'Ποντίκι',           ['MOUSE WIRELESS'],      'INPUT_LOGIC',       'mouse'),
+            (8, 'Πληκτρολόγιο',      ['KEYBOARDS WIRELESS'],  'KEYBOARD_LOGIC',    'keyboard'),
+            (9, 'Party Ήχος',        ['PARTY SPEAKERS'],      'GENERIC',           'party'),
+        ]
+        slots = new_slots
 
     # Base candidate pool
     c = df_products[df_products['Material'] != tm].copy()
@@ -6755,14 +6773,34 @@ def run_projectors_engine(trigger, df_products, df_history):
         pool['Final_Score'] += pool['Sales_Tiebreaker'].fillna(0) * 0.1
 
         # ── Price cap (soft penalty, like the TV engine) ──
+        # EXCEPTION: brand-locked items (Samsung/XGIMI/AURZEN matching the trigger brand)
+        # are exempt — we always want to surface the official accessory even if it's
+        # over the generic cap (e.g. XGIMI PowerBase €135 on a €443 MoGo).
         if cap_key in PROJ_CAPS[ptier]:
             pct, hard_max = PROJ_CAPS[ptier][cap_key]
             floor = PROJ_FLOORS[cap_key]
             cap_eur = max(float(floor), min(tprice * pct, float(hard_max)))
             overpriced = pool['_p'] > cap_eur
-            pool.loc[overpriced, 'Final_Score'] -= 800000
-            if overpriced.any():
-                notes.append(f"Price Cap (€{cap_eur:.0f}, {ptier}/{cap_key}): {overpriced.sum()} penalized")
+
+            # Build brand-exemption mask: items from the trigger's brand are exempt
+            # for slots that have brand-lock logic.
+            mfr_col = pool['Κατασκευαστής'].fillna('').str.upper().str.strip()
+            title_l_for_exempt = pool['Title'].fillna('').str.lower()
+            brand_exempt = pd.Series(False, index=pool.index)
+            if logic_key in ('BAG_LOGIC', 'STAND_LOGIC', 'ACCESSORY_LOGIC', 'BRAND_ACCESSORY_LOGIC'):
+                if is_samsung_freestyle:
+                    brand_exempt = title_l_for_exempt.str.contains('freestyle', na=False)
+                elif is_xgimi:
+                    brand_exempt = mfr_col == 'XGIMI'
+                elif is_aurzen:
+                    brand_exempt = mfr_col == 'AURZEN'
+
+            penalize = overpriced & ~brand_exempt
+            pool.loc[penalize, 'Final_Score'] -= 800000
+            if penalize.any():
+                notes.append(f"Price Cap (€{cap_eur:.0f}, {ptier}/{cap_key}): {penalize.sum()} penalized")
+            if (overpriced & brand_exempt).any():
+                notes.append(f"Brand exemption: {(overpriced & brand_exempt).sum()} brand items kept above cap")
 
         # ══════════════════════════════════════════════════════════════
         # PER-SLOT LOGIC
@@ -6857,57 +6895,52 @@ def run_projectors_engine(trigger, df_products, df_history):
                 notes.append("🟢 AURZEN stand forced")
 
         elif logic_key == 'AUDIO_LOGIC':
-            # NO MORE soundbar swap (catalog has none). Cinema usage → boost premium portable.
+            # Tier-aware target window boost (TV-engine style):
+            # budget   → €20-€50 sweet spot (JBL Go, Sony SRS-XB100)
+            # mid      → €60-€150 (JBL Charge/Flip, Sony ULT FIELD 3)
+            # premium  → €200-€450 (Marshall Stanmore, JBL Xtreme)
             title_l = pool['Title'].fillna('').str.lower()
             
+            if ptier == 'budget':
+                window_lo, window_hi = 20, 50
+            elif ptier == 'mid':
+                window_lo, window_hi = 60, 150
+            else:  # premium
+                window_lo, window_hi = 200, 450
+            
+            in_window = (pool['_p'] >= window_lo) & (pool['_p'] <= window_hi)
+            pool.loc[in_window, 'Final_Score'] += 250000
+            notes.append(f"Speaker target window €{window_lo}-€{window_hi} ({ptier})")
+            
             if is_cinema and ptier in ('mid', 'premium'):
-                # Boost Marshall + JBL Xtreme + Sony ULT FIELD — premium room-filling speakers
-                premium_kw = title_l.str.contains(r'marshall|xtreme|ult field|partybox', regex=True, na=False)
-                pool.loc[premium_kw, 'Final_Score'] += 300000
+                premium_kw = title_l.str.contains(r'marshall|xtreme|ult field|partybox|stanmore', regex=True, na=False)
+                pool.loc[premium_kw, 'Final_Score'] += 200000
                 notes.append("Cinema: boosted premium room speakers")
             
             if is_portable:
-                # Compact speakers (JBL Go/Flip/Charge, Sony SRS) preferred
                 compact_kw = title_l.str.contains(r'\bgo\b|flip|charge|grip|srs|hifuture', regex=True, na=False)
-                pool.loc[compact_kw, 'Final_Score'] += 100000
+                pool.loc[compact_kw, 'Final_Score'] += 80000
                 notes.append("Portable: compact speakers boosted")
 
         elif logic_key == 'BATTERY_LOGIC':
-            # Just need AA alkaline 4-pack-ish (for the remote). No extra logic.
             pass
 
         elif logic_key == 'POWER_LOGIC':
-            # Surge protector — price tier already enforced via cap
             pass
 
         elif logic_key == 'ACCESSORY_LOGIC':
-            # Slot 7: brand-specific accessory (Samsung Freestyle Battery, XGIMI screen, AURZEN PowerPlay).
+            # Slot 7 (or slot 2 for Samsung Freestyle): brand-specific accessory.
             title_l = pool['Title'].fillna('').str.lower()
             mfr_col = pool['Κατασκευαστής'].fillna('').str.upper().str.strip()
             
             if is_samsung_freestyle:
-                # ΛΑΜΠΕΣ PROJECTOR has the Freestyle Battery (mislabeled)
+                # ΛΑΜΠΕΣ PROJECTOR has the Freestyle Battery (mislabeled as a lamp)
                 m_fr = title_l.str.contains('freestyle', na=False)
                 pool.loc[m_fr, 'Final_Score'] += 800000
-                notes.append("🟢 Samsung Freestyle Battery forced")
-            elif is_xgimi:
-                # Hard-exclude Samsung Freestyle Battery — it's in the same hierarchy but not relevant
-                pool = pool[~title_l.str.contains('freestyle', na=False)]
-                title_l = pool['Title'].fillna('').str.lower()
-                mfr_col = pool['Κατασκευαστής'].fillna('').str.upper().str.strip()
-                m_xgimi = mfr_col == 'XGIMI'
-                pool.loc[m_xgimi, 'Final_Score'] += 600000
-                notes.append("🟢 XGIMI accessory forced (Freestyle excluded)")
-            elif is_aurzen:
-                pool = pool[~title_l.str.contains('freestyle', na=False)]
-                title_l = pool['Title'].fillna('').str.lower()
-                mfr_col = pool['Κατασκευαστής'].fillna('').str.upper().str.strip()
-                m_aur = mfr_col == 'AURZEN'
-                pool.loc[m_aur, 'Final_Score'] += 600000
-                notes.append("🟢 AURZEN accessory forced (Freestyle excluded)")
+                pool = pool[m_fr]  # hard filter — only Samsung Freestyle items
+                notes.append("🟢 Samsung Freestyle Battery forced (hard filter)")
             else:
-                # Generic projector — the only items here are Samsung Freestyle Battery
-                # (irrelevant) and BlitzWolf tripod. Force the tripod, exclude Freestyle.
+                # Generic projector — exclude Samsung Freestyle (irrelevant), boost tripod
                 pool = pool[~title_l.str.contains('freestyle', na=False)]
                 if pool.empty:
                     notes.append("Generic projector — no relevant accessory")
@@ -6916,25 +6949,88 @@ def run_projectors_engine(trigger, df_products, df_history):
                     pool.loc[m_acc, 'Final_Score'] += 200000
                     notes.append("Generic: tripod/accessory boosted")
 
-        elif logic_key == 'INPUT_LOGIC':
-            # Wireless mouse — for projectors, prefer compact/silent ones.
+        elif logic_key == 'BRAND_ACCESSORY_LOGIC':
+            # XGIMI/AURZEN slot 7: prefer a SECOND item from the brand ecosystem
+            # (e.g. 2nd stand or alt-color bag), not already used in earlier slots.
             title_l = pool['Title'].fillna('').str.lower()
-            compact = title_l.str.contains(r'silent|compact|portable|m171|m220|m280', regex=True, na=False)
+            mfr_col = pool['Κατασκευαστής'].fillna('').str.upper().str.strip()
+            
+            # Hard-exclude irrelevant items (Samsung Freestyle, ultra-expensive UST screen)
+            pool = pool[~title_l.str.contains('freestyle', na=False)]
+            
+            if is_xgimi:
+                m_brand = mfr_col == 'XGIMI'
+                pool.loc[m_brand, 'Final_Score'] += 700000
+                # Model-specific match (e.g. MoGo bag for MoGo trigger)
+                if tmodel:
+                    m_model = title_l.str.contains(re.escape(tmodel.lower()), na=False)
+                    pool.loc[m_model, 'Final_Score'] += 300000
+                notes.append("🟢 XGIMI 2nd accessory forced")
+            elif is_aurzen:
+                m_brand = mfr_col == 'AURZEN'
+                pool.loc[m_brand, 'Final_Score'] += 700000
+                if tmodel:
+                    m_model = title_l.str.contains(re.escape(tmodel.lower()), na=False)
+                    pool.loc[m_model, 'Final_Score'] += 300000
+                notes.append("🟢 AURZEN 2nd accessory forced")
+
+        elif logic_key == 'INPUT_LOGIC':
+            # Mouse — tier-aware target window
+            #   budget   → €10-€20 (M171/M220)
+            #   mid      → €15-€40 (M280, MX Anywhere entry)
+            #   premium  → €40-€90 (MX Master, MX Anywhere 3)
+            title_l = pool['Title'].fillna('').str.lower()
+            if ptier == 'budget':
+                window_lo, window_hi = 8, 20
+            elif ptier == 'mid':
+                window_lo, window_hi = 12, 40
+            else:
+                window_lo, window_hi = 35, 90
+            in_window = (pool['_p'] >= window_lo) & (pool['_p'] <= window_hi)
+            pool.loc[in_window, 'Final_Score'] += 200000
+            notes.append(f"Mouse target window €{window_lo}-€{window_hi} ({ptier})")
+            
+            compact = title_l.str.contains(r'silent|compact|portable|m171|m220|m280|anywhere', regex=True, na=False)
             pool.loc[compact, 'Final_Score'] += 80000
 
         elif logic_key == 'GENERIC':
-            # Party Speakers — the catalog has some non-speaker items (e.g. JBL battery
-            # packs) in this hierarchy. Filter to actual speakers via title keywords.
+            # Party Speakers — filter out non-speakers + tier window.
+            #   budget  → €30-€90  (cheap karaoke kid speakers)
+            #   mid     → €80-€250 (Crystal Audio PRT, JBL Partybox 110)
+            #   premium → €250-€600 (JBL Partybox 320/710)
             title_l = pool['Title'].fillna('').str.lower()
             non_speaker = title_l.str.contains(r'μπαταρία|powerbank|battery|charger', regex=True, na=False)
             pool = pool[~non_speaker]
             if pool.empty:
                 notes.append("No real party speakers after filter")
+            else:
+                if ptier == 'budget':
+                    window_lo, window_hi = 30, 90
+                elif ptier == 'mid':
+                    window_lo, window_hi = 80, 250
+                else:
+                    window_lo, window_hi = 250, 600
+                in_window = (pool['_p'] >= window_lo) & (pool['_p'] <= window_hi)
+                pool.loc[in_window, 'Final_Score'] += 250000
+                notes.append(f"Party target window €{window_lo}-€{window_hi} ({ptier})")
 
         elif logic_key == 'KEYBOARD_LOGIC':
-            # Wireless keyboard — for projectors, prefer compact/multi-device.
+            # Keyboard — tier-aware target window.
+            #   budget  → €25-€60 (Logitech K380, Pebble Keys 2)
+            #   mid     → €40-€100 (K580, MX Keys Mini)
+            #   premium → €90-€200 (MX Keys S, Craft)
             title_l = pool['Title'].fillna('').str.lower()
-            compact = title_l.str.contains(r'compact|portable|multi.?device|k380|k480', regex=True, na=False)
+            if ptier == 'budget':
+                window_lo, window_hi = 20, 60
+            elif ptier == 'mid':
+                window_lo, window_hi = 35, 100
+            else:
+                window_lo, window_hi = 80, 200
+            in_window = (pool['_p'] >= window_lo) & (pool['_p'] <= window_hi)
+            pool.loc[in_window, 'Final_Score'] += 200000
+            notes.append(f"Keyboard target window €{window_lo}-€{window_hi} ({ptier})")
+            
+            compact = title_l.str.contains(r'compact|portable|multi.?device|k380|k480|pebble|mx keys', regex=True, na=False)
             pool.loc[compact, 'Final_Score'] += 80000
 
         # ── Selection (with hierarchy cap of 2) ──
