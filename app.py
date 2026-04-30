@@ -786,8 +786,12 @@ L2_CHILDREN = {
                  ],
     "SDA":       [{"key": "Floor Care", "label": "Σκούπες",
                    "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 2v8l4-2'/%3E%3Cpath d='M12 10l-4-2'/%3E%3Ccircle cx='12' cy='18' r='4'/%3E%3Cline x1='12' y1='10' x2='12' y2='14'/%3E%3C/svg%3E"}],
-    "TV": [{"key": "TVs", "label": "Τηλεοράσεις",
-            "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='2' y='7' width='20' height='15' rx='2' ry='2'/%3E%3Cpolyline points='17 2 12 7 7 2'/%3E%3C/svg%3E"}],
+    "TV": [
+            {"key": "TVs", "label": "Τηλεοράσεις",
+                "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='2' y='7' width='20' height='15' rx='2' ry='2'/%3E%3Cpolyline points='17 2 12 7 7 2'/%3E%3C/svg%3E"},
+            {"key": "Projectors", "label": "Projectors",
+                "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='4' y='6' width='16' height='12' rx='2' ry='2'/%3E%3Ccircle cx='12' cy='12' r='3'/%3E%3Cline x1='2' y1='12' x2='4' y2='12'/%3E%3Cline x1='20' y1='12' x2='22' y2='12'/%3E%3C/svg%3E"}
+        ],
 }
 
 # Reverse: L2 key → parent L1 key (used to highlight which L2 is active)
@@ -1064,6 +1068,21 @@ else:
             st.sidebar.markdown('<p class="sidebar-section">Επιλέξτε Τηλεόραση</p>', unsafe_allow_html=True)
             sel = st.sidebar.selectbox("", tvs['Title'].unique(), label_visibility="collapsed", key="tv_sel")
             trigger = tvs[tvs['Title']==sel].iloc[0] if sel else None
+
+
+    elif active_cluster == "Projectors":
+        if df_products.empty: st.stop()
+        # Fetch by Level 2 or Hierarchy depending on your Excel mapping
+        projs = df_products[df_products['Level 2'].fillna('').astype(str).str.strip().str.upper() == 'PROJECTORS'].copy()
+        if projs.empty:
+            projs = df_products[df_products['Hierarchy'].fillna('').astype(str).str.strip().str.upper().isin(['PROJECTORS', 'ΒΙΝΤΕΟΠΡΟΒΟΛΕΙΣ'])].copy()
+            
+        if projs.empty:
+            st.sidebar.warning("Δεν βρέθηκαν Projectors.")
+        else:
+            st.sidebar.markdown('<p class="sidebar-section">Επιλέξτε Projector</p>', unsafe_allow_html=True)
+            sel = st.sidebar.selectbox("", projs['Title'].unique(), label_visibility="collapsed", key="proj_sel")
+            trigger = projs[projs['Title']==sel].iloc[0] if sel else None
             
     elif active_cluster == "Floor Care":
         if df_vacuums.empty:
@@ -3792,7 +3811,176 @@ def run_laptops_engine(trigger, df_products, df_history):
 
 
 
+# ═════════════════════════════════════════════════════════════
+# 🟢 PROJECTORS ENGINE (The Big Screen)
+# ═════════════════════════════════════════════════════════════
+def run_projectors_engine(trigger, df_products, df_history):
+    diag = []
+    slot_notes = {}
+    all_recs = []
 
+    tm = trigger['Material']
+    tt = str(trigger.get('Title', ''))
+    tprice = parse_euro_price(trigger.get('LIST PRICE', 0))
+    
+    # Extract Trigger Attributes for Deep Filters
+    tusage = str(trigger.get('Προτεινόμενη χρήση', '')).lower()
+    ttech = str(trigger.get('Τεχνολογία οθόνης', '')).lower()
+    tres = str(trigger.get('Ανάλυση', '')).lower()
+    tdyn = str(trigger.get('Δυνατότητες', '')).lower()
+
+    # Attribute Logic Checks
+    is_cinema = 'home cinema' in tusage or 'gaming' in tusage
+    is_pro = 'επαγγελματική' in tusage
+    is_class = 'classroom' in tusage
+    is_portable = 'φορητός' in tdyn or 'φορητός' in tt.lower()
+    is_laser_led = 'laser' in ttech or 'led' in ttech
+    is_4k = '4k' in tres or 'uhd' in tres
+
+    diag.append(("0. Trigger Context", f"Usage: {tusage}", f"Tech: {ttech}, Res: {tres}, Portable: {is_portable}"))
+
+    # Base Candidate Pool
+    c = df_products[df_products['Material'] != tm].copy()
+    if 'Sum of Sales' in c.columns:
+        c['Sales_Tiebreaker'] = pd.to_numeric(c['Sum of Sales'], errors='coerce').fillna(0)
+    else:
+        c['Sales_Tiebreaker'] = 0
+
+    # The New Slot Strategy
+    slots = [
+        (1, 'Τσάντα Μεταφοράς', ['ΤΣΑΝΤΕΣ PROJECTOR'], 'BAG_LOGIC'),
+        (2, 'Καλώδιο Σύνδεσης', ['HDMI'], 'CABLE_LOGIC'),
+        (3, 'Μπαταρίες', ['ΑΛΚΑΛΙΚΕΣ'], 'BATTERY_LOGIC'),
+        (4, 'Οθόνη Προβολής', ['ΟΘΟΝΕΣ PROJECTOR'], 'CANVAS_LOGIC'),
+        (5, 'Ήχος', ['ΗΧΕΙΑ ΦΟΡΗΤΟΥ ΗΧΟΥ'], 'AUDIO_LOGIC'),
+        (6, 'Προστασία Τάσης', ['SURGE PROTECTORS'], 'POWER_LOGIC'),
+        (7, 'Συντήρηση / Αναβάθμιση', ['ΛΑΜΠΕΣ PROJECTOR'], 'MAINTENANCE_LOGIC'),
+        (8, 'Ποντίκι', ['MOUSE WIRELESS'], 'INPUT_LOGIC'),
+        (9, 'Πληκτρολόγιο / Hub', ['KEYBOARDS WIRELESS'], 'HUB_LOGIC'),
+        (10, 'Party Ήχος', ['PARTY SPEAKERS'], 'GENERIC'),
+    ]
+
+    used_materials = {tm}
+    used_hierarchies_count = {}
+
+    for slot_num, role, hierarchies, logic_key in slots:
+        notes = [f"Logic: {logic_key}"]
+        
+        # ── Deep Filter Slot Overrides ──
+        if logic_key == 'CABLE_LOGIC':
+            if is_class:
+                hierarchies = ['VGA CABLES', 'HDMI']
+                notes.append("Classroom Logic: Added VGA to cable options.")
+        
+        elif logic_key == 'AUDIO_LOGIC':
+            if is_cinema:
+                hierarchies = ['SOUNDBARS']
+                role = 'Soundbar'
+                notes.append("Cinema Logic: Swapped to Soundbars.")
+            elif is_class:
+                hierarchies = ['PC SPEAKERS 2.0', 'PC SPEAKERS 1']
+                role = 'PC Speakers'
+                notes.append("Classroom Logic: Swapped to PC Speakers.")
+        
+        elif logic_key == 'MAINTENANCE_LOGIC':
+            if is_cinema:
+                hierarchies = ['MEDIA PLAYERS']
+                role = 'Media Player'
+                notes.append("Cinema Logic: Swapped to Media Players.")
+            elif is_laser_led:
+                hierarchies = ['CLEANING PRODUCTS']
+                role = 'Κιτ Καθαρισμού'
+                notes.append("Tech Logic (Laser/LED): Swapped Lamps to Cleaning Kit.")
+        
+        elif logic_key == 'HUB_LOGIC':
+            if is_pro:
+                hierarchies = ['USB HUB DEVICES']
+                role = 'USB Hub'
+                notes.append("Pro Logic: Swapped Keyboard to USB Hub.")
+
+        # Pool Filtering
+        hier_upper = [h.upper().strip() for h in hierarchies]
+        pool = c[c['Hierarchy'].fillna('').astype(str).str.upper().str.strip().isin(hier_upper)].copy()
+
+        if pool.empty:
+            hier_col = c['Hierarchy'].fillna('').astype(str).str.upper().str.strip()
+            mask = pd.Series(False, index=c.index)
+            for hk in hier_upper:
+                if hk: mask |= hier_col.str.contains(re.escape(hk), regex=True, na=False)
+            pool = c[mask].copy()
+
+        pool = pool[~pool['Material'].isin(used_materials)]
+
+        if pool.empty:
+            notes.append("❌ Empty after filtering")
+            slot_notes[slot_num] = notes
+            diag.append((f"Slot {slot_num} ({role})", 0, "Empty"))
+            continue
+
+        pool['Final_Score'] = 0.0
+        if 'AVAILABILITY' in pool.columns:
+            pool.loc[pool['AVAILABILITY'] == 'Άμεσα Διαθέσιμο', 'Final_Score'] += 100000
+        pool['Final_Score'] += pool['Sales_Tiebreaker'].fillna(0) * 0.1
+
+        # ── Attribute Logic Scoring ──
+        if logic_key == 'CABLE_LOGIC':
+            if is_cinema:
+                if 'Μήκος Καλωδίου6' in pool.columns:
+                    long_cables = pool['Μήκος Καλωδίου6'].fillna('').str.contains(r'10|15|20', regex=True)
+                    pool.loc[long_cables, 'Final_Score'] += 50000
+                    notes.append("Cinema: Boosted 10m+ cables.")
+            if is_4k:
+                hdmi_21 = pool['Title'].fillna('').str.lower().str.contains('2.1|8k|4k')
+                if 'Έκδοση' in pool.columns:
+                    hdmi_21 |= pool['Έκδοση'].fillna('').astype(str).str.contains('2.1|2.0')
+                pool.loc[hdmi_21, 'Final_Score'] += 80000
+                notes.append("4K Res: Boosted HDMI 2.1/2.0.")
+
+        elif logic_key == 'HUB_LOGIC' and is_pro:
+            hdmi_hubs = pool['Title'].fillna('').str.lower().str.contains('hdmi')
+            if 'Θύρες επέκτασης' in pool.columns:
+                hdmi_hubs |= pool['Θύρες επέκτασης'].fillna('').str.lower().str.contains('hdmi')
+            pool.loc[hdmi_hubs, 'Final_Score'] += 60000
+            notes.append("Pro Hub: Boosted HDMI expansion.")
+
+        pool = pool.sort_values('Final_Score', ascending=False)
+        
+        chosen = None
+        for _, row in pool.iterrows():
+            h = row['Hierarchy']
+            if used_hierarchies_count.get(h, 0) < 2:
+                chosen = row
+                break
+        
+        if chosen is None:
+            notes.append("❌ Hierarchy cap blocked items")
+            slot_notes[slot_num] = notes
+            diag.append((f"Slot {slot_num} ({role})", 0, "Hier cap"))
+            continue
+
+        row_copy = chosen.copy()
+        row_copy['Assigned_Slot'] = slot_num
+        row_copy['Slot_Role'] = role
+        row_copy['Marketing_Copy'] = "Απαραίτητος εξοπλισμός για την προβολή σας."
+        row_copy['Item_Rank'] = 1
+        all_recs.append(row_copy)
+        
+        used_materials.add(chosen['Material'])
+        used_hierarchies_count[chosen['Hierarchy']] = used_hierarchies_count.get(chosen['Hierarchy'], 0) + 1
+        notes.append(f"✅ {str(chosen.get('Title', ''))[:60]}")
+        slot_notes[slot_num] = notes
+        diag.append((f"Slot {slot_num} ({role})", 1, f"Score: {chosen.get('Final_Score', 0):.0f}"))
+
+    diag.append(("TOTAL", len(all_recs), f"out of {len(slots)}"))
+
+    if all_recs:
+        recs_df = pd.DataFrame(all_recs)
+        recs_df['Draft_Score'] = recs_df['Assigned_Slot']
+        return recs_df, diag, slot_notes, recs_df
+    return pd.DataFrame(), diag, slot_notes, pd.DataFrame()
+
+
+    
 # ═══════════════════════════════════════════════════════════════
 # 🟢 FLOOR CARE ENGINE — "Perfect Fit" Ecosystem
 # ═══════════════════════════════════════════════════════════════
@@ -6609,7 +6797,9 @@ elif active_cluster == "Floor Care":
 elif active_cluster == "TVs":
     recs, diag, slot_notes, full_candidates = run_tv_engine(trigger, df_products, df_history)
     slot_diag = []
-
+elif active_cluster == "Projectors":
+        df_recs, diag, slot_notes, _ = run_projectors_engine(trigger, df_products, df_history)
+        
 elif active_cluster in ("Mouse", "Keyboard", "Gaming Mouse", "Gaming Keyboard"):
     recs, diag, slot_notes, full_candidates = run_peripherals_engine(trigger, df_peripherals, df_history, active_cluster)
     slot_diag = []
