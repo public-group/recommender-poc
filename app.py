@@ -1038,7 +1038,7 @@ else:
         # 🧪 TEST LIST: Restrict the dropdown to specific SKUs
         # ─────────────────────────────────────────────────────────────
         tv_test_skus = {
-            "2027797", "2027771", "2035104", "2089142", "2035099"
+            "2027797", "2027771", "2035104", "2089142", "2035099", "1786394" 
         }
         if not tvs.empty:
             t_filtered = tvs[tvs['Material'].astype(str).str.strip().str.replace(r'\.0$', '', regex=True).isin(tv_test_skus)]
