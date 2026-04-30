@@ -2322,7 +2322,7 @@ def run_engine(trigger, df_products, df_history, df_slots):
     # 🟢 NEW: Premium phone absolute brand preference & High-End Best Seller Fallback
     PREMIUM_PRICE_THRESHOLD = 850
     PREMIUM_BRAND_BOOST = 5000000.0  # Massive absolute boost to guarantee brand matches win
-    BEST_SELLER_BOOST = 200000.0
+    BEST_SELLER_BOOST = 300000.0
     EXPENSIVE_BOOST = 100000.0
     PREMIUM_ACC_MIN_PRICE = 25.0
     
