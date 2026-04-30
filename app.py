@@ -6810,7 +6810,7 @@ elif active_cluster == "TVs":
     recs, diag, slot_notes, full_candidates = run_tv_engine(trigger, df_products, df_history)
     slot_diag = []
 elif active_cluster == "Projectors":
-        df_recs, diag, slot_notes, _ = run_projectors_engine(trigger, df_products, df_history)
+        recs, diag, slot_notes, _ = run_projectors_engine(trigger, df_products, df_history)
         
 elif active_cluster in ("Mouse", "Keyboard", "Gaming Mouse", "Gaming Keyboard"):
     recs, diag, slot_notes, full_candidates = run_peripherals_engine(trigger, df_peripherals, df_history, active_cluster)
