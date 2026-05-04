@@ -7175,18 +7175,20 @@ def run_projectors_engine(trigger, df_products, df_history):
         return recs_df, diag, slot_notes, recs_df
     return pd.DataFrame(), diag, slot_notes, pd.DataFrame()
 
+
 # ═══════════════════════════════════════════════════════════════
 # 🟢 VINYL & TURNTABLES ENGINE
 # ═══════════════════════════════════════════════════════════════
 
-# Πρόσθεσε το df_peripherals στα ορίσματα
 def run_vinyl_engine(trigger, df_products, df_peripherals, df_music, df_history):
     diag, slot_notes, all_recs = [], {}, []
     
     tm = trigger['Material']
+    tt = str(trigger.get('Title', ''))  # <-- ΠΡΟΣΤΕΘΗΚΕ ΤΟ tt ΠΟΥ ΕΛΕΙΠΕ
     tb = str(trigger.get('Κατασκευαστής', '')).strip().upper()
     tprice = parse_euro_price(trigger.get('LIST PRICE', 0))
     ttier = get_vinyl_tier(tprice)
+    
     # ── DEEP FILTER EXTRACTION ──
     _tt_lower = tt.lower()
     
@@ -7198,7 +7200,7 @@ def run_vinyl_engine(trigger, df_products, df_peripherals, df_music, df_history)
     extra_char = str(trigger.get('Extra Χαρακτηριστικά', '')).lower()
     is_suitcase = "βαλιτσάκι" in extra_char or "βαλιτσάκι" in _tt_lower
     
-    # Έλεγχος Pre-Amp: Ακόμα κι αν λείπει από το κελί, το πιάνει από τον τίτλο (όπως στο AT-LPW30TK)
+    # Έλεγχος Pre-Amp: Ακόμα κι αν λείπει από το κελί, το πιάνει από τον τίτλο
     has_preamp = "ενσωματωμένος προενισχυτής" in extra_char or "προενισχυτ" in _tt_lower
     is_usb_extra = "usb" in extra_char
     
@@ -7209,7 +7211,7 @@ def run_vinyl_engine(trigger, df_products, df_peripherals, df_music, df_history)
 
     diag.append(("0. Trigger", f"Brand={tb}, Price=€{tprice:.0f} ({ttier})", f"Spk={has_spk}, PreAmp={has_preamp}, BT={is_bt}, USB={is_usb_conn or is_usb_extra}"))
 
-    # --- Data Prep (ΕΝΩΣΗ PRODUCTS & PERIPHERALS) ---
+    # --- Data Prep (ΕΝΩΣΗ PRODUCTS & PERIPHERALS ΓΙΑ ΝΑ ΒΡΙΣΚΕΙ ΤΑ ΗΧΕΙΑ/ΚΑΛΩΔΙΑ) ---
     c_prod_full = pd.concat([df_products, df_peripherals], ignore_index=True)
     c_prod = c_prod_full[c_prod_full['Material'] != tm].copy()
     
@@ -7221,7 +7223,7 @@ def run_vinyl_engine(trigger, df_products, df_peripherals, df_music, df_history)
         c_music['Sales_30'] = pd.to_numeric(c_music.get('Sum of Sales', 0), errors='coerce').fillna(0)
 
     used_materials = {tm}
-
+    
     for slot_num, role, hierarchies, logic_key in VINYL_SLOTS:
         notes = [f"Logic: {logic_key}"]
         
