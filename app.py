@@ -6974,33 +6974,70 @@ def run_projectors_engine(trigger, df_products, df_history):
                 pool.loc[m_aur, 'Final_Score'] += 700000
                 notes.append("🟢 AURZEN stand forced")
 
+        # ── LOGIC 1, 2, 3: AUDIO OUTPUT ──
         elif logic_key == 'AUDIO_LOGIC':
-            # Tier-aware target window boost (TV-engine style):
-            # budget   → €20-€50 sweet spot (JBL Go, Sony SRS-XB100)
-            # mid      → €60-€150 (JBL Charge/Flip, Sony ULT FIELD 3)
-            # premium  → €200-€450 (Marshall Stanmore, JBL Xtreme)
-            title_l = pool['Title'].fillna('').str.lower()
-            
-            if ptier == 'budget':
-                window_lo, window_hi = 20, 50
-            elif ptier == 'mid':
-                window_lo, window_hi = 60, 150
-            else:  # premium
-                window_lo, window_hi = 200, 450
-            
-            in_window = (pool['_p'] >= window_lo) & (pool['_p'] <= window_hi)
-            pool.loc[in_window, 'Final_Score'] += 250000
-            notes.append(f"Speaker target window €{window_lo}-€{window_hi} ({ptier})")
-            
-            if is_cinema and ptier in ('mid', 'premium'):
-                premium_kw = title_l.str.contains(r'marshall|xtreme|ult field|partybox|stanmore', regex=True, na=False)
-                pool.loc[premium_kw, 'Final_Score'] += 200000
-                notes.append("Cinema: boosted premium room speakers")
-            
-            if is_portable:
-                compact_kw = title_l.str.contains(r'\bgo\b|flip|charge|grip|srs|hifuture', regex=True, na=False)
-                pool.loc[compact_kw, 'Final_Score'] += 80000
-                notes.append("Portable: compact speakers boosted")
+            # Μάσκες Ιεραρχιών βάσει των δεδομένων πωλήσεων
+            pc_mask = pool['Hierarchy'].str.contains('PC SPEAKERS', case=False, na=False)
+            bt_mask = pool['Hierarchy'].str.contains('ΦΟΡΗΤΟΥ ΗΧΟΥ', case=False, na=False)
+            micro_mask = pool['Hierarchy'].str.contains('MICRO', case=False, na=False)
+            premium_audio_mask = pool['Hierarchy'].str.contains('SOUNDBARS|MULTIROOM', case=False, na=False)
+            amp_mask = pool['Hierarchy'].str.contains('AMPLIFIERS|ΕΝΙΣΧΥΤΕΣ', case=False, na=False)
+            hifi_mask = pool['Hierarchy'].str.contains('ΗΧΕΙΑ HI-FI', case=False, na=False)
+            active_mask = pool['Title'].str.contains('Αυτοενισχυόμενα|Active|Powered', case=False, na=False)
+
+            if no_spk:
+                if not has_preamp and is_rca:
+                    # 🔴 STRICT Logic 3a: No Pre-Amp -> Needs Amplifier + Passive
+                    pool.loc[amp_mask, 'Final_Score'] += 600000
+                    pool.loc[hifi_mask, 'Final_Score'] += 400000
+                    notes.append("No Pre-Amp -> Forced Amplifiers & Hi-Fi Speakers")
+                else:
+                    # 🔴 Logic 1/3b: Has Pre-Amp, needs Active Speakers. Scale by TIER.
+                    pool.loc[active_mask, 'Final_Score'] += 200000
+                    
+                    if ttier == 'Entry':
+                        # Entry TV -> PC Speakers 2.0 (19 sales, ~84€ avg)
+                        pool.loc[pc_mask, 'Final_Score'] += 500000
+                        notes.append("Entry / No Spk -> Boosted PC Speakers 2.0 (Best Budget Fit)")
+                    elif ttier == 'Mid':
+                        # Mid TV -> Portable BT if BT exists (~140€ avg), else Micro Hi-Fi (~94€ avg)
+                        if is_bt:
+                            pool.loc[bt_mask, 'Final_Score'] += 500000
+                            notes.append("Mid / No Spk / BT -> Boosted Portable BT (Top Seller)")
+                        else:
+                            pool.loc[micro_mask, 'Final_Score'] += 500000
+                            pool.loc[pc_mask, 'Final_Score'] += 400000
+                            notes.append("Mid / No Spk / No BT -> Boosted Micro Hi-Fi & PC Speakers")
+                    else:
+                        # Premium TV -> Soundbars / Multiroom (~200-213€ avg)
+                        if is_bt:
+                            pool.loc[premium_audio_mask, 'Final_Score'] += 500000
+                            pool.loc[bt_mask, 'Final_Score'] += 400000
+                            notes.append("Premium / BT -> Boosted Soundbars/Multiroom & Premium BT")
+                        else:
+                            pool.loc[premium_audio_mask, 'Final_Score'] += 500000
+                            pool.loc[micro_mask, 'Final_Score'] += 400000
+                            notes.append("Premium / No BT -> Boosted Soundbars & Micro Hi-Fi")
+
+            elif has_spk or is_suitcase:
+                # 🔴 STRICT Logic 2: AVOID Amplifiers & Hi-Fi
+                pool.loc[amp_mask | hifi_mask, 'Final_Score'] -= 900000
+                
+                # Routing βάσει Tier & Συνδεσιμότητας
+                if ttier == 'Entry':
+                    pool.loc[pc_mask, 'Final_Score'] += 500000
+                    notes.append("Suitcase Entry -> Boosted PC Speakers 2.0 (Avoid Amp)")
+                elif ttier == 'Mid':
+                    if is_bt:
+                        pool.loc[bt_mask, 'Final_Score'] += 500000
+                        notes.append("Suitcase Mid / BT -> Boosted Portable BT (Avoid Amp)")
+                    else:
+                        pool.loc[pc_mask, 'Final_Score'] += 500000
+                        notes.append("Suitcase Mid / No BT -> Boosted PC Speakers (Avoid Amp)")
+                else:
+                    pool.loc[premium_audio_mask, 'Final_Score'] += 500000
+                    pool.loc[bt_mask, 'Final_Score'] += 400000
+                    notes.append("Suitcase Premium -> Boosted Soundbars / High-End Portable")
 
         elif logic_key == 'BATTERY_LOGIC':
             pass
