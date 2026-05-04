@@ -7331,8 +7331,8 @@ elif active_cluster in ("Monitors", "Printers", "Webcam", "USB Hub"):
     recs, diag, slot_notes, full_candidates = run_peripherals_engine(trigger, df_peripherals, df_history, active_cluster)
     slot_diag = []
 else:
-    recs, diag, slot_notes, full_candidates = run_books_engine(trigger, df_books, df_history)
-    slot_diag = []
+    df_all_for_books = pd.concat([df_books, df_products], ignore_index=True)
+    recs, diag, slot_notes, full_candidates = run_books_engine(trigger, df_all_for_books, df_history)
 
 MARKETING_COPY = {
     "PRIMARY_CASE": "Απόλυτη προστασία & τέλεια εφαρμογή.",
