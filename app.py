@@ -7188,7 +7188,8 @@ def run_projectors_engine(trigger, df_products, df_history):
 # 🟢 VINYL & TURNTABLES ENGINE
 # ═══════════════════════════════════════════════════════════════
 
-def run_vinyl_engine(trigger, df_products, df_music, df_history):
+# Πρόσθεσε το df_peripherals στα ορίσματα
+def run_vinyl_engine(trigger, df_products, df_peripherals, df_music, df_history):
     diag, slot_notes, all_recs = [], {}, []
     
     tm = trigger['Material']
@@ -7213,8 +7214,10 @@ def run_vinyl_engine(trigger, df_products, df_music, df_history):
 
     diag.append(("0. Trigger", f"Brand={tb}, Price=€{tprice:.0f} ({ttier})", f"Spk={has_spk}, PreAmp={has_preamp}, BT={is_bt}, USB={is_usb_conn or is_usb_extra}"))
 
-    # --- Data Prep ---
-    c_prod = df_products[df_products['Material'] != tm].copy()
+    # --- Data Prep (ΕΝΩΣΗ PRODUCTS & PERIPHERALS) ---
+    c_prod_full = pd.concat([df_products, df_peripherals], ignore_index=True)
+    c_prod = c_prod_full[c_prod_full['Material'] != tm].copy()
+    
     c_music = df_music.copy() if not df_music.empty else pd.DataFrame()
     
     c_prod['Sales_30'] = pd.to_numeric(c_prod.get('Sum of Sales', 0), errors='coerce').fillna(0)
@@ -7284,38 +7287,39 @@ def run_vinyl_engine(trigger, df_products, df_music, df_history):
                     notes.append(f"Logic 6: Brand Match ({tb}) -> Replacement Needle Boosted")
 
         # ── LOGIC 1, 2, 3: AUDIO OUTPUT ──
+        # ── LOGIC 1, 2, 3: AUDIO OUTPUT ──
         elif logic_key == 'AUDIO_LOGIC':
+            pc_mask = pool['Hierarchy'].str.contains('PC SPEAKERS', case=False, na=False)
+            bt_mask = pool['Hierarchy'].str.contains('ΦΟΡΗΤΟΥ ΗΧΟΥ', case=False, na=False)
+            amp_mask = pool['Hierarchy'].str.contains('AMPLIFIERS|ΕΝΙΣΧΥΤΕΣ', case=False, na=False)
+            hifi_mask = pool['Hierarchy'].str.contains('ΗΧΕΙΑ HI-FI', case=False, na=False)
+            
+            # Active speakers είναι είτε αυτά που γράφουν "Αυτοενισχυόμενα/Active" είτε τα PC Speakers
+            active_mask = pool['Title'].str.contains('Αυτοενισχυόμενα|Active|Powered', case=False, na=False) | pc_mask
+
             if no_spk:
-                # Logic 1: No Speaker Emergency
-                active_mask = pool['Title'].str.contains('Αυτοενισχυόμενα|Active|Powered', case=False, na=False)
-                pool.loc[active_mask, 'Final_Score'] += 500000
-                notes.append("Logic 1: No Speaker Emergency -> Active Speakers Boosted")
-                
-                # Logic 3a: Technical Signal Chain (No Pre-amp)
                 if not has_preamp and is_rca:
-                    amp_mask = pool['Hierarchy'].str.contains('AMPLIFIERS|ΕΝΙΣΧΥΤΕΣ', case=False, na=False)
+                    # Logic 3a: No Pre-Amp + RCA -> Amplifiers & Hi-Fi Speakers
                     pool.loc[amp_mask, 'Final_Score'] += 600000
-                    hifi_mask = pool['Hierarchy'].str.contains('ΗΧΕΙΑ HI-FI', case=False, na=False)
                     pool.loc[hifi_mask, 'Final_Score'] += 400000
-                    notes.append("Logic 3: No Pre-Amp + RCA -> Amplifiers & Hi-Fi Speakers Boosted")
-                
-            if has_spk or is_suitcase:
-                # Logic 2: Budget Upgrade (Suitcase/Built-in)
-                pc_mask = pool['Hierarchy'].str.contains('PC SPEAKERS', case=False, na=False)
-                pool.loc[pc_mask, 'Final_Score'] += 400000
-                
-                # Logic 2 & 5: If Bluetooth, boost Portable BT Speakers
-                if is_bt:
-                    bt_mask = pool['Hierarchy'].str.contains('ΦΟΡΗΤΟΥ ΗΧΟΥ', case=False, na=False)
-                    pool.loc[bt_mask, 'Final_Score'] += 600000
-                    notes.append("Logic 2/5: Budget Upgrade + BT -> Portable BT Speakers Boosted")
+                    notes.append("Logic 3: No Pre-Amp -> Forced Amplifiers & Hi-Fi Speakers")
                 else:
-                    notes.append("Logic 2: Budget Upgrade -> PC Speakers Boosted")
+                    # Logic 1: No Speaker Emergency -> Active Speakers
+                    pool.loc[active_mask, 'Final_Score'] += 600000
+                    # ΑΠΑΓΟΡΕΥΣΗ: Ρίχνουμε τα Φορητά BT ώστε να κερδίσουν υποχρεωτικά τα Αυτοενισχυόμενα
+                    pool.loc[bt_mask, 'Final_Score'] -= 300000
+                    notes.append("Logic 1: No Speaker Emergency -> Forced Active Speakers (Banned Portable BT)")
                     
-                # Logic 2: AVOID Amplifiers & Hi-Fi
-                avoid_mask = pool['Hierarchy'].str.contains('AMPLIFIERS|HI-FI', case=False, na=False)
-                pool.loc[avoid_mask, 'Final_Score'] -= 900000
-                notes.append("Logic 2: Avoided Amplifiers/Hi-Fi")
+            elif has_spk or is_suitcase:
+                # Logic 2: Budget Upgrade (Suitcase/Built-in)
+                pool.loc[amp_mask | hifi_mask, 'Final_Score'] -= 900000
+                
+                if is_bt:
+                    pool.loc[bt_mask, 'Final_Score'] += 600000
+                    notes.append("Logic 2: Budget Upgrade + BT -> Boosted Portable BT Speakers")
+                else:
+                    pool.loc[pc_mask, 'Final_Score'] += 600000
+                    notes.append("Logic 2: Budget Upgrade (No BT) -> Boosted PC Speakers")
 
         # ── LOGIC 4: CABLE JACK / USB ──
         elif logic_key == 'CABLE_JACK_USB_LOGIC':
@@ -7393,7 +7397,7 @@ elif active_cluster == "Projectors":
     recs, diag, slot_notes, full_candidates = run_projectors_engine(trigger, df_products, df_history)
     slot_diag = []
 elif active_cluster == "Turntables":
-    recs, diag, slot_notes, full_candidates = run_vinyl_engine(trigger, df_products, df_music, df_history)
+    recs, diag, slot_notes, full_candidates = run_vinyl_engine(trigger, df_products, df_peripherals, df_music, df_history)
     slot_diag = []
     full_candidates = recs
 elif active_cluster in ("Mouse", "Keyboard", "Gaming Mouse", "Gaming Keyboard"):
