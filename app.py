@@ -7327,10 +7327,34 @@ def run_vinyl_engine(trigger, df_products, df_peripherals, df_music, df_history)
                 notes.append("Non-USB -> Jack 3.5mm Boosted")
 
         elif logic_key == 'HEADPHONE_LOGIC':
+            # Logic 5: Αν έχει BT το πικάπ, προτιμάμε Ασύρματα ακουστικά
             if is_bt:
                 wl_mask = pool['Title'].str.contains('Wireless|Bluetooth|Ασύρματα', case=False, na=False)
-                pool.loc[wl_mask, 'Final_Score'] += 500000
+                pool.loc[wl_mask, 'Final_Score'] += 200000
                 notes.append("Logic 5: BT Turntable -> Wireless Headphones Boosted")
+
+            # ── Οικοσύστημα & Λογική Προτεινόμενης Χρήσης (Tiering) ──
+            if 'Προτεινόμενη χρήση' in pool.columns:
+                usage_col = pool['Προτεινόμενη χρήση'].fillna('').str.lower()
+                premium_usage = usage_col.str.contains('premium', na=False)
+                music_usage = usage_col.str.contains('μουσική|music', na=False)
+                
+                is_same_brand = pool['Κατασκευαστής'].fillna('').str.strip().str.upper() == tb
+
+                if tb == 'SONY':
+                    # Οικοσύστημα SONY: Πρώτα τα Premium, μετά τα Μουσική, μετά οποιοδήποτε Sony
+                    pool.loc[is_same_brand & premium_usage, 'Final_Score'] += 800000
+                    pool.loc[is_same_brand & music_usage, 'Final_Score'] += 700000
+                    pool.loc[is_same_brand, 'Final_Score'] += 600000
+                    notes.append("Ecosystem Match: Boosted Sony (Premium -> Music)")
+                elif ttier == 'Premium':
+                    # Άλλα Premium πικάπ -> Ακουστικά "Premium"
+                    pool.loc[premium_usage, 'Final_Score'] += 500000
+                    notes.append("Premium Tier -> Boosted 'Premium' Usage Headphones")
+                else:
+                    # Entry / Mid πικάπ -> Ακουστικά "Μουσική"
+                    pool.loc[music_usage, 'Final_Score'] += 500000
+                    notes.append(f"{ttier} Tier -> Boosted 'Μουσική' Usage Headphones")
 
         elif logic_key == 'CABLE_RCA_LOGIC':
             if has_preamp:
