@@ -318,8 +318,8 @@ TURNTABLE_ACCESSORY_BUDGET = {
 }
 
 def get_vinyl_tier(price):
-    if price > 400: return 'Premium'
-    if price > 150: return 'Mid'
+    if price >= 280: return 'Premium'
+    if price >= 140: return 'Mid'
     return 'Entry'
 
 # ─────────────────────────────────────────────────────────────
@@ -7187,20 +7187,24 @@ def run_vinyl_engine(trigger, df_products, df_peripherals, df_music, df_history)
     tb = str(trigger.get('Κατασκευαστής', '')).strip().upper()
     tprice = parse_euro_price(trigger.get('LIST PRICE', 0))
     ttier = get_vinyl_tier(tprice)
-    
     # ── DEEP FILTER EXTRACTION ──
+    _tt_lower = tt.lower()
+    
+    # Έλεγχος Ηχείων: Ψάχνουμε στα χαρακτηριστικά αλλά ΚΑΙ στον τίτλο
     internal_spk_raw = str(trigger.get('Ενσωματωμένα Ηχεία', '')).lower()
-    has_spk = "διαθέτει" in internal_spk_raw and "δε διαθέτει" not in internal_spk_raw
-    no_spk = "δε διαθέτει" in internal_spk_raw
+    has_spk = ("διαθέτει" in internal_spk_raw and "δε διαθέτει" not in internal_spk_raw) or ("ενσωματωμένα ηχεία" in _tt_lower)
+    no_spk = ("δε διαθέτει" in internal_spk_raw) or not has_spk
     
     extra_char = str(trigger.get('Extra Χαρακτηριστικά', '')).lower()
-    is_suitcase = "βαλιτσάκι" in extra_char
-    has_preamp = "ενσωματωμένος προενισχυτής" in extra_char
+    is_suitcase = "βαλιτσάκι" in extra_char or "βαλιτσάκι" in _tt_lower
+    
+    # Έλεγχος Pre-Amp: Ακόμα κι αν λείπει από το κελί, το πιάνει από τον τίτλο (όπως στο AT-LPW30TK)
+    has_preamp = "ενσωματωμένος προενισχυτής" in extra_char or "προενισχυτ" in _tt_lower
     is_usb_extra = "usb" in extra_char
     
     conn = str(trigger.get('Συνδεσιμότητα', '')).lower()
-    is_bt = "bluetooth" in conn
-    is_usb_conn = "usb" in conn
+    is_bt = "bluetooth" in conn or "bluetooth" in _tt_lower
+    is_usb_conn = "usb" in conn or "usb" in _tt_lower
     is_rca = "rca" in conn
 
     diag.append(("0. Trigger", f"Brand={tb}, Price=€{tprice:.0f} ({ttier})", f"Spk={has_spk}, PreAmp={has_preamp}, BT={is_bt}, USB={is_usb_conn or is_usb_extra}"))
