@@ -283,7 +283,32 @@ TV_MARKETING_COPY = {
     "Μαγνητικό Πλαίσιο": "Δώσε στην The Frame σου το τέλειο διακοσμητικό πλαίσιο.",
 }
 
+# ═════════════════════════════════════════════════════════════
+# 🟢 VINYL & TURNTABLES CONFIGURATION
+# ═════════════════════════════════════════════════════════════
 
+VINYL_SLOTS = [
+    (1,  'Αξεσουάρ Μουσικής',   ['MUSIC ACCESSORIES', 'ΒΕΛΟΝΕΣ ΠΙΚΑΠ'], 'ACCESSORY_LOGIC'),
+    (2,  'LP Electronica/Pop',  ['LP ELECTRONICA/POP/HIP HOP'],         'LP_LOGIC'),
+    (3,  'Φορητά Ηχεία',        ['ΗΧΕΙΑ ΦΟΡΗΤΟΥ ΗΧΟΥ', 'PC SPEAKERS'],  'SPEAKER_LOGIC'),
+    (4,  'LP Alternative',      ['LP ALTERNATIVE'],                     'LP_LOGIC'),
+    (5,  'Καλώδια Jack',        ['ΚΑΛΩΔΙΑ 3.5MM JACK', 'ΚΑΛΩΔΙΑ USB'],  'CABLE_JACK_LOGIC'),
+    (6,  'Προστασία Ρεύματος',  ['SURGE PROTECTORS'],                   'GENERIC'),
+    (7,  'LP Classic Rock',     ['LP CLASSIC ROCK'],                    'LP_LOGIC'),
+    (8,  'LP Ελληνικά',         ['LP ΕΛΛΗΝΙΚΑ'],                        'LP_LOGIC'),
+    (9,  'Ακουστικά Overhead',  ['OVERHEAD'],                           'HEADPHONE_LOGIC'),
+    (10, 'Καλώδια RCA',         ['ΚΑΛΩΔΙΑ RCA'],                        'CABLE_RCA_LOGIC'),
+]
+
+VINYL_MARKETING_COPY = {
+    "Αξεσουάρ Μουσικής": "Φροντίδα και ανταλλακτικά για τον αναλογικό σου ήχο.",
+    "LP_GENRE": "Top selling βινύλιο των τελευταίων 30 ημερών.",
+    "Φορητά Ηχεία": "Απόλαυσε τη μουσική σου παντού, χωρίς περιορισμούς.",
+    "Καλώδια Jack": "Σύνδεσε το πικάπ σου με κάθε ηχητική πηγή.",
+    "Προστασία Ρεύματος": "Προστάτευσε τον ευαίσθητο εξοπλισμό σου.",
+    "Ακουστικά Overhead": "Για προσωπικές και αναλογικές ακροάσεις.",
+    "Καλώδια RCA": "Η κλασική σύνδεση για τον απόλυτο Hi-Fi ήχο.",
+}
 
 # ─────────────────────────────────────────────────────────────
 # 🟢 KIDS BOOKS CONFIGURATION
@@ -1093,7 +1118,18 @@ else:
             st.sidebar.markdown('<p class="sidebar-section">Επιλέξτε Projector</p>', unsafe_allow_html=True)
             sel = st.sidebar.selectbox("", projs['Title'].unique(), label_visibility="collapsed", key="proj_sel")
             trigger = projs[projs['Title']==sel].iloc[0] if sel else None
-            
+
+
+
+elif active_cluster == "Turntables":
+    # Φιλτράρουμε τα Πικάπ από το Products sheet
+    turntables = df_products[df_products['Level 2'] == 'ΠΙΚΑΠ']
+    if not turntables.empty:
+        trigger = turntables[turntables['Title']==sel].iloc[0] if sel else turntables.iloc[0]
+        recs, diag, slot_notes = run_vinyl_engine(trigger, df_products, df_history)
+
+
+    
     elif active_cluster == "Floor Care":
         if df_vacuums.empty:
             st.sidebar.warning("Sheet 'Vacuums' is empty or missing.")
@@ -7077,6 +7113,118 @@ def run_projectors_engine(trigger, df_products, df_history):
         return recs_df, diag, slot_notes, recs_df
     return pd.DataFrame(), diag, slot_notes, pd.DataFrame()
 
+# ═════════════════════════════════════════════════════════════
+# 🟢 VINYL & TURNTABLES ENGINE
+# ═════════════════════════════════════════════════════════════
+def run_vinyl_engine(trigger, df_products, df_history):
+    diag, slot_notes, all_recs = [], {}, []
+    tm = trigger['Material']
+    tt = str(trigger.get('Title', ''))
+    tb = str(trigger.get('Κατασκευαστής', '')).strip().upper()
+    
+    # ── Extraction Attributes ──
+    # Έλεγχος για ενσωματωμένα ηχεία
+    has_internal_speakers = str(trigger.get('Ενσωματωμένα Ηχεία', '')).lower() == "διαθέτει"
+    # Έλεγχος για "βαλιτσάκι" στα Extra Χαρακτηριστικά
+    is_suitcase = "βαλιτσάκι" in str(trigger.get('Extra Χαρακτηριστικά', '')).lower()
+    # Έλεγχος Προενισχυτή
+    has_preamp = "ενσωματωμένος προενισχυτής" in str(trigger.get('Extra Χαρακτηριστικά', '')).lower()
+    # Έλεγχος Συνδεσιμότητας
+    conn = str(trigger.get('Συνδεσιμότητα', '')).lower()
+    is_bluetooth = "bluetooth" in conn
+    is_usb = "usb" in conn
+
+    diag.append(("0. Trigger", f"Brand={tb}, BT={is_bluetooth}, PreAmp={has_preamp}", f"Internal Speakers={has_internal_speakers}"))
+
+    # Candidate pool
+    c = df_products[df_products['Material'] != tm].copy()
+    # Μετατροπή πωλήσεων σε αριθμό για το sorting των LP
+    c['Sales_30'] = pd.to_numeric(c.get('Sum of Sales', 0), errors='coerce').fillna(0)
+
+    used_materials = {tm}
+
+    for slot_num, role, hierarchies, logic_key in VINYL_SLOTS:
+        notes = [f"Logic: {logic_key}"]
+        
+        # ── 1. HIERARCHY FILTERING ──
+        pool = c[c['Hierarchy'].fillna('').astype(str).str.upper().str.strip().isin([h.upper() for h in hierarchies])].copy()
+        
+        if pool.empty:
+            # Fallback για substring match αν το exact hierarchy fail
+            mask = pd.Series(False, index=c.index)
+            for h in hierarchies:
+                mask |= c['Hierarchy'].fillna('').str.contains(h, case=False, na=False)
+            pool = c[mask].copy()
+
+        pool = pool[~pool['Material'].isin(used_materials)]
+
+        if pool.empty:
+            diag.append((f"Slot {slot_num}", 0, "Empty"))
+            continue
+
+        # ── 2. LOGIC OVERRIDES ──
+        
+        # A. LP Logic: Showcase Top Selling SKU
+        if logic_key == 'LP_LOGIC':
+            pool = pool.sort_values('Sales_30', ascending=False)
+            notes.append("LP Rule: Sorted by top selling (30d).")
+        
+        # B. Accessory Logic: Needle match for specific brands
+        elif logic_key == 'ACCESSORY_LOGIC':
+            if tb in ["AUDIO-TECHNICA", "LENCO", "CROSLEY"]:
+                needle_mask = pool['Hierarchy'].str.contains('ΒΕΛΟΝΕΣ', case=False, na=False)
+                if needle_mask.any():
+                    pool.loc[needle_mask, 'Final_Score'] = 500000
+                    notes.append(f"Brand Match ({tb}): Prioritizing replacement needles.")
+
+        # C. Speaker Logic: Active vs BT vs PC
+        elif logic_key == 'SPEAKER_LOGIC':
+            if not has_internal_speakers and not is_suitcase:
+                # Αν δεν έχει ηχεία, προτεραιότητα σε αυτοενισχυόμενα
+                active_mask = pool['Title'].str.contains('Αυτοενισχυόμενα|Active', case=False, na=False)
+                pool.loc[active_mask, 'Final_Score'] = 300000
+                notes.append("No internal speakers: Boosting Active Speakers.")
+            elif is_bluetooth:
+                bt_mask = pool['Hierarchy'].str.contains('ΦΟΡΗΤΟΥ ΗΧΟΥ', case=False, na=False)
+                pool.loc[bt_mask, 'Final_Score'] = 200000
+                notes.append("BT Turntable: Prioritizing BT Speakers.")
+
+        # D. Cable Logic: USB Digitizer check
+        elif logic_key == 'CABLE_JACK_LOGIC':
+            if is_usb:
+                # Αν είναι USB πικάπ, προτείνουμε USB-B καλώδιο
+                usb_cable_mask = pool['Hierarchy'].str.contains('USB', case=False, na=False)
+                pool.loc[usb_cable_mask, 'Final_Score'] = 400000
+                notes.append("Digitizer/USB Turntable: Suggesting USB-B cables.")
+
+        # E. Headphone Logic: BT vs Wired
+        elif logic_key == 'HEADPHONE_LOGIC':
+            if is_bluetooth:
+                wireless_mask = pool['Title'].str.contains('Wireless|Bluetooth|Ασύρματα', case=False, na=False)
+                pool.loc[wireless_mask, 'Final_Score'] = 300000
+                notes.append("BT Turntable: Boosting Wireless Headphones.")
+
+        # ── 3. FINAL SELECTION ──
+        # Συνδυασμός score και πωλήσεων
+        if 'Final_Score' not in pool.columns: pool['Final_Score'] = 0
+        pool['Score'] = pool['Final_Score'] + (pool['Sales_30'] * 0.1)
+        
+        pool = pool.sort_values('Score', ascending=False)
+        chosen = pool.iloc[0]
+
+        rc = chosen.copy()
+        rc['Assigned_Slot'] = slot_num
+        rc['Slot_Role'] = role
+        # Dynamic Marketing Copy
+        m_role = "LP_GENRE" if logic_key == 'LP_LOGIC' else role
+        rc['Marketing_Copy'] = VINYL_MARKETING_COPY.get(m_role, "Ιδανικό συμπλήρωμα για το πικάπ σου.")
+        
+        all_recs.append(rc)
+        used_materials.add(chosen['Material'])
+        slot_notes[slot_num] = notes
+        diag.append((f"Slot {slot_num} ({role})", 1, f"Score: {chosen['Score']:.0f}"))
+
+    return pd.DataFrame(all_recs), diag, slot_notes
 
 # ─────────────────────────────────────────────────────────────
 # RUN ENGINE
