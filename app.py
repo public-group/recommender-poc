@@ -6974,7 +6974,7 @@ def run_projectors_engine(trigger, df_products, df_history):
                 pool.loc[m_aur, 'Final_Score'] += 700000
                 notes.append("🟢 AURZEN stand forced")
 
-elif logic_key == 'AUDIO_LOGIC':
+    elif logic_key == 'AUDIO_LOGIC':
             pc_mask = pool['Hierarchy'].str.contains('PC SPEAKERS', case=False, na=False)
             bt_mask = pool['Hierarchy'].str.contains('ΦΟΡΗΤΟΥ ΗΧΟΥ', case=False, na=False)
             amp_mask = pool['Hierarchy'].str.contains('AMPLIFIERS|ΕΝΙΣΧΥΤΕΣ', case=False, na=False)
