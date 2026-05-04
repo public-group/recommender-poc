@@ -705,7 +705,8 @@ def load_all_data():
     return dp, dm, dh, ds, db, dl, dv, dper, dstat, available_sheets
 
 try:
-    df_products, df_history, df_slots, df_books, df_laptops, df_vacuums, df_peripherals, df_stationery, df_music, sheets_loaded = load_all_data()
+
+    df_products, df_music, df_history, df_slots, df_books, df_laptops, df_vacuums, df_peripherals, df_stationery, sheets_loaded = load_all_data()
     compat_cols_found = [c for c in COMPAT_COLS if c in df_products.columns]
 except Exception as e:
     st.error(f"🚨 Error loading data: {e}")
