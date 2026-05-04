@@ -571,6 +571,42 @@ def price_ok(tp, np, l1):
 def title_sim(a, b): return SequenceMatcher(None, a.lower(), b.lower()).ratio() * 100
 def safe(v): return html_lib.escape(str(v))
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# TABLET HELPERS
+# ═══════════════════════════════════════════════════════════════════════════════
+ 
+def parse_euro_price(val) -> float:
+    """
+    Parse a price that may be in European locale format.
+ 
+    Examples
+    --------
+    '1.299,99 €'  →  1299.99
+    '499,00'      →  499.0
+    1299.99       →  1299.99
+    None / ''     →  0.0
+    """
+    if val is None or (isinstance(val, float) and pd.isna(val)) or str(val).strip() == '':
+        return 0.0
+    s = (
+        str(val)
+        .replace('€', '')
+        .replace('\xa0', '')   # non-breaking space
+        .strip()
+        .replace('.', '')      # thousands separator
+        .replace(',', '.')     # decimal separator
+    )
+    try:
+        return float(s)
+    except ValueError:
+        return 0.0
+ 
+ 
+def _safe_str_series(series: pd.Series) -> pd.Series:
+    """Fill NaN and cast to str."""
+    return series.fillna('').astype(str)
+
+
 # ═════════════════════════════════════════════════════════════
 # 🟢 LAPTOPS HELPERS
 # ═════════════════════════════════════════════════════════════
