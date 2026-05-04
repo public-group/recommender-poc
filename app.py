@@ -7356,7 +7356,7 @@ elif active_cluster == "Projectors":
     recs, diag, slot_notes, full_candidates = run_projectors_engine(trigger, df_products, df_history)
     slot_diag = []
 elif active_cluster == "Turntables":
-    recs, diag, slot_notes = run_vinyl_engine(trigger, df_products, df_music, df_history)
+    recs, diag, slot_notes, full_candidates = run_vinyl_engine(trigger, df_products, df_music, df_history)
     slot_diag = []
     full_candidates = recs
 elif active_cluster in ("Mouse", "Keyboard", "Gaming Mouse", "Gaming Keyboard"):
