@@ -656,7 +656,12 @@ def load_all_data():
         ds = pd.read_excel(excel_file, sheet_name='Slot_Matrix')
         ds.columns = ds.columns.str.strip()
     else: ds = pd.DataFrame()
-    
+        
+    if 'Music' in available_sheets:
+        dm = pd.read_excel(excel_file, sheet_name='Music')
+        dm.columns = dm.columns.str.strip()
+    else: dm = pd.DataFrame()
+        
     if 'Books' in available_sheets:
         db = pd.read_excel(excel_file, sheet_name='Books')
         db.columns = db.columns.str.strip()
@@ -697,10 +702,10 @@ def load_all_data():
     if not db.empty and CC not in db.columns:
         db[CC] = ''
     
-    return dp, dh, ds, db, dl, dv, dper, dstat, available_sheets
+    return dp, dm, dh, ds, db, dl, dv, dper, dstat, available_sheets
 
 try:
-    df_products, df_history, df_slots, df_books, df_laptops, df_vacuums, df_peripherals, df_stationery, sheets_loaded = load_all_data()
+    df_products, df_history, df_slots, df_books, df_laptops, df_vacuums, df_peripherals, df_stationery, df_music, sheets_loaded = load_all_data()
     compat_cols_found = [c for c in COMPAT_COLS if c in df_products.columns]
 except Exception as e:
     st.error(f"🚨 Error loading data: {e}")
@@ -7133,7 +7138,7 @@ def run_projectors_engine(trigger, df_products, df_history):
 # ═════════════════════════════════════════════════════════════
 # 🟢 VINYL & TURNTABLES ENGINE
 # ═════════════════════════════════════════════════════════════
-def run_vinyl_engine(trigger, df_products, df_history):
+def run_vinyl_engine(trigger, df_products, df_music, df_history):
     diag, slot_notes, all_recs = [], {}, []
     tm = trigger['Material']
     tt = str(trigger.get('Title', ''))
@@ -7151,27 +7156,33 @@ def run_vinyl_engine(trigger, df_products, df_history):
     is_bluetooth = "bluetooth" in conn
     is_usb = "usb" in conn
 
-    diag.append(("0. Trigger", f"Brand={tb}, BT={is_bluetooth}, PreAmp={has_preamp}", f"Internal Speakers={has_internal_speakers}"))
+    diag.append(("0b. Data", f"Music Rows={len(df_music)}", f"Product Rows={len(df_products)}"))
 
-    # Candidate pool
-    c = df_products[df_products['Material'] != tm].copy()
-    # Μετατροπή πωλήσεων σε αριθμό για το sorting των LP
-    c['Sales_30'] = pd.to_numeric(c.get('Sum of Sales', 0), errors='coerce').fillna(0)
+    # Candidate pools for different sheets
+    c_prod = df_products[df_products['Material'] != tm].copy()
+    c_music = df_music[df_music['Material'] != tm].copy() if not df_music.empty else pd.DataFrame()
+    
+    # Prep sales for sorting
+    c_prod['Sales_30'] = pd.to_numeric(c_prod.get('Sum of Sales', 0), errors='coerce').fillna(0)
+    if not c_music.empty:
+        c_music['Sales_30'] = pd.to_numeric(c_music.get('Sum of Sales', 0), errors='coerce').fillna(0)
 
     used_materials = {tm}
 
     for slot_num, role, hierarchies, logic_key in VINYL_SLOTS:
         notes = [f"Logic: {logic_key}"]
         
-        # ── 1. HIERARCHY FILTERING ──
-        pool = c[c['Hierarchy'].fillna('').astype(str).str.upper().str.strip().isin([h.upper() for h in hierarchies])].copy()
+        # ── 1. SOURCE SELECTION & HIERARCHY FILTERING ──
+        source_df = c_music if logic_key == 'LP_LOGIC' else c_prod
+        notes.append(f"Source: {'Music' if logic_key == 'LP_LOGIC' else 'Products'}")
+
+        pool = source_df[source_df['Hierarchy'].fillna('').astype(str).str.upper().str.strip().isin([h.upper() for h in hierarchies])].copy()
         
         if pool.empty:
-            # Fallback για substring match αν το exact hierarchy fail
-            mask = pd.Series(False, index=c.index)
+            mask = pd.Series(False, index=source_df.index)
             for h in hierarchies:
-                mask |= c['Hierarchy'].fillna('').str.contains(h, case=False, na=False)
-            pool = c[mask].copy()
+                mask |= source_df['Hierarchy'].fillna('').str.contains(h, case=False, na=False)
+            pool = source_df[mask].copy()
 
         pool = pool[~pool['Material'].isin(used_materials)]
 
