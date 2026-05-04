@@ -158,6 +158,44 @@ LAPTOP_MARKETING_COPY = {
     "Headset / Office": "Ολοκλήρωσε το setup σου.",
 }
 
+# ═════════════════════════════════════════════════════════════
+# 🟢 TABLETS CONFIGURATION
+# ═════════════════════════════════════════════════════════════
+
+# (slot_num, role_label, [hierarchies], logic_key)
+TABLET_PRO_SLOTS = [
+    (1,  'Keyboard Case',     ['740100020004023'], 'MODEL_MATCH_STRICT'),
+    (2,  'Stylus / Pencil',   ['740100020004013'], 'BRAND_MATCH_STRICT'),
+    (3,  'Screen Protector',  ['740500020004008', '740500020004007'], 'MODEL_MATCH_STRICT'),
+    (4,  'Paper-feel Film',   ['740500020004008'], 'MODEL_MATCH_STRICT'),
+    (5,  'Sleeve / Bag',      ['740100020004006'], 'SIZE_MATCH'),
+    (6,  'Travel Protection', ['740100020004015'], 'SIZE_MATCH'),
+    (7,  'USB-C Hub',         ['740100020004011'], 'PORT_MATCH'),
+    (8,  'Fast Wall Charger', ['740100020004014'], 'WATTAGE_BOOST_30W'),
+    (9,  'Power Bank',        ['740900010004'],    'LAPTOP_CLASS_PB'),
+    (10, 'TWS Earbuds',       ['740700030003002'], 'ECOSYSTEM_BOOST'),
+]
+
+TABLET_MEDIA_SLOTS = [
+    (1,  'Folio Case',        ['740100020004006'], 'MODEL_MATCH_STRICT'),
+    (2,  'Rugged Back Cover', ['740100020004017', '740100020004007'], 'MODEL_MATCH_STRICT'),
+    (3,  'Tempered Glass',    ['740100020004009'], 'MODEL_MATCH_STRICT'),
+    (4,  'Film Protector',    ['740100020004009'], 'MODEL_MATCH_STRICT'),
+    (5,  'Tablet Stand',      ['740100020004010'], 'GENERIC'),
+    (6,  'Headphones',        ['740100020004015', '740500020004002'], 'GENERIC'),
+    (7,  'Wall Charger',      ['740100020004012'], 'PORT_MATCH'),
+    (8,  'Long Cable (2m+)',  ['740100020004011'], 'LENGTH_BOOST'),
+    (9,  'Storage / Adaptor', ['741000010005', '740100020004011'], 'OS_STORAGE_LOGIC'),
+    (10, 'Screen Cleaner',    ['740500020004001'], 'GENERIC'),
+]
+
+TABLET_MARKETING_COPY = {
+    "Keyboard Case": "Μεταμόρφωσε το tablet σε laptop.",
+    "Stylus / Pencil": "Η απόλυτη ακρίβεια για σημειώσεις & σχέδιο.",
+    "OS_STORAGE_LOGIC": "Επέκτεινε τις δυνατότητες αποθήκευσης.",
+    "Folio Case": "Προστασία και στήριξη για άνετη θέαση."
+}
+
 
 # ═════════════════════════════════════════════════════════════
 # 🟢 FLOOR CARE CONFIGURATION
@@ -2760,6 +2798,237 @@ def run_engine(trigger, df_products, df_history, df_slots):
 
     diag.append(("6. Final", len(sel), "Hierarchy cap=2"))
     return (pd.DataFrame(sel) if sel else pd.DataFrame()), diag, slot_diag, slot_notes, full
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# SCORING CONSTANTS
+# ═══════════════════════════════════════════════════════════════════════════════
+ 
+SCORE_MODEL_MATCH   = 1_000_000   # Exact model compatibility
+SCORE_USB_PORT      =   500_000   # USB port compatibility
+SCORE_WATTAGE       =   300_000   # 30W+ charger
+SCORE_SD_CARD       =   500_000   # Micro SD (Android)
+SCORE_SD_CAPACITY   =   100_000   # 64 / 128 GB capacity
+SCORE_OTG_ADAPTER   =   500_000   # OTG/Adapter (iOS)
+SCORE_CABLE_LENGTH  =   200_000   # Cable ≥ 2 m
+ 
+ 
+# ═══════════════════════════════════════════════════════════════════════════════
+# MAIN ENGINE
+# ═══════════════════════════════════════════════════════════════════════════════
+ 
+def run_tablets_engine(
+    trigger,
+    df_products: pd.DataFrame,
+    df_history: pd.DataFrame | None = None,
+) -> tuple[pd.DataFrame, list, dict]:
+    """
+    Run the Tablets & iPads recommendation engine.
+ 
+    Parameters
+    ----------
+    trigger     : dict-like (or pd.Series) for the product that triggered recs.
+    df_products : Full product catalogue DataFrame.
+    df_history  : Optional purchase/view history (reserved for future scoring).
+ 
+    Returns
+    -------
+    df_recs    : DataFrame — one recommended product per slot.
+    diag       : list of (step, description, detail) tuples for debugging.
+    slot_notes : dict  slot_num → [note strings].
+    """
+    diag: list[tuple] = []
+    slot_notes: dict[int, list[str]] = {}
+    all_recs: list[dict] = []
+ 
+    # ── 1. Extract trigger attributes ─────────────────────────────────────
+    tm      = trigger['Material']
+    tb      = str(trigger.get('Κατασκευαστής', '')).strip().upper()
+    tmod    = str(trigger.get('Μοντέλο', '')).strip()
+    tos     = str(trigger.get('Λειτουργικό σύστημα', '')).strip().lower()
+    tport   = str(trigger.get('Θύρα USB', '')).strip()   # e.g. "USB-C", "Micro-USB"
+    trating = str(trigger.get('Experts Rating', '')).strip()
+    tprice  = parse_euro_price(trigger.get('LIST PRICE', 0))
+ 
+    # ── 2. Persona detection ──────────────────────────────────────────────
+    # Pro   → {Excellent, Top Quality}
+    # Media → everything else (Top Quality is included but Pro takes priority)
+    PRO_RATINGS = {'Excellent', 'Top Quality'}
+    is_pro        = trating in PRO_RATINGS
+    active_slots  = TABLET_PRO_SLOTS   if is_pro else TABLET_MEDIA_SLOTS
+    persona_label = "Productivity Pro" if is_pro else "Media Consumer"
+ 
+    diag.append((
+        "0. Trigger",
+        f"Material={tm} | Brand={tb} | Model='{tmod}' | USB Port='{tport}'",
+        f"Persona={persona_label} | Rating={trating} | OS={tos} | Price={tprice:.2f}",
+    ))
+ 
+    # ── 3. Candidate pool ─────────────────────────────────────────────────
+    c = df_products[df_products['Material'] != tm].copy()
+ 
+    # Sales tiebreaker
+    sales_col = 'Sum of Sales' if 'Sum of Sales' in c.columns else None
+    c['Sales_Tiebreaker'] = (
+        pd.to_numeric(c[sales_col], errors='coerce').fillna(0)
+        if sales_col else 0.0
+    )
+ 
+    # Parsed price
+    c['_p'] = c['LIST PRICE'].apply(parse_euro_price)
+ 
+    # Guarantee text columns exist to avoid KeyError on sparse catalogues
+    _TEXT_COLS = ['Hierarchy', 'Title', 'Συμβατές συσκευές', 'Συμβατό με']
+    for col in _TEXT_COLS:
+        if col not in c.columns:
+            c[col] = ''
+    for col in _TEXT_COLS:
+        c[col] = _safe_str_series(c[col])
+ 
+    used_materials: set = {tm}
+ 
+    # ── 4. Slot loop ──────────────────────────────────────────────────────
+    for slot_num, role, hierarchies, logic_key in active_slots:
+        notes: list[str] = [
+            f"Logic : {logic_key}",
+            f"Hier  : {', '.join(hierarchies)}",
+        ]
+ 
+        # ── 4a. Hierarchy filter ──────────────────────────────────────────
+        hier_pattern = '|'.join(re.escape(h) for h in hierarchies)
+        pool = c[c['Hierarchy'].str.contains(hier_pattern, na=False)].copy()
+        pool = pool[~pool['Material'].isin(used_materials)]
+ 
+        if pool.empty:
+            notes.append("→ SKIP: no candidates after hierarchy filter")
+            slot_notes[slot_num] = notes
+            diag.append((f"Slot {slot_num}", role, "SKIPPED – empty pool"))
+            continue
+ 
+        pool['Final_Score'] = 0.0
+ 
+        # ── 4b. Attribute scoring ─────────────────────────────────────────
+ 
+        # ── Logic: Model Match ────────────────────────────────────────────
+        # Slots 1-6 for both personas.
+        # Boosts products whose 'Συμβατές συσκευές' contains the trigger model.
+        if 'MODEL_MATCH' in logic_key and tmod:
+            match_mask = pool['Συμβατές συσκευές'].str.contains(
+                re.escape(tmod), case=False, na=False
+            )
+            pool.loc[match_mask, 'Final_Score'] += SCORE_MODEL_MATCH
+            notes.append(
+                f"Model Match '{tmod}': {match_mask.sum()} hit(s)"
+            )
+ 
+        # ── Logic: USB Port Match ─────────────────────────────────────────
+        # Slots 7-9 for both personas.
+        # Boosts products whose 'Συμβατό με' mentions the trigger's USB port.
+        if 'USB_PORT' in logic_key and tport:
+            port_mask = pool['Συμβατό με'].str.contains(
+                re.escape(tport), case=False, na=False
+            )
+            pool.loc[port_mask, 'Final_Score'] += SCORE_USB_PORT
+            notes.append(
+                f"USB Port Match '{tport}': {port_mask.sum()} hit(s)"
+            )
+ 
+        # ── Logic: Wattage Boost (30W+) ───────────────────────────────────
+        # Applied to the Fast Charger slot (Pro Slot 8 / Media Slot 7).
+        if 'WATTAGE' in logic_key:
+            watt_mask = pool['Title'].str.contains(
+                r'30\s*W|45\s*W|65\s*W|GaN', case=False, na=False
+            )
+            pool.loc[watt_mask, 'Final_Score'] += SCORE_WATTAGE
+            notes.append(
+                f"Wattage Boost (30W+): {watt_mask.sum()} hit(s)"
+            )
+ 
+        # ── Logic: Cable Length Boost ─────────────────────────────────────
+        # Applied to the Extra Long Cable slot (Media Slot 8).
+        if 'CABLE_LENGTH' in logic_key:
+            len_mask = pool['Title'].str.contains(
+                r'2\s*m\b|2\.0\s*m|3\s*m\b|200\s*cm|300\s*cm',
+                case=False, na=False
+            )
+            pool.loc[len_mask, 'Final_Score'] += SCORE_CABLE_LENGTH
+            notes.append(
+                f"Cable Length Boost (2m+): {len_mask.sum()} hit(s)"
+            )
+ 
+        # ── Logic: OS-Based Storage Expansion ────────────────────────────
+        # Applied to Media Slot 9.
+        # Android → Micro SD (prefer 64/128 GB capacity)
+        # iOS / iPadOS → OTG or USB-C Adapter
+        if logic_key == 'OS_STORAGE_LOGIC':
+            is_android = 'android' in tos
+            is_ios     = any(kw in tos for kw in ('ios', 'ipad', 'ipados'))
+ 
+            if is_android:
+                sd_mask = pool['Hierarchy'].str.contains(
+                    '741000010005', na=False
+                )
+                pool.loc[sd_mask, 'Final_Score'] += SCORE_SD_CARD
+ 
+                cap_mask = pool['Title'].str.contains(
+                    r'64\s*GB|128\s*GB', case=False, na=False
+                )
+                pool.loc[cap_mask, 'Final_Score'] += SCORE_SD_CAPACITY
+                notes.append(
+                    f"Android – SD Card boost: {sd_mask.sum()} items; "
+                    f"64/128 GB boost: {cap_mask.sum()} items"
+                )
+ 
+            elif is_ios:
+                otg_mask = pool['Title'].str.contains(
+                    r'OTG|Adapter|Adaptor', case=False, na=False
+                )
+                pool.loc[otg_mask, 'Final_Score'] += SCORE_OTG_ADAPTER
+                notes.append(
+                    f"iOS/iPadOS – OTG/Adapter boost: {otg_mask.sum()} items"
+                )
+ 
+            else:
+                notes.append(
+                    f"OS_STORAGE_LOGIC: OS='{tos}' not matched (no boost applied)"
+                )
+ 
+        # ── 4c. Rank candidates ───────────────────────────────────────────
+        pool = pool.sort_values(
+            ['Final_Score', 'Sales_Tiebreaker'],
+            ascending=[False, False],
+        )
+ 
+        chosen = pool.iloc[0]
+ 
+        # ── 4d. Build recommendation record ──────────────────────────────
+        rec: dict = chosen.to_dict()
+        rec['Assigned_Slot']  = slot_num
+        rec['Slot_Role']      = role
+        rec['Persona']        = persona_label
+        rec['Final_Score']    = chosen['Final_Score']
+        rec['Marketing_Copy'] = TABLET_MARKETING_COPY.get(role, _DEFAULT_COPY)
+ 
+        all_recs.append(rec)
+        used_materials.add(chosen['Material'])
+        slot_notes[slot_num] = notes
+ 
+        diag.append((
+            f"Slot {slot_num}",
+            role,
+            (
+                f"→ {chosen.get('Material', '?')} | "
+                f"Score={chosen['Final_Score']:.0f} | "
+                f"Sales={chosen['Sales_Tiebreaker']:.0f} | "
+                f"Price={chosen['_p']:.2f}"
+            ),
+        ))
+ 
+    # ── 5. Return ─────────────────────────────────────────────────────────
+    df_recs = pd.DataFrame(all_recs) if all_recs else pd.DataFrame()
+    return df_recs, diag, slot_notes
+ 
+
+
 
 # ═════════════════════════════════════════════════════════════
 # 🟢 LAPTOPS ENGINE — Mainstream / Road Warrior
