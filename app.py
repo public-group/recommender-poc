@@ -6974,61 +6974,55 @@ def run_projectors_engine(trigger, df_products, df_history):
                 pool.loc[m_aur, 'Final_Score'] += 700000
                 notes.append("🟢 AURZEN stand forced")
 
-# ── LOGIC 1, 2, 3 & TIERED SALES ROUTING: AUDIO OUTPUT ──
-        elif logic_key == 'AUDIO_LOGIC':
-            # Μάσκες Ιεραρχιών
+elif logic_key == 'AUDIO_LOGIC':
             pc_mask = pool['Hierarchy'].str.contains('PC SPEAKERS', case=False, na=False)
             bt_mask = pool['Hierarchy'].str.contains('ΦΟΡΗΤΟΥ ΗΧΟΥ', case=False, na=False)
             amp_mask = pool['Hierarchy'].str.contains('AMPLIFIERS|ΕΝΙΣΧΥΤΕΣ', case=False, na=False)
             hifi_mask = pool['Hierarchy'].str.contains('ΗΧΕΙΑ HI-FI', case=False, na=False)
             premium_audio_mask = pool['Hierarchy'].str.contains('SOUNDBARS|MULTIROOM', case=False, na=False)
             
-            # Τα Active (Αυτοενισχυόμενα) είναι είτε αυτά που το γράφουν στον τίτλο, είτε τα PC Speakers
-            active_mask = pool['Title'].str.contains('Αυτοενισχυόμενα|Active|Powered', case=False, na=False) | pc_mask
+            active_mask = pool['Title'].str.contains('Αυτοενισχυόμενα|Active|Powered', case=False, na=False) | pc_mask | premium_audio_mask
 
-            # ==========================================
-            # ΒΗΜΑ Α: ΑΥΣΤΗΡΟΙ ΤΕΧΝΙΚΟΙ ΚΑΝΟΝΕΣ (HARD FILTERS)
-            # ==========================================
+            # --- ECOSYSTEM BRAND MATCH ---
+            is_same_brand = pool['Κατασκευαστής'].fillna('').str.strip().str.upper() == tb
+            pool.loc[is_same_brand, 'Final_Score'] += 250000
+            if is_same_brand.any():
+                notes.append(f"Ecosystem Match: Boosted same-brand audio ({tb})")
+
+            # --- A. HARD TECHNICAL FILTERS ---
             if no_spk:
                 if not has_preamp and is_rca:
-                    # Logic 3a: No Pre-Amp + RCA -> Υποχρεωτικά Amplifiers & Hi-Fi Speakers
                     pool.loc[amp_mask, 'Final_Score'] += 600000
                     pool.loc[hifi_mask, 'Final_Score'] += 400000
-                    notes.append("Strict Logic: No Pre-Amp + RCA -> Forced Amplifiers & Hi-Fi Speakers")
+                    notes.append("Strict: No Pre-Amp -> Forced Amplifiers & Hi-Fi Speakers")
                 else:
-                    # Logic 1: No Speaker Emergency -> Χρειάζεται Active Speakers
                     pool.loc[active_mask, 'Final_Score'] += 200000
-                    notes.append("Strict Logic: No Speakers -> Needs Active/Powered Output")
-                    
+                    notes.append("Strict: No Speakers -> Needs Active/Powered Output")
             elif has_spk or is_suitcase:
-                # Logic 2: Έχει ηχεία ή είναι Βαλιτσάκι -> ΑΠΑΓΟΡΕΥΟΝΤΑΙ Amplifiers & Hi-Fi
                 pool.loc[amp_mask | hifi_mask, 'Final_Score'] -= 900000
-                notes.append("Strict Logic: Suitcase/Has Speakers -> Banned Amplifiers & Hi-Fi")
+                notes.append("Strict: Has Speakers -> Banned Amplifiers & Hi-Fi")
 
-            # ==========================================
-            # ΒΗΜΑ Β: ΕΜΠΟΡΙΚΗ ΣΤΡΑΤΗΓΙΚΗ (TIER & SALES ROUTING)
-            # ==========================================
-            # (Εφαρμόζεται παράλληλα, εκτός αν ο αυστηρός κανόνας του Ενισχυτή έχει ήδη κλειδώσει την κορυφή)
-            
+            # --- B. COMMERCIAL TIERING (SALES & BUDGET) ---
             if ttier == 'Entry':
-                # Entry TV -> Ανεξαρτήτως BT, η καλύτερη πώληση είναι τα PC Speakers 2.0
+                # Entry (Budget πικάπ): Ανεξάρτητα από το αν έχει Bluetooth ή όχι, 
+                # η καλύτερη πώληση σε αυτή την κατηγορία τιμής είναι τα PC SPEAKERS 2.0
                 pool.loc[pc_mask, 'Final_Score'] += 500000
-                notes.append("Sales Tier (Entry): Boosted PC Speakers 2.0 (Best Budget Fit)")
-                
+                notes.append("Sales Tier [Entry]: Boosted PC Speakers 2.0 (Ignored BT)")
             elif ttier == 'Mid':
-                # Mid TV -> Αν έχει BT προωθούμε Φορητά (Top Seller), αλλιώς PC Speakers
+                # Mid (Μεσαία πικάπ): "Λάμπουν" τα ΗΧΕΙΑ ΦΟΡΗΤΟΥ ΗΧΟΥ αν υπάρχει Bluetooth. 
+                # Αν ΔΕΝ έχει Bluetooth, το ιδανικό fallback είναι τα PC Speakers.
                 if is_bt:
                     pool.loc[bt_mask, 'Final_Score'] += 500000
-                    notes.append("Sales Tier (Mid + BT): Boosted Portable BT Speakers")
+                    notes.append("Sales Tier [Mid + BT]: Boosted Portable BT")
                 else:
                     pool.loc[pc_mask, 'Final_Score'] += 500000
-                    notes.append("Sales Tier (Mid + No BT): Boosted PC Speakers (Fallback)")
-                    
+                    notes.append("Sales Tier [Mid + No BT]: Boosted PC Speakers (Fallback)")
             elif ttier == 'Premium':
-                # Premium TV -> Soundbars / Multiroom ή τα πολύ δυνατά φορητά
                 pool.loc[premium_audio_mask, 'Final_Score'] += 500000
-                pool.loc[bt_mask, 'Final_Score'] += 300000  # Δευτερεύον boost στα Φορητά
-                notes.append("Sales Tier (Premium): Boosted Soundbars/Multiroom & High-End BT")
+                if is_bt:
+                    pool.loc[bt_mask, 'Final_Score'] += 300000
+                notes.append("Sales Tier [Premium]: Boosted Soundbars & Multiroom")
+                
 
         elif logic_key == 'BATTERY_LOGIC':
             pass
