@@ -6761,7 +6761,7 @@ def run_projectors_engine(trigger, df_products, df_history):
 
     diag.append((
         "0. Trigger Context",
-        f"Brand={tbrand}, Price=€{tprice:.0f}, Tier={ptier}",
+        f"Brand={tb}, Price=€{tprice:.0f}, Tier={ptier}",
         f"Tech={ttech}, Cinema={is_cinema}, Portable={is_portable}, Freestyle={is_samsung_freestyle}, XGIMI={is_xgimi}, AURZEN={is_aurzen}"
     ))
 
