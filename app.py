@@ -6718,7 +6718,7 @@ def run_projectors_engine(trigger, df_products, df_history):
     tm = trigger['Material']
     tt = str(trigger.get('Title', ''))
     tt_l = tt.lower()
-    tbrand = str(trigger.get('Κατασκευαστής', '')).strip().upper()
+    tb = str(trigger.get('Κατασκευαστής', '')).strip().upper()
     tmodel = str(trigger.get('Μοντέλο', '')).strip()
     tprice = parse_euro_price(trigger.get('LIST PRICE', 0))
 
@@ -6736,9 +6736,9 @@ def run_projectors_engine(trigger, df_products, df_history):
     is_4k        = '4k' in tres or 'uhd' in tres
 
     # Brand-specific flags
-    is_samsung_freestyle = tbrand == 'SAMSUNG' and 'freestyle' in tt_l
-    is_xgimi             = tbrand == 'XGIMI'
-    is_aurzen            = tbrand == 'AURZEN'
+    is_samsung_freestyle = tb == 'SAMSUNG' and 'freestyle' in tt_l
+    is_xgimi             = tb == 'XGIMI'
+    is_aurzen            = tb == 'AURZEN'
 
     # ── Price tier (projector market — tighter than TVs) ──
     # budget : ≤€200    → cheap accessories, no fancy bag/stand
@@ -6871,9 +6871,9 @@ def run_projectors_engine(trigger, df_products, df_history):
                 if is_samsung_freestyle:
                     brand_exempt = title_l_for_exempt.str.contains('freestyle', na=False)
                 elif is_xgimi:
-                    brand_exempt = mfr_col == 'XGIMI'
+                    brand_exempt = mfr_col == tb
                 elif is_aurzen:
-                    brand_exempt = mfr_col == 'AURZEN'
+                    brand_exempt = mfr_col == tb
 
             penalize = overpriced & ~brand_exempt
             pool.loc[penalize, 'Final_Score'] -= 800000
