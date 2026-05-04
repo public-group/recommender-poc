@@ -319,7 +319,7 @@ TURNTABLE_ACCESSORY_BUDGET = {
 
 def get_vinyl_tier(price):
     if price >= 280: return 'Premium'
-    if price >= 140: return 'Mid'
+    if price >= 120: return 'Mid'
     return 'Entry'
 
 # ─────────────────────────────────────────────────────────────
