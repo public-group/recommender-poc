@@ -2870,7 +2870,7 @@ SCORE_CABLE_LENGTH  =   200_000   # Cable ≥ 2 m
  
  
 # ═══════════════════════════════════════════════════════════════════════════════
-# MAIN ENGINE
+# TABLET ENGINE
 # ═══════════════════════════════════════════════════════════════════════════════
  
 def run_tablets_engine(
@@ -3082,7 +3082,7 @@ def run_tablets_engine(
  
     # ── 5. Return ─────────────────────────────────────────────────────────
     df_recs = pd.DataFrame(all_recs) if all_recs else pd.DataFrame()
-    return df_recs, diag, slot_notes
+    return df_recs, diag, slot_notes, df_recs
  
 
 
