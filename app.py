@@ -6750,7 +6750,18 @@ def run_projectors_engine(trigger, df_products, df_history):
         ptier = 'mid'
     else:
         ptier = 'premium'
+        
+    # ── EXTRACTION ΓΙΑ PROJECTORS (Προσθήκη αυτών των γραμμών) ──
+    internal_spk_raw = str(trigger.get('Ενσωματωμένα Ηχεία', '')).lower()
+    # Ορίζουμε αν λείπουν τα ηχεία για να μη χτυπάει το logic παρακάτω
+    no_spk = "δε διαθέτει" in internal_spk_raw 
+    has_spk = "διαθέτει" in internal_spk_raw and "δε διαθέτει" not in internal_spk_raw
 
+    # Επειδή οι προβολείς δεν έχουν Pre-amp ή RCA συνήθως, ορίζουμε 
+    # ψεύτικες (default) τιμές για να μη "σκάει" το κοινό AUDIO_LOGIC
+    has_preamp = True 
+    is_rca = False
+    
     # Per-slot price caps for projectors: (pct_of_trigger, hard_max_eur)
     PROJ_CAPS = {
         'budget':  {'bag': (0.40, 50),  'cable': (0.15, 25), 'screen': (0.40, 80),  'speaker': (0.30, 50),  'battery': (0.10, 12), 'surge': (0.15, 25), 'lamp': (0.50, 100), 'mouse': (0.15, 30), 'keyboard': (0.30, 60), 'party': (0.50, 100)},
