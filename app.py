@@ -825,8 +825,11 @@ L1_CATEGORIES = [
 L2_CHILDREN = {
     "Books":     [{"key": "Kids Books",  "label": "Παιδικά\nΒιβλία",
                    "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 19.5A2.5 2.5 0 0 1 6.5 17H20'/%3E%3Cpath d='M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z'/%3E%3C/svg%3E"}],
-    "Telephony": [{"key": "Smartphones", "label": "Smart-\nphones",
-                   "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='5' y='2' width='14' height='20' rx='2' ry='2'/%3E%3Cline x1='12' y1='18' x2='12.01' y2='18'/%3E%3C/svg%3E"}],
+    "Telephony": [
+        {"key": "Smartphones", "label": "Smart-\nphones", "icon_svg": "..."},
+        {"key": "Tablets", "label": "Tablets", # <--- ΠΡΟΣΘΗΚΗ
+         "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='4' y='2' width='16' height='20' rx='2' ry='2'/%3E%3Cline x1='12' y1='18' x2='12.01' y2='18'/%3E%3C/svg%3E"}
+    ],          
     "IT":        [{"key": "Laptops",     "label": "Laptops",
                    "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='2' y='4' width='20' height='12' rx='1' ry='1'/%3E%3Cline x1='6' y1='20' x2='18' y2='20'/%3E%3Cline x1='12' y1='16' x2='12' y2='20'/%3E%3C/svg%3E"},
                   {"key": "Mouse",      "label": "Mouse",
@@ -1086,7 +1089,25 @@ else:
             st.sidebar.markdown('<p class="sidebar-section">Επιλέξτε Smartphone</p>', unsafe_allow_html=True)
             sel = st.sidebar.selectbox("", phones['Title'].unique(), label_visibility="collapsed", key="sm_sel")
             trigger = phones[phones['Title']==sel].iloc[0] if sel else None
+    elif active_cluster == "Tablets":
+        if df_products.empty: st.stop()
+        # Φιλτράρουμε τη στήλη Level 2 για Tablets
+        tablets = df_products[df_products['Level 2'].fillna('').astype(str).str.strip().str.upper() == 'TABLETS']
+        
+        # 🧪 TEST LIST: Περιορισμός στα συγκεκριμένα SKUs για το PoC
+        tablet_test_skus = {"2033038", "2104523", "2087611", "2033035", "1983050"} # Βάλε εδώ SKUs που έχεις στο αρχείο σου
+        
+        if not tablets.empty:
+            t_filtered = tablets[tablets['Material'].astype(str).str.strip().str.replace(r'\.0$', '', regex=True).isin(tablet_test_skus)]
+            if not t_filtered.empty:
+                tablets = t_filtered
 
+        if tablets.empty:
+            st.sidebar.warning("Δεν βρέθηκαν Tablets στο sheet Products.")
+        else:
+            st.sidebar.markdown('<p class="sidebar-section">Επιλέξτε Tablet</p>', unsafe_allow_html=True)
+            sel = st.sidebar.selectbox("", tablets['Title'].unique(), label_visibility="collapsed", key="tab_sel")
+            trigger = tablets[tablets['Title']==sel].iloc[0] if sel else None
     elif active_cluster == "Laptops":
         if df_laptops.empty:
             st.sidebar.warning("Sheet 'Laptops' is empty or missing.")
@@ -7650,7 +7671,9 @@ elif active_cluster == "Floor Care":
 elif active_cluster == "TVs":
     recs, diag, slot_notes, full_candidates = run_tv_engine(trigger, df_products, df_history)
     slot_diag = []
-
+elif active_cluster == "Tablets":
+    recs, diag, slot_notes, full_candidates = run_tablets_engine(trigger, df_products, df_history)
+    slot_diag = []
 elif active_cluster == "Projectors":
     recs, diag, slot_notes, full_candidates = run_projectors_engine(trigger, df_products, df_history)
     slot_diag = []
@@ -7888,6 +7911,8 @@ with st.expander("⚙️ System Diagnostics"):
         attr_keys_to_show = ['Material','Title','Level 2','Hierarchy','Σειρά βιβλίου','Ηλικία','Εξώφυλλο','Brand','LIST PRICE']
     elif active_cluster == "Laptops":
         attr_keys_to_show = ['Material','Title','Level 1','Level 2','Hierarchy','Κατασκευαστής','Μοντέλο','Προτεινόμενη χρήση','Μέγεθος οθόνης','Θύρες','LIST PRICE']
+    elif active_cluster == "Tablets":
+        attr_keys_to_show = ['Material','Title','Level 2','Κατασκευαστής','Μοντέλο','Experts Rating','Λειτουργικό σύστημα','LIST PRICE']
     else:
         attr_keys_to_show = ['Material','Title','Level 2','Hierarchy','Κατασκευαστής','Μοντέλο','LIST PRICE']
         
