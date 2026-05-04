@@ -102,7 +102,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v22.1 — Peripherals: Mouse/KB/Gaming Mouse/Gaming KB + Streaming Είδος + Monitors (dedicated HDMI/DP/USB ports) + Backfill + Printers + Webcam + USB Hub
+        🟢 Engine v24 — TV & Sound
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -289,7 +289,7 @@ TV_MARKETING_COPY = {
 
 VINYL_SLOTS = [
     (1,  'Αξεσουάρ Μουσικής',   ['MUSIC ACCESSORIES', 'ΒΕΛΟΝΕΣ ΠΙΚΑΠ'], 'ACCESSORY_LOGIC'),
-    (2,  'Ηχείο / Έξοδος Ήχου', ['ΗΧΕΙΑ ΦΟΡΗΤΟΥ ΗΧΟΥ', 'PC SPEAKERS 2.0', 'PC SPEAKERS 1', 'MICRO  Hi-Fi', 'ΗΧΕΙΑ HI-FI', 'AMPLIFIERS'], 'AUDIO_LOGIC'),
+    (2,  'Ηχείο / Έξοδος Ήχου', ['ΗΧΕΙΑ ΦΟΡΗΤΟΥ ΗΧΟΥ', 'PC SPEAKERS 2.0', 'PC SPEAKERS 1', 'MICRO  Hi-Fi', 'ΗΧΕΙΑ HI-FI', 'AMPLIFIERS', 'SOUNDBARS', 'MULTIROOM SPEAKERS'], 'AUDIO_LOGIC'),
     (3,  'LP Electronica/Pop',  ['LP ELECTRONICA/POP/HIP HOP'],         'LP_LOGIC'),
     (4,  'LP Alternative',      ['LP ALTERNATIVE'],                     'LP_LOGIC'),
     (5,  'Καλώδια Ήχου / USB',  ['ΚΑΛΩΔΙΑ 3.5MM JACK', 'ΚΑΛΩΔΙΑ USB'],  'CABLE_JACK_USB_LOGIC'),
@@ -6974,70 +6974,61 @@ def run_projectors_engine(trigger, df_products, df_history):
                 pool.loc[m_aur, 'Final_Score'] += 700000
                 notes.append("🟢 AURZEN stand forced")
 
-        # ── LOGIC 1, 2, 3: AUDIO OUTPUT ──
+# ── LOGIC 1, 2, 3 & TIERED SALES ROUTING: AUDIO OUTPUT ──
         elif logic_key == 'AUDIO_LOGIC':
-            # Μάσκες Ιεραρχιών βάσει των δεδομένων πωλήσεων
+            # Μάσκες Ιεραρχιών
             pc_mask = pool['Hierarchy'].str.contains('PC SPEAKERS', case=False, na=False)
             bt_mask = pool['Hierarchy'].str.contains('ΦΟΡΗΤΟΥ ΗΧΟΥ', case=False, na=False)
-            micro_mask = pool['Hierarchy'].str.contains('MICRO', case=False, na=False)
-            premium_audio_mask = pool['Hierarchy'].str.contains('SOUNDBARS|MULTIROOM', case=False, na=False)
             amp_mask = pool['Hierarchy'].str.contains('AMPLIFIERS|ΕΝΙΣΧΥΤΕΣ', case=False, na=False)
             hifi_mask = pool['Hierarchy'].str.contains('ΗΧΕΙΑ HI-FI', case=False, na=False)
-            active_mask = pool['Title'].str.contains('Αυτοενισχυόμενα|Active|Powered', case=False, na=False)
+            premium_audio_mask = pool['Hierarchy'].str.contains('SOUNDBARS|MULTIROOM', case=False, na=False)
+            
+            # Τα Active (Αυτοενισχυόμενα) είναι είτε αυτά που το γράφουν στον τίτλο, είτε τα PC Speakers
+            active_mask = pool['Title'].str.contains('Αυτοενισχυόμενα|Active|Powered', case=False, na=False) | pc_mask
 
+            # ==========================================
+            # ΒΗΜΑ Α: ΑΥΣΤΗΡΟΙ ΤΕΧΝΙΚΟΙ ΚΑΝΟΝΕΣ (HARD FILTERS)
+            # ==========================================
             if no_spk:
                 if not has_preamp and is_rca:
-                    # 🔴 STRICT Logic 3a: No Pre-Amp -> Needs Amplifier + Passive
+                    # Logic 3a: No Pre-Amp + RCA -> Υποχρεωτικά Amplifiers & Hi-Fi Speakers
                     pool.loc[amp_mask, 'Final_Score'] += 600000
                     pool.loc[hifi_mask, 'Final_Score'] += 400000
-                    notes.append("No Pre-Amp -> Forced Amplifiers & Hi-Fi Speakers")
+                    notes.append("Strict Logic: No Pre-Amp + RCA -> Forced Amplifiers & Hi-Fi Speakers")
                 else:
-                    # 🔴 Logic 1/3b: Has Pre-Amp, needs Active Speakers. Scale by TIER.
+                    # Logic 1: No Speaker Emergency -> Χρειάζεται Active Speakers
                     pool.loc[active_mask, 'Final_Score'] += 200000
+                    notes.append("Strict Logic: No Speakers -> Needs Active/Powered Output")
                     
-                    if ttier == 'Entry':
-                        # Entry TV -> PC Speakers 2.0 (19 sales, ~84€ avg)
-                        pool.loc[pc_mask, 'Final_Score'] += 500000
-                        notes.append("Entry / No Spk -> Boosted PC Speakers 2.0 (Best Budget Fit)")
-                    elif ttier == 'Mid':
-                        # Mid TV -> Portable BT if BT exists (~140€ avg), else Micro Hi-Fi (~94€ avg)
-                        if is_bt:
-                            pool.loc[bt_mask, 'Final_Score'] += 500000
-                            notes.append("Mid / No Spk / BT -> Boosted Portable BT (Top Seller)")
-                        else:
-                            pool.loc[micro_mask, 'Final_Score'] += 500000
-                            pool.loc[pc_mask, 'Final_Score'] += 400000
-                            notes.append("Mid / No Spk / No BT -> Boosted Micro Hi-Fi & PC Speakers")
-                    else:
-                        # Premium TV -> Soundbars / Multiroom (~200-213€ avg)
-                        if is_bt:
-                            pool.loc[premium_audio_mask, 'Final_Score'] += 500000
-                            pool.loc[bt_mask, 'Final_Score'] += 400000
-                            notes.append("Premium / BT -> Boosted Soundbars/Multiroom & Premium BT")
-                        else:
-                            pool.loc[premium_audio_mask, 'Final_Score'] += 500000
-                            pool.loc[micro_mask, 'Final_Score'] += 400000
-                            notes.append("Premium / No BT -> Boosted Soundbars & Micro Hi-Fi")
-
             elif has_spk or is_suitcase:
-                # 🔴 STRICT Logic 2: AVOID Amplifiers & Hi-Fi
+                # Logic 2: Έχει ηχεία ή είναι Βαλιτσάκι -> ΑΠΑΓΟΡΕΥΟΝΤΑΙ Amplifiers & Hi-Fi
                 pool.loc[amp_mask | hifi_mask, 'Final_Score'] -= 900000
+                notes.append("Strict Logic: Suitcase/Has Speakers -> Banned Amplifiers & Hi-Fi")
+
+            # ==========================================
+            # ΒΗΜΑ Β: ΕΜΠΟΡΙΚΗ ΣΤΡΑΤΗΓΙΚΗ (TIER & SALES ROUTING)
+            # ==========================================
+            # (Εφαρμόζεται παράλληλα, εκτός αν ο αυστηρός κανόνας του Ενισχυτή έχει ήδη κλειδώσει την κορυφή)
+            
+            if ttier == 'Entry':
+                # Entry TV -> Ανεξαρτήτως BT, η καλύτερη πώληση είναι τα PC Speakers 2.0
+                pool.loc[pc_mask, 'Final_Score'] += 500000
+                notes.append("Sales Tier (Entry): Boosted PC Speakers 2.0 (Best Budget Fit)")
                 
-                # Routing βάσει Tier & Συνδεσιμότητας
-                if ttier == 'Entry':
-                    pool.loc[pc_mask, 'Final_Score'] += 500000
-                    notes.append("Suitcase Entry -> Boosted PC Speakers 2.0 (Avoid Amp)")
-                elif ttier == 'Mid':
-                    if is_bt:
-                        pool.loc[bt_mask, 'Final_Score'] += 500000
-                        notes.append("Suitcase Mid / BT -> Boosted Portable BT (Avoid Amp)")
-                    else:
-                        pool.loc[pc_mask, 'Final_Score'] += 500000
-                        notes.append("Suitcase Mid / No BT -> Boosted PC Speakers (Avoid Amp)")
+            elif ttier == 'Mid':
+                # Mid TV -> Αν έχει BT προωθούμε Φορητά (Top Seller), αλλιώς PC Speakers
+                if is_bt:
+                    pool.loc[bt_mask, 'Final_Score'] += 500000
+                    notes.append("Sales Tier (Mid + BT): Boosted Portable BT Speakers")
                 else:
-                    pool.loc[premium_audio_mask, 'Final_Score'] += 500000
-                    pool.loc[bt_mask, 'Final_Score'] += 400000
-                    notes.append("Suitcase Premium -> Boosted Soundbars / High-End Portable")
+                    pool.loc[pc_mask, 'Final_Score'] += 500000
+                    notes.append("Sales Tier (Mid + No BT): Boosted PC Speakers (Fallback)")
+                    
+            elif ttier == 'Premium':
+                # Premium TV -> Soundbars / Multiroom ή τα πολύ δυνατά φορητά
+                pool.loc[premium_audio_mask, 'Final_Score'] += 500000
+                pool.loc[bt_mask, 'Final_Score'] += 300000  # Δευτερεύον boost στα Φορητά
+                notes.append("Sales Tier (Premium): Boosted Soundbars/Multiroom & High-End BT")
 
         elif logic_key == 'BATTERY_LOGIC':
             pass
