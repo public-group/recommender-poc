@@ -7158,11 +7158,11 @@ def run_vinyl_engine(trigger, df_products, df_music, df_history):
 
     diag.append(("0b. Data", f"Music Rows={len(df_music)}", f"Product Rows={len(df_products)}"))
 
-    # Candidate pools for different sheets
+   # Candidate pools για διαφορετικά sheets
     c_prod = df_products[df_products['Material'] != tm].copy()
     c_music = df_music[df_music['Material'] != tm].copy() if not df_music.empty else pd.DataFrame()
     
-    # Prep sales for sorting
+    # Προετοιμασία πωλήσεων
     c_prod['Sales_30'] = pd.to_numeric(c_prod.get('Sum of Sales', 0), errors='coerce').fillna(0)
     if not c_music.empty:
         c_music['Sales_30'] = pd.to_numeric(c_music.get('Sum of Sales', 0), errors='coerce').fillna(0)
@@ -7276,7 +7276,10 @@ elif active_cluster == "TVs":
 elif active_cluster == "Projectors":
     recs, diag, slot_notes, full_candidates = run_projectors_engine(trigger, df_products, df_history)
     slot_diag = []
-
+elif active_cluster == "Turntables":
+    recs, diag, slot_notes = run_vinyl_engine(trigger, df_products, df_music, df_history)
+    slot_diag = []
+    full_candidates = recs
 elif active_cluster in ("Mouse", "Keyboard", "Gaming Mouse", "Gaming Keyboard"):
     recs, diag, slot_notes, full_candidates = run_peripherals_engine(trigger, df_peripherals, df_history, active_cluster)
     slot_diag = []
