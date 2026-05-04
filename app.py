@@ -1128,27 +1128,27 @@ else:
 
 
 
-elif active_cluster == "Turntables":
-        if df_products.empty: st.stop()
-        
-        # FIX: Robust filtering στη στήλη Hierarchy αντί για Level 2
-        hier_col = df_products['Hierarchy'].fillna('').astype(str).str.strip().str.upper()
-        turntables = df_products[hier_col == 'ΠΙΚΑΠ']
-
-        # 🧪 TEST LIST: Περιορισμός στα συγκεκριμένα SKUs
-        tt_test_skus = {"1956497", "2106285", "1821326", "1402320", "1873884"}
-        
-        if not turntables.empty:
-            t_filtered = turntables[turntables['Material'].astype(str).str.strip().str.replace(r'\.0$', '', regex=True).isin(tt_test_skus)]
-            if not t_filtered.empty:
-                turntables = t_filtered
-
-        if turntables.empty:
-            st.sidebar.warning("Δεν βρέθηκαν test Πικάπ στη στήλη Hierarchy.")
-        else:
-            st.sidebar.markdown('<p class="sidebar-section">Επιλέξτε Πικάπ</p>', unsafe_allow_html=True)
-            sel = st.sidebar.selectbox("", turntables['Title'].unique(), label_visibility="collapsed", key="tt_sel")
-            trigger = turntables[turntables['Title']==sel].iloc[0] if sel else None
+    elif active_cluster == "Turntables":
+            if df_products.empty: st.stop()
+            
+            # FIX: Robust filtering στη στήλη Hierarchy αντί για Level 2
+            hier_col = df_products['Hierarchy'].fillna('').astype(str).str.strip().str.upper()
+            turntables = df_products[hier_col == 'ΠΙΚΑΠ']
+    
+            # 🧪 TEST LIST: Περιορισμός στα συγκεκριμένα SKUs
+            tt_test_skus = {"1956497", "2106285", "1821326", "1402320", "1873884"}
+            
+            if not turntables.empty:
+                t_filtered = turntables[turntables['Material'].astype(str).str.strip().str.replace(r'\.0$', '', regex=True).isin(tt_test_skus)]
+                if not t_filtered.empty:
+                    turntables = t_filtered
+    
+            if turntables.empty:
+                st.sidebar.warning("Δεν βρέθηκαν test Πικάπ στη στήλη Hierarchy.")
+            else:
+                st.sidebar.markdown('<p class="sidebar-section">Επιλέξτε Πικάπ</p>', unsafe_allow_html=True)
+                sel = st.sidebar.selectbox("", turntables['Title'].unique(), label_visibility="collapsed", key="tt_sel")
+                trigger = turntables[turntables['Title']==sel].iloc[0] if sel else None
 
     
     elif active_cluster == "Floor Care":
