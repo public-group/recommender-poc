@@ -711,7 +711,17 @@ def _is_airpod(row):
     # Apple-branded earbuds count even if the title is sanitized
     return brand == 'APPLE'
  
- 
+ def get_tablet_tier(price):
+    """Categorize a tablet based on its price."""
+    if price is None:
+        return 'Unknown'
+    elif price < 300:
+        return 'Budget'
+    elif price <= 800:
+        return 'Mid-range'
+    else:
+        return 'Premium'
+        
 def _model_match_mask(pool, model):
     if not model or 'Συμβατές συσκευές' not in pool.columns:
         return pd.Series(False, index=pool.index)
