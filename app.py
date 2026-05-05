@@ -162,39 +162,7 @@ LAPTOP_MARKETING_COPY = {
 # 🟢 TABLETS CONFIGURATION
 # ═════════════════════════════════════════════════════════════
 
-TABLET_MARKETING_COPY = {
-    # Standard / Premium path
-    "Keyboard Case":        "Μεταμόρφωσε το tablet σε laptop.",
-    "Tablet Bag":           "Ασφαλής μεταφορά παντού.",
-    "NB Bag":               "Χωρητική θήκη laptop-style.",
-    "Wall Charger":         "Γρήγορη φόρτιση κάθε στιγμή.",
-    "Cable":                "Ανθεκτικό καλώδιο για καθημερινή χρήση.",
-    "Bluetooth":            "Ασύρματος ήχος χωρίς συμβιβασμούς.",
-    "Wireless Keyboard":    "Πληκτρολόγησε άνετα από παντού.",
-    "Wireless Mouse":       "Ακρίβεια χωρίς καλώδια.",
-    "Screen Protector":     "Προστασία οθόνης χωρίς συμβιβασμούς.",
-    "Overhead":             "Καθηλωτικός ήχος over-ear.",
-    "Smartwatch":           "Όλες οι ειδοποιήσεις στον καρπό σου.",
-    "Stylus":               "Ακρίβεια για σημειώσεις & σχέδιο.",
-    "Storage":               "Επέκτεινε τον αποθηκευτικό σου χώρο.",
 
-    # iPad path
-    "Apple Original 1":      "Γνήσιο αξεσουάρ Apple για το iPad σου.",
-    "Apple Original 2":      "Γνήσιο αξεσουάρ Apple για το iPad σου.",
-    "Apple Original 3":      "Γνήσιο αξεσουάρ Apple για το iPad σου.",
-    "Apple Original 4":      "Γνήσιο αξεσουάρ Apple για το iPad σου.",
-    "Apple Wall Charger":    "Original Apple φόρτιση.",
-    "Apple Cable":           "Γνήσιο καλώδιο Apple.",
-    "AirPods":               "Ο ασύρματος ήχος της Apple.",
-    "Apple Watch":           "Συμπλήρωσε το Apple οικοσύστημα.",
-    "USB Flash + Adapter":   "Επέκτεινε τον αποθηκευτικό σου χώρο.",
-
-    # Kiddoboo path
-    "Party Speaker":         "Ξεσήκωσε το πάρτι.",
-    "Action Camera":         "Κατέγραψε κάθε περιπέτεια.",
-    "Smartphone":            "Πρώτο κινητό για μικρούς εξερευνητές.",
-    "Travel/Scooter":        "Έξω από το σπίτι, σε κίνηση.",
-}
 
 TABLET_PREMIUM_BRANDS = {'APPLE', 'SAMSUNG', 'HUAWEI', 'XIAOMI', 'MICROSOFT'}
  
