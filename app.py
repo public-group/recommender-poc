@@ -1241,25 +1241,37 @@ else:
             st.sidebar.markdown('<p class="sidebar-section">Επιλέξτε Smartphone</p>', unsafe_allow_html=True)
             sel = st.sidebar.selectbox("", phones['Title'].unique(), label_visibility="collapsed", key="sm_sel")
             trigger = phones[phones['Title']==sel].iloc[0] if sel else None
+    
+    
     elif active_cluster == "Tablets":
         if df_products.empty: st.stop()
-        # Φιλτράρουμε τη στήλη Level 2 για Tablets
-        tablets = df_products[df_products['Level 2'].fillna('').astype(str).str.strip().str.upper() == 'TABLETS']
-        
-        # 🧪 TEST LIST: Περιορισμός στα συγκεκριμένα SKUs για το PoC
-        tablet_test_skus = {"2033038", "2104523", "2087611", "2033035", "1983050"} # Βάλε εδώ SKUs που έχεις στο αρχείο σου
-        
-        if not tablets.empty:
-            t_filtered = tablets[tablets['Material'].astype(str).str.strip().str.replace(r'\.0$', '', regex=True).isin(tablet_test_skus)]
+        # Fetch by Level 2 or Hierarchy depending on your Excel mapping
+        tabs = df_products[df_products['Level 2'].fillna('').astype(str).str.strip().str.upper() == 'TABLETS'].copy()
+        if tabs.empty:
+            tabs = df_products[df_products['Hierarchy'].fillna('').astype(str).str.strip().str.upper().isin(
+                ['TABLETS', 'TABLETS & IPADS', 'IPADS', 'ΤΑΜΠΛΕΤ', 'TABLET PC']
+            )].copy()
+    
+        # ─────────────────────────────────────────────────────────────
+        # 🧪 TEST LIST: Restrict the dropdown to specific SKUs
+        # ─────────────────────────────────────────────────────────────
+        tablet_test_skus = {
+            "2004601", "2037260", "2072249", "2100875",
+            "2071356", "2066261", "2075971"
+        }
+        if not tabs.empty:
+            t_filtered = tabs[tabs['Material'].astype(str).str.strip().str.replace(r'\.0$', '', regex=True).isin(tablet_test_skus)]
             if not t_filtered.empty:
-                tablets = t_filtered
-
-        if tablets.empty:
-            st.sidebar.warning("Δεν βρέθηκαν Tablets στο sheet Products.")
+                tabs = t_filtered
+        # ─────────────────────────────────────────────────────────────
+        if tabs.empty:
+            st.sidebar.warning("Δεν βρέθηκαν test Tablets.")
         else:
             st.sidebar.markdown('<p class="sidebar-section">Επιλέξτε Tablet</p>', unsafe_allow_html=True)
-            sel = st.sidebar.selectbox("", tablets['Title'].unique(), label_visibility="collapsed", key="tab_sel")
-            trigger = tablets[tablets['Title']==sel].iloc[0] if sel else None
+            sel = st.sidebar.selectbox("", tabs['Title'].unique(), label_visibility="collapsed", key="tab_sel")
+            trigger = tabs[tabs['Title']==sel].iloc[0] if sel else None
+    
+    
     elif active_cluster == "Laptops":
         if df_laptops.empty:
             st.sidebar.warning("Sheet 'Laptops' is empty or missing.")
