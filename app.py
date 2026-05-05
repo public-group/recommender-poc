@@ -694,7 +694,19 @@ def safe(v): return html_lib.escape(str(v))
 # ═══════════════════════════════════════════════════════════════════════════════
 # TABLET HELPERS
 # ═══════════════════════════════════════════════════════════════════════════════
- 
+
+def get_tablet_tier(price):
+    """Categorize a tablet based on its price."""
+    if price is None:
+        return 'Unknown'
+    elif price < 300:
+        return 'Budget'
+    elif price <= 800:
+        return 'Mid-range'
+    else:
+        return 'Premium'
+
+
 def _is_branded_stylus(row):
     brand = str(row.get('Κατασκευαστής', '')).strip().upper()
     title = str(row.get('Title', '')).upper()
@@ -710,17 +722,6 @@ def _is_airpod(row):
         return True
     # Apple-branded earbuds count even if the title is sanitized
     return brand == 'APPLE'
- 
- def get_tablet_tier(price):
-    """Categorize a tablet based on its price."""
-    if price is None:
-        return 'Unknown'
-    elif price < 300:
-        return 'Budget'
-    elif price <= 800:
-        return 'Mid-range'
-    else:
-        return 'Premium'
         
 def _model_match_mask(pool, model):
     if not model or 'Συμβατές συσκευές' not in pool.columns:
