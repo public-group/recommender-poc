@@ -164,46 +164,32 @@ LAPTOP_MARKETING_COPY = {
 
 
 
-# ============================================================================
-# CONSTANTS
-# ============================================================================
- 
 TABLET_PREMIUM_BRANDS = {'APPLE', 'SAMSUNG', 'HUAWEI', 'XIAOMI', 'MICROSOFT'}
  
-BRANDED_STYLUS_BRANDS = {
-    'APPLE', 'SAMSUNG', 'HUAWEI', 'XIAOMI', 'MICROSOFT', 'LENOVO', 'WACOM', 'LOGITECH'
-}
-BRANDED_STYLUS_KEYWORDS = (
-    'apple pencil', 's pen', 's-pen', 'spen', 'surface pen',
-    'm-pen', 'smart pen', 'stylus pen'
-)
+# Score weights — higher = stronger preference
+S_BRAND_BOOST       = 100_000   # always-on for trigger-brand match
+S_BRAND_STRONG      = 500_000   # for slots where brand is the primary signal
+S_MODEL_MATCH       = 500_000   # accessory's compat field contains trigger model
+S_CATEGORY_TARGET   = 400_000   # slot's targeted Κατηγορία / Είδος
+S_CATEGORY_REPEAT   = -600_000  # already-shown category penalty
+S_PORT_MATCH        = 300_000   # Θύρα USB / Σύνδεση direct match
+S_PORT_MISMATCH     = -300_000  # explicit port wrong (e.g. USB-A flash on Type-C iPad)
+S_BLUETOOTH_REQ     = 400_000   # Bluetooth required (iPad mouse/keyboard)
+S_USB_RECEIVER_PEN  = -700_000  # USB-receiver mouse on iPad → broken
+S_WATTAGE_TIER      = 250_000   # charger wattage matches tablet tier
+S_CASE_TYPE_PRIMARY = 250_000   # Folio for premium / Back Cover for standard
+S_COLOR_EXACT       = 200_000   # Χρώμα contains a trigger color token
+S_COLOR_TRANSPARENT = 80_000    # transparent fallback
+S_SIZE_MATCH        = 300_000   # NB-bag size band overlaps tablet screen size
+S_TOUCHPAD_BOOST    = 150_000   # premium tablet → touchpad keyboard
+S_HIERARCHY_TARGET  = 200_000   # slot prefers a specific hierarchy when multiple allowed
+S_PRICE_PENALTY     = -200_000  # exceeds budget cap × 1.5
+S_OTG_BONUS         = 100_000   # adapter compat
+S_AIRPODS_BOOST     = 400_000   # iPad Bluetooth slot → AirPods
+S_MAGIC_MOUSE_BOOST = 600_000   # iPad mouse slot → Magic Mouse
+S_UNBRANDED_STYLUS  = 50_000    # generic stylus preferred over branded for non-Apple
  
-TRANSPARENT_COLORS = {'διάφανο', 'διαφανο', 'transparent', 'clear'}
- 
-# Score deltas (kept consistent in magnitude)
-SCORE_MODEL_MATCH       =   500_000
-SCORE_CATEGORY_TARGET   =   400_000   # iPad: hits the targeted Apple Original category
-SCORE_CATEGORY_REPEAT   =  -600_000   # iPad: penalty for already-shown category
-SCORE_SIZE_MATCH        =   300_000
-SCORE_OS_STORAGE        =   300_000
-SCORE_PORT_MATCH        =   200_000
-SCORE_PRICE_PENALTY     =  -200_000
-SCORE_BRAND_BOOST       =   100_000
-SCORE_BRAND_STRONG      =   500_000
-SCORE_OTG_PORT_BONUS    =   100_000
-SCORE_AIRPODS_BOOST     =   400_000
-SCORE_MAGIC_MOUSE_BOOST =   600_000
-SCORE_BLUETOOTH_REQ     =   400_000
-SCORE_USB_RECEIVER_PEN  =  -700_000
-SCORE_TYPEC_FLASH_BOOST =   500_000
-SCORE_USBA_FLASH_PEN    =  -150_000
-SCORE_COLOR_EXACT       =   200_000
-SCORE_COLOR_TRANSPARENT =    80_000
-SCORE_TOUCHPAD_BOOST    =   150_000
-SCORE_BACKCOVER_FILTER  =   250_000
-SCORE_FOLIO_FILTER      =   250_000
-SCORE_UNBRANDED         =    50_000
- 
+# Self-contained fallbacks — override in your main config module
 try:
     TABLET_ACCESSORY_BUDGET     # noqa: F821
 except NameError:
@@ -218,200 +204,6 @@ try:
     TABLET_MARKETING_COPY        # noqa: F821
 except NameError:
     TABLET_MARKETING_COPY = {}
- 
- 
-# ============================================================================
-# TEXT HELPERS
-# ============================================================================
- 
-# Greek → Latin lookalikes for fuzzy model matching.
-_GR_TO_LATIN = str.maketrans({
-    'α':'a','β':'b','γ':'g','δ':'d','ε':'e','ζ':'z','η':'h',
-    'ι':'i','κ':'k','λ':'l','μ':'m','ν':'n','ο':'o','π':'p',
-    'ρ':'r','τ':'t','υ':'y','φ':'f','χ':'x',
-    'Α':'a','Β':'b','Γ':'g','Δ':'d','Ε':'e','Ζ':'z','Η':'h',
-    'Ι':'i','Κ':'k','Λ':'l','Μ':'m','Ν':'n','Ο':'o','Π':'p',
-    'Ρ':'r','Τ':'t','Υ':'y','Φ':'f','Χ':'x',
-    'ά':'a','έ':'e','ή':'h','ί':'i','ό':'o','ύ':'y','ώ':'w',
-})
- 
-def _norm(s):
-    """Lowercase + Greek→Latin transliteration for fuzzy matching."""
-    return str(s).lower().translate(_GR_TO_LATIN)
- 
- 
-def _classify_apple_original(row):
-    """Map an Apple Original Tablet Accessory to a coarse category."""
-    title = _norm(row.get('Title', ''))
-    if any(k in title for k in ('pencil', 'stylus', 'grafida', 'γραφιδα')):
-        return 'Stylus'
-    if 'magic keyboard' in title or 'smart keyboard' in title or 'keyboard' in title \
-       or 'pliktrologio' in title:
-        return 'Keyboard'
-    if 'smart folio' in title or 'folio' in title:
-        return 'Folio'
-    if 'smart cover' in title or 'cover' in title:
-        return 'Cover'
-    if 'airtag' in title:
-        return 'AirTag'
-    if 'airpod' in title or 'earpod' in title or 'akoystik' in title or 'hands-free' in title:
-        return 'Audio'
-    if 'adapter' in title or 'antapt' in title or 'hub' in title:
-        return 'Adapter'
-    if 'cable' in title or 'kalwdio' in title:
-        return 'Cable'
-    if 'charger' in title or 'fortist' in title or 'power adapter' in title:
-        return 'Charger'
-    if 'thiki' in title or 'sleeve' in title or 'bag' in title or 'case' in title:
-        return 'Case'
-    return 'Other'
- 
- 
-def _is_branded_stylus(row):
-    brand = str(row.get('Κατασκευαστής', '')).strip().upper()
-    title = _norm(row.get('Title', ''))
-    if brand in BRANDED_STYLUS_BRANDS:
-        return True
-    return any(k in title for k in BRANDED_STYLUS_KEYWORDS)
- 
- 
-def _is_airpod(row):
-    title = _norm(row.get('Title', ''))
-    brand = str(row.get('Κατασκευαστής', '')).strip().upper()
-    return 'airpod' in title or brand == 'APPLE'
- 
- 
-def _is_magic_mouse(row):
-    return 'magic mouse' in _norm(row.get('Title', ''))
- 
- 
-def _is_bluetooth_mouse(row):
-    title = _norm(row.get('Title', ''))
-    conn  = _norm(row.get('Συνδεσιμότητα', ''))
-    if 'bluetooth' in title or 'bluetooth' in conn:
-        return True
-    return 'magic mouse' in title
- 
- 
-def _is_usb_receiver_mouse(row):
-    title = _norm(row.get('Title', ''))
-    conn  = _norm(row.get('Συνδεσιμότητα', ''))
-    keywords = ('nano receiver', 'usb receiver', 'wireless 2.4',
-                '2.4ghz', '2.4 ghz', 'unifying')
-    return any(k in title or k in conn for k in keywords)
- 
- 
-def _model_match_mask(pool, model, also_title=True):
-    """Match model against compat columns (plural + singular) + title.
-    Greek/Latin lookalikes normalized so 'iPad Α16' (Greek) matches Latin 'A'.
-    """
-    if not model:
-        return pd.Series(False, index=pool.index)
-    pat = re.escape(_norm(model))
-    cols = []
-    for c in ('Συμβατές συσκευές', 'Συμβατή συσκευή'):
-        if c in pool.columns:
-            cols.append(c)
-    if also_title:
-        cols.append('Title')
-    mask = pd.Series(False, index=pool.index)
-    for col in cols:
-        col_mask = (pool[col].fillna('').astype(str)
-                    .map(_norm).str.contains(pat, regex=True, na=False))
-        mask = mask | col_mask
-    return mask
- 
- 
-def _port_match_mask(pool, port):
-    if not port or 'Συμβατό με' not in pool.columns:
-        return pd.Series(False, index=pool.index)
-    pat = re.escape(_norm(port))
-    return (pool['Συμβατό με'].fillna('').astype(str)
-            .map(_norm).str.contains(pat, regex=True, na=False))
- 
- 
-def _renumber(slots):
-    return [(i + 1, role, hier, logic) for i, (_, role, hier, logic) in enumerate(slots)]
- 
- 
-def _budget_cap(role, caps):
-    r = role.lower()
-    if any(k in r for k in ('overhead', 'audio', 'bluetooth', 'airpods', 'speaker', 'hands-free')):
-        return caps.get('audio', 999)
-    if any(k in r for k in ('charger', 'cable', 'power')):
-        return caps.get('power', 999)
-    if any(k in r for k in ('case', 'bag', 'sleeve', 'cover', 'folio')):
-        return caps.get('case', 999)
-    return caps.get('default', 999)
- 
- 
-# ============================================================================
-# SLOT BUILDERS
-# ============================================================================
- 
-def _build_kiddoboo_slots():
-    return [
-        (None, 'Overhead',         ['OVERHEAD'],                          'GENERIC'),
-        (None, 'Smartwatch',       ['SMART WATCHES', 'ACTIVITY TRACKER'], 'GENERIC'),
-        (None, 'Wall Charger',     ['WALL CHARGERS'],                     'PORT_MATCH'),
-        (None, 'Cable',            ['ΚΑΛΩΔΙΑ ΔΕΔΟΜΕΝΩΝ', 'USB CABLES'],   'PORT_MATCH'),
-        (None, 'Party Speaker',    ['ΗΧΕΙΑ ΦΟΡΗΤΟΥ ΗΧΟΥ'],                'GENERIC'),
-        (None, 'Action Camera',    ['IP CAMERAS', 'TRAVEL ACCESSORIES'],  'GENERIC'),
-        (None, 'Smartphone',       ['Smartphones'],                       'GENERIC'),
-        (None, 'Travel/Scooter',   ['TRAVEL ACCESSORIES'],                'GENERIC'),
-        (None, 'Bluetooth',        ['Bluetooth'],                         'GENERIC'),
-        (None, 'Screen Protector', ['MOBILE SCREEN PROTECTORS'],          'MODEL_MATCH'),
-    ]
- 
- 
-def _build_apple_ipad_slots():
-    """Explicit category targeting prevents the all-stylus failure mode."""
-    APPLE_ORIG = ['APPLE ORIGINAL TABLET ACCESSORIES', 'APPLE ORIGINAL TABLET BAGS']
-    return [
-        (None, 'Apple Pencil',         APPLE_ORIG,                                                   'APPLE_TARGET:Stylus'),
-        (None, 'Smart Folio',          APPLE_ORIG,                                                   'APPLE_TARGET:Folio,Cover,Case'),
-        (None, 'Apple Keyboard',       APPLE_ORIG,                                                   'APPLE_TARGET:Keyboard'),
-        (None, 'Apple Other',          APPLE_ORIG,                                                   'APPLE_TARGET:Adapter,AirTag,Other'),
-        (None, 'Apple Wall Charger',   ['APPLE ORIGINAL POWER SUPPLY', 'WALL CHARGERS'],             'CHARGER_APPLE_FB'),
-        (None, 'Apple Cable',          ['APPLE ORIGINAL IPHONE CABLE-ADAPTORS', 'ΚΑΛΩΔΙΑ ΔΕΔΟΜΕΝΩΝ'], 'CABLE_APPLE_FB'),
-        (None, 'AirPods',              ['Bluetooth'],                                                'AIRPODS_BOOST'),
-        (None, 'Apple Watch',          ['SMART WATCHES'],                                            'BRAND_MATCH'),
-        (None, 'Wireless Mouse',       ['MOUSE WIRELESS'],                                           'MOUSE_FIT'),
-        (None, 'USB-C Storage',        ['USB FLASH DISK', 'ΚΑΛΩΔΙΑ-ADAPTORS'],                       'STORAGE_FIT'),
-    ]
- 
- 
-def _build_standard_slots(has_kb_match, is_premium):
-    slots = []
-    if has_kb_match:
-        slots.append((None, 'Keyboard Case',     ['TABLETS KEYBOARDS'],                'KEYBOARD_FIT'))
-        slots.append((None, 'Wall Charger',      ['WALL CHARGERS'],                    'PORT_MATCH'))
-        slots.append((None, 'NB Bag',            ['NB BAGS', 'ΘΗΚΕΣ SLEEVE LAPTOP'],   'SIZE_MATCH'))
-        slots.append((None, 'Tablet Bag',        ['TABLET BAGS'],                      'CASE_FIT'))
-    else:
-        slots.append((None, 'Tablet Bag',        ['TABLET BAGS'],                      'CASE_FIT'))
-        slots.append((None, 'Wall Charger',      ['WALL CHARGERS'],                    'PORT_MATCH'))
- 
-    slots.append((None, 'Bluetooth',             ['Bluetooth'],                        'GENERIC'))
- 
-    if not has_kb_match:
-        slots.append((None, 'Wireless Keyboard', ['KEYBOARDS WIRELESS'],               'KEYBOARD_FIT'))
- 
-    slots.append((None, 'Screen Protector',      ['MOBILE SCREEN PROTECTORS'],         'MODEL_MATCH'))
-    slots.append((None, 'Overhead',              ['OVERHEAD'],                         'GENERIC'))
-    slots.append((None, 'Smartwatch',            ['SMART WATCHES'],                    'GENERIC'))
-    slots.append((None, 'Cable',                 ['ΚΑΛΩΔΙΑ ΔΕΔΟΜΕΝΩΝ', 'USB CABLES'], 'PORT_MATCH'))
- 
-    stylus = (None, 'Stylus', ['ΓΡΑΦΙΔΕΣ'], 'UNBRANDED_STYLUS')
-    if is_premium:
-        insert_idx = 4 if has_kb_match else 1
-        slots.insert(insert_idx, stylus)
-    else:
-        slots.append(stylus)
- 
-    slots.append((None, 'Wireless Mouse', ['MOUSE WIRELESS'],             'MOUSE_FIT'))
-    slots.append((None, 'Storage',        ['MICRO SD', 'USB FLASH DISK'], 'STORAGE_FIT'))
-    return slots[:10]
  
 
 # ═════════════════════════════════════════════════════════════
@@ -792,65 +584,87 @@ def safe(v): return html_lib.escape(str(v))
 # TABLET HELPERS
 # ═══════════════════════════════════════════════════════════════════════════════
 
-def get_tablet_tier(price):
-    """Categorize a tablet based on its price."""
-    if price is None:
-        return 'Unknown'
-    elif price < 300:
-        return 'Budget'
-    elif price <= 800:
-        return 'Mid-range'
-    else:
-        return 'Premium'
+def _norm_col_name(s):
+    return (str(s).replace('\xa0', ' ')
+                  .replace('≡', '')
+                  .strip()
+                  .lower())
+ 
+ 
+def _col(df, name):
+    """Return the actual column name in df matching `name` (NBSP/≡ tolerant),
+    or None if absent."""
+    target = _norm_col_name(name)
+    for c in df.columns:
+        if _norm_col_name(c) == target:
+            return c
+    return None
+ 
+ 
+def _series(df, name, default=''):
+    """Get column as a string Series, defaulting to empty if column missing."""
+    c = _col(df, name)
+    if c is None:
+        return pd.Series(default, index=df.index, dtype=object)
+    return df[c].fillna(default).astype(str)
+ 
+def _compat_mask(pool, model):
+    """Match the trigger model against accessory compat fields (BOTH
+    'Συμβατές συσκευές' plural and 'Συμβατή συσκευή' singular). Pure
+    case-insensitive substring match — no transliteration."""
+    if not model:
+        return pd.Series(False, index=pool.index)
+    pat = re.escape(model)
+    mask = pd.Series(False, index=pool.index)
+    for col_name in ('Συμβατές συσκευές', 'Συμβατή συσκευή'):
+        col = _col(pool, col_name)
+        if col:
+            mask = mask | pool[col].fillna('').astype(str).str.contains(
+                pat, case=False, regex=True, na=False)
+    return mask
+ 
+ 
+def _port_mask_chargers(pool, trigger_port):
+    """For WALL CHARGERS — match by Θύρα USB column (values: '2 x USB-A',
+    'Type-C')."""
+    if not trigger_port:
+        return pd.Series(False, index=pool.index)
+    s = _series(pool, 'Θύρα USB').str.lower()
+    tp = trigger_port.lower()
+    if 'type-c' in tp or 'usb-c' in tp:
+        return s.str.contains('type-c', na=False) | s.str.contains('usb-c', na=False)
+    if 'usb-a' in tp or 'micro' in tp or 'lightning' in tp:
+        return s.str.contains('usb-a', na=False)
+    return pd.Series(False, index=pool.index)
+ 
+ 
+def _port_mask_cables(pool, trigger_port):
+    """For ΚΑΛΩΔΙΑ ΔΕΔΟΜΕΝΩΝ — match by Τύπος σύνδεσης column."""
+    if not trigger_port:
+        return pd.Series(False, index=pool.index)
+    s = _series(pool, 'Τύπος σύνδεσης').str.lower()
+    tp = trigger_port.lower()
+    if 'type-c' in tp or 'usb-c' in tp:
+        return s.str.contains('type-c', na=False) | s.str.contains('usb-c', na=False)
+    if 'lightning' in tp:
+        return s.str.contains('lightning', na=False)
+    if 'micro' in tp:
+        return s.str.contains('micro', na=False)
+    return pd.Series(False, index=pool.index)
+ 
+ 
+def _port_mask_flash(pool, trigger_port):
+    """For USB FLASH DISK — match by Σύνδεση column (values: USB-A, USB-C,
+    USB) and Interface (USB 3.x preferred for Type-C)."""
+    if not trigger_port:
+        return pd.Series(False, index=pool.index)
+    sigma = _series(pool, 'Σύνδεση').str.lower()
+    tp = trigger_port.lower()
+    if 'type-c' in tp or 'usb-c' in tp:
+        return sigma.str.contains('usb-c', na=False)
+    return sigma.str.contains('usb-a', na=False)
 
 
-def _is_branded_stylus(row):
-    brand = str(row.get('Κατασκευαστής', '')).strip().upper()
-    title = str(row.get('Title', '')).upper()
-    if brand in BRANDED_STYLUS_BRANDS:
-        return True
-    return any(k in title for k in BRANDED_STYLUS_KEYWORDS)
- 
- 
-def _is_airpod(row):
-    title = str(row.get('Title', '')).upper()
-    brand = str(row.get('Κατασκευαστής', '')).strip().upper()
-    if 'AIRPOD' in title:
-        return True
-    # Apple-branded earbuds count even if the title is sanitized
-    return brand == 'APPLE'
-        
-def _model_match_mask(pool, model):
-    if not model or 'Συμβατές συσκευές' not in pool.columns:
-        return pd.Series(False, index=pool.index)
-    return (pool['Συμβατές συσκευές']
-            .fillna('').astype(str)
-            .str.contains(re.escape(model), case=False, na=False))
- 
- 
-def _port_match_mask(pool, port):
-    if not port or 'Συμβατό με' not in pool.columns:
-        return pd.Series(False, index=pool.index)
-    return (pool['Συμβατό με']
-            .fillna('').astype(str)
-            .str.contains(port, case=False, na=False))
- 
- 
-def _renumber(slots):
-    """Re-stamp slot numbers 1..N preserving order."""
-    return [(i + 1, role, hier, logic) for i, (_, role, hier, logic) in enumerate(slots)]
- 
- 
-def _budget_cap_for_role(role, caps):
-    r = role.lower()
-    if any(k in r for k in ('overhead', 'audio', 'bluetooth', 'airpods', 'speaker', 'hands-free')):
-        return caps.get('audio', 999)
-    if any(k in r for k in ('charger', 'cable', 'power')):
-        return caps.get('power', 999)
-    if any(k in r for k in ('case', 'bag', 'sleeve', 'cover')):
-        return caps.get('case', 999)
-    return caps.get('default', 999)
- 
 
 # ═════════════════════════════════════════════════════════════
 # 🟢 LAPTOPS HELPERS
