@@ -406,7 +406,9 @@ def _budget_cap(role, caps):
         return caps.get('power', 999)
     if any(k in r for k in ('case', 'bag', 'sleeve', 'cover', 'folio')):
         return caps.get('case', 999)
-
+    
+    # Catch-all for Screen Protectors, Mice, Keyboards, etc.
+    return caps.get('default', 999)
 
 
 # ═════════════════════════════════════════════════════════════
