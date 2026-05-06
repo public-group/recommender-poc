@@ -102,7 +102,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v24 — TV & Sound
+        🟢 Engine v25 — Tablets
     </div>
 </div>
 """, unsafe_allow_html=True)
