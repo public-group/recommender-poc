@@ -949,6 +949,24 @@ def _size_match_mask(pool, tablet_size_inches):
     s = _series(pool, 'Μέγεθος')
     return s.apply(lambda b: _size_band_matches(b, tablet_size_inches))
 
+def get_tablet_tier(price):
+    """Map a tablet's LIST PRICE (€) to a budget tier string.
+
+    Returns one of: 'Premium' | 'High' | 'Mid' | 'Entry'
+    These match the keys in TABLET_ACCESSORY_BUDGET and WATTAGE_TIER_PREFS.
+    """
+    try:
+        p = float(price)
+    except (TypeError, ValueError):
+        return 'Entry'
+    if p >= 900:
+        return 'Premium'
+    if p >= 500:
+        return 'High'
+    if p >= 200:
+        return 'Mid'
+    return 'Entry'
+    
 # ═════════════════════════════════════════════════════════════
 # 🟢 LAPTOPS HELPERS
 # ═════════════════════════════════════════════════════════════
