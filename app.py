@@ -826,9 +826,27 @@ def title_sim(a, b): return SequenceMatcher(None, a.lower(), b.lower()).ratio() 
 def safe(v): return html_lib.escape(str(v))
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# TABLET HELPERS
+# TABLET 
 # ═══════════════════════════════════════════════════════════════════════════════
 
+def get_tablet_tier(price):
+    """Map a tablet's LIST PRICE (€) to a budget tier string.
+
+    Returns one of: 'Premium' | 'High' | 'Mid' | 'Entry'
+    These match the keys in TABLET_ACCESSORY_BUDGET and WATTAGE_TIER_PREFS.
+    """
+    try:
+        p = float(price)
+    except (TypeError, ValueError):
+        return 'Entry'
+    if p >= 900:
+        return 'Premium'
+    if p >= 500:
+        return 'High'
+    if p >= 200:
+        return 'Mid'
+    return 'Entry'
+    
 def _norm_col_name(s):
     return (str(s).replace('\xa0', ' ').replace('≡', '').strip().lower())
  
