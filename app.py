@@ -476,6 +476,7 @@ def _budget_range(role, ttier):
     if any(k in r for k in ('stylus','pencil','γραφίδα','γραφιδα')):
         return caps.get('stylus', caps['default'])
     return caps['default']
+ 
     
 # ═════════════════════════════════════════════════════════════
 # 🟢 FLOOR CARE CONFIGURATION
@@ -3499,7 +3500,9 @@ def run_tablets_engine(trigger, df_products, df_history):
             pool.loc[pool['_apple_cat'].isin(used_apple_cats),
                      'Final_Score'] += S_CATEGORY_REPEAT
             if base == 'APPLE_TARGET_STRICT' and tmod:
-                mm2 = _compat_mask(pool, tmod)
+                # Exact match — substring would let "iPad Pro" match
+                # "iPad Pro 11" 2024 (M4)" cross-listings on Air keyboards.
+                mm2 = _exact_compat_match(pool, tmod)
                 if mm2.any():
                     pool = pool[mm2]
                 else:
@@ -3520,6 +3523,10 @@ def run_tablets_engine(trigger, df_products, df_history):
                     em = _exact_compat_match(folio_pool, tmod)
                     if em.any():
                         pool = folio_pool[em]
+                        # Color boost — Silver iPad should prefer Silver/White
+                        # folio over Sky/Pink when multiple exact-compat colors
+                        # exist.
+                        pool = _apply_color_boost(pool, color_toks)
                         apple_folio_ok = True
                         notes.append('APPLE_FOLIO_EXACT')
             if not apple_folio_ok:
@@ -3893,7 +3900,7 @@ def run_tablets_engine(trigger, df_products, df_history):
                if all_recs else pd.DataFrame())
     return recs_df, diag, slot_notes, recs_df
 
-
+    
 # ═════════════════════════════════════════════════════════════
 # 🟢 LAPTOPS ENGINE — Mainstream / Road Warrior
 # ═════════════════════════════════════════════════════════════
