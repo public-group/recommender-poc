@@ -476,8 +476,7 @@ def _budget_range(role, ttier):
     if any(k in r for k in ('stylus','pencil','γραφίδα','γραφιδα')):
         return caps.get('stylus', caps['default'])
     return caps['default']
- 
-
+    
 # ═════════════════════════════════════════════════════════════
 # 🟢 FLOOR CARE CONFIGURATION
 # ═════════════════════════════════════════════════════════════
@@ -1114,6 +1113,7 @@ def _nb_bag_fallback_pool(c, used_materials, tb, tsize, is_premium):
         # Premium tablet → prefer pricier sleeves (proxy for quality)
         nb['Final_Score'] += nb['_p'].fillna(0) * 100
     return nb
+ 
  
  
 # ═════════════════════════════════════════════════════════════
@@ -3397,6 +3397,7 @@ SCORE_CABLE_LENGTH  =   200_000   # Cable ≥ 2 m
 # TABLET ENGINE
 # ═══════════════════════════════════════════════════════════════════════════════
 
+
 def run_tablets_engine(trigger, df_products, df_history):
     diag, slot_notes, all_recs = [], {}, []
  
@@ -3780,20 +3781,75 @@ def run_tablets_engine(trigger, df_products, df_history):
         slot_notes[slot_num] = notes
  
     # ----- Fallback pass -----
-    # Skip slots whose logic key is in LOGIC_NO_FALLBACK (e.g. screen protector)
-    fallback_targets = [s for s in failed_slots
-                        if s[3] not in LOGIC_NO_FALLBACK]
+    # Failures fall into three categories:
+    #
+    #  A. COMPAT_FAIL  — main loop correctly rejected because no model match
+    #                    exists in this hierarchy. Re-running with relaxed
+    #                    filters here would just bring the wrong-model items
+    #                    back. Either redirect to a different hierarchy
+    #                    (e.g. Folio failure → NB BAG) or skip the slot.
+    #
+    #  B. NO_FALLBACK  — slot's logic key explicitly opts out (e.g. screen
+    #                    protector). Always skip.
+    #
+    #  C. POOL_FAIL    — original hierarchy pool was empty / over-filtered
+    #                    by budget. Safe to relax to brand+sales over the
+    #                    same hierarchy or FALLBACK_HIERARCHIES.
  
-    if fallback_targets:
+    COMPAT_FAIL_REASONS = {'NO_MODEL_COMPAT', 'NO_APPLE_TARGET',
+                            'NO_FOLIO_NO_NB', 'NO_CASE_NO_NB'}
+ 
+    if failed_slots:
         diag.append(("3. Fallback Pass",
-                     f"{len(fallback_targets)} unfilled",
-                     "Brand+sales relaxed"))
+                     f"{len(failed_slots)} unfilled",
+                     "Compat→NB Bag/skip; Pool→brand+sales"))
  
-        for slot_num, role, hierarchies, logic_key, reason in fallback_targets:
+        for slot_num, role, hierarchies, logic_key, reason in failed_slots:
+            # B. NO_FALLBACK — explicit skip
+            if logic_key in LOGIC_NO_FALLBACK:
+                continue
+ 
+            # A. COMPAT_FAIL — don't re-search the same hierarchy
+            if reason in COMPAT_FAIL_REASONS:
+                # For case-y slots (Folio / Tablet Bag / Smart Folio), redirect
+                # to NB BAG fallback instead of picking a wrong-model brand
+                # match from the same hierarchy.
+                role_l = role.lower()
+                is_case_role = any(k in role_l for k in
+                                    ('case', 'bag', 'folio', 'cover', 'sleeve'))
+                if is_case_role:
+                    nb = _nb_bag_fallback_pool(c, used_materials, tb,
+                                                tsize, is_premium)
+                    if nb.empty:
+                        slot_notes[slot_num] = (slot_notes.get(slot_num, [])
+                                                + ['FALLBACK_NB_EMPTY'])
+                        continue
+                    nb = nb.sort_values(['Final_Score', 'Sales_Tiebreaker'],
+                                         ascending=[False, False])
+                    chosen = nb.iloc[0]
+                    rc = chosen.copy()
+                    rc['Assigned_Slot']  = slot_num
+                    rc['Slot_Role']      = 'NB Bag'
+                    rc['Marketing_Copy'] = TABLET_MARKETING_COPY.get(
+                        'NB Bag', 'Εναλλακτική επιλογή.')
+                    all_recs.append(rc)
+                    used_materials.add(chosen['Material'])
+                    slot_notes[slot_num] = (slot_notes.get(slot_num, [])
+                                            + ['FALLBACK_TO_NB_BAG',
+                                               f"score={chosen['Final_Score']:.0f}",
+                                               f"brand={str(chosen.get('Κατασκευαστής', ''))[:20]}"])
+                    continue
+ 
+                # For non-case compat failures (e.g. keyboard with no model
+                # compat), skip the slot rather than push an incompatible
+                # accessory. The user said "if not a match, dont show it".
+                slot_notes[slot_num] = (slot_notes.get(slot_num, [])
+                                        + ['FALLBACK_SKIPPED_COMPAT'])
+                continue
+ 
+            # C. POOL_FAIL — safe to relax to brand+sales
             pool = c[c['Hierarchy'].isin(hierarchies)].copy()
             pool = pool[~pool['Material'].isin(used_materials)]
-            # NEW: exclude already-used Apple categories so the keyboard
-            # fallback can't pick another Pencil
             if used_apple_cats and '_apple_cat' in pool.columns:
                 pool = pool[~pool['_apple_cat'].isin(used_apple_cats)]
  
@@ -3836,6 +3892,8 @@ def run_tablets_engine(trigger, df_products, df_history):
     recs_df = (pd.DataFrame(all_recs).sort_values('Assigned_Slot')
                if all_recs else pd.DataFrame())
     return recs_df, diag, slot_notes, recs_df
+
+
 # ═════════════════════════════════════════════════════════════
 # 🟢 LAPTOPS ENGINE — Mainstream / Road Warrior
 # ═════════════════════════════════════════════════════════════
