@@ -161,7 +161,10 @@ LAPTOP_MARKETING_COPY = {
 # ═════════════════════════════════════════════════════════════
 # 🟢 TABLETS CONFIGURATION
 # ═════════════════════════════════════════════════════════════
-
+══════════════════════════════════════════════
+# ░░ 1. TABLET CONFIGURATION ░░
+# ════════════════════════════════════════════════════════════════════════════
+ 
 TABLET_PREMIUM_BRANDS = {'APPLE', 'SAMSUNG', 'HUAWEI', 'XIAOMI', 'MICROSOFT'}
  
 KNOWN_TABLET_BRANDS = {
@@ -203,55 +206,73 @@ S_PREMIUM_VARIANT   =   800_000   # NEW: boost expensive variants for premium ti
  
 # ────────────────────────────────────────────────────────────
 # Budget ranges per tier × role group  (min, max) in euros
+# Tier thresholds (set in get_tablet_tier):
+#     Pro            ≥ 1050
+#     Upper Medium   750 – 1049
+#     Medium         550 – 749
+#     Low            250 – 549
+#     Budget         < 250
 # ────────────────────────────────────────────────────────────
 TABLET_ACCESSORY_BUDGET = {
-    'Premium': {
-        'audio':    (200, 600),     # raised min: AirPods Pro for Premium
-        'power':    (20,  120),     # lowered min so Apple 20W (€25) fits cleanly
-        'cable':    (15,   60),
-        'case':     (40,  250),
-        'storage':  (25,  200),
-        'wear':     (350, 900),     # raised min: Apple Watch Series/Ultra
-        'mouse':    (40,  250),
-        'keyboard': (60,  400),
-        'stylus':   (40,  250),
-        'default':  (15,  300),
+    'Pro': {
+        'audio':    (250, 700),
+        'power':    (25,  150),
+        'cable':    (15,   80),
+        'case':     (50,  300),
+        'storage':  (30,  250),
+        'wear':     (400,1000),
+        'mouse':    (50,  300),
+        'keyboard': (80,  500),
+        'stylus':   (50,  300),
+        'default':  (15,  400),
     },
-    'High': {
-        'audio':    (100, 350),
+    'Upper Medium': {
+        'audio':    (150, 450),
+        'power':    (20,  100),
+        'cable':    (12,   50),
+        'case':     (35,  200),
+        'storage':  (20,  150),
+        'wear':     (250, 700),
+        'mouse':    (35,  180),
+        'keyboard': (50,  300),
+        'stylus':   (35,  200),
+        'default':  (12,  300),
+    },
+    'Medium': {
+        'audio':    (80,  300),
         'power':    (15,   70),
         'cable':    (10,   40),
         'case':     (25,  150),
-        'storage':  (15,  120),
-        'wear':     (180, 500),
-        'mouse':    (20,  120),
-        'keyboard': (40,  200),
-        'stylus':   (25,  150),
+        'storage':  (15,  100),
+        'wear':     (150, 500),
+        'mouse':    (25,  120),
+        'keyboard': (30,  150),
+        'stylus':   (20,  120),
         'default':  (10,  200),
     },
-    'Mid': {
-        'audio':    (20,  150),
-        'power':    (8,    40),
-        'cable':    ( 5,   25),
-        'case':     (10,   80),
-        'storage':  ( 8,   60),
-        'wear':     (50,  300),
-        'mouse':    (10,   60),
-        'keyboard': (15,   70),     # tightened: kills Armaggeddon mech kbd at Mid
-        'stylus':   (10,   60),
-        'default':  ( 5,  120),
+    'Low': {
+        'audio':    (30,  180),
+        'power':    (10,   45),
+        'cable':    ( 8,   30),
+        'case':     (15,   90),
+        'storage':  (10,   70),
+        'wear':     (60,  250),
+        'mouse':    (15,   80),
+        'keyboard': (10,   40),    # user spec: ≤ 40€ for €398 tablet
+        'stylus':   (12,   80),
+        'default':  ( 8,  150),
     },
-    'Entry': {
-        'audio':    ( 5,   80),
-        'power':    ( 5,   35),     # raised max so Xiaomi 33W charger (~€30) fits
-        'cable':    ( 3,   15),
-        'case':     ( 5,   40),
-        'storage':  ( 5,   30),
+    'Budget': {
+        'audio':    ( 5,  100),
+        'power':    ( 5,   35),
+        'cable':    ( 3,   18),
+        'case':     ( 5,   45),
+        'storage':  ( 5,   40),
         'wear':     (25,  150),
-        'mouse':    ( 5,   30),
-        'keyboard': (10,   50),
-        'stylus':   ( 5,   30),
-        'default':  ( 3,   60),
+        'mouse':    ( 5,   40),
+        'keyboard': ( 5,   20),    # user spec: ≤ 20€ for €180 tablet
+        'stylus':   ( 5,   35),
+        'default':  ( 3,   80),
     },
 }
  
@@ -287,10 +308,11 @@ TABLET_MARKETING_COPY = {
  
  
 WATTAGE_TIER_PREFS = {
-    'Premium': ['21 - 60 Watt', '61 - 100 Watt'],
-    'High':    ['21 - 60 Watt', 'Έως 20 Watt'],
-    'Mid':     ['Έως 20 Watt', '21 - 60 Watt'],
-    'Entry':   ['Έως 20 Watt', '21 - 60 Watt'],   # widened so Xiaomi 33W Entry ok
+    'Pro':          ['21 - 60 Watt', '61 - 100 Watt'],
+    'Upper Medium': ['21 - 60 Watt', '61 - 100 Watt'],
+    'Medium':       ['21 - 60 Watt', 'Έως 20 Watt'],
+    'Low':          ['Έως 20 Watt', '21 - 60 Watt'],
+    'Budget':       ['Έως 20 Watt', '21 - 60 Watt'],
 }
  
  
@@ -407,8 +429,15 @@ def _build_standard_slots(has_kb_match, is_premium):
         slots.append((None, 'Wireless Keyboard', ['KEYBOARDS WIRELESS'],               'KEYBOARD_WIRELESS_FIT'))
  
     slots.append((None, 'Screen Protector',      ['MOBILE SCREEN PROTECTORS'],         'SCREEN_PROTECTOR_FIT'))
-    slots.append((None, 'Overhead',              ['OVERHEAD'],                         'BRAND_FIRST'))   # CHANGED
-    slots.append((None, 'Smartwatch',            ['SMART WATCHES'],                    'BRAND_MATCH'))   # was BRAND_FIRST; needs color+variant
+    # Reorder: when there's no kb match, the early layout has Bluetooth at slot 3.
+    # We don't want Bluetooth + Overhead both inside slots 1-6 (audio-redundant).
+    # Pull Smartwatch up to 6, push Overhead to 7.
+    if has_kb_match:
+        slots.append((None, 'Overhead',          ['OVERHEAD'],                         'BRAND_FIRST'))
+        slots.append((None, 'Smartwatch',        ['SMART WATCHES'],                    'BRAND_MATCH'))
+    else:
+        slots.append((None, 'Smartwatch',        ['SMART WATCHES'],                    'BRAND_MATCH'))
+        slots.append((None, 'Overhead',          ['OVERHEAD'],                         'BRAND_FIRST'))
     slots.append((None, 'Cable',                 ['ΚΑΛΩΔΙΑ ΔΕΔΟΜΕΝΩΝ', 'USB CABLES'], 'CABLE_FIT'))
  
     stylus = (None, 'Stylus', ['ΓΡΑΦΙΔΕΣ'], 'STYLUS_FIT')
@@ -428,7 +457,7 @@ def _renumber(slots):
  
  
 def _budget_range(role, ttier):
-    caps = TABLET_ACCESSORY_BUDGET.get(ttier, TABLET_ACCESSORY_BUDGET['Mid'])
+    caps = TABLET_ACCESSORY_BUDGET.get(ttier, TABLET_ACCESSORY_BUDGET['Low'])
     r = role.lower()
     if any(k in r for k in ('overhead','airpods','speaker','hands-free','bluetooth','audio')):
         return caps.get('audio', caps['default'])
@@ -831,21 +860,18 @@ def safe(v): return html_lib.escape(str(v))
 
 def get_tablet_tier(price):
     """Map a tablet's LIST PRICE (€) to a budget tier string.
-
-    Returns one of: 'Premium' | 'High' | 'Mid' | 'Entry'
-    These match the keys in TABLET_ACCESSORY_BUDGET and WATTAGE_TIER_PREFS.
+    Returns one of: 'Pro' | 'Upper Medium' | 'Medium' | 'Low' | 'Budget'
+    Matches the keys in TABLET_ACCESSORY_BUDGET and WATTAGE_TIER_PREFS.
     """
     try:
         p = float(price)
     except (TypeError, ValueError):
-        return 'Entry'
-    if p >= 900:
-        return 'Premium'
-    if p >= 500:
-        return 'High'
-    if p >= 200:
-        return 'Mid'
-    return 'Entry'
+        return 'Budget'
+    if p >= 1050: return 'Pro'
+    if p >=  750: return 'Upper Medium'
+    if p >=  550: return 'Medium'
+    if p >=  250: return 'Low'
+    return 'Budget'
     
 def _norm_col_name(s):
     return (str(s).replace('\xa0', ' ').replace('≡', '').strip().lower())
@@ -882,6 +908,29 @@ def _compat_mask(pool, model):
         if col:
             mask = mask | pool[col].fillna('').astype(str).str.contains(
                 pat, case=False, regex=True, na=False)
+    return mask
+ 
+ 
+def _exact_compat_match(pool, model):
+    """Token-level EXACT match. Splits compat field on ; / , | newline,
+    strips, lowercases, and checks if the trigger model equals one of the
+    tokens. Used by CASE_FIT and APPLE_FOLIO_STRICT — substring matching is
+    too loose ("iPad Pro" should NOT match "iPad Pro 12.9-inch 5th Gen")."""
+    if not model:
+        return pd.Series(False, index=pool.index)
+    target = str(model).strip().lower()
+ 
+    def matches(s):
+        if not s:
+            return False
+        tokens = re.split(r'[;/,\n|]+', str(s).lower())
+        return any(t.strip() == target for t in tokens)
+ 
+    mask = pd.Series(False, index=pool.index)
+    for col_name in ('Συμβατές συσκευές', 'Συμβατή συσκευή'):
+        col = _col(pool, col_name)
+        if col:
+            mask = mask | pool[col].fillna('').apply(matches)
     return mask
  
  
@@ -983,7 +1032,7 @@ def _port_mask_flash(pool, trigger_port):
  
  
 def _wattage_pref_mask(pool, ttier):
-    prefs = WATTAGE_TIER_PREFS.get(ttier, WATTAGE_TIER_PREFS['Mid'])
+    prefs = WATTAGE_TIER_PREFS.get(ttier, WATTAGE_TIER_PREFS['Low'])
     s = _series(pool, 'Ισχύς (Watt)')
     if s.eq('').all():
         s = _series(pool, 'Ισχύς')
@@ -1048,6 +1097,26 @@ def _apply_budget_filter(pool, role, ttier):
     if soft.any():
         return pool[soft]
     return pool
+ 
+ 
+def _nb_bag_fallback_pool(c, used_materials, tb, tsize, is_premium):
+    """Return an NB BAG / SLEEVE pool scored for fallback when no compat
+    case exists. Brand match boost + size match boost + premium price scale.
+    Caller checks if returned pool is empty before using."""
+    nb = c[c['Hierarchy'].isin(['NB BAGS', 'ΘΗΚΕΣ SLEEVE LAPTOP'])].copy()
+    nb = nb[~nb['Material'].isin(used_materials)]
+    if nb.empty:
+        return nb
+    nb['Final_Score'] = 0.0
+    nb_brand = (_series(nb, 'Κατασκευαστής').str.upper().str.strip() == tb)
+    nb.loc[nb_brand, 'Final_Score'] += S_BRAND_BOOST
+    if tsize > 0:
+        nb.loc[_size_match_mask(nb, tsize), 'Final_Score'] += S_SIZE_MATCH
+    if is_premium:
+        # Premium tablet → prefer pricier sleeves (proxy for quality)
+        nb['Final_Score'] += nb['_p'].fillna(0) * 100
+    return nb
+ 
  
 # ═════════════════════════════════════════════════════════════
 # 🟢 LAPTOPS HELPERS
@@ -3350,7 +3419,8 @@ def run_tablets_engine(trigger, df_products, df_history):
     color_toks = _color_tokens(tcolor)
  
     is_premium    = tb in TABLET_PREMIUM_BRANDS and (
-                      ttier == 'Premium' or trat in ('Excellent', 'Top Quality'))
+                      ttier in ('Pro', 'Upper Medium')
+                      or trat in ('Excellent', 'Top Quality'))
     is_apple_ipad = tb == 'APPLE'
     is_kiddoboo   = tb == 'KIDDOBOO'
  
@@ -3439,6 +3509,7 @@ def run_tablets_engine(trigger, df_products, df_history):
                     continue
  
         # ───── APPLE FOLIO STRICT — Folio with NB BAG fallback ─────
+        # Exact model match required (no "iPad Pro" → "iPad Pro 12.9").
         elif base == 'APPLE_FOLIO_STRICT':
             in_target = pool['_apple_cat'].isin(['Folio'])
             apple_folio_ok = False
@@ -3447,29 +3518,19 @@ def run_tablets_engine(trigger, df_products, df_history):
                 folio_pool.loc[folio_pool['_apple_cat'].isin(used_apple_cats),
                                'Final_Score'] += S_CATEGORY_REPEAT
                 if tmod:
-                    mm2 = _compat_mask(folio_pool, tmod)
-                    if mm2.any():
-                        pool = folio_pool[mm2]
+                    em = _exact_compat_match(folio_pool, tmod)
+                    if em.any():
+                        pool = folio_pool[em]
                         apple_folio_ok = True
-                        notes.append('APPLE_FOLIO')
+                        notes.append('APPLE_FOLIO_EXACT')
             if not apple_folio_ok:
-                # Inline fallback to NB BAG with size match (premium for premium)
-                nb_pool = c[c['Hierarchy'].isin(['NB BAGS', 'ΘΗΚΕΣ SLEEVE LAPTOP'])].copy()
-                nb_pool = nb_pool[~nb_pool['Material'].isin(used_materials)]
-                if nb_pool.empty:
+                nb = _nb_bag_fallback_pool(c, used_materials, tb, tsize, is_premium)
+                if nb.empty:
                     slot_notes[slot_num] = notes + ['NO_FOLIO_NO_NB']
                     failed_slots.append((slot_num, role, hierarchies, logic_key, 'NO_FOLIO_NO_NB'))
                     continue
-                nb_pool['Final_Score'] = 0.0
-                nb_brand = (_series(nb_pool, 'Κατασκευαστής')
-                            .str.upper().str.strip() == tb)
-                nb_pool.loc[nb_brand, 'Final_Score'] += S_BRAND_BOOST
-                if tsize > 0:
-                    nb_pool.loc[_size_match_mask(nb_pool, tsize),
-                                'Final_Score'] += S_SIZE_MATCH
-                if is_premium:
-                    nb_pool['Final_Score'] += nb_pool['_p'].fillna(0) * 100  # scale by price
-                pool = nb_pool
+                pool = nb
+                role = 'NB Bag'
                 notes.append('NB_BAG_FALLBACK')
  
         # ───── BRAND-FIRST hard filter ─────
@@ -3477,25 +3538,36 @@ def run_tablets_engine(trigger, df_products, df_history):
             pool = _brand_first_filter(pool, tb)
  
         # ───── TABLET BAG / CASE fit ─────
+        # Exact model match required. If no exact match, fall back INLINE to
+        # NB BAG (size+brand boost, sales tiebreak). No partial substring
+        # matches like "iPad Pro" → "iPad Pro 12.9-inch 5th Gen".
         elif base == 'CASE_FIT':
-            pool = _brand_first_filter_case(pool, tb)
-            # Require model compat — drops "Galaxy Tab S11 case for S10 Lite"
+            case_pool = _brand_first_filter_case(pool, tb)
+            exact_match_found = False
             if tmod:
-                mm = _compat_mask(pool, tmod)
-                if mm.any():
-                    pool = pool[mm]
-                else:
-                    slot_notes[slot_num] = notes + ['NO_MODEL_COMPAT']
-                    failed_slots.append((slot_num, role, hierarchies, logic_key, 'NO_MODEL_COMPAT'))
+                em = _exact_compat_match(case_pool, tmod)
+                if em.any():
+                    pool = case_pool[em].copy()
+                    exact_match_found = True
+                    notes.append('CASE_EXACT')
+                    ttype = _series(pool, 'Τύπος Θήκης').str.lower()
+                    if is_premium or is_apple_ipad:
+                        pool.loc[ttype.isin(['folio', 'book cover']),
+                                 'Final_Score'] += S_CASE_TYPE_PRIMARY
+                    else:
+                        pool.loc[ttype.eq('back cover'),
+                                 'Final_Score'] += S_CASE_TYPE_PRIMARY
+                    pool = _apply_color_boost(pool, color_toks)
+            if not exact_match_found:
+                # Inline NB BAG fallback — change role label so the user sees it
+                nb = _nb_bag_fallback_pool(c, used_materials, tb, tsize, is_premium)
+                if nb.empty:
+                    slot_notes[slot_num] = notes + ['NO_CASE_NO_NB']
+                    failed_slots.append((slot_num, role, hierarchies, logic_key, 'NO_CASE_NO_NB'))
                     continue
-            ttype = _series(pool, 'Τύπος Θήκης').str.lower()
-            if is_premium or is_apple_ipad:
-                pool.loc[ttype.isin(['folio', 'book cover']),
-                         'Final_Score'] += S_CASE_TYPE_PRIMARY
-            else:
-                pool.loc[ttype.eq('back cover'),
-                         'Final_Score'] += S_CASE_TYPE_PRIMARY
-            pool = _apply_color_boost(pool, color_toks)
+                pool = nb
+                role = 'NB Bag'
+                notes.append('NB_BAG_FALLBACK')
  
         # ───── TABLET KEYBOARD fit ─────
         elif base == 'KEYBOARD_TABLET_FIT':
@@ -3626,13 +3698,15 @@ def run_tablets_engine(trigger, df_products, df_history):
             if is_apple_ipad and has_bt.any():
                 pool = pool[has_bt]
  
-        # ───── AIRPODS / Bluetooth audio (premium variant boost) ─────
+        # ───── AIRPODS / Bluetooth audio (brand-first + premium variant) ─────
         elif base == 'AIRPODS_BOOST':
-            sb = _series(pool, 'Κατασκευαστής').str.upper().str.strip() == tb
-            pool.loc[sb, 'Final_Score'] += S_AIRPODS_BOOST
-            # Premium tier → boost expensive variants (AirPods Pro/Max ~ €280+)
+            # Hard filter — iPad slot 7 always gets Apple Bluetooth (whichever
+            # variant is in the dataset). Was a soft boost; JBL Tour Pro 3 was
+            # winning over AirPods 4 because of the premium-variant boost.
+            pool = _brand_first_filter(pool, tb)
             if is_premium:
-                pool.loc[pool['_p'] >= 250, 'Final_Score'] += S_PREMIUM_VARIANT
+                # Among Apple options, boost expensive variants (Pro/Max)
+                pool.loc[pool['_p'] >= 200, 'Final_Score'] += S_PREMIUM_VARIANT
  
         # ───── BRAND match (Apple Watch on iPad, Smartwatch on standard) ─────
         elif base == 'BRAND_MATCH':
@@ -3764,7 +3838,6 @@ def run_tablets_engine(trigger, df_products, df_history):
     recs_df = (pd.DataFrame(all_recs).sort_values('Assigned_Slot')
                if all_recs else pd.DataFrame())
     return recs_df, diag, slot_notes, recs_df
-    
 # ═════════════════════════════════════════════════════════════
 # 🟢 LAPTOPS ENGINE — Mainstream / Road Warrior
 # ═════════════════════════════════════════════════════════════
