@@ -162,7 +162,7 @@ LAPTOP_MARKETING_COPY = {
 # 🟢 TABLETS CONFIGURATION
 # ═════════════════════════════════════════════════════════════
 
- 
+
 TABLET_PREMIUM_BRANDS = {'APPLE', 'SAMSUNG', 'HUAWEI', 'XIAOMI', 'MICROSOFT'}
  
 KNOWN_TABLET_BRANDS = {
@@ -378,7 +378,7 @@ def _build_kiddoboo_slots():
         (None, 'Smartwatch',       ['SMART WATCHES', 'ACTIVITY TRACKER'], 'BRAND_FIRST'),
         (None, 'Wall Charger',     ['WALL CHARGERS'],                     'CHARGER_FIT'),
         (None, 'Cable',            ['ΚΑΛΩΔΙΑ ΔΕΔΟΜΕΝΩΝ', 'USB CABLES'],   'CABLE_FIT'),
-        (None, 'Party Speaker',    ['KARAOKE', 'ΗΧΕΙΑ ΦΟΡΗΤΟΥ ΗΧΟΥ'],                'BRAND_FIRST'),
+        (None, 'Party Speaker',    ['ΗΧΕΙΑ ΦΟΡΗΤΟΥ ΗΧΟΥ'],                'BRAND_FIRST'),
         (None, 'Action Camera',    ['IP CAMERAS', 'TRAVEL ACCESSORIES'],  'BRAND_FIRST'),
         (None, 'Smartphone',       ['Smartphones'],                       'BRAND_FIRST'),
         (None, 'Travel/Scooter',   ['TRAVEL ACCESSORIES'],                'BRAND_FIRST'),
@@ -477,7 +477,7 @@ def _budget_range(role, ttier):
         return caps.get('stylus', caps['default'])
     return caps['default']
  
-    
+
 # ═════════════════════════════════════════════════════════════
 # 🟢 FLOOR CARE CONFIGURATION
 # ═════════════════════════════════════════════════════════════
@@ -870,7 +870,7 @@ def get_tablet_tier(price):
     if p >=  550: return 'Medium'
     if p >=  250: return 'Low'
     return 'Budget'
-    
+
 def _norm_col_name(s):
     return (str(s).replace('\xa0', ' ').replace('≡', '').strip().lower())
  
@@ -1099,22 +1099,49 @@ def _apply_budget_filter(pool, role, ttier):
  
 def _nb_bag_fallback_pool(c, used_materials, tb, tsize, is_premium):
     """Return an NB BAG / SLEEVE pool scored for fallback when no compat
-    case exists. Brand match boost + size match boost + premium price scale.
-    Caller checks if returned pool is empty before using."""
-    nb = c[c['Hierarchy'].isin(['NB BAGS', 'ΘΗΚΕΣ SLEEVE LAPTOP'])].copy()
+    case exists. Hard-filters by tablet size when possible (safety net keeps
+    the pool if no size-band match exists). Brand match boost + premium price
+    scale. Caller checks if returned pool is empty before using."""
+    # Case-insensitive hierarchy match — defensive against data feed casing
+    hier_u = c['Hierarchy'].fillna('').astype(str).str.upper().str.strip()
+    nb = c[hier_u.isin(['NB BAGS', 'ΘΗΚΕΣ SLEEVE LAPTOP'])].copy()
     nb = nb[~nb['Material'].isin(used_materials)]
     if nb.empty:
         return nb
+    # Hard-filter by size band if any items match; safety net keeps all otherwise
+    if tsize > 0:
+        size_mask = _size_match_mask(nb, tsize)
+        if size_mask.any():
+            nb = nb[size_mask]
     nb['Final_Score'] = 0.0
     nb_brand = (_series(nb, 'Κατασκευαστής').str.upper().str.strip() == tb)
     nb.loc[nb_brand, 'Final_Score'] += S_BRAND_BOOST
-    if tsize > 0:
-        nb.loc[_size_match_mask(nb, tsize), 'Final_Score'] += S_SIZE_MATCH
     if is_premium:
         # Premium tablet → prefer pricier sleeves (proxy for quality)
         nb['Final_Score'] += nb['_p'].fillna(0) * 100
     return nb
  
+ 
+def _universal_tablet_bag_pool(c, used_materials, tb, color_toks=None):
+    """Return UNIVERSAL TABLET BAGS pool (Brand συσκευής σου = UNIVERSAL).
+    Used as the middle fallback step between same-brand exact-model match
+    and NB BAG. Universals claim to fit a range of sizes — no model match
+    required. Brand boost + color boost only."""
+    hier_u = c['Hierarchy'].fillna('').astype(str).str.upper().str.strip()
+    bags = c[hier_u.eq('TABLET BAGS')].copy()
+    bags = bags[~bags['Material'].isin(used_materials)]
+    if bags.empty:
+        return bags
+    brand_dev = _series(bags, 'Brand συσκευής σου').str.upper().str.strip()
+    bags = bags[brand_dev.eq('UNIVERSAL')]
+    if bags.empty:
+        return bags
+    bags['Final_Score'] = 0.0
+    same_b = _series(bags, 'Κατασκευαστής').str.upper().str.strip() == tb
+    bags.loc[same_b, 'Final_Score'] += S_BRAND_BOOST
+    if color_toks:
+        bags = _apply_color_boost(bags, color_toks)
+    return bags
  
  
 # ═════════════════════════════════════════════════════════════
@@ -3399,6 +3426,7 @@ SCORE_CABLE_LENGTH  =   200_000   # Cable ≥ 2 m
 # ═══════════════════════════════════════════════════════════════════════════════
 
 
+
 def run_tablets_engine(trigger, df_products, df_history):
     diag, slot_notes, all_recs = [], {}, []
  
@@ -3510,8 +3538,10 @@ def run_tablets_engine(trigger, df_products, df_history):
                     failed_slots.append((slot_num, role, hierarchies, logic_key, 'NO_MODEL_COMPAT'))
                     continue
  
-        # ───── APPLE FOLIO STRICT — Folio with NB BAG fallback ─────
-        # Exact model match required (no "iPad Pro" → "iPad Pro 12.9").
+        # ───── APPLE FOLIO STRICT — 3-tier chain ─────
+        # Tier 1: Apple Original Folio with EXACT model match
+        # Tier 2: Universal Tablet Bag (Brand συσκευής σου = UNIVERSAL)
+        # Tier 3: NB BAG with size match
         elif base == 'APPLE_FOLIO_STRICT':
             in_target = pool['_apple_cat'].isin(['Folio'])
             apple_folio_ok = False
@@ -3523,39 +3553,47 @@ def run_tablets_engine(trigger, df_products, df_history):
                     em = _exact_compat_match(folio_pool, tmod)
                     if em.any():
                         pool = folio_pool[em]
-                        # Color boost — Silver iPad should prefer Silver/White
-                        # folio over Sky/Pink when multiple exact-compat colors
-                        # exist.
                         pool = _apply_color_boost(pool, color_toks)
                         apple_folio_ok = True
                         notes.append('APPLE_FOLIO_EXACT')
             if not apple_folio_ok:
-                nb = _nb_bag_fallback_pool(c, used_materials, tb, tsize, is_premium)
-                if nb.empty:
-                    slot_notes[slot_num] = notes + ['NO_FOLIO_NO_NB']
-                    failed_slots.append((slot_num, role, hierarchies, logic_key, 'NO_FOLIO_NO_NB'))
-                    continue
-                pool = nb
-                role = 'NB Bag'
-                notes.append('NB_BAG_FALLBACK')
+                # Tier 2: Universal Tablet Bag
+                univ = _universal_tablet_bag_pool(c, used_materials, tb, color_toks)
+                if not univ.empty:
+                    pool = univ
+                    role = 'Tablet Bag (Universal)'
+                    notes.append('UNIVERSAL_TABLET_BAG')
+                else:
+                    # Tier 3: NB BAG
+                    nb = _nb_bag_fallback_pool(c, used_materials, tb, tsize, is_premium)
+                    if nb.empty:
+                        slot_notes[slot_num] = notes + ['NO_FOLIO_NO_UNIV_NO_NB']
+                        failed_slots.append((slot_num, role, hierarchies, logic_key, 'NO_FOLIO_NO_NB'))
+                        continue
+                    pool = nb
+                    role = 'NB Bag'
+                    notes.append('NB_BAG_FALLBACK')
  
         # ───── BRAND-FIRST hard filter ─────
         elif base == 'BRAND_FIRST':
             pool = _brand_first_filter(pool, tb)
  
-        # ───── TABLET BAG / CASE fit ─────
-        # Exact model match required. If no exact match, fall back INLINE to
-        # NB BAG (size+brand boost, sales tiebreak). No partial substring
-        # matches like "iPad Pro" → "iPad Pro 12.9-inch 5th Gen".
+        # ───── TABLET BAG / CASE fit — 3-tier chain ─────
+        # Tier 1: Same-brand TABLET BAG with EXACT model match
+        # Tier 2: Universal Tablet Bag (Brand συσκευής σου = UNIVERSAL)
+        # Tier 3: NB BAG with size match
         elif base == 'CASE_FIT':
-            case_pool = _brand_first_filter_case(pool, tb)
             exact_match_found = False
-            if tmod:
-                em = _exact_compat_match(case_pool, tmod)
+            # Tier 1: own-brand pool only (NOT universals — those go to Tier 2
+            # without the exact-match requirement)
+            brand_dev_full = _series(pool, 'Brand συσκευής σου').str.upper().str.strip()
+            own_brand_pool = pool[brand_dev_full.eq(tb)].copy()
+            if tmod and not own_brand_pool.empty:
+                em = _exact_compat_match(own_brand_pool, tmod)
                 if em.any():
-                    pool = case_pool[em].copy()
+                    pool = own_brand_pool[em].copy()
                     exact_match_found = True
-                    notes.append('CASE_EXACT')
+                    notes.append('CASE_BRAND_EXACT')
                     ttype = _series(pool, 'Τύπος Θήκης').str.lower()
                     if is_premium or is_apple_ipad:
                         pool.loc[ttype.isin(['folio', 'book cover']),
@@ -3565,15 +3603,22 @@ def run_tablets_engine(trigger, df_products, df_history):
                                  'Final_Score'] += S_CASE_TYPE_PRIMARY
                     pool = _apply_color_boost(pool, color_toks)
             if not exact_match_found:
-                # Inline NB BAG fallback — change role label so the user sees it
-                nb = _nb_bag_fallback_pool(c, used_materials, tb, tsize, is_premium)
-                if nb.empty:
-                    slot_notes[slot_num] = notes + ['NO_CASE_NO_NB']
-                    failed_slots.append((slot_num, role, hierarchies, logic_key, 'NO_CASE_NO_NB'))
-                    continue
-                pool = nb
-                role = 'NB Bag'
-                notes.append('NB_BAG_FALLBACK')
+                # Tier 2: Universal Tablet Bag
+                univ = _universal_tablet_bag_pool(c, used_materials, tb, color_toks)
+                if not univ.empty:
+                    pool = univ
+                    role = 'Tablet Bag (Universal)'
+                    notes.append('UNIVERSAL_TABLET_BAG')
+                else:
+                    # Tier 3: NB BAG
+                    nb = _nb_bag_fallback_pool(c, used_materials, tb, tsize, is_premium)
+                    if nb.empty:
+                        slot_notes[slot_num] = notes + ['NO_CASE_NO_UNIV_NO_NB']
+                        failed_slots.append((slot_num, role, hierarchies, logic_key, 'NO_CASE_NO_NB'))
+                        continue
+                    pool = nb
+                    role = 'NB Bag'
+                    notes.append('NB_BAG_FALLBACK')
  
         # ───── TABLET KEYBOARD fit ─────
         elif base == 'KEYBOARD_TABLET_FIT':
@@ -3825,24 +3870,38 @@ def run_tablets_engine(trigger, df_products, df_history):
                 is_case_role = any(k in role_l for k in
                                     ('case', 'bag', 'folio', 'cover', 'sleeve'))
                 if is_case_role:
-                    nb = _nb_bag_fallback_pool(c, used_materials, tb,
-                                                tsize, is_premium)
-                    if nb.empty:
+                    # 3-tier chain: Universal Tablet Bag → NB BAG → skip
+                    univ = _universal_tablet_bag_pool(c, used_materials, tb, color_toks)
+                    chosen_pool = univ if not univ.empty else None
+                    chosen_role = 'Tablet Bag (Universal)' if chosen_pool is not None else None
+                    chosen_marker = 'FALLBACK_TO_UNIVERSAL' if chosen_pool is not None else None
+ 
+                    if chosen_pool is None:
+                        nb = _nb_bag_fallback_pool(c, used_materials, tb,
+                                                    tsize, is_premium)
+                        if not nb.empty:
+                            chosen_pool = nb
+                            chosen_role = 'NB Bag'
+                            chosen_marker = 'FALLBACK_TO_NB_BAG'
+ 
+                    if chosen_pool is None:
                         slot_notes[slot_num] = (slot_notes.get(slot_num, [])
                                                 + ['FALLBACK_NB_EMPTY'])
                         continue
-                    nb = nb.sort_values(['Final_Score', 'Sales_Tiebreaker'],
-                                         ascending=[False, False])
-                    chosen = nb.iloc[0]
+ 
+                    chosen_pool = chosen_pool.sort_values(
+                        ['Final_Score', 'Sales_Tiebreaker'],
+                        ascending=[False, False])
+                    chosen = chosen_pool.iloc[0]
                     rc = chosen.copy()
                     rc['Assigned_Slot']  = slot_num
-                    rc['Slot_Role']      = 'NB Bag'
+                    rc['Slot_Role']      = chosen_role
                     rc['Marketing_Copy'] = TABLET_MARKETING_COPY.get(
-                        'NB Bag', 'Εναλλακτική επιλογή.')
+                        chosen_role, 'Εναλλακτική επιλογή.')
                     all_recs.append(rc)
                     used_materials.add(chosen['Material'])
                     slot_notes[slot_num] = (slot_notes.get(slot_num, [])
-                                            + ['FALLBACK_TO_NB_BAG',
+                                            + [chosen_marker,
                                                f"score={chosen['Final_Score']:.0f}",
                                                f"brand={str(chosen.get('Κατασκευαστής', ''))[:20]}"])
                     continue
@@ -3900,7 +3959,6 @@ def run_tablets_engine(trigger, df_products, df_history):
                if all_recs else pd.DataFrame())
     return recs_df, diag, slot_notes, recs_df
 
-    
 # ═════════════════════════════════════════════════════════════
 # 🟢 LAPTOPS ENGINE — Mainstream / Road Warrior
 # ═════════════════════════════════════════════════════════════
