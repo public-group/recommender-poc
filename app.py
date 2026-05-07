@@ -478,6 +478,7 @@ def _budget_range(role, ttier):
     return caps['default']
  
 
+
 # ═════════════════════════════════════════════════════════════
 # 🟢 FLOOR CARE CONFIGURATION
 # ═════════════════════════════════════════════════════════════
@@ -853,7 +854,7 @@ def title_sim(a, b): return SequenceMatcher(None, a.lower(), b.lower()).ratio() 
 def safe(v): return html_lib.escape(str(v))
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# TABLET 
+# 
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def get_tablet_tier(price):
@@ -891,8 +892,17 @@ def _series(df, name, default=''):
  
  
 def _extract_size_from_title(title):
-    """Fallback when Μέγεθος οθόνης column is empty/0. Parses '11"' or '12.9".'"""
-    m = re.search(r'(\d+(?:\.\d+)?)\s*["″]', str(title))
+    """Fallback when Μέγεθος οθόνης column is empty/0. Parses inches from
+    titles. Accepts multiple inch markers seen in Public.gr titles:
+        '  one ASCII single quote
+        '' two ASCII single quotes (the Greek title style: 'Universal 14''')
+        "  ASCII double quote
+        ″  Unicode double prime (U+2033)
+        ''  Unicode typographic single quotes (U+2018/U+2019)
+    """
+    s = str(title)
+    m = re.search(
+        r'(\d+(?:\.\d+)?)\s*(?:["″\u2033]|[\'\u2018\u2019]{1,2})', s)
     return float(m.group(1)) if m else 0.0
  
  
@@ -1122,11 +1132,37 @@ def _nb_bag_fallback_pool(c, used_materials, tb, tsize, is_premium):
     return nb
  
  
-def _universal_tablet_bag_pool(c, used_materials, tb, color_toks=None):
+def _universal_bag_size(row):
+    """Extract size in inches from a Universal Tablet Bag.
+    Tries the bag's Title first ('Universal 14"' / 'Universal 11''),
+    then 'Συμβατή συσκευή' (e.g. 'Tablets up to 11"'), then 'Μέγεθος'.
+    Returns 0.0 if nothing detectable."""
+    for col_key in ('Title', 'Συμβατή συσκευή', 'Μέγεθος'):
+        # row.get tolerates non-breaking-space variants because the engine
+        # normalizes column reads via _series elsewhere; here we accept whatever
+        # variant is present in the row dict.
+        for k in row.index:
+            if _norm_col_name(k) == _norm_col_name(col_key):
+                v = row[k]
+                if pd.notna(v):
+                    sz = _extract_size_from_title(v)
+                    if sz > 0:
+                        return sz
+                break
+    return 0.0
+ 
+ 
+def _universal_tablet_bag_pool(c, used_materials, tb, tsize, color_toks=None):
     """Return UNIVERSAL TABLET BAGS pool (Brand συσκευής σου = UNIVERSAL).
     Used as the middle fallback step between same-brand exact-model match
-    and NB BAG. Universals claim to fit a range of sizes — no model match
-    required. Brand boost + color boost only."""
+    and NB BAG.
+ 
+    Hard-filters by size when the bag's title/compat declares a size
+    (e.g. 'Universal 14"'). Tolerance ±1.5" — a Universal 12" bag fits a
+    10.5–13.5" tablet; a Universal 14" bag does NOT fit an 11" tablet.
+ 
+    Bags with no detectable size are kept (genuinely universal sleeves).
+    Brand boost + color boost only."""
     hier_u = c['Hierarchy'].fillna('').astype(str).str.upper().str.strip()
     bags = c[hier_u.eq('TABLET BAGS')].copy()
     bags = bags[~bags['Material'].isin(used_materials)]
@@ -1136,12 +1172,23 @@ def _universal_tablet_bag_pool(c, used_materials, tb, color_toks=None):
     bags = bags[brand_dev.eq('UNIVERSAL')]
     if bags.empty:
         return bags
+ 
+    # Size filter: keep bags whose declared size is within ±1.5" of the
+    # tablet, OR bags with no declared size (genuine size-agnostic universals).
+    if tsize > 0:
+        bag_sizes = bags.apply(_universal_bag_size, axis=1)
+        size_ok = (bag_sizes == 0) | ((bag_sizes - tsize).abs() <= 1.5)
+        size_filtered = bags[size_ok]
+        if not size_filtered.empty:
+            bags = size_filtered
+ 
     bags['Final_Score'] = 0.0
     same_b = _series(bags, 'Κατασκευαστής').str.upper().str.strip() == tb
     bags.loc[same_b, 'Final_Score'] += S_BRAND_BOOST
     if color_toks:
         bags = _apply_color_boost(bags, color_toks)
     return bags
+ 
  
  
 # ═════════════════════════════════════════════════════════════
@@ -3426,7 +3473,6 @@ SCORE_CABLE_LENGTH  =   200_000   # Cable ≥ 2 m
 # ═══════════════════════════════════════════════════════════════════════════════
 
 
-
 def run_tablets_engine(trigger, df_products, df_history):
     diag, slot_notes, all_recs = [], {}, []
  
@@ -3558,7 +3604,7 @@ def run_tablets_engine(trigger, df_products, df_history):
                         notes.append('APPLE_FOLIO_EXACT')
             if not apple_folio_ok:
                 # Tier 2: Universal Tablet Bag
-                univ = _universal_tablet_bag_pool(c, used_materials, tb, color_toks)
+                univ = _universal_tablet_bag_pool(c, used_materials, tb, tsize, color_toks)
                 if not univ.empty:
                     pool = univ
                     role = 'Tablet Bag (Universal)'
@@ -3604,7 +3650,7 @@ def run_tablets_engine(trigger, df_products, df_history):
                     pool = _apply_color_boost(pool, color_toks)
             if not exact_match_found:
                 # Tier 2: Universal Tablet Bag
-                univ = _universal_tablet_bag_pool(c, used_materials, tb, color_toks)
+                univ = _universal_tablet_bag_pool(c, used_materials, tb, tsize, color_toks)
                 if not univ.empty:
                     pool = univ
                     role = 'Tablet Bag (Universal)'
@@ -3871,7 +3917,7 @@ def run_tablets_engine(trigger, df_products, df_history):
                                     ('case', 'bag', 'folio', 'cover', 'sleeve'))
                 if is_case_role:
                     # 3-tier chain: Universal Tablet Bag → NB BAG → skip
-                    univ = _universal_tablet_bag_pool(c, used_materials, tb, color_toks)
+                    univ = _universal_tablet_bag_pool(c, used_materials, tb, tsize, color_toks)
                     chosen_pool = univ if not univ.empty else None
                     chosen_role = 'Tablet Bag (Universal)' if chosen_pool is not None else None
                     chosen_marker = 'FALLBACK_TO_UNIVERSAL' if chosen_pool is not None else None
@@ -3958,6 +4004,8 @@ def run_tablets_engine(trigger, df_products, df_history):
     recs_df = (pd.DataFrame(all_recs).sort_values('Assigned_Slot')
                if all_recs else pd.DataFrame())
     return recs_df, diag, slot_notes, recs_df
+ 
+
 
 # ═════════════════════════════════════════════════════════════
 # 🟢 LAPTOPS ENGINE — Mainstream / Road Warrior
