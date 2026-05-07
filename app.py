@@ -162,72 +162,68 @@ LAPTOP_MARKETING_COPY = {
 # 🟢 TABLETS CONFIGURATION
 # ═════════════════════════════════════════════════════════════
 
-
-# ────────────────────────────────────────────────────────────
-# Brand / persona constants
-# ────────────────────────────────────────────────────────────
 TABLET_PREMIUM_BRANDS = {'APPLE', 'SAMSUNG', 'HUAWEI', 'XIAOMI', 'MICROSOFT'}
  
-# Brands appearing in accessory compat fields. Used by the cross-brand
-# incompat filter — an accessory whose compat mentions ONLY one of these
-# OTHER than the trigger brand is excluded from STYLUS / SCREEN PROTECTOR.
 KNOWN_TABLET_BRANDS = {
     'APPLE', 'SAMSUNG', 'HUAWEI', 'XIAOMI', 'MICROSOFT',
     'LENOVO', 'KIDDOBOO', 'AMAZON', 'ASUS', 'ACER', 'NOKIA',
 }
  
+# Logic keys whose slots should be DROPPED entirely on failure rather than
+# filled by the fallback pass. Avoids cross-category nonsense like a phone
+# screen protector showing up on a tablet.
+LOGIC_NO_FALLBACK = {'SCREEN_PROTECTOR_FIT'}
+ 
  
 # ────────────────────────────────────────────────────────────
-# Score weights — higher = stronger preference
-# Hard filters do most heavy lifting; scores are for tiebreaking.
+# Score weights
 # ────────────────────────────────────────────────────────────
-S_BRAND_PRIMARY     = 1_500_000   # absolute brand priority (fallback pass)
-S_BRAND_BOOST       =   100_000   # always-on baseline for trigger-brand match
-S_MODEL_MATCH       =   500_000   # accessory's compat field contains trigger model
-S_CATEGORY_TARGET   =   500_000   # APPLE_TARGET in-category (informational; hard filter does the work)
-S_CATEGORY_REPEAT   = -2_000_000  # already-shown Apple category (huge penalty)
-S_PORT_MATCH        =   300_000   # Θύρα USB / Σύνδεση direct match
-S_PORT_MISMATCH     = -1_000_000  # explicit port wrong
-S_BLUETOOTH_REQ     =   500_000   # Bluetooth required (iPad mouse/keyboard)
-S_USB_RECEIVER_PEN  = -1_500_000  # USB-receiver mouse on iPad
-S_WATTAGE_TIER      =   300_000   # charger wattage matches tablet tier
-S_CASE_TYPE_PRIMARY =   300_000   # Folio for premium / Back Cover for standard
+S_BRAND_PRIMARY     = 1_500_000
+S_BRAND_BOOST       =   100_000
+S_MODEL_MATCH       =   500_000
+S_CATEGORY_TARGET   =   500_000
+S_CATEGORY_REPEAT   = -2_000_000
+S_PORT_MATCH        =   300_000
+S_PORT_MISMATCH     = -1_000_000
+S_BLUETOOTH_REQ     =   500_000
+S_USB_RECEIVER_PEN  = -1_500_000
+S_WATTAGE_TIER      =   300_000
+S_CASE_TYPE_PRIMARY =   300_000
 S_COLOR_EXACT       =   200_000
 S_COLOR_TRANSPARENT =    80_000
-S_SIZE_MATCH        =   300_000   # NB-bag size band overlaps tablet
+S_SIZE_MATCH        =   400_000
 S_TOUCHPAD_BOOST    =   200_000
-S_HIERARCHY_TARGET  =   300_000   # slot prefers a specific hierarchy
+S_HIERARCHY_TARGET  =   300_000
 S_OTG_BONUS         =   100_000
 S_AIRPODS_BOOST     =   500_000
 S_MAGIC_MOUSE_BOOST =   700_000
 S_UNBRANDED_STYLUS  =    50_000
+S_PREMIUM_VARIANT   =   800_000   # NEW: boost expensive variants for premium tier
  
  
 # ────────────────────────────────────────────────────────────
 # Budget ranges per tier × role group  (min, max) in euros
-# Hard-filtered in the main loop. The MIN is the price floor — for
-# Premium tablets, slots like Storage/Cable won't pick €5 items.
 # ────────────────────────────────────────────────────────────
 TABLET_ACCESSORY_BUDGET = {
     'Premium': {
-        'audio':    (80,  500),
-        'power':    (25,  120),
+        'audio':    (200, 600),     # raised min: AirPods Pro for Premium
+        'power':    (20,  120),     # lowered min so Apple 20W (€25) fits cleanly
         'cable':    (15,   60),
         'case':     (40,  250),
         'storage':  (25,  200),
-        'wear':     (200, 900),
+        'wear':     (350, 900),     # raised min: Apple Watch Series/Ultra
         'mouse':    (40,  250),
         'keyboard': (60,  400),
         'stylus':   (40,  250),
         'default':  (15,  300),
     },
     'High': {
-        'audio':    (50,  300),
+        'audio':    (100, 350),
         'power':    (15,   70),
         'cable':    (10,   40),
         'case':     (25,  150),
         'storage':  (15,  120),
-        'wear':     (120, 500),
+        'wear':     (180, 500),
         'mouse':    (20,  120),
         'keyboard': (40,  200),
         'stylus':   (25,  150),
@@ -235,34 +231,31 @@ TABLET_ACCESSORY_BUDGET = {
     },
     'Mid': {
         'audio':    (20,  150),
-        'power':    (10,   40),
+        'power':    (8,    40),
         'cable':    ( 5,   25),
         'case':     (10,   80),
         'storage':  ( 8,   60),
         'wear':     (50,  300),
         'mouse':    (10,   60),
-        'keyboard': (20,  120),
+        'keyboard': (15,   70),     # tightened: kills Armaggeddon mech kbd at Mid
         'stylus':   (10,   60),
         'default':  ( 5,  120),
     },
     'Entry': {
         'audio':    ( 5,   80),
-        'power':    ( 5,   25),
+        'power':    ( 5,   35),     # raised max so Xiaomi 33W charger (~€30) fits
         'cable':    ( 3,   15),
         'case':     ( 5,   40),
         'storage':  ( 5,   30),
         'wear':     (25,  150),
         'mouse':    ( 5,   30),
-        'keyboard': (10,   60),
+        'keyboard': (10,   50),
         'stylus':   ( 5,   30),
         'default':  ( 3,   60),
     },
 }
  
  
-# ────────────────────────────────────────────────────────────
-# Marketing copy per slot role
-# ────────────────────────────────────────────────────────────
 TABLET_MARKETING_COPY = {
     'Keyboard Case':        'Μεταμόρφωσε το tablet σε laptop.',
     'Tablet Bag':           'Ασφαλής μεταφορά παντού.',
@@ -293,42 +286,28 @@ TABLET_MARKETING_COPY = {
 }
  
  
-# ────────────────────────────────────────────────────────────
-# Wattage tier preferences (match WALL CHARGERS.Ισχύς (Watt) values)
-# ────────────────────────────────────────────────────────────
 WATTAGE_TIER_PREFS = {
     'Premium': ['21 - 60 Watt', '61 - 100 Watt'],
     'High':    ['21 - 60 Watt', 'Έως 20 Watt'],
     'Mid':     ['Έως 20 Watt', '21 - 60 Watt'],
-    'Entry':   ['Έως 20 Watt'],
+    'Entry':   ['Έως 20 Watt', '21 - 60 Watt'],   # widened so Xiaomi 33W Entry ok
 }
  
  
-# ────────────────────────────────────────────────────────────
-# Color tokens treated as transparent / clear fallback
-# ────────────────────────────────────────────────────────────
 TRANSPARENT_TOKENS = {'διάφανο', 'διαφανο', 'διαφανής', 'διαφανες',
                       'transparent', 'clear', 'διάφανο;μαύρο'}
  
  
-# ────────────────────────────────────────────────────────────
-# Fallback hierarchies — used when a failed slot's own pool exhausts
-# ────────────────────────────────────────────────────────────
 FALLBACK_HIERARCHIES = [
     'Bluetooth', 'SMART WATCHES', 'ACTIVITY TRACKER',
     'ΗΧΕΙΑ ΦΟΡΗΤΟΥ ΗΧΟΥ', 'USB FLASH DISK',
     'WALL CHARGERS', 'ΚΑΛΩΔΙΑ ΔΕΔΟΜΕΝΩΝ', 'USB CABLES',
-    'TABLET BAGS', 'MOBILE SCREEN PROTECTORS',
+    'TABLET BAGS', 'NB BAGS', 'ΘΗΚΕΣ SLEEVE LAPTOP',
     'MOUSE WIRELESS', 'KEYBOARDS WIRELESS',
     'APPLE ORIGINAL TABLET ACCESSORIES', 'APPLE ORIGINAL TABLET BAGS',
 ]
  
  
-# ────────────────────────────────────────────────────────────
-# Apple Original categorization (uses structured fields only)
-# Returns: Stylus | Keyboard | Folio | Adapter | Charger | Cable
-#        | Wireless Charger | Audio Adapter | Other
-# ────────────────────────────────────────────────────────────
 def _apple_orig_categorize(row):
     def get(col_name):
         c = None
@@ -364,7 +343,7 @@ def _apple_orig_categorize(row):
         return 'Wireless Charger'
     if 'αντάπτορας ήχου' in typos3:
         return 'Audio Adapter'
-    if brand_dev:  # Apple Original Tablet Bags entries
+    if brand_dev:
         return 'Folio'
     return 'Other'
  
@@ -374,8 +353,6 @@ def _apple_orig_categorize(row):
 # ────────────────────────────────────────────────────────────
  
 def _build_kiddoboo_slots():
-    """Kiddoboo brand-first on every slot EXCEPT charger (3) and cable (4),
-    since Kiddoboo doesn't make those."""
     return [
         (None, 'Overhead',         ['OVERHEAD'],                          'BRAND_FIRST'),
         (None, 'Smartwatch',       ['SMART WATCHES', 'ACTIVITY TRACKER'], 'BRAND_FIRST'),
@@ -391,8 +368,6 @@ def _build_kiddoboo_slots():
  
  
 def _build_apple_ipad_slots():
-    """First 4 slots target distinct Apple Original categories so the iPad
-    gets diverse picks (Pencil → Folio → Keyboard → Other) instead of 4 styluses."""
     APPLE_ORIG = ['APPLE ORIGINAL TABLET ACCESSORIES', 'APPLE ORIGINAL TABLET BAGS']
     APPLE_PSU  = ['APPLE ORIGINAL POWER SUPPLY',
                   'APPLE ORIGINAL IPHONE CABLE-ADAPTORS',
@@ -403,7 +378,7 @@ def _build_apple_ipad_slots():
                   'ΚΑΛΩΔΙΑ ΔΕΔΟΜΕΝΩΝ']
     return [
         (None, 'Apple Pencil',       APPLE_ORIG,         'APPLE_TARGET:Stylus'),
-        (None, 'Smart Folio',        APPLE_ORIG,         'APPLE_TARGET:Folio'),
+        (None, 'Smart Folio',        APPLE_ORIG,         'APPLE_FOLIO_STRICT'),     # CHANGED
         (None, 'Apple Keyboard',     APPLE_ORIG,         'APPLE_TARGET_STRICT:Keyboard'),
         (None, 'Apple Other',        APPLE_ORIG,         'APPLE_TARGET:Adapter,Other'),
         (None, 'Apple Wall Charger', APPLE_PSU,          'APPLE_CHARGER_FIT'),
@@ -426,14 +401,14 @@ def _build_standard_slots(has_kb_match, is_premium):
         slots.append((None, 'Tablet Bag',        ['TABLET BAGS'],                      'CASE_FIT'))
         slots.append((None, 'Wall Charger',      ['WALL CHARGERS'],                    'CHARGER_FIT'))
  
-    slots.append((None, 'Bluetooth',             ['Bluetooth'],                        'GENERIC'))
+    slots.append((None, 'Bluetooth',             ['Bluetooth'],                        'BRAND_FIRST'))   # CHANGED
  
     if not has_kb_match:
         slots.append((None, 'Wireless Keyboard', ['KEYBOARDS WIRELESS'],               'KEYBOARD_WIRELESS_FIT'))
  
     slots.append((None, 'Screen Protector',      ['MOBILE SCREEN PROTECTORS'],         'SCREEN_PROTECTOR_FIT'))
-    slots.append((None, 'Overhead',              ['OVERHEAD'],                         'GENERIC'))
-    slots.append((None, 'Smartwatch',            ['SMART WATCHES'],                    'BRAND_FIRST'))
+    slots.append((None, 'Overhead',              ['OVERHEAD'],                         'BRAND_FIRST'))   # CHANGED
+    slots.append((None, 'Smartwatch',            ['SMART WATCHES'],                    'BRAND_MATCH'))   # was BRAND_FIRST; needs color+variant
     slots.append((None, 'Cable',                 ['ΚΑΛΩΔΙΑ ΔΕΔΟΜΕΝΩΝ', 'USB CABLES'], 'CABLE_FIT'))
  
     stylus = (None, 'Stylus', ['ΓΡΑΦΙΔΕΣ'], 'STYLUS_FIT')
@@ -453,7 +428,6 @@ def _renumber(slots):
  
  
 def _budget_range(role, ttier):
-    """Return (min_price, max_price) tuple for the role × tier."""
     caps = TABLET_ACCESSORY_BUDGET.get(ttier, TABLET_ACCESSORY_BUDGET['Mid'])
     r = role.lower()
     if any(k in r for k in ('overhead','airpods','speaker','hands-free','bluetooth','audio')):
@@ -475,8 +449,7 @@ def _budget_range(role, ttier):
     if any(k in r for k in ('stylus','pencil','γραφίδα','γραφιδα')):
         return caps.get('stylus', caps['default'])
     return caps['default']
-
-
+ 
 
 # ═════════════════════════════════════════════════════════════
 # 🟢 FLOOR CARE CONFIGURATION
@@ -856,10 +829,6 @@ def safe(v): return html_lib.escape(str(v))
 # TABLET HELPERS
 # ═══════════════════════════════════════════════════════════════════════════════
 
- # ────────────────────────────────────────────────────────────
-# Column resolver (NBSP + ≡ tolerant)
-# ────────────────────────────────────────────────────────────
- 
 def _norm_col_name(s):
     return (str(s).replace('\xa0', ' ').replace('≡', '').strip().lower())
  
@@ -879,9 +848,11 @@ def _series(df, name, default=''):
     return df[c].fillna(default).astype(str)
  
  
-# ────────────────────────────────────────────────────────────
-# Compatibility matching
-# ────────────────────────────────────────────────────────────
+def _extract_size_from_title(title):
+    """Fallback when Μέγεθος οθόνης column is empty/0. Parses '11"' or '12.9".'"""
+    m = re.search(r'(\d+(?:\.\d+)?)\s*["″]', str(title))
+    return float(m.group(1)) if m else 0.0
+ 
  
 def _compat_mask(pool, model):
     if not model:
@@ -897,7 +868,6 @@ def _compat_mask(pool, model):
  
  
 def _compat_text(pool):
-    """Concatenate compat fields (plural + singular) for cross-brand checks."""
     text = pd.Series('', index=pool.index)
     for col_name in ('Συμβατές συσκευές', 'Συμβατή συσκευή'):
         col = _col(pool, col_name)
@@ -906,12 +876,7 @@ def _compat_text(pool):
     return text.str.upper()
  
  
-# ────────────────────────────────────────────────────────────
-# Brand-first hard filter (Tier 0 priority, smartphone-style)
-# ────────────────────────────────────────────────────────────
- 
 def _brand_first_filter(pool, trigger_brand):
-    """If pool contains any items from the trigger brand, keep ONLY those."""
     if pool.empty or not trigger_brand:
         return pool
     same = _series(pool, 'Κατασκευαστής').str.upper().str.strip() == trigger_brand
@@ -921,8 +886,6 @@ def _brand_first_filter(pool, trigger_brand):
  
  
 def _brand_first_filter_case(pool, trigger_brand):
-    """Tablet-bag brand match — uses 'Brand συσκευής σου' column.
-    Keeps trigger-brand items + Universal as fallback within filter."""
     if pool.empty or not trigger_brand:
         return pool
     brand_dev = _series(pool, 'Brand συσκευής σου').str.upper().str.strip()
@@ -935,23 +898,26 @@ def _brand_first_filter_case(pool, trigger_brand):
     return pool
  
  
-# ────────────────────────────────────────────────────────────
-# Cross-brand incompatibility filter
-# Drops accessories whose compat field mentions a competitor brand
-# but NOT the trigger brand (e.g. "για Apple iPad" stylus on a Xiaomi).
-# ────────────────────────────────────────────────────────────
+def _brand_incompat_filter(pool, trigger_brand, known_brands=None,
+                            also_check_title=False):
+    """Drop accessories whose compat field (and optionally title) mentions
+    a competitor brand but NOT the trigger brand.
  
-def _brand_incompat_filter(pool, trigger_brand, known_brands=None):
+    `also_check_title=True` catches "Tune Stylus για Apple iPad" cases
+    where the brand is in the title, not the structured compat field."""
     if pool.empty or not trigger_brand:
         return pool
     if known_brands is None:
         known_brands = KNOWN_TABLET_BRANDS
- 
     others = [b for b in known_brands if b != trigger_brand]
     if not others:
         return pool
  
     text = _compat_text(pool)
+    if also_check_title:
+        title = _series(pool, 'Title').str.upper()
+        text = text + ' ' + title
+ 
     is_empty = text.str.strip().eq('')
     has_self = text.str.contains(re.escape(trigger_brand), na=False)
     has_other = pd.Series(False, index=pool.index)
@@ -961,10 +927,6 @@ def _brand_incompat_filter(pool, trigger_brand, known_brands=None):
     keep = is_empty | has_self | (~has_other)
     return pool[keep]
  
- 
-# ────────────────────────────────────────────────────────────
-# Port matching — separate maskers per hierarchy
-# ────────────────────────────────────────────────────────────
  
 def _port_mask_chargers(pool, trigger_port):
     if not trigger_port:
@@ -1002,10 +964,6 @@ def _port_mask_flash(pool, trigger_port):
     return sigma.str.contains('usb-a', na=False)
  
  
-# ────────────────────────────────────────────────────────────
-# Wattage tier
-# ────────────────────────────────────────────────────────────
- 
 def _wattage_pref_mask(pool, ttier):
     prefs = WATTAGE_TIER_PREFS.get(ttier, WATTAGE_TIER_PREFS['Mid'])
     s = _series(pool, 'Ισχύς (Watt)')
@@ -1013,10 +971,6 @@ def _wattage_pref_mask(pool, ttier):
         s = _series(pool, 'Ισχύς')
     return s.isin(prefs)
  
- 
-# ────────────────────────────────────────────────────────────
-# Color tokens
-# ────────────────────────────────────────────────────────────
  
 def _color_tokens(trigger_color):
     if not trigger_color:
@@ -1026,9 +980,18 @@ def _color_tokens(trigger_color):
             if t and t not in TRANSPARENT_TOKENS]
  
  
-# ────────────────────────────────────────────────────────────
-# NB-bag size band
-# ────────────────────────────────────────────────────────────
+def _apply_color_boost(pool, color_toks, with_transparent=True):
+    """Add color-match boost to pool's Final_Score column. No filter — boost only."""
+    if not color_toks:
+        return pool
+    acc_color = _series(pool, 'Χρώμα').str.lower()
+    exact = acc_color.apply(lambda s: any(t in s for t in color_toks))
+    pool.loc[exact, 'Final_Score'] += S_COLOR_EXACT
+    if with_transparent:
+        transp = acc_color.isin(TRANSPARENT_TOKENS)
+        pool.loc[transp & ~exact, 'Final_Score'] += S_COLOR_TRANSPARENT
+    return pool
+ 
  
 def _size_band_matches(band, tablet_size_inches):
     if not band or tablet_size_inches <= 0:
@@ -1055,43 +1018,19 @@ def _size_match_mask(pool, tablet_size_inches):
     return s.apply(lambda b: _size_band_matches(b, tablet_size_inches))
  
  
-# ────────────────────────────────────────────────────────────
-# Budget range hard filter (with safety net)
-# ────────────────────────────────────────────────────────────
- 
 def _apply_budget_filter(pool, role, ttier):
-    """Hard-filter pool to items in [min, max] for the role × tier.
-    Safety net: if no items match, keep the original pool."""
+    """Hard-filter to [min, max] for role × tier, with safety net."""
     if pool.empty:
         return pool
     min_p, max_p = _budget_range(role, ttier)
     in_range = (pool['_p'] >= min_p) & (pool['_p'] <= max_p)
     if in_range.any():
         return pool[in_range]
-    # Soft fallback: keep items at most 50% above max
     soft = pool['_p'] <= max_p * 1.5
     if soft.any():
         return pool[soft]
     return pool
-
-def get_tablet_tier(price):
-    """Map a tablet's LIST PRICE (€) to a budget tier string.
-
-    Returns one of: 'Premium' | 'High' | 'Mid' | 'Entry'
-    These match the keys in TABLET_ACCESSORY_BUDGET and WATTAGE_TIER_PREFS.
-    """
-    try:
-        p = float(price)
-    except (TypeError, ValueError):
-        return 'Entry'
-    if p >= 900:
-        return 'Premium'
-    if p >= 500:
-        return 'High'
-    if p >= 200:
-        return 'Mid'
-    return 'Entry'
-
+ 
 # ═════════════════════════════════════════════════════════════
 # 🟢 LAPTOPS HELPERS
 # ═════════════════════════════════════════════════════════════
@@ -3373,12 +3312,12 @@ SCORE_CABLE_LENGTH  =   200_000   # Cable ≥ 2 m
 # TABLET ENGINE
 # ═══════════════════════════════════════════════════════════════════════════════
 
- 
 def run_tablets_engine(trigger, df_products, df_history):
     diag, slot_notes, all_recs = [], {}, []
  
     # ----- Trigger -----
     tm     = trigger['Material']
+    tt     = str(trigger.get('Title', ''))
     tb     = str(trigger.get('Κατασκευαστής', '')).strip().upper()
     tmod   = str(trigger.get('Μοντέλο', '')).strip()
     trat   = str(trigger.get('Experts Rating', '')).strip()
@@ -3386,6 +3325,8 @@ def run_tablets_engine(trigger, df_products, df_history):
     ttier  = get_tablet_tier(tprice)
     tos    = str(trigger.get('Λειτουργικό σύστημα', '')).lower()
     tsize  = parse_screen_size(trigger.get('Μέγεθος οθόνης', 0))
+    if tsize <= 0:
+        tsize = _extract_size_from_title(tt)   # title fallback
     tport  = str(extract_base_port(trigger.get('Θύρα USB', ''))).strip()
     tcolor = str(trigger.get('Χρώμα', '')).strip()
     color_toks = _color_tokens(tcolor)
@@ -3436,7 +3377,7 @@ def run_tablets_engine(trigger, df_products, df_history):
     # ----- Main pass -----
     used_materials  = {tm}
     used_apple_cats = set()
-    failed_slots    = []   # (slot_num, role, hierarchies, logic_key, reason)
+    failed_slots    = []
  
     for slot_num, role, hierarchies, logic_key in slots:
         notes = [f"Logic: {logic_key}"]
@@ -3458,8 +3399,7 @@ def run_tablets_engine(trigger, df_products, df_history):
  
         base = logic_key.split(':', 1)[0]
  
-        # ───── APPLE TARGET (iPad slots 1-4) ─────
-        # HARD filter to target category (was a soft boost in v3).
+        # ───── APPLE TARGET (iPad slots 1, 4) ─────
         if base in ('APPLE_TARGET', 'APPLE_TARGET_STRICT'):
             target_cats = set(logic_key.split(':', 1)[1].split(','))
             in_target = pool['_apple_cat'].isin(target_cats)
@@ -3469,7 +3409,6 @@ def run_tablets_engine(trigger, df_products, df_history):
                 slot_notes[slot_num] = notes + ['NO_APPLE_TARGET']
                 failed_slots.append((slot_num, role, hierarchies, logic_key, 'NO_APPLE_TARGET'))
                 continue
-            # Penalize already-shown categories (different categories per slot)
             pool.loc[pool['_apple_cat'].isin(used_apple_cats),
                      'Final_Score'] += S_CATEGORY_REPEAT
             if base == 'APPLE_TARGET_STRICT' and tmod:
@@ -3481,14 +3420,56 @@ def run_tablets_engine(trigger, df_products, df_history):
                     failed_slots.append((slot_num, role, hierarchies, logic_key, 'NO_MODEL_COMPAT'))
                     continue
  
-        # ───── BRAND-FIRST (Kiddoboo non-power slots, Standard smartwatch) ─────
+        # ───── APPLE FOLIO STRICT — Folio with NB BAG fallback ─────
+        elif base == 'APPLE_FOLIO_STRICT':
+            in_target = pool['_apple_cat'].isin(['Folio'])
+            apple_folio_ok = False
+            if in_target.any():
+                folio_pool = pool[in_target].copy()
+                folio_pool.loc[folio_pool['_apple_cat'].isin(used_apple_cats),
+                               'Final_Score'] += S_CATEGORY_REPEAT
+                if tmod:
+                    mm2 = _compat_mask(folio_pool, tmod)
+                    if mm2.any():
+                        pool = folio_pool[mm2]
+                        apple_folio_ok = True
+                        notes.append('APPLE_FOLIO')
+            if not apple_folio_ok:
+                # Inline fallback to NB BAG with size match (premium for premium)
+                nb_pool = c[c['Hierarchy'].isin(['NB BAGS', 'ΘΗΚΕΣ SLEEVE LAPTOP'])].copy()
+                nb_pool = nb_pool[~nb_pool['Material'].isin(used_materials)]
+                if nb_pool.empty:
+                    slot_notes[slot_num] = notes + ['NO_FOLIO_NO_NB']
+                    failed_slots.append((slot_num, role, hierarchies, logic_key, 'NO_FOLIO_NO_NB'))
+                    continue
+                nb_pool['Final_Score'] = 0.0
+                nb_brand = (_series(nb_pool, 'Κατασκευαστής')
+                            .str.upper().str.strip() == tb)
+                nb_pool.loc[nb_brand, 'Final_Score'] += S_BRAND_BOOST
+                if tsize > 0:
+                    nb_pool.loc[_size_match_mask(nb_pool, tsize),
+                                'Final_Score'] += S_SIZE_MATCH
+                if is_premium:
+                    nb_pool['Final_Score'] += nb_pool['_p'].fillna(0) * 100  # scale by price
+                pool = nb_pool
+                notes.append('NB_BAG_FALLBACK')
+ 
+        # ───── BRAND-FIRST hard filter ─────
         elif base == 'BRAND_FIRST':
             pool = _brand_first_filter(pool, tb)
-            # Sales tiebreak handled at sort time
  
-        # ───── TABLET BAG fit ─────
+        # ───── TABLET BAG / CASE fit ─────
         elif base == 'CASE_FIT':
-            pool = _brand_first_filter_case(pool, tb)   # hard filter to brand
+            pool = _brand_first_filter_case(pool, tb)
+            # Require model compat — drops "Galaxy Tab S11 case for S10 Lite"
+            if tmod:
+                mm = _compat_mask(pool, tmod)
+                if mm.any():
+                    pool = pool[mm]
+                else:
+                    slot_notes[slot_num] = notes + ['NO_MODEL_COMPAT']
+                    failed_slots.append((slot_num, role, hierarchies, logic_key, 'NO_MODEL_COMPAT'))
+                    continue
             ttype = _series(pool, 'Τύπος Θήκης').str.lower()
             if is_premium or is_apple_ipad:
                 pool.loc[ttype.isin(['folio', 'book cover']),
@@ -3496,12 +3477,7 @@ def run_tablets_engine(trigger, df_products, df_history):
             else:
                 pool.loc[ttype.eq('back cover'),
                          'Final_Score'] += S_CASE_TYPE_PRIMARY
-            if color_toks:
-                acc_color = _series(pool, 'Χρώμα').str.lower()
-                exact = acc_color.apply(lambda s: any(t in s for t in color_toks))
-                transp = acc_color.isin(TRANSPARENT_TOKENS)
-                pool.loc[exact, 'Final_Score'] += S_COLOR_EXACT
-                pool.loc[transp & ~exact, 'Final_Score'] += S_COLOR_TRANSPARENT
+            pool = _apply_color_boost(pool, color_toks)
  
         # ───── TABLET KEYBOARD fit ─────
         elif base == 'KEYBOARD_TABLET_FIT':
@@ -3512,9 +3488,11 @@ def run_tablets_engine(trigger, df_products, df_history):
             extra = _series(pool, 'Πρόσθετα χαρακτηριστικά').str.lower()
             pool.loc[extra.str.contains('touchpad', na=False),
                      'Final_Score'] += S_TOUCHPAD_BOOST
+            pool = _apply_color_boost(pool, color_toks, with_transparent=False)
  
-        # ───── WIRELESS KEYBOARD fit ─────
+        # ───── WIRELESS KEYBOARD fit (brand-first + Bluetooth req) ─────
         elif base == 'KEYBOARD_WIRELESS_FIT':
+            pool = _brand_first_filter(pool, tb)   # NEW: Samsung kbd if any exist
             conn = _series(pool, 'Συνδεσιμότητα').str.lower()
             pool.loc[conn.str.contains('bluetooth', na=False),
                      'Final_Score'] += S_BLUETOOTH_REQ
@@ -3522,6 +3500,7 @@ def run_tablets_engine(trigger, df_products, df_history):
                 extra = _series(pool, 'Πρόσθετα χαρακτηριστικά').str.lower()
                 pool.loc[extra.str.contains('touchpad', na=False),
                          'Final_Score'] += S_TOUCHPAD_BOOST
+            pool = _apply_color_boost(pool, color_toks, with_transparent=False)
  
         # ───── NB BAG size fit ─────
         elif base == 'NB_SIZE_FIT':
@@ -3536,7 +3515,7 @@ def run_tablets_engine(trigger, df_products, df_history):
                                     regex=True, na=False)
             if wall.any():
                 pool = pool[wall]
-            # Brand-first when present (Xiaomi tablet → Xiaomi charger wins)
+            # Brand-first BEFORE any other scoring/filtering
             pool = _brand_first_filter(pool, tb)
             pool.loc[_port_mask_chargers(pool, tport),
                      'Final_Score'] += S_PORT_MATCH
@@ -3553,13 +3532,13 @@ def run_tablets_engine(trigger, df_products, df_history):
                                               regex=True, na=False))
             if is_charger.any():
                 pool = pool[is_charger]
+            # Brand-first BEFORE budget — Apple charger wins even at €25
+            pool = _brand_first_filter(pool, tb)
             in_apple = pool['Hierarchy'].isin(
                 ['APPLE ORIGINAL POWER SUPPLY',
                  'APPLE ORIGINAL IPHONE CABLE-ADAPTORS',
                  'APPLE ORIGINAL IPHONE CABLE-ADA'])
             pool.loc[in_apple, 'Final_Score'] += S_HIERARCHY_TARGET
-            sb = _series(pool, 'Κατασκευαστής').str.upper().str.strip() == tb
-            pool.loc[sb, 'Final_Score'] += S_BRAND_BOOST * 5
             wattage = _series(pool, 'Ισχύς (Watt)')
             if wattage.eq('').all():
                 wattage = _series(pool, 'Ισχύς')
@@ -3576,12 +3555,11 @@ def run_tablets_engine(trigger, df_products, df_history):
                         & ~t3.str.contains('φορτιστής', na=False))
             if is_cable.any():
                 pool = pool[is_cable]
+            pool = _brand_first_filter(pool, tb)   # brand-first BEFORE budget
             in_apple = pool['Hierarchy'].isin(
                 ['APPLE ORIGINAL IPHONE CABLE-ADAPTORS',
                  'APPLE ORIGINAL IPHONE CABLE-ADA'])
             pool.loc[in_apple, 'Final_Score'] += S_HIERARCHY_TARGET
-            sb = _series(pool, 'Κατασκευαστής').str.upper().str.strip() == tb
-            pool.loc[sb, 'Final_Score'] += S_BRAND_BOOST * 5
             pool.loc[_port_mask_cables(pool, tport),
                      'Final_Score'] += S_PORT_MATCH
  
@@ -3596,20 +3574,28 @@ def run_tablets_engine(trigger, df_products, df_history):
             pool.loc[_port_mask_cables(pool, tport),
                      'Final_Score'] += S_PORT_MATCH
  
-        # ───── STORAGE fit ─────
+        # ───── STORAGE fit (USB-C hard filter for Type-C triggers) ─────
         elif base == 'STORAGE_FIT':
+            tp_l = tport.lower()
             if 'android' in tos:
                 pool.loc[pool['Hierarchy'] == 'MICRO SD',
                          'Final_Score'] += S_PORT_MATCH
+            sigma = _series(pool, 'Σύνδεση').str.lower()
+            if 'type-c' in tp_l or 'usb-c' in tp_l:
+                is_typec_flash = sigma.str.contains('usb-c', na=False)
+                if is_typec_flash.any():
+                    # Hard-filter — no USB-A flash drives on a Type-C iPad
+                    flash_pool = pool[pool['Hierarchy'] != 'MICRO SD']
+                    typec_in_flash = flash_pool['Σύνδεση'].fillna('').str.lower().str.contains('usb-c', na=False) if 'Σύνδεση' in flash_pool.columns else None
+                    keep = (pool['Hierarchy'] != 'USB FLASH DISK') | is_typec_flash
+                    pool = pool[keep]
             pool.loc[_port_mask_flash(pool, tport),
                      'Final_Score'] += S_PORT_MATCH
-            sigma = _series(pool, 'Σύνδεση').str.lower()
-            tp = tport.lower()
-            if 'type-c' in tp or 'usb-c' in tp:
-                pool.loc[sigma.eq('usb-a'),
-                         'Final_Score'] += S_PORT_MISMATCH
             pool.loc[pool['Hierarchy'].eq('ΚΑΛΩΔΙΑ-ADAPTORS'),
                      'Final_Score'] += S_OTG_BONUS
+            # Premium boost: bigger capacity sticks (proxy = price)
+            if is_premium:
+                pool.loc[pool['_p'] >= 30, 'Final_Score'] += S_PREMIUM_VARIANT // 2
  
         # ───── MOUSE fit ─────
         elif base == 'MOUSE_FIT':
@@ -3622,31 +3608,45 @@ def run_tablets_engine(trigger, df_products, df_history):
             if is_apple_ipad and has_bt.any():
                 pool = pool[has_bt]
  
-        # ───── AIRPODS / Bluetooth audio ─────
+        # ───── AIRPODS / Bluetooth audio (premium variant boost) ─────
         elif base == 'AIRPODS_BOOST':
             sb = _series(pool, 'Κατασκευαστής').str.upper().str.strip() == tb
             pool.loc[sb, 'Final_Score'] += S_AIRPODS_BOOST
+            # Premium tier → boost expensive variants (AirPods Pro/Max ~ €280+)
+            if is_premium:
+                pool.loc[pool['_p'] >= 250, 'Final_Score'] += S_PREMIUM_VARIANT
  
-        # ───── BRAND match (Apple Watch on iPad) ─────
+        # ───── BRAND match (Apple Watch on iPad, Smartwatch on standard) ─────
         elif base == 'BRAND_MATCH':
             pool = _brand_first_filter(pool, tb)
+            # Color boost — match watch color to tablet color
+            pool = _apply_color_boost(pool, color_toks, with_transparent=False)
+            # Premium tier → boost expensive watches (Series/Ultra)
+            if is_premium:
+                pool.loc[pool['_p'] >= 400, 'Final_Score'] += S_PREMIUM_VARIANT
  
-        # ───── SCREEN PROTECTOR fit ─────
+        # ───── SCREEN PROTECTOR fit (skip-on-failure) ─────
         elif base == 'SCREEN_PROTECTOR_FIT':
-            pool = _brand_incompat_filter(pool, tb)
+            pool = _brand_incompat_filter(pool, tb, also_check_title=True)
             if tmod:
                 mm = _compat_mask(pool, tmod)
                 if mm.any():
                     pool = pool[mm]
                 else:
-                    slot_notes[slot_num] = notes + ['NO_MODEL_COMPAT']
-                    failed_slots.append((slot_num, role, hierarchies, logic_key, 'NO_MODEL_COMPAT'))
-                    continue
+                    # Skip the slot entirely — no fallback (drop to user)
+                    slot_notes[slot_num] = notes + ['NO_MODEL_COMPAT_SKIP']
+                    continue   # NOT added to failed_slots → no fallback
+            else:
+                slot_notes[slot_num] = notes + ['NO_MODEL_TO_MATCH_SKIP']
+                continue
  
-        # ───── STYLUS fit ─────
+        # ───── STYLUS fit (brand-first + title-aware incompat) ─────
         elif base == 'STYLUS_FIT':
-            # Drop styluses meant for a competitor brand
-            pool = _brand_incompat_filter(pool, tb)
+            # Drop styluses that mention competitor brands in compat OR title
+            pool = _brand_incompat_filter(pool, tb, also_check_title=True)
+            # If trigger is a major brand and any same-brand stylus exists, hard-filter
+            if tb in TABLET_PREMIUM_BRANDS:
+                pool = _brand_first_filter(pool, tb)
             if tmod:
                 mm = _compat_mask(pool, tmod)
                 pool.loc[mm, 'Final_Score'] += S_MODEL_MATCH
@@ -3659,7 +3659,7 @@ def run_tablets_engine(trigger, df_products, df_history):
             sb = _series(pool, 'Κατασκευαστής').str.upper().str.strip() == tb
             pool.loc[~sb, 'Final_Score'] += S_UNBRANDED_STYLUS
  
-        # ─── Budget hard filter (price floor + ceiling) ───
+        # ─── Budget hard filter ───
         if not pool.empty:
             pool = _apply_budget_filter(pool, role, ttier)
  
@@ -3672,7 +3672,7 @@ def run_tablets_engine(trigger, df_products, df_history):
                                 ascending=[False, False])
         chosen = pool.iloc[0]
  
-        if base in ('APPLE_TARGET', 'APPLE_TARGET_STRICT'):
+        if base in ('APPLE_TARGET', 'APPLE_TARGET_STRICT', 'APPLE_FOLIO_STRICT'):
             cat = str(chosen.get('_apple_cat', ''))
             if cat:
                 used_apple_cats.add(cat)
@@ -3689,21 +3689,29 @@ def run_tablets_engine(trigger, df_products, df_history):
         notes.append(f"brand={str(chosen.get('Κατασκευαστής', ''))[:20]}")
         slot_notes[slot_num] = notes
  
-    # ----- Fallback pass: fill any failed slots -----
-    if failed_slots:
+    # ----- Fallback pass -----
+    # Skip slots whose logic key is in LOGIC_NO_FALLBACK (e.g. screen protector)
+    fallback_targets = [s for s in failed_slots
+                        if s[3] not in LOGIC_NO_FALLBACK]
+ 
+    if fallback_targets:
         diag.append(("3. Fallback Pass",
-                     f"{len(failed_slots)} unfilled",
+                     f"{len(fallback_targets)} unfilled",
                      "Brand+sales relaxed"))
  
-        for slot_num, role, hierarchies, logic_key, reason in failed_slots:
-            # Try the slot's original hierarchies first, with relaxed filters
+        for slot_num, role, hierarchies, logic_key, reason in fallback_targets:
             pool = c[c['Hierarchy'].isin(hierarchies)].copy()
             pool = pool[~pool['Material'].isin(used_materials)]
+            # NEW: exclude already-used Apple categories so the keyboard
+            # fallback can't pick another Pencil
+            if used_apple_cats and '_apple_cat' in pool.columns:
+                pool = pool[~pool['_apple_cat'].isin(used_apple_cats)]
  
-            # If empty, expand to a broad fallback set so we always get 10 slots
             if pool.empty:
                 pool = c[c['Hierarchy'].isin(FALLBACK_HIERARCHIES)].copy()
                 pool = pool[~pool['Material'].isin(used_materials)]
+                if used_apple_cats and '_apple_cat' in pool.columns:
+                    pool = pool[~pool['_apple_cat'].isin(used_apple_cats)]
  
             if pool.empty:
                 slot_notes[slot_num] = (slot_notes.get(slot_num, [])
@@ -3714,7 +3722,6 @@ def run_tablets_engine(trigger, df_products, df_history):
             sb = _series(pool, 'Κατασκευαστής').str.upper().str.strip() == tb
             pool.loc[sb, 'Final_Score'] += S_BRAND_PRIMARY
  
-            # Soft budget penalty (don't hard-filter in fallback)
             min_p, max_p = _budget_range(role, ttier)
             out_range = (pool['_p'] < min_p * 0.5) | (pool['_p'] > max_p * 2.0)
             pool.loc[out_range, 'Final_Score'] -= 500_000
