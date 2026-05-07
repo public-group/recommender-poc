@@ -378,7 +378,7 @@ def _build_kiddoboo_slots():
         (None, 'Smartwatch',       ['SMART WATCHES', 'ACTIVITY TRACKER'], 'BRAND_FIRST'),
         (None, 'Wall Charger',     ['WALL CHARGERS'],                     'CHARGER_FIT'),
         (None, 'Cable',            ['ΚΑΛΩΔΙΑ ΔΕΔΟΜΕΝΩΝ', 'USB CABLES'],   'CABLE_FIT'),
-        (None, 'Party Speaker',    ['ΗΧΕΙΑ ΦΟΡΗΤΟΥ ΗΧΟΥ'],                'BRAND_FIRST'),
+        (None, 'Party Speaker',    ['KARAOKE', 'ΗΧΕΙΑ ΦΟΡΗΤΟΥ ΗΧΟΥ'],                'BRAND_FIRST'),
         (None, 'Action Camera',    ['IP CAMERAS', 'TRAVEL ACCESSORIES'],  'BRAND_FIRST'),
         (None, 'Smartphone',       ['Smartphones'],                       'BRAND_FIRST'),
         (None, 'Travel/Scooter',   ['TRAVEL ACCESSORIES'],                'BRAND_FIRST'),
