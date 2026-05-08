@@ -1091,7 +1091,7 @@ def _size_band_matches(band, tablet_size_inches):
         # so bag_size >= tablet_size with a small downward slack for marketing
         # rounding (some "11-inch" listings are actually 10.9").
         v = float(m.group(1))
-        return v >= tablet_size_inches - 0.2 and v <= tablet_size_inches + 3.0
+        return v >= tablet_size_inches - 0.2 and v <= tablet_size_inches + 1.5
     return False
  
  
@@ -1190,7 +1190,7 @@ def _universal_tablet_bag_pool(c, used_materials, tb, tsize, color_toks=None):
     if tsize > 0:
         bag_sizes = bags.apply(_universal_bag_size, axis=1)
         size_ok = (bag_sizes == 0) | (
-            (bag_sizes >= tsize - 0.2) & (bag_sizes <= tsize + 3.0)
+            (bag_sizes >= tsize - 0.2) & (bag_sizes <= tsize + 1.5)
         )
         size_filtered = bags[size_ok]
         if not size_filtered.empty:
