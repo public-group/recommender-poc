@@ -480,7 +480,101 @@ def _budget_range(role, ttier):
  
  
 
+# ═════════════════════════════════════════════════════════════
+# 🟢 SMARTWATCH CONFIGURATION
+# ═════════════════════════════════════════════════════════════
 
+# ── Brand Personas ──────────────────────────────────────────────
+ATHLETE_BRANDS   = {"GARMIN", "SUUNTO", "POLAR", "COROS"}
+ECOSYSTEM_BRANDS = {"APPLE", "SAMSUNG", "GOOGLE", "HUAWEI", "XIAOMI", "FITBIT"}
+ 
+# ── Price Tiers ─────────────────────────────────────────────────
+def get_wearable_tier(price: float) -> str:
+    """Classify a trigger product into Entry / Mid / Premium."""
+    if price >= 400:
+        return "Premium"
+    if price >= 180:
+        return "Mid"
+    return "Entry"
+ 
+# ── Budget Caps per Tier & Accessory Category (€) ───────────────
+#    Used both as a hard ceiling and as the "sweet-spot" reference.
+WEARABLE_BUDGET_CAPS: dict[str, dict[str, float]] = {
+    "Entry":   {"straps": 25,  "protection": 15, "power": 20,  "audio": 50,   "scales": 30,  "mounts": 20,  "car_charger": 15},
+    "Mid":     {"straps": 45,  "protection": 25, "power": 35,  "audio": 120,  "scales": 60,  "mounts": 35,  "car_charger": 25},
+    "Premium": {"straps": 100, "protection": 50, "power": 60,  "audio": 250,  "scales": 150, "mounts": 60,  "car_charger": 40},
+}
+ 
+# ── Scoring Constants ────────────────────────────────────────────
+#    Organised in descending priority so scoring intent is self-documenting.
+SCORE_MODEL_MATCH_STRICT  = 1_000_000   # Full model string found verbatim in compatibility field
+SCORE_MODEL_MATCH_PARTIAL =   500_000   # ≥50 % of model tokens found in compatibility field
+SCORE_SAME_BRAND          =   200_000   # Accessory made by the same manufacturer as the trigger
+SCORE_USE_CASE_AFFINITY   =   300_000   # Product matches persona use-case (sport audio, dock, etc.)
+SCORE_IN_BUDGET_SWEET     =   150_000   # Price falls within 50 %–100 % of budget cap
+SCORE_BELOW_SWEET         =    75_000   # Price is cheap but valid (<50 % of cap)
+SCORE_POPULARITY_BOOST    =   100_000   # Item is in the top-20 % by sales volume
+ 
+PENALTY_OVER_CAP_SOFT     =  -200_000   # Price is 100 %–150 % of cap
+PENALTY_OVER_CAP_HARD     =  -400_000   # Price is 150 %–250 % of cap
+PENALTY_WAY_OVER_CAP      =  -900_000   # Price > 250 % of cap (near-total exclusion)
+PENALTY_BRAND_DIVERSITY   =  -150_000   # Per extra appearance of the same brand (applied per extra occurrence)
+ 
+# Slot is skipped if the best candidate's final score is below this threshold.
+# Set it just below PENALTY_OVER_CAP_HARD so a single hard-penalised product
+# without any positive signals never gets recommended.
+SCORE_MINIMUM_THRESHOLD   = PENALTY_OVER_CAP_HARD  # -400 000
+ 
+# ── Marketing Copy (one string per hierarchy label) ─────────────
+WEARABLE_MARKETING_COPY: dict[str, str] = {
+    "ΛΟΥΡΑΚΙΑ WEARABLES":          "Ανανέωσε το στυλ σου — από sport silicone έως premium leather.",
+    "ΠΡΟΣΤΑΣΙΑ ΟΘΟΝΗΣ WEARABLES":  "Διατήρησε την οθόνη σου αλώβητη από γρατζουνιές και πτώσεις.",
+    "Bluetooth":                   "Απόλαυσε ασύρματο ήχο στις προπονήσεις και στην καθημερινή σου.",
+    "BODY SCALES":                 "Παρακολούθησε πλήρη σύσταση σώματος — πέρα από απλό βάρος.",
+    "WALL CHARGERS":               "Γρήγορη φόρτιση για κάθε συσκευή σου στο σπίτι.",
+    "ΦΟΡΤΙΣΤΕΣ WEARABLES":         "Εφεδρικός φορτιστής για το smartwatch σου — ποτέ ξεφόρτωτος.",
+    "OVERHEAD":                    "Over-ear άνεση για μαραθώνιες συνεδρίες ήχου.",
+    "ΗΧΕΙΑ ΦΟΡΗΤΟΥ ΗΧΟΥ":          "Φορητός ήχος 360° — για το σπίτι, το γυμναστήριο, την παραλία.",
+    "MOUNTS & STANDS":             "Τακτοποίησε & φόρτιζε το smartwatch σου με στυλ.",
+    "CAR CHARGERS":                "Κράτα κάθε συσκευή φορτισμένη σε κάθε διαδρομή.",
+}
+ 
+# ═══════════════════════════════════════════════════════════════
+# 2.  PERSONA-SPECIFIC SLOT DEFINITIONS
+#
+#     Format per slot:
+#       (slot_num, role_label, [hierarchy_strings], logic_key, budget_key)
+#
+#     Athlete  → 2 straps (sweat-resistant), protection, dedicated charger,
+#                sport audio, bike mount, scale, wall charger, speaker, car charger
+#     Ecosystem → 1 premium strap, protection, dedicated charger, dock/stand,
+#                 TWS earbuds, scale, wall charger, car charger, speaker, over-ear
+# ═══════════════════════════════════════════════════════════════
+ 
+SLOTS_ECOSYSTEM: list[tuple] = [
+    (1,  "Λουράκι",               ["ΛΟΥΡΑΚΙΑ WEARABLES"],         "MODEL_MATCH_STRICT", "straps"),
+    (2,  "Προστασία Οθόνης",      ["ΠΡΟΣΤΑΣΙΑ ΟΘΟΝΗΣ WEARABLES"], "MODEL_MATCH_STRICT", "protection"),
+    (3,  "Φορτιστής Wearable",    ["ΦΟΡΤΙΣΤΕΣ WEARABLES"],        "MODEL_MATCH_STRICT", "power"),
+    (4,  "Βάση / Dock",           ["MOUNTS & STANDS"],            "MOUNT_USE_CASE",     "mounts"),
+    (5,  "TWS Earbuds",           ["Bluetooth"],                  "AUDIO_USE_CASE",     "audio"),
+    (6,  "Ζυγαριά",               ["BODY SCALES"],                "GENERIC",            "scales"),
+    (7,  "Φορτιστής Τοίχου",      ["WALL CHARGERS"],              "GENERIC",            "power"),
+    (8,  "Φορτιστής Αυτ/του",     ["CAR CHARGERS"],               "GENERIC",            "car_charger"),
+    (9,  "Φορητό Ηχείο",          ["ΗΧΕΙΑ ΦΟΡΗΤΟΥ ΗΧΟΥ"],         "GENERIC",            "audio"),
+    (10, "Over-Ear Headphones",   ["OVERHEAD"],                   "GENERIC",            "audio"),
+]
+ 
+SLOTS_ATHLETE: list[tuple] = [
+    (1,  "Λουράκι Sport (κύριο)", ["ΛΟΥΡΑΚΙΑ WEARABLES"],         "MODEL_MATCH_STRICT", "straps"),
+    (2,  "Λουράκι Sport (εφεδρ.)",["ΛΟΥΡΑΚΙΑ WEARABLES"],         "MODEL_MATCH_STRICT", "straps"),
+    (3,  "Προστασία Οθόνης",      ["ΠΡΟΣΤΑΣΙΑ ΟΘΟΝΗΣ WEARABLES"], "MODEL_MATCH_STRICT", "protection"),
+    (4,  "Φορτιστής Wearable",    ["ΦΟΡΤΙΣΤΕΣ WEARABLES"],        "MODEL_MATCH_STRICT", "power"),
+    (5,  "Sport Audio",           ["Bluetooth"],                  "AUDIO_USE_CASE",     "audio"),
+    (6,  "Bike Mount / Βάση",     ["MOUNTS & STANDS"],            "MOUNT_USE_CASE",     "mounts"),
+    (7,  "Ζυγαριά",               ["BODY SCALES"],                "GENERIC",            "scales"),
+    (8,  "Φορτιστής Τοίχου",      ["WALL CHARGERS"],              "GENERIC",            "power"),
+    (9,  "Φορητό Ηχείο",          ["ΗΧΕΙΑ ΦΟΡΗΤΟΥ ΗΧΟΥ"],         "GENERIC",            "audio"),
+    (10, "Φορτιστής Αυτ/του",     ["CAR CHARGERS"],               "GENERIC",            "car_charger"),
 
 # ═════════════════════════════════════════════════════════════
 # 🟢 FLOOR CARE CONFIGURATION
@@ -1203,7 +1297,92 @@ def _universal_tablet_bag_pool(c, used_materials, tb, tsize, color_toks=None):
         bags = _apply_color_boost(bags, color_toks)
     return bags
  
+
+# ═════════════════════════════════════════════════════════════
+# 🟢 SMARTWATCH HELPERS
+# ═════════════════════════════════════════════════════════════
+
+
+def parse_euro_price(raw) -> float:
+    """
+    Robustly parse a price value that may be a float, int, or a
+    Euro-formatted string such as '€ 1.299,00' or '1299.99'.
+    Returns 0.0 on failure.
+    """
+    if isinstance(raw, (int, float)):
+        return float(raw)
+    try:
+        cleaned = re.sub(r"[€\s]", "", str(raw))          # strip € and spaces
+        cleaned = cleaned.replace(".", "").replace(",", ".")  # EU → decimal
+        return float(cleaned)
+    except (ValueError, AttributeError):
+        return 0.0
  
+ 
+def _model_tokens(model_str: str) -> set[str]:
+    """
+    Split a model string into meaningful tokens for partial matching.
+    E.g. 'Apple Watch Series 9 45mm' → {'APPLE', 'WATCH', 'SERIES', '9', '45MM'}
+    """
+    tokens = re.split(r"[\s\-/,]+", model_str.strip().upper())
+    return {t for t in tokens if len(t) >= 2}
+ 
+ 
+def _compatibility_score(model_str: str, compat_field) -> int:
+    """
+    Score a compatibility-field value against the trigger's model.
+ 
+    Returns
+    -------
+    SCORE_MODEL_MATCH_STRICT   if the full model string is found verbatim
+    SCORE_MODEL_MATCH_PARTIAL  if ≥50 % of model tokens are present
+    0                          otherwise
+    """
+    if not model_str or pd.isna(compat_field):
+        return 0
+    compat_upper = str(compat_field).upper()
+ 
+    # ① Verbatim / strict match
+    if re.search(re.escape(model_str.upper()), compat_upper):
+        return SCORE_MODEL_MATCH_STRICT
+ 
+    # ② Token-based partial match
+    tokens = _model_tokens(model_str)
+    if not tokens:
+        return 0
+    matched = sum(1 for t in tokens if t in compat_upper)
+    if matched >= max(2, len(tokens) // 2):          # ≥50 % of tokens found
+        return SCORE_MODEL_MATCH_PARTIAL
+ 
+    return 0
+ 
+ 
+def _price_affinity_score(item_price: float, cap: float) -> int:
+    """
+    Reward items inside the budget sweet-spot; penalise those over the cap.
+ 
+    Zones:
+      < 50 % of cap       →  small positive (affordable but relevant)
+      50 % – 100 % of cap →  full positive  (sweet spot)
+      100 % – 150 % of cap→  soft penalty
+      150 % – 250 % of cap→  hard penalty
+      > 250 % of cap      →  near-exclusion
+    """
+    if item_price <= 0 or cap <= 0:
+        return 0
+    ratio = item_price / cap
+    if ratio <= 0.50:
+        return SCORE_BELOW_SWEET
+    if ratio <= 1.00:
+        return SCORE_IN_BUDGET_SWEET
+    if ratio <= 1.50:
+        return PENALTY_OVER_CAP_SOFT
+    if ratio <= 2.50:
+        return PENALTY_OVER_CAP_HARD
+    return PENALTY_WAY_OVER_CAP
+ 
+ 
+
  
 # ═════════════════════════════════════════════════════════════
 # 🟢 LAPTOPS HELPERS
@@ -1466,6 +1645,8 @@ L2_CHILDREN = {
         {"key": "Smartphones", "label": "Smart-\nphones", "icon_svg": "..."},
         {"key": "Tablets", "label": "Tablets", # <--- ΠΡΟΣΘΗΚΗ
          "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='4' y='2' width='16' height='20' rx='2' ry='2'/%3E%3Cline x1='12' y1='18' x2='12.01' y2='18'/%3E%3C/svg%3E"}
+        {"key": "Wearables", "label": "Smart-\nwatches", 
+         "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M18 6L16 2H8L6 6M18 18l-2 4H8l-2-4'/%3E%3Ccircle cx='12' cy='12' r='7'/%3E%3Cpath d='M12 9v3l2 2'/%3E%3C/svg%3E"}
     ],          
     "IT":        [{"key": "Laptops",     "label": "Laptops",
                    "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='2' y='4' width='20' height='12' rx='1' ry='1'/%3E%3Cline x1='6' y1='20' x2='18' y2='20'/%3E%3Cline x1='12' y1='16' x2='12' y2='20'/%3E%3C/svg%3E"},
@@ -1727,7 +1908,22 @@ else:
             sel = st.sidebar.selectbox("", phones['Title'].unique(), label_visibility="collapsed", key="sm_sel")
             trigger = phones[phones['Title']==sel].iloc[0] if sel else None
     
-    
+    elif active_cluster == "Wearables":
+        if df_products.empty: st.stop()
+        watches = df_products[df_products['Level 2'].fillna('').astype(str).str.strip().str.upper() == 'WEARABLES']
+        
+        # Test SKUs για Wearables
+        watch_test_skus = {"2107409", "1994065", "2087520", "2027221", "2107386"} # SKUs από Garmin, Apple, Samsung
+        if not watches.empty:
+            watches = watches[watches['Material'].astype(str).str.strip().str.replace(r'\.0$', '', regex=True).isin(watch_test_skus)]
+
+        if watches.empty:
+            st.sidebar.warning("Δεν βρέθηκαν Smartwatches.")
+        else:
+            st.sidebar.markdown('<p class="sidebar-section">Επιλέξτε Smartwatch</p>', unsafe_allow_html=True)
+            sel = st.sidebar.selectbox("", watches['Title'].unique(), label_visibility="collapsed", key="watch_sel")
+            trigger = watches[watches['Title']==sel].iloc[0] if sel else None
+            
     elif active_cluster == "Tablets":
         if df_products.empty: st.stop()
         # Fetch by Level 2 or Hierarchy depending on your Excel mapping
@@ -4020,6 +4216,300 @@ def run_tablets_engine(trigger, df_products, df_history):
     return recs_df, diag, slot_notes, recs_df
  
 
+# ═════════════════════════════════════════════════════════════
+# 🟢 SMARTWATCH ENGINE
+# ═════════════════════════════════════════════════════════════
+
+
+def run_wearables_engine(
+    trigger: dict,
+    df_products: pd.DataFrame,
+    df_history: pd.DataFrame,
+) -> tuple[pd.DataFrame, list, dict, dict]:
+    """
+    Wearables Cross-Sell Recommendation Engine v2.
+ 
+    Parameters
+    ----------
+    trigger     : dict         – The source product row (the item being viewed / purchased)
+    df_products : pd.DataFrame – Full product catalogue
+    df_history  : pd.DataFrame – Sales / interaction history (used for popularity signals)
+ 
+    Returns
+    -------
+    recs_df         : pd.DataFrame – One recommended row per slot (sorted by Assigned_Slot)
+    diag            : list         – Human-readable diagnostic tuples for debugging
+    slot_notes      : dict         – Per-slot list of scoring notes
+    score_breakdown : dict         – Per-slot score component dict for full transparency
+    """
+ 
+    diag: list          = []
+    slot_notes: dict    = {}
+    score_breakdown: dict = {}
+    all_recs: list      = []
+ 
+    # ── Parse Trigger Fields ─────────────────────────────────
+    tm     = trigger["Material"]
+    tb     = str(trigger.get("Κατασκευαστής", "")).strip().upper()
+    tmod   = str(trigger.get("Μοντέλο", "")).strip()
+    tprice = parse_euro_price(trigger.get("LIST PRICE", 0))
+    ttier  = get_wearable_tier(tprice)
+ 
+    is_athlete   = tb in ATHLETE_BRANDS
+    is_ecosystem = tb in ECOSYSTEM_BRANDS
+    # Unknown brand: default to Ecosystem logic (safest general recommendations)
+    persona_label = "Athlete" if is_athlete else "Ecosystem User"
+ 
+    diag.append((
+        "0. Trigger",
+        f"Persona={persona_label}  Brand={tb}  Tier={ttier}",
+        f"Price=€{tprice:.2f}  Model={tmod or '—'}",
+    ))
+ 
+    # ── Select Slot Layout ───────────────────────────────────
+    slot_definitions = SLOTS_ATHLETE if is_athlete else SLOTS_ECOSYSTEM
+    caps             = WEARABLE_BUDGET_CAPS.get(ttier, WEARABLE_BUDGET_CAPS["Mid"])
+ 
+    # ── Prepare Candidate Pool ───────────────────────────────
+    c = df_products[df_products["Material"] != tm].copy()
+    c["Sales_Tiebreaker"] = (
+        pd.to_numeric(c.get("Sum of Sales", 0), errors="coerce").fillna(0)
+    )
+    c["_p"] = c["LIST PRICE"].apply(parse_euro_price)
+ 
+    # Popularity threshold: items in the top-20 % of sales get a bonus
+    sales_p80 = c["Sales_Tiebreaker"].quantile(0.80) if not c.empty else 0
+ 
+    used_materials: set   = {tm}
+    brand_slot_count: dict = {}    # {brand_str: count_of_slots_already_filled}
+ 
+    # ── Slot Loop ────────────────────────────────────────────
+    for slot_num, role, hierarchies, logic_key, budget_key in slot_definitions:
+ 
+        notes: list[str] = [f"Logic={logic_key}", f"BudgetKey={budget_key}"]
+ 
+        # ── Build per-slot candidate pool from hierarchy ────
+        hier_pattern = "|".join(re.escape(h) for h in hierarchies)
+        pool = c[
+            c["Hierarchy"]
+            .fillna("")
+            .astype(str)
+            .str.upper()
+            .str.contains(hier_pattern, na=False)
+        ].copy()
+        pool = pool[~pool["Material"].isin(used_materials)]
+ 
+        if pool.empty:
+            diag.append((f"Slot {slot_num}", role, "⚪ Pool empty — skipped"))
+            continue
+ 
+        pool["_score"] = 0.0
+        cap = caps.get(budget_key, caps["power"])
+ 
+        # ═══════════════════════════════════════════════════
+        # SCORING LAYER 1 — Compatibility / Model Match
+        #   Applies to straps, screen protectors, wearable chargers.
+        #   Two-tier: strict (verbatim) > partial (token).
+        # ═══════════════════════════════════════════════════
+        has_any_compat_hit = False
+        if logic_key == "MODEL_MATCH_STRICT" and tmod:
+            compat_col = "Συμβατές συσκευές"
+            if compat_col in pool.columns:
+                compat_scores = pool[compat_col].apply(
+                    lambda x: _compatibility_score(tmod, x)
+                )
+                pool["_score"] += compat_scores
+                strict_hits  = (compat_scores == SCORE_MODEL_MATCH_STRICT).sum()
+                partial_hits = (compat_scores == SCORE_MODEL_MATCH_PARTIAL).sum()
+                has_any_compat_hit = (strict_hits + partial_hits) > 0
+                notes.append(
+                    f"Compat strict={strict_hits} partial={partial_hits}"
+                )
+                if not has_any_compat_hit:
+                    notes.append("⚠️ No compat match — relying on brand/popularity fallback")
+ 
+        # ═══════════════════════════════════════════════════
+        # SCORING LAYER 2 — Persona / Use-Case Affinity
+        #   Audio and Mount slots receive persona-specific boosts
+        #   so the right product type surfaces for each persona.
+        # ═══════════════════════════════════════════════════
+        if logic_key == "AUDIO_USE_CASE":
+            if is_athlete:
+                # Athletes → sport/bone-conduction, IPX-rated, running-friendly
+                sport_mask = pool["Title"].str.contains(
+                    r"Sport|Run|Bone|Shokz|Neckband|IPX[567]",
+                    case=False, na=False, regex=True,
+                )
+                pool.loc[sport_mask, "_score"] += SCORE_USE_CASE_AFFINITY
+                notes.append(f"Sport audio boost: {sport_mask.sum()} items")
+            else:
+                # Ecosystem → True Wireless, preferably same brand
+                tws_mask = pool["Title"].str.contains(
+                    r"Buds|AirPods|FreeBuds|TWS|True\s*Wireless|Galaxy\s*Buds",
+                    case=False, na=False, regex=True,
+                )
+                same_brand_tws = tws_mask & (
+                    pool["Κατασκευαστής"].fillna("").str.upper() == tb
+                )
+                pool.loc[same_brand_tws,  "_score"] += SCORE_USE_CASE_AFFINITY + SCORE_SAME_BRAND
+                pool.loc[tws_mask & ~same_brand_tws, "_score"] += SCORE_USE_CASE_AFFINITY
+                notes.append(f"TWS boost: same-brand={same_brand_tws.sum()} other={tws_mask.sum() - same_brand_tws.sum()}")
+ 
+        elif logic_key == "MOUNT_USE_CASE":
+            if is_athlete:
+                # Athletes → bike / handlebar / GPS mounts
+                bike_mask = pool["Title"].str.contains(
+                    r"Bike|Ποδήλατο|Handlebar|Cycling|GPS\s*Mount",
+                    case=False, na=False, regex=True,
+                )
+                pool.loc[bike_mask, "_score"] += SCORE_USE_CASE_AFFINITY
+                notes.append(f"Bike mount boost: {bike_mask.sum()} items")
+            else:
+                # Ecosystem → charging docks / nightstand stands
+                dock_mask = pool["Title"].str.contains(
+                    r"Dock|Stand|Station|Βάση|Charging\s*Stand|Nightstand",
+                    case=False, na=False, regex=True,
+                )
+                pool.loc[dock_mask, "_score"] += SCORE_USE_CASE_AFFINITY
+                notes.append(f"Dock/Stand boost: {dock_mask.sum()} items")
+ 
+        # ═══════════════════════════════════════════════════
+        # SCORING LAYER 3 — Brand Alignment
+        #   Same-brand accessories feel more intentional.
+        # ═══════════════════════════════════════════════════
+        same_brand_mask = pool["Κατασκευαστής"].fillna("").str.upper() == tb
+        pool.loc[same_brand_mask, "_score"] += SCORE_SAME_BRAND
+ 
+        # ═══════════════════════════════════════════════════
+        # SCORING LAYER 4 — Brand Diversity Penalty
+        #   Prevents the recommendation set from being monopolised
+        #   by a single manufacturer (especially Apple).
+        #   Each extra slot already filled by a brand adds a cumulative penalty.
+        # ═══════════════════════════════════════════════════
+        for brand, count in brand_slot_count.items():
+            if count >= 2:
+                over_mask = pool["Κατασκευαστής"].fillna("").str.upper() == brand
+                pool.loc[over_mask, "_score"] += PENALTY_BRAND_DIVERSITY * (count - 1)
+ 
+        # ═══════════════════════════════════════════════════
+        # SCORING LAYER 5 — Price Affinity
+        #   Reward items that sit inside the budget sweet-spot;
+        #   progressively penalise those that exceed the cap.
+        # ═══════════════════════════════════════════════════
+        pool["_score"] += pool["_p"].apply(lambda p: _price_affinity_score(p, cap))
+ 
+        # ═══════════════════════════════════════════════════
+        # SCORING LAYER 6 — Popularity Boost
+        #   Items in the top-20 % by sales get a small tie-breaking boost.
+        # ═══════════════════════════════════════════════════
+        popular_mask = pool["Sales_Tiebreaker"] >= sales_p80
+        pool.loc[popular_mask, "_score"] += SCORE_POPULARITY_BOOST
+ 
+        # ── Final Sort & Selection ──────────────────────────
+        pool = pool.sort_values(
+            ["_score", "Sales_Tiebreaker"], ascending=[False, False]
+        )
+ 
+        best_score = pool["_score"].iloc[0] if not pool.empty else None
+ 
+        # Gate: skip this slot if the best candidate is below minimum threshold
+        if best_score is None or best_score < SCORE_MINIMUM_THRESHOLD:
+            diag.append((
+                f"Slot {slot_num}",
+                role,
+                f"⛔ Best score {best_score} below threshold — skipped",
+            ))
+            continue
+ 
+        chosen = pool.iloc[0]
+        chosen_brand  = str(chosen.get("Κατασκευαστής", "")).strip().upper()
+        chosen_score  = chosen["_score"]
+        fallback_used = (
+            logic_key == "MODEL_MATCH_STRICT"
+            and tmod
+            and not has_any_compat_hit
+        )
+ 
+        # Update brand-diversity tracker
+        brand_slot_count[chosen_brand] = brand_slot_count.get(chosen_brand, 0) + 1
+ 
+        # ── Build output row ────────────────────────────────
+        rc = chosen.copy()
+        rc["Assigned_Slot"]  = slot_num
+        rc["Slot_Role"]      = role
+        rc["Persona"]        = persona_label
+        rc["Score"]          = chosen_score
+        rc["Fallback_Used"]  = fallback_used
+        rc["Marketing_Copy"] = WEARABLE_MARKETING_COPY.get(
+            hierarchies[0],
+            "Ιδανική επιλογή για το smartwatch σου.",
+        )
+        all_recs.append(rc)
+        used_materials.add(chosen["Material"])
+        slot_notes[slot_num] = notes
+ 
+        # Detailed breakdown for audit / debugging
+        score_breakdown[slot_num] = {
+            "slot_role":    role,
+            "material":     chosen["Material"],
+            "title":        str(chosen.get("Title", ""))[:60],
+            "brand":        chosen_brand,
+            "final_score":  round(chosen_score),
+            "price":        round(chosen["_p"], 2),
+            "cap":          cap,
+            "price_ratio":  round(chosen["_p"] / cap, 2) if cap else None,
+            "fallback":     fallback_used,
+            "logic":        logic_key,
+        }
+ 
+        diag.append((
+            f"Slot {slot_num} ✅",
+            f"{role}  →  {str(chosen.get('Title', ''))[:50]}",
+            f"Score={round(chosen_score):,}  Price=€{chosen['_p']:.2f}  Cap=€{cap}  Fallback={fallback_used}",
+        ))
+ 
+    # ── Assemble Final DataFrame ────────────────────────────
+    recs_df = (
+        pd.DataFrame(all_recs).sort_values("Assigned_Slot")
+        if all_recs
+        else pd.DataFrame()
+    )
+ 
+    return recs_df, diag, slot_notes, score_breakdown
+ 
+ 
+# ═══════════════════════════════════════════════════════════════
+# 5.  DIAGNOSTIC PRETTY-PRINT HELPER
+# ═══════════════════════════════════════════════════════════════
+ 
+def print_wearables_diag(diag: list, slot_notes: dict, score_breakdown: dict) -> None:
+    """Pretty-print the diagnostics returned by run_wearables_engine."""
+    print("\n" + "═" * 72)
+    print("  WEARABLES ENGINE — DIAGNOSTICS")
+    print("═" * 72)
+    for label, main, detail in diag:
+        print(f"  [{label}]  {main}")
+        if detail:
+            print(f"            {detail}")
+ 
+    print("\n" + "─" * 72)
+    print("  SLOT NOTES")
+    print("─" * 72)
+    for slot_num, notes in sorted(slot_notes.items()):
+        print(f"  Slot {slot_num:>2}:  {' | '.join(notes)}")
+ 
+    print("\n" + "─" * 72)
+    print("  SCORE BREAKDOWN")
+    print("─" * 72)
+    for slot_num, bd in sorted(score_breakdown.items()):
+        print(
+            f"  Slot {slot_num:>2} [{bd['slot_role']:<28}]  "
+            f"Score={bd['final_score']:>10,}  "
+            f"Price=€{bd['price']:<7}  Cap=€{bd['cap']:<6}  "
+            f"Ratio={bd['price_ratio']}  Fallback={bd['fallback']}"
+        )
+    print("═" * 72 + "\n")
+ 
 
 # ═════════════════════════════════════════════════════════════
 # 🟢 LAPTOPS ENGINE — Mainstream / Road Warrior
