@@ -1913,7 +1913,7 @@ else:
         watches = df_products[df_products['Level 2'].fillna('').astype(str).str.strip().str.upper() == 'WEARABLES']
         
         # Test SKUs για Wearables
-        watch_test_skus = {"2107409", "1994065", "2087520", "2027221", "2107386"} # SKUs από Garmin, Apple, Samsung
+        watch_test_skus = {"2071988", "2072047", "1973685", "2071917", "1964635", "2088752", "1902161", "2076501", "1924408", "2044156"} # SKUs από Garmin, Apple, Samsung
         if not watches.empty:
             watches = watches[watches['Material'].astype(str).str.strip().str.replace(r'\.0$', '', regex=True).isin(watch_test_skus)]
 
