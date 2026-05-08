@@ -1644,7 +1644,7 @@ L2_CHILDREN = {
     "Telephony": [
         {"key": "Smartphones", "label": "Smart-\nphones", "icon_svg": "..."},
         {"key": "Tablets", "label": "Tablets", # <--- ΠΡΟΣΘΗΚΗ
-         "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='4' y='2' width='16' height='20' rx='2' ry='2'/%3E%3Cline x1='12' y1='18' x2='12.01' y2='18'/%3E%3C/svg%3E"}
+         "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='4' y='2' width='16' height='20' rx='2' ry='2'/%3E%3Cline x1='12' y1='18' x2='12.01' y2='18'/%3E%3C/svg%3E"},
         {"key": "Wearables", "label": "Smart-\nwatches", 
          "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M18 6L16 2H8L6 6M18 18l-2 4H8l-2-4'/%3E%3Ccircle cx='12' cy='12' r='7'/%3E%3Cpath d='M12 9v3l2 2'/%3E%3C/svg%3E"}
     ],          
