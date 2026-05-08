@@ -9141,6 +9141,9 @@ elif active_cluster == "Turntables":
     recs, diag, slot_notes, full_candidates = run_vinyl_engine(trigger, df_products, df_peripherals, df_music, df_history)
     slot_diag = []
     full_candidates = recs
+elif active_cluster == "Wearables":
+    recs, diag, slot_notes, full_candidates = run_wearables_engine(trigger, df_products, df_history)
+    slot_diag = []    
 elif active_cluster in ("Mouse", "Keyboard", "Gaming Mouse", "Gaming Keyboard"):
     recs, diag, slot_notes, full_candidates = run_peripherals_engine(trigger, df_peripherals, df_history, active_cluster)
     slot_diag = []
