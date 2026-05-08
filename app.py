@@ -161,7 +161,327 @@ LAPTOP_MARKETING_COPY = {
 # ═════════════════════════════════════════════════════════════
 # 🟢 TABLETS CONFIGURATION
 # ═════════════════════════════════════════════════════════════
-TABLET_PREMIUM_BRANDS
+
+
+
+TABLET_PREMIUM_BRANDS = {'APPLE', 'SAMSUNG', 'HUAWEI', 'XIAOMI', 'MICROSOFT'}
+ 
+KNOWN_TABLET_BRANDS = {
+    'APPLE', 'SAMSUNG', 'HUAWEI', 'XIAOMI', 'MICROSOFT',
+    'LENOVO', 'KIDDOBOO', 'AMAZON', 'ASUS', 'ACER', 'NOKIA',
+}
+ 
+# Logic keys whose slots should be DROPPED entirely on failure rather than
+# filled by the fallback pass. Avoids cross-category nonsense like a phone
+# screen protector showing up on a tablet.
+LOGIC_NO_FALLBACK = {'SCREEN_PROTECTOR_FIT'}
+ 
+ 
+# ────────────────────────────────────────────────────────────
+# Score weights
+# ────────────────────────────────────────────────────────────
+S_BRAND_PRIMARY     = 1_500_000
+S_BRAND_BOOST       =   100_000
+S_MODEL_MATCH       =   500_000
+S_CATEGORY_TARGET   =   500_000
+S_CATEGORY_REPEAT   = -2_000_000
+S_PORT_MATCH        =   300_000
+S_PORT_MISMATCH     = -1_000_000
+S_BLUETOOTH_REQ     =   500_000
+S_USB_RECEIVER_PEN  = -1_500_000
+S_WATTAGE_TIER      =   300_000
+S_CASE_TYPE_PRIMARY =   300_000
+S_COLOR_EXACT       =   200_000
+S_COLOR_TRANSPARENT =    80_000
+S_SIZE_MATCH        =   400_000
+S_TOUCHPAD_BOOST    =   200_000
+S_HIERARCHY_TARGET  =   300_000
+S_OTG_BONUS         =   100_000
+S_AIRPODS_BOOST     =   500_000
+S_MAGIC_MOUSE_BOOST =   700_000
+S_UNBRANDED_STYLUS  =    50_000
+S_PREMIUM_VARIANT   =   800_000   # NEW: boost expensive variants for premium tier
+ 
+ 
+# ────────────────────────────────────────────────────────────
+# Budget ranges per tier × role group  (min, max) in euros
+# Tier thresholds (set in get_tablet_tier):
+#     Pro            ≥ 1050
+#     Upper Medium   750 – 1049
+#     Medium         550 – 749
+#     Low            250 – 549
+#     Budget         < 250
+# ────────────────────────────────────────────────────────────
+TABLET_ACCESSORY_BUDGET = {
+    'Pro': {
+        'audio':    (250, 700),
+        'power':    (25,  150),
+        'cable':    (15,   80),
+        'case':     (50,  300),
+        'storage':  (30,  250),
+        'wear':     (400,1000),
+        'mouse':    (50,  300),
+        'keyboard': (80,  500),
+        'stylus':   (50,  300),
+        'default':  (15,  400),
+    },
+    'Upper Medium': {
+        'audio':    (150, 450),
+        'power':    (20,  100),
+        'cable':    (12,   50),
+        'case':     (35,  200),
+        'storage':  (20,  150),
+        'wear':     (250, 700),
+        'mouse':    (35,  180),
+        'keyboard': (50,  300),
+        'stylus':   (35,  200),
+        'default':  (12,  300),
+    },
+    'Medium': {
+        'audio':    (80,  300),
+        'power':    (15,   70),
+        'cable':    (10,   40),
+        'case':     (25,  150),
+        'storage':  (15,  100),
+        'wear':     (150, 500),
+        'mouse':    (25,  120),
+        'keyboard': (30,  150),
+        'stylus':   (20,  120),
+        'default':  (10,  200),
+    },
+    'Low': {
+        'audio':    (30,  180),
+        'power':    (10,   45),
+        'cable':    ( 8,   30),
+        'case':     (15,   90),
+        'storage':  (10,   70),
+        'wear':     (60,  250),
+        'mouse':    (15,   80),
+        'keyboard': (10,   40),    # user spec: ≤ 40€ for €398 tablet
+        'stylus':   (12,   80),
+        'default':  ( 8,  150),
+    },
+    'Budget': {
+        'audio':    ( 5,  100),
+        'power':    ( 5,   35),
+        'cable':    ( 3,   18),
+        'case':     ( 5,   45),
+        'storage':  ( 5,   40),
+        'wear':     (25,  150),
+        'mouse':    ( 5,   40),
+        'keyboard': ( 5,   20),    # user spec: ≤ 20€ for €180 tablet
+        'stylus':   ( 5,   35),
+        'default':  ( 3,   80),
+    },
+}
+ 
+ 
+TABLET_MARKETING_COPY = {
+    'Keyboard Case':        'Μεταμόρφωσε το tablet σε laptop.',
+    'Tablet Bag':           'Ασφαλής μεταφορά παντού.',
+    'NB Bag':               'Χωρητική θήκη laptop-style.',
+    'Wall Charger':         'Γρήγορη φόρτιση κάθε στιγμή.',
+    'Cable':                'Ανθεκτικό καλώδιο για καθημερινή χρήση.',
+    'Bluetooth':            'Ασύρματος ήχος χωρίς συμβιβασμούς.',
+    'Wireless Keyboard':    'Πληκτρολόγησε άνετα από παντού.',
+    'Wireless Mouse':       'Ακρίβεια χωρίς καλώδια.',
+    'Screen Protector':     'Προστασία οθόνης χωρίς συμβιβασμούς.',
+    'Overhead':             'Καθηλωτικός ήχος over-ear.',
+    'Smartwatch':           'Όλες οι ειδοποιήσεις στον καρπό σου.',
+    'Stylus':               'Ακρίβεια για σημειώσεις & σχέδιο.',
+    'Storage':              'Επέκτεινε τον αποθηκευτικό σου χώρο.',
+    'Apple Pencil':         'Ακρίβεια Apple για κάθε ιδέα.',
+    'Smart Folio':          'Λεπτή προστασία, στιβαρή στήριξη.',
+    'Apple Keyboard':       'Πληκτρολόγησε σαν σε laptop.',
+    'Apple Other':          'Γνήσιο αξεσουάρ Apple.',
+    'Apple Wall Charger':   'Original Apple φόρτιση.',
+    'Apple Cable':          'Γνήσιο καλώδιο Apple.',
+    'AirPods':              'Ο ασύρματος ήχος της Apple.',
+    'Apple Watch':          'Συμπλήρωσε το Apple οικοσύστημα.',
+    'USB Storage':          'Επέκτεινε τον αποθηκευτικό σου χώρο.',
+    'Party Speaker':        'Ξεσήκωσε το πάρτι.',
+    'Action Camera':        'Κατέγραψε κάθε περιπέτεια.',
+    'Smartphone':           'Πρώτο κινητό για μικρούς εξερευνητές.',
+    'Travel/Scooter':       'Έξω από το σπίτι, σε κίνηση.',
+}
+ 
+ 
+WATTAGE_TIER_PREFS = {
+    'Pro':          ['21 - 60 Watt', '61 - 100 Watt'],
+    'Upper Medium': ['21 - 60 Watt', '61 - 100 Watt'],
+    'Medium':       ['21 - 60 Watt', 'Έως 20 Watt'],
+    'Low':          ['Έως 20 Watt', '21 - 60 Watt'],
+    'Budget':       ['Έως 20 Watt', '21 - 60 Watt'],
+}
+ 
+ 
+TRANSPARENT_TOKENS = {'διάφανο', 'διαφανο', 'διαφανής', 'διαφανες',
+                      'transparent', 'clear', 'διάφανο;μαύρο'}
+ 
+ 
+FALLBACK_HIERARCHIES = [
+    'Bluetooth', 'SMART WATCHES', 'ACTIVITY TRACKER',
+    'ΗΧΕΙΑ ΦΟΡΗΤΟΥ ΗΧΟΥ', 'USB FLASH DISK',
+    'WALL CHARGERS', 'ΚΑΛΩΔΙΑ ΔΕΔΟΜΕΝΩΝ', 'USB CABLES',
+    'TABLET BAGS', 'NB BAGS', 'ΘΗΚΕΣ SLEEVE LAPTOP',
+    'MOUSE WIRELESS', 'KEYBOARDS WIRELESS',
+    'APPLE ORIGINAL TABLET ACCESSORIES', 'APPLE ORIGINAL TABLET BAGS',
+]
+ 
+ 
+def _apple_orig_categorize(row):
+    def get(col_name):
+        c = None
+        for k in row.index:
+            if _norm_col_name(k) == _norm_col_name(col_name):
+                c = k
+                break
+        return str(row[c]).strip() if c is not None else ''
+ 
+    katigoria = get('Κατηγορία').lower()
+    eidos_kbd = get('Είδος πληκτρολογίου').lower()
+    typos_dev = get('Τύπος συσκευής').lower()
+    typos3    = get('Τύπος3').lower()
+    ypod      = get('Υποδοχές').lower()
+    typhikis  = get('Τύπος Θήκης').lower()
+    brand_dev = get('Brand συσκευής σου').lower()
+ 
+    if 'γραφίδα' in typos_dev or 'γραφιδα' in typos_dev:
+        return 'Stylus'
+    if 'magic keyboard' in eidos_kbd or 'smart keyboard' in eidos_kbd:
+        return 'Keyboard'
+    if 'πληκτρολόγια' in katigoria or 'πληκτρολογια' in katigoria:
+        return 'Keyboard'
+    if typhikis in ('back cover', 'book cover', 'folio'):
+        return 'Folio'
+    if 'αντάπτορ' in katigoria or 'αντάπτορ' in typos3 or 'adapter' in typos3:
+        return 'Adapter'
+    if 'φορτιστής πρίζας' in typos3 or 'φορτιστης πριζας' in typos3:
+        return 'Charger'
+    if 'καλώδιο' in typos3 or 'καλωδιο' in typos3:
+        return 'Cable'
+    if 'ασύρματος φορτιστής' in typos3:
+        return 'Wireless Charger'
+    if 'αντάπτορας ήχου' in typos3:
+        return 'Audio Adapter'
+    if brand_dev:
+        return 'Folio'
+    return 'Other'
+ 
+ 
+# ────────────────────────────────────────────────────────────
+# Slot builders — one per persona
+# ────────────────────────────────────────────────────────────
+ 
+def _build_kiddoboo_slots():
+    return [
+        (None, 'Overhead',         ['OVERHEAD'],                          'BRAND_FIRST'),
+        (None, 'Smartwatch',       ['SMART WATCHES', 'ACTIVITY TRACKER'], 'BRAND_FIRST'),
+        (None, 'Wall Charger',     ['WALL CHARGERS'],                     'CHARGER_FIT'),
+        (None, 'Cable',            ['ΚΑΛΩΔΙΑ ΔΕΔΟΜΕΝΩΝ', 'USB CABLES'],   'CABLE_FIT'),
+        (None, 'Party Speaker',    ['ΗΧΕΙΑ ΦΟΡΗΤΟΥ ΗΧΟΥ'],                'BRAND_FIRST'),
+        (None, 'Action Camera',    ['IP CAMERAS', 'TRAVEL ACCESSORIES'],  'BRAND_FIRST'),
+        (None, 'Smartphone',       ['Smartphones'],                       'BRAND_FIRST'),
+        (None, 'Travel/Scooter',   ['TRAVEL ACCESSORIES'],                'BRAND_FIRST'),
+        (None, 'Bluetooth',        ['Bluetooth'],                         'BRAND_FIRST'),
+        (None, 'Screen Protector', ['MOBILE SCREEN PROTECTORS'],          'SCREEN_PROTECTOR_FIT'),
+    ]
+ 
+ 
+def _build_apple_ipad_slots():
+    APPLE_ORIG = ['APPLE ORIGINAL TABLET ACCESSORIES', 'APPLE ORIGINAL TABLET BAGS']
+    APPLE_PSU  = ['APPLE ORIGINAL POWER SUPPLY',
+                  'APPLE ORIGINAL IPHONE CABLE-ADAPTORS',
+                  'APPLE ORIGINAL IPHONE CABLE-ADA',
+                  'WALL CHARGERS']
+    APPLE_CBL  = ['APPLE ORIGINAL IPHONE CABLE-ADAPTORS',
+                  'APPLE ORIGINAL IPHONE CABLE-ADA',
+                  'ΚΑΛΩΔΙΑ ΔΕΔΟΜΕΝΩΝ']
+    return [
+        (None, 'Apple Pencil',       APPLE_ORIG,         'APPLE_TARGET:Stylus'),
+        (None, 'Smart Folio',        APPLE_ORIG,         'APPLE_FOLIO_STRICT'),     # CHANGED
+        (None, 'Apple Keyboard',     APPLE_ORIG,         'APPLE_TARGET_STRICT:Keyboard'),
+        (None, 'Apple Other',        APPLE_ORIG,         'APPLE_TARGET:Adapter,Other'),
+        (None, 'Apple Wall Charger', APPLE_PSU,          'APPLE_CHARGER_FIT'),
+        (None, 'Apple Cable',        APPLE_CBL,          'APPLE_CABLE_FIT'),
+        (None, 'AirPods',            ['Bluetooth'],      'AIRPODS_BOOST'),
+        (None, 'Apple Watch',        ['SMART WATCHES'],  'BRAND_MATCH'),
+        (None, 'Wireless Mouse',     ['MOUSE WIRELESS'], 'MOUSE_FIT'),
+        (None, 'USB Storage',        ['USB FLASH DISK', 'ΚΑΛΩΔΙΑ-ADAPTORS'], 'STORAGE_FIT'),
+    ]
+ 
+ 
+def _build_standard_slots(has_kb_match, is_premium):
+    slots = []
+    if has_kb_match:
+        slots.append((None, 'Keyboard Case',     ['TABLETS KEYBOARDS'],                'KEYBOARD_TABLET_FIT'))
+        slots.append((None, 'Wall Charger',      ['WALL CHARGERS'],                    'CHARGER_FIT'))
+        slots.append((None, 'NB Bag',            ['NB BAGS', 'ΘΗΚΕΣ SLEEVE LAPTOP'],   'NB_SIZE_FIT'))
+        slots.append((None, 'Tablet Bag',        ['TABLET BAGS'],                      'CASE_FIT'))
+    else:
+        slots.append((None, 'Tablet Bag',        ['TABLET BAGS'],                      'CASE_FIT'))
+        slots.append((None, 'Wall Charger',      ['WALL CHARGERS'],                    'CHARGER_FIT'))
+ 
+    slots.append((None, 'Bluetooth',             ['Bluetooth'],                        'BRAND_FIRST'))   # CHANGED
+ 
+    if not has_kb_match:
+        slots.append((None, 'Wireless Keyboard', ['KEYBOARDS WIRELESS'],               'KEYBOARD_WIRELESS_FIT'))
+ 
+    slots.append((None, 'Screen Protector',      ['MOBILE SCREEN PROTECTORS'],         'SCREEN_PROTECTOR_FIT'))
+    # Reorder: when there's no kb match, the early layout has Bluetooth at slot 3.
+    # We don't want Bluetooth + Overhead both inside slots 1-6 (audio-redundant).
+    # Pull Smartwatch up to 6, push Overhead to 7.
+    if has_kb_match:
+        slots.append((None, 'Overhead',          ['OVERHEAD'],                         'BRAND_FIRST'))
+        slots.append((None, 'Smartwatch',        ['SMART WATCHES'],                    'BRAND_MATCH'))
+    else:
+        slots.append((None, 'Smartwatch',        ['SMART WATCHES'],                    'BRAND_MATCH'))
+        slots.append((None, 'Overhead',          ['OVERHEAD'],                         'BRAND_FIRST'))
+    slots.append((None, 'Cable',                 ['ΚΑΛΩΔΙΑ ΔΕΔΟΜΕΝΩΝ', 'USB CABLES'], 'CABLE_FIT'))
+ 
+    stylus = (None, 'Stylus', ['ΓΡΑΦΙΔΕΣ'], 'STYLUS_FIT')
+    if is_premium:
+        insert_idx = 4 if has_kb_match else 1
+        slots.insert(insert_idx, stylus)
+    else:
+        slots.append(stylus)
+ 
+    slots.append((None, 'Wireless Mouse', ['MOUSE WIRELESS'],             'MOUSE_FIT'))
+    slots.append((None, 'Storage',        ['MICRO SD', 'USB FLASH DISK'], 'STORAGE_FIT'))
+    return slots[:10]
+ 
+ 
+def _renumber(slots):
+    return [(i + 1, role, hier, lk) for i, (_, role, hier, lk) in enumerate(slots)]
+ 
+ 
+def _budget_range(role, ttier):
+    caps = TABLET_ACCESSORY_BUDGET.get(ttier, TABLET_ACCESSORY_BUDGET['Low'])
+    r = role.lower()
+    if any(k in r for k in ('overhead','airpods','speaker','hands-free','bluetooth','audio')):
+        return caps.get('audio', caps['default'])
+    if any(k in r for k in ('charger','wall')) and 'cable' not in r:
+        return caps.get('power', caps['default'])
+    if 'cable' in r:
+        return caps.get('cable', caps['default'])
+    if any(k in r for k in ('case','bag','sleeve','cover','folio')):
+        return caps.get('case', caps['default'])
+    if any(k in r for k in ('storage','flash','sd')):
+        return caps.get('storage', caps['default'])
+    if any(k in r for k in ('watch','tracker','smartwatch')):
+        return caps.get('wear', caps['default'])
+    if 'mouse' in r:
+        return caps.get('mouse', caps['default'])
+    if 'keyboard' in r:
+        return caps.get('keyboard', caps['default'])
+    if any(k in r for k in ('stylus','pencil','γραφίδα','γραφιδα')):
+        return caps.get('stylus', caps['default'])
+    return caps['default']
+ 
+ 
+
+
+
 # ═════════════════════════════════════════════════════════════
 # 🟢 FLOOR CARE CONFIGURATION
 # ═════════════════════════════════════════════════════════════
