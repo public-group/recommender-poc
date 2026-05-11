@@ -1805,6 +1805,11 @@ L1_CATEGORIES = [
         "label": "Μικρές\nΣυσκευές",
         "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 2v8l4-2'/%3E%3Cpath d='M12 10l-4-2'/%3E%3Ccircle cx='12' cy='18' r='4'/%3E%3Cline x1='12' y1='10' x2='12' y2='14'/%3E%3C/svg%3E",
     },
+    {
+        "key": "Climatism",
+        "label": "Κλιματισμός\n& Θέρμανση",
+        "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5'%3E%3Cpath d='M12 2v20M2 12h20M4.93 4.93l14.14 14.14M19.07 4.93L4.93 19.07'/%3E%3C/svg%3E",
+    },
 
     {
         "key": "TV",
@@ -1862,8 +1867,10 @@ L2_CHILDREN = {
                   {"key": "Notepads",       "label": "Σημειωμ.",    "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5'%3E%3Cpath d='M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z'/%3E%3C/svg%3E"},
                  ],
     "SDA": [
-        {"key": "Floor Care", "label": "Σκούπες", "icon_svg": "..."},
-        {"key": "Climatism", "label": "Κλιματισμός\n& Θέρμανση", # <--- ΕΝΗΜΕΡΩΣΗ
+        {"key": "Floor Care", "label": "Σκούπες", "icon_svg": "..."}
+    ],
+    "Climatism": [
+        {"key": "AirUnits", "label": "Κλιματιστικά",
          "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5'%3E%3Cpath d='M12 2v20M2 12h20M4.93 4.93l14.14 14.14M19.07 4.93L4.93 19.07'/%3E%3C/svg%3E"}
     ],
     "TV": [
