@@ -593,25 +593,12 @@ SLOTS_ATHLETE: list[tuple] = [
 # ═════════════════════════════════════════════════════════════
 # 🟢 CLIMATISM (AC) CONFIGURATION
 # ═════════════════════════════════════════════════════════════
-
-# 2026 Climatism Performance Pairing
-CLIMA_ACCESSORY_BUDGET = {
-    'Entry':   {'fan': 60,  'dehum': 220, 'purifier': 180, 'weather': 20},
-    'Mid':     {'fan': 120, 'dehum': 350, 'purifier': 350, 'weather': 40},
-    'Premium': {'fan': 700, 'dehum': 700, 'purifier': 1200, 'weather': 100}
-}
-
-def get_clima_price_tier(price):
-    if price >= 1100: return 'Premium'
-    if price >= 700:  return 'Mid'
-    return 'Entry'
-    
-# Αντιστοίχιση BTU με τετραγωνικά για φιλτράρισμα συσκευών treatment
-BTU_AREA_MAP = {
-    9000: 20,
-    12000: 25,
-    18000: 40,
-    24000: 60
+# Δυναμικά όρια τιμών ανά κατηγορία BTU
+CLIMA_TIER_THRESHOLDS = {
+    9000:  {'Mid': 450,  'Premium': 850},
+    12000: {'Mid': 550,  'Premium': 1100},
+    18000: {'Mid': 850,  'Premium': 1600},
+    24000: {'Mid': 1000, 'Premium': 1300}
 }
 
 CLIMA_SUMMER_SLOTS = [
@@ -621,10 +608,10 @@ CLIMA_SUMMER_SLOTS = [
     (4,  'Weather Gadget',     ['WEATHER GADGETS'],    'GENERIC'),
     (5,  'Ανεμιστήρας Επιτραπέζιος', ['Ανεμιστήρες Επιτραπέζιοι'], 'GENERIC'),
     (6,  'Ιονιστής',           ['Ιονιστές'],           'IONIZER_CHECK'),
-    (7,  'Ανεμιστήρας Δαπέδου 2', ['Ανεμιστήρες Δαπέδου'], 'SALES_BOOST'),
-    (8,  'Αφυγραντήρας 2',     ['Αφυγραντήρες'],       'BEST_VALUE'),
-    (9,  'Καθαριστής Αέρα 2',  ['Καθαριστές Αέρα'],    'GENERIC'),
-    (10, 'Weather Gadget 2',    ['WEATHER GADGETS'],    'PREMIUM_DISPLAY'),
+    (7,  'Μπαταρίες (AAA)',    ['ΑΛΚΑΛΙΚΕΣ'],          'BATTERY_AAA'),
+    (8,  'Προστασία Ρεύματος', ['SURGE PROTECTORS'],   'GENERIC'),
+    (9,  'Ανεμιστήρας Δαπέδου 2', ['Ανεμιστήρες Δαπέδου'], 'SALES_BOOST'),
+    (10, 'Αφυγραντήρας 2',     ['Αφυγραντήρες'],       'BEST_VALUE'),
 ]
 
 CLIMA_WINTER_SLOTS = [
@@ -633,12 +620,19 @@ CLIMA_WINTER_SLOTS = [
     (3,  'Καθαριστής Αέρα',    ['Καθαριστές Αέρα'],    'AREA_MATCH'),
     (4,  'Weather Gadget',     ['WEATHER GADGETS'],    'HUMIDITY_FOCUS'),
     (5,  'Καλοριφέρ Mica',      ['Καλοριφέρ Mica'],      'GENERIC'),
-    (6,  'Ηλεκτρική Κουβέρτα', ['Ηλεκτρικές Κουβέρτες'], 'ECONOMY_BOOST'),
+    (6,  'Ηλεκτρική Κουβέρτα', ['Ηλεκτρικές Κουβέρτες'], 'GENERIC'),
     (7,  'Θερμάστρα Ηλεκτρική', ['Θερμάστρες Ηλεκτρικές'], 'GENERIC'),
     (8,  'Ηλεκτρικό Καλοριφέρ', ['Ηλεκτρικά Καλοριφέρ'], 'GENERIC'),
-    (9,  'Αφυγραντήρας 2',     ['Αφυγραντήρες'],       'CLOTHES_DRYING'),
-    (10, 'Weather Gadget 2',    ['WEATHER GADGETS'],    'GENERIC'),
+    (9,  'Μπαταρίες',          ['ΑΛΚΑΛΙΚΕΣ'],          'GENERIC'),
+    (10, 'Προστασία Ρεύματος', ['SURGE PROTECTORS'],   'GENERIC'),
 ]
+
+def get_clima_tier_by_btu(price, btu):
+    # Fallback στα 12000 αν δεν βρεθεί BTU
+    thresholds = CLIMA_TIER_THRESHOLDS.get(btu, CLIMA_TIER_THRESHOLDS[12000])
+    if price >= thresholds['Premium']: return 'Premium'
+    if price >= thresholds['Mid']: return 'Mid'
+    return 'Entry'
 
 # ═════════════════════════════════════════════════════════════
 # 🟢 FLOOR CARE CONFIGURATION
@@ -5831,20 +5825,25 @@ def run_climatism_engine(trigger, df_air, df_history):
     tb = str(trigger.get('Κατασκευαστής', '')).strip().upper()
     tprice = parse_euro_price(trigger.get('LIST PRICE', 0))
     
-    # Προσδιορισμός Tier Τιμής
-    ptier = get_clima_price_tier(tprice)
-    
-    # Εξαγωγή BTU για Area Matching
+    # 1. Έξυπνη Εξαγωγή BTU
     btu_match = re.search(r'(\d{1,2})[\s\.]?000', tt)
-    t_btu = int(btu_match.group(0).replace('.', '').replace(' ', '')) if btu_match else 12000
+    if not btu_match: # Fallback για τίτλους χωρίς .000 (π.χ. "18άρι")
+        btu_match = re.search(r'\b(9|12|18|24)\b', tt)
+        t_btu = int(btu_match.group(1)) * 1000 if btu_match else 12000
+    else:
+        t_btu = int(btu_match.group(0).replace('.', '').replace(' ', ''))
+        
+    # 2. Προσδιορισμός Tier βάσει BTU & Τιμής
+    ptier = get_clima_tier_by_btu(tprice, t_btu)
     t_area = BTU_AREA_MAP.get(t_btu, 25)
     
+    # 3. Εποχικότητα
     import datetime
     current_month = datetime.datetime.now().month
     season = 'SUMMER' if 5 <= current_month <= 10 else 'WINTER'
     active_slots = CLIMA_SUMMER_SLOTS if season == 'SUMMER' else CLIMA_WINTER_SLOTS
     
-    diag.append(("0. Context", f"Tier: {ptier} (€{tprice}), BTU: {t_btu}", f"Season: {season}"))
+    diag.append(("0. Context", f"BTU: {t_btu}, Tier: {ptier}", f"Season: {season}, Area: {t_area}m²"))
 
     c = df_air[df_air['Material'] != tm].copy()
     c['Sales_Tiebreaker'] = pd.to_numeric(c.get('Sum of Sales', 0), errors='coerce').fillna(0)
@@ -5860,47 +5859,40 @@ def run_climatism_engine(trigger, df_air, df_history):
         if pool.empty: continue
 
         pool['Final_Score'] = 0.0
-        
-        # Καθορισμός Budget Cap για το συγκεκριμένο slot
         caps = CLIMA_ACCESSORY_BUDGET[ptier]
-        current_cap = 9999
-        if 'Ανεμιστήρες' in str(hierarchies): current_cap = caps['fan']
-        elif 'Αφυγραντήρες' in str(hierarchies): current_cap = caps['dehum']
-        elif 'Καθαριστές' in str(hierarchies): current_cap = caps['purifier']
-        elif 'WEATHER' in str(hierarchies): current_cap = caps['weather']
-
+        
+        # --- Slot-Specific Filtering ---
+        if logic_key == 'BATTERY_AAA':
+            # Φιλτράρουμε μόνο AAA μπαταρίες για το τηλεκοντρόλ
+            aaa_mask = pool['Title'].str.contains('AAA', case=False, na=False)
+            if aaa_mask.any(): pool = pool[aaa_mask]
+        
+        # --- Scoring Loop ---
         for idx, item in pool.iterrows():
             score = 0.0
             iprice = item['_p']
             
-            # 1. BRAND SYNC (+50k)
-            if str(item.get('Κατασκευαστής', '')).upper() == tb:
-                score += 50000
+            # 1. Brand Match
+            if str(item.get('Κατασκευαστής', '')).upper() == tb: score += 50000
             
-            # 2. BUDGET MATCH (Crucial Fix)
-            # Αν το προϊόν είναι ακριβότερο από το cap του tier, φάε βαρύ πέναλτι
-            if iprice > current_cap:
-                score -= 500000
-            # Αν το προϊόν είναι στο "sweet spot" (70% - 100% του cap), δώσε boost
-            elif iprice >= (current_cap * 0.6):
-                score += 30000
-                
-            # 3. AREA MATCH (+40k)
+            # 2. Budget Scaling (σχετικό με το ptier του BTU)
+            current_cap = 9999
+            if 'Ανεμιστήρες' in str(item['Hierarchy']): current_cap = caps['fan']
+            elif 'Αφυγραντήρες' in str(item['Hierarchy']): current_cap = caps['dehum']
+            elif 'Καθαριστές' in str(item['Hierarchy']): current_cap = caps['purifier']
+            
+            if iprice > current_cap: score -= 500000
+            elif iprice >= (current_cap * 0.6): score += 30000
+            
+            # 3. Area Match
             item_area_raw = str(item.get('Για χώρους έως', ''))
-            area_match = re.search(r'(\d+)', item_area_raw)
-            if area_match:
-                item_m2 = int(area_match.group(1))
-                # Ποινή αν η συσκευή είναι πολύ μικρή για τα BTU του κλιματιστικού
-                if item_m2 < (t_area * 0.7): score -= 100000
-                elif abs(item_m2 - t_area) <= 15: score += 40000
-
-            # 4. BEST VALUE (για το slot 8)
-            if logic_key == 'BEST_VALUE' and 'Best Value' in str(item.get('Experts Rating ≡', '')):
-                score += 60000
-
+            a_match = re.search(r'(\d+)', item_area_raw)
+            if a_match:
+                item_m2 = int(a_match.group(1))
+                if abs(item_m2 - t_area) <= 15: score += 40000
+            
             pool.at[idx, 'Final_Score'] = score
 
-        # Picking με Tiebreaker τις πωλήσεις
         pool = pool.sort_values(['Final_Score', 'Sales_Tiebreaker'], ascending=[False, False])
         
         if not pool.empty:
@@ -5908,13 +5900,7 @@ def run_climatism_engine(trigger, df_air, df_history):
             rc = chosen.copy()
             rc['Assigned_Slot'] = slot_num
             rc['Slot_Role'] = role
-            
-            # Δυναμικό Marketing Copy
-            if chosen['Final_Score'] < 0: # Αν αναγκαστούμε να δείξουμε κάτι εκτός budget
-                rc['Marketing_Copy'] = "Premium επιλογή για μέγιστη απόδοση."
-            else:
-                rc['Marketing_Copy'] = f"Ιδανική επιλογή για κλιματιστικό {t_btu} BTU."
-                
+            rc['Marketing_Copy'] = "Η ιδανική προσθήκη για το κλιματιστικό σου."
             all_recs.append(rc)
             used_materials.add(chosen['Material'])
             slot_notes[slot_num] = notes
