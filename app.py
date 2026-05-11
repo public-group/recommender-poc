@@ -5831,7 +5831,7 @@ def run_laptops_engine(trigger, df_products, df_history):
 # ═══════════════════════════════════════════════════════════════════════════════
 # CLIMA ENGINE
 # ═══════════════════════════════════════════════════════════════════════════════
-def run_climatism_engine(trigger, df_air, df_history):
+def run_climatism_engine(trigger, df_air, df_products, df_history):
     diag, slot_notes, all_recs = [], {}, []
     
     tm = trigger['Material']
@@ -5839,19 +5839,17 @@ def run_climatism_engine(trigger, df_air, df_history):
     tb = str(trigger.get('Κατασκευαστής', '')).strip().upper()
     tprice = parse_euro_price(trigger.get('LIST PRICE', 0))
     
-    # 1. Έξυπνη Εξαγωγή BTU
+    # 1. Έξυπνη Εξαγωγή BTU & Προσδιορισμός Tier
     btu_match = re.search(r'(\d{1,2})[\s\.]?000', tt)
-    if not btu_match: # Fallback για τίτλους χωρίς .000 (π.χ. "18άρι")
+    if not btu_match:
         btu_match = re.search(r'\b(9|12|18|24)\b', tt)
         t_btu = int(btu_match.group(1)) * 1000 if btu_match else 12000
     else:
         t_btu = int(btu_match.group(0).replace('.', '').replace(' ', ''))
         
-    # 2. Προσδιορισμός Tier βάσει BTU & Τιμής
     ptier = get_clima_tier_by_btu(tprice, t_btu)
     t_area = BTU_AREA_MAP.get(t_btu, 25)
     
-    # 3. Εποχικότητα
     import datetime
     current_month = datetime.datetime.now().month
     season = 'SUMMER' if 5 <= current_month <= 10 else 'WINTER'
@@ -5859,7 +5857,11 @@ def run_climatism_engine(trigger, df_air, df_history):
     
     diag.append(("0. Context", f"BTU: {t_btu}, Tier: {ptier}", f"Season: {season}, Area: {t_area}m²"))
 
-    c = df_air[df_air['Material'] != tm].copy()
+    # --- ΣΥΝΕΝΩΣΗ ΠΗΓΩΝ ΔΕΔΟΜΕΝΩΝ ---
+    # Ενώνουμε το sheet Air με το sheet Products για να έχουμε πρόσβαση σε μπαταρίες/surge protectors
+    full_pool = pd.concat([df_air, df_products], ignore_index=True)
+    c = full_pool[full_pool['Material'] != tm].copy()
+    
     c['Sales_Tiebreaker'] = pd.to_numeric(c.get('Sum of Sales', 0), errors='coerce').fillna(0)
     c['_p'] = pd.to_numeric(c.get('LIST PRICE', 0), errors='coerce').fillna(0)
     
@@ -5867,6 +5869,8 @@ def run_climatism_engine(trigger, df_air, df_history):
 
     for slot_num, role, hierarchies, logic_key in active_slots:
         notes = [f"Logic: {logic_key}"]
+        
+        # Αναζήτηση στις ιεραρχίες
         pool = c[c['Hierarchy'].fillna('').astype(str).isin(hierarchies)].copy()
         pool = pool[~pool['Material'].isin(used_materials)]
         
@@ -5875,9 +5879,8 @@ def run_climatism_engine(trigger, df_air, df_history):
         pool['Final_Score'] = 0.0
         caps = CLIMA_ACCESSORY_BUDGET[ptier]
         
-        # --- Slot-Specific Filtering ---
+        # --- Ειδικό Φιλτράρισμα για Μπαταρίες AAA ---
         if logic_key == 'BATTERY_AAA':
-            # Φιλτράρουμε μόνο AAA μπαταρίες για το τηλεκοντρόλ
             aaa_mask = pool['Title'].str.contains('AAA', case=False, na=False)
             if aaa_mask.any(): pool = pool[aaa_mask]
         
@@ -5889,21 +5892,25 @@ def run_climatism_engine(trigger, df_air, df_history):
             # 1. Brand Match
             if str(item.get('Κατασκευαστής', '')).upper() == tb: score += 50000
             
-            # 2. Budget Scaling (σχετικό με το ptier του BTU)
+            # 2. Budget Scaling
             current_cap = 9999
-            if 'Ανεμιστήρες' in str(item['Hierarchy']): current_cap = caps['fan']
-            elif 'Αφυγραντήρες' in str(item['Hierarchy']): current_cap = caps['dehum']
-            elif 'Καθαριστές' in str(item['Hierarchy']): current_cap = caps['purifier']
+            hier_str = str(item['Hierarchy'])
+            if 'Ανεμιστήρες' in hier_str: current_cap = caps['fan']
+            elif 'Αφυγραντήρες' in hier_str: current_cap = caps['dehum']
+            elif 'Καθαριστές' in hier_str: current_cap = caps['purifier']
+            elif 'SURGE' in hier_str: current_cap = 45 # Default cap για πολύπριζα
+            elif 'ΑΛΚΑΛΙΚΕΣ' in hier_str: current_cap = 15 # Default cap για μπαταρίες
             
             if iprice > current_cap: score -= 500000
             elif iprice >= (current_cap * 0.6): score += 30000
             
-            # 3. Area Match
-            item_area_raw = str(item.get('Για χώρους έως', ''))
-            a_match = re.search(r'(\d+)', item_area_raw)
-            if a_match:
-                item_m2 = int(a_match.group(1))
-                if abs(item_m2 - t_area) <= 15: score += 40000
+            # 3. Area Match (Μόνο για Air Treatment συσκευές)
+            if any(x in hier_str for x in ['Αφυγραντήρες', 'Καθαριστές']):
+                item_area_raw = str(item.get('Για χώρους έως', ''))
+                a_match = re.search(r'(\d+)', item_area_raw)
+                if a_match:
+                    item_m2 = int(a_match.group(1))
+                    if abs(item_m2 - t_area) <= 15: score += 40000
             
             pool.at[idx, 'Final_Score'] = score
 
@@ -5914,7 +5921,7 @@ def run_climatism_engine(trigger, df_air, df_history):
             rc = chosen.copy()
             rc['Assigned_Slot'] = slot_num
             rc['Slot_Role'] = role
-            rc['Marketing_Copy'] = "Η ιδανική προσθήκη για το κλιματιστικό σου."
+            rc['Marketing_Copy'] = "Απαραίτητο συμπλήρωμα για τη νέα σου συσκευή."
             all_recs.append(rc)
             used_materials.add(chosen['Material'])
             slot_notes[slot_num] = notes
@@ -9424,7 +9431,7 @@ elif active_cluster == "Wearables":
     recs, diag, slot_notes, full_candidates = run_wearables_engine(trigger, df_products, df_history)
     slot_diag = []    
 elif active_cluster == "AirUnits":
-    recs, diag, slot_notes, full_candidates = run_climatism_engine(trigger, df_air, df_history)
+    recs, diag, slot_notes, full_candidates = run_climatism_engine(trigger, df_air, df_products, df_history)
     slot_diag = [] 
 elif active_cluster in ("Mouse", "Keyboard", "Gaming Mouse", "Gaming Keyboard"):
     recs, diag, slot_notes, full_candidates = run_peripherals_engine(trigger, df_peripherals, df_history, active_cluster)
