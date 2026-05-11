@@ -2191,17 +2191,21 @@ else:
             sel = st.sidebar.selectbox("", tvs['Title'].unique(), label_visibility="collapsed", key="tv_sel")
             trigger = tvs[tvs['Title']==sel].iloc[0] if sel else None
             
-    # Μέσα στο Level 2 View (Sidebar)
     elif active_cluster == "AirUnits":
         if df_air.empty: 
             st.sidebar.warning("Το sheet 'Air' είναι άδειο.")
         else:
-            # Φιλτράρουμε τα κλιματιστικά ως Trigger
-            ac_hiers = ['Κλιματιστικά Τοίχου 16.000-28.000 BTU', 'Κλιματιστικά Τοίχου 9.000-15.000 BTU', 'Φορητά Κλιματιστικά']
-            ac_units = df_air[df_air['Hierarchy'].isin(ac_hiers)]
+            # 🧪 Περιορισμός στα συγκεκριμένα SKUs που ζητήθηκαν
+            target_skus = {
+                "1955080", "1977008", "1912745", "1938304", "1918665", "2028089"
+            }
+            
+            # Φιλτράρισμα του df_air βάσει των Material IDs
+            # Χρησιμοποιούμε καθαρισμό regex για να είμαστε σίγουροι ότι τα νούμερα ταυτίζονται ως strings
+            ac_units = df_air[df_air['Material'].astype(str).str.strip().str.replace(r'\.0$', '', regex=True).isin(target_skus)]
             
             if ac_units.empty:
-                st.sidebar.warning("Δεν βρέθηκαν κλιματιστικά στο sheet Air.")
+                st.sidebar.warning("Δεν βρέθηκαν τα επιλεγμένα κλιματιστικά στο sheet Air.")
             else:
                 st.sidebar.markdown('<p class="sidebar-section">Επιλέξτε Κλιματιστικό</p>', unsafe_allow_html=True)
                 sel = st.sidebar.selectbox("", ac_units['Title'].unique(), label_visibility="collapsed", key="ac_sel")
