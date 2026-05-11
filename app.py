@@ -601,6 +601,20 @@ CLIMA_TIER_THRESHOLDS = {
     24000: {'Mid': 1000, 'Premium': 1300}
 }
 
+BTU_AREA_MAP = {
+    9000: 20,
+    12000: 25,
+    18000: 40,
+    24000: 60
+}
+
+# Budget Caps για αξεσουάρ κλιματισμού (Απαραίτητο για το Price Tiering)
+CLIMA_ACCESSORY_BUDGET = {
+    'Entry':   {'fan': 60,  'dehum': 220, 'purifier': 180, 'weather': 20},
+    'Mid':     {'fan': 120, 'dehum': 350, 'purifier': 350, 'weather': 40},
+    'Premium': {'fan': 700, 'dehum': 700, 'purifier': 1200, 'weather': 100}
+}
+
 CLIMA_SUMMER_SLOTS = [
     (1,  'Ανεμιστήρας Δαπέδου', ['Ανεμιστήρες Δαπέδου'], 'BRAND_SYNC'),
     (2,  'Αφυγραντήρας',       ['Αφυγραντήρες'],       'AREA_MATCH'),
