@@ -484,6 +484,8 @@ def _budget_range(role, ttier):
 # 🟢 SMARTWATCH CONFIGURATION
 # ═════════════════════════════════════════════════════════════
 
+
+
 # ── Brand Personas ──────────────────────────────────────────────
 ATHLETE_BRANDS   = {"GARMIN", "SUUNTO", "POLAR", "COROS"}
 ECOSYSTEM_BRANDS = {"APPLE", "SAMSUNG", "GOOGLE", "HUAWEI", "XIAOMI", "FITBIT"}
@@ -538,19 +540,9 @@ WEARABLE_MARKETING_COPY: dict[str, str] = {
     "MOUNTS & STANDS":             "Τακτοποίησε & φόρτιζε το smartwatch σου με στυλ.",
     "CAR CHARGERS":                "Κράτα κάθε συσκευή φορτισμένη σε κάθε διαδρομή.",
 }
- 
-# ═══════════════════════════════════════════════════════════════
-# 2.  PERSONA-SPECIFIC SLOT DEFINITIONS
-#
-#     Format per slot:
-#       (slot_num, role_label, [hierarchy_strings], logic_key, budget_key)
-#
-#     Athlete  → 2 straps (sweat-resistant), protection, dedicated charger,
-#                sport audio, bike mount, scale, wall charger, speaker, car charger
-#     Ecosystem → 1 premium strap, protection, dedicated charger, dock/stand,
-#                 TWS earbuds, scale, wall charger, car charger, speaker, over-ear
-# ═══════════════════════════════════════════════════════════════
- 
+
+
+
 SLOTS_ECOSYSTEM: list[tuple] = [
     (1,  "Λουράκι",               ["ΛΟΥΡΑΚΙΑ WEARABLES"],         "MODEL_MATCH_STRICT", "straps"),
     (2,  "Προστασία Οθόνης",      ["ΠΡΟΣΤΑΣΙΑ ΟΘΟΝΗΣ WEARABLES"], "MODEL_MATCH_STRICT", "protection"),
@@ -576,6 +568,7 @@ SLOTS_ATHLETE: list[tuple] = [
     (9,  "Φορητό Ηχείο",          ["ΗΧΕΙΑ ΦΟΡΗΤΟΥ ΗΧΟΥ"],         "GENERIC",            "audio"),
     (10, "Φορτιστής Αυτ/του",     ["CAR CHARGERS"],               "GENERIC",            "car_charger"),
 ]
+
 # ═════════════════════════════════════════════════════════════
 # 🟢 FLOOR CARE CONFIGURATION
 # ═════════════════════════════════════════════════════════════
@@ -1319,40 +1312,85 @@ def parse_euro_price(raw) -> float:
         return 0.0
  
  
+# ── Size-group tables for strap / screen-protector compatibility ──────────
+#    Accessories often list size ranges like "38/40/41mm" rather than
+#    individual model names.  Map each physical mm size to its band-width group
+#    so we can do size-aware matching even when exact model names don't appear.
+ 
+_APPLE_WATCH_SIZE_GROUPS: list[set[str]] = [
+    {"38MM", "40MM", "41MM"},           # Small (band width ~38 mm)
+    {"42MM", "44MM", "45MM", "49MM"},   # Large (band width ~42 mm)
+]
+ 
+_SAMSUNG_WATCH_SIZE_GROUPS: list[set[str]] = [
+    {"40MM", "41MM", "42MM"},
+    {"44MM", "45MM", "46MM", "47MM"},
+]
+ 
+# Map brand keyword → size groups to use
+_BRAND_SIZE_GROUPS: dict[str, list[set[str]]] = {
+    "APPLE":   _APPLE_WATCH_SIZE_GROUPS,
+    "SAMSUNG": _SAMSUNG_WATCH_SIZE_GROUPS,
+}
+ 
+ 
+def _extract_sizes(text: str) -> set[str]:
+    """Return all 'NNmm' tokens found in text, upper-cased."""
+    return {m.upper() for m in re.findall(r"\d{2}mm", text, re.IGNORECASE)}
+ 
+ 
 def _model_tokens(model_str: str) -> set[str]:
     """
     Split a model string into meaningful tokens for partial matching.
-    E.g. 'Apple Watch Series 9 45mm' → {'APPLE', 'WATCH', 'SERIES', '9', '45MM'}
+    Strips noise words so only brand/series/number/size tokens survive.
+    E.g. 'Apple Watch Series 9 45mm GPS+Cellular'
+         → {'APPLE', 'WATCH', 'SERIES', '9', '45MM'}
     """
-    tokens = re.split(r"[\s\-/,]+", model_str.strip().upper())
-    return {t for t in tokens if len(t) >= 2}
+    _NOISE = {"AND", "OR", "WITH", "FOR", "THE", "GPS", "CELLULAR",
+              "LTE", "NFC", "WIFI", "BT", "PLUS", "PRO", "MAX"}
+    raw = re.split(r"[\s\-/,+&]+", model_str.strip().upper())
+    return {t for t in raw if len(t) >= 2 and t not in _NOISE}
  
  
-def _compatibility_score(model_str: str, compat_field) -> int:
+def _compatibility_score(model_str: str, compat_field, brand: str = "") -> int:
     """
-    Score a compatibility-field value against the trigger's model.
+    Score the accessory's 'Συμβατό με' field against the trigger's Μοντέλο.
  
-    Returns
-    -------
-    SCORE_MODEL_MATCH_STRICT   if the full model string is found verbatim
-    SCORE_MODEL_MATCH_PARTIAL  if ≥50 % of model tokens are present
-    0                          otherwise
+    Matching cascade (highest wins):
+    ① Verbatim — full model string found in the compat text          → STRICT
+    ② Token overlap — ≥50 % of meaningful model tokens found         → PARTIAL
+    ③ Size-group — model's mm size is in the same width group as any
+                   mm size listed in the compat text                 → PARTIAL
+    ④ Brand-only — brand keyword present but nothing else            → 0
+                   (brand match is handled separately by the engine)
     """
     if not model_str or pd.isna(compat_field):
         return 0
-    compat_upper = str(compat_field).upper()
  
-    # ① Verbatim / strict match
-    if re.search(re.escape(model_str.upper()), compat_upper):
+    compat_upper = str(compat_field).upper()
+    model_upper  = model_str.strip().upper()
+ 
+    # ① Verbatim
+    if re.search(re.escape(model_upper), compat_upper):
         return SCORE_MODEL_MATCH_STRICT
  
-    # ② Token-based partial match
-    tokens = _model_tokens(model_str)
-    if not tokens:
-        return 0
-    matched = sum(1 for t in tokens if t in compat_upper)
-    if matched >= max(2, len(tokens) // 2):          # ≥50 % of tokens found
-        return SCORE_MODEL_MATCH_PARTIAL
+    # ② Token overlap
+    tokens  = _model_tokens(model_str)
+    if tokens:
+        matched = sum(1 for t in tokens if t in compat_upper)
+        if matched >= max(2, len(tokens) // 2):
+            return SCORE_MODEL_MATCH_PARTIAL
+ 
+    # ③ Size-group awareness
+    model_sizes  = _extract_sizes(model_upper)
+    compat_sizes = _extract_sizes(compat_upper)
+    if model_sizes and compat_sizes:
+        size_groups = _BRAND_SIZE_GROUPS.get(brand.upper(), [])
+        for group in size_groups:
+            # The model has a size in this group AND the accessory lists at
+            # least one size from the same group → compatible fit
+            if model_sizes & group and compat_sizes & group:
+                return SCORE_MODEL_MATCH_PARTIAL
  
     return 0
  
@@ -1380,10 +1418,10 @@ def _price_affinity_score(item_price: float, cap: float) -> int:
     if ratio <= 2.50:
         return PENALTY_OVER_CAP_HARD
     return PENALTY_WAY_OVER_CAP
- 
- 
 
- 
+
+
+
 # ═════════════════════════════════════════════════════════════
 # 🟢 LAPTOPS HELPERS
 # ═════════════════════════════════════════════════════════════
@@ -4313,10 +4351,10 @@ def run_wearables_engine(
         # ═══════════════════════════════════════════════════
         has_any_compat_hit = False
         if logic_key == "MODEL_MATCH_STRICT" and tmod:
-            compat_col = "Συμβατές συσκευές"
+            compat_col = "Συμβατό με"                      # ← correct column name
             if compat_col in pool.columns:
                 compat_scores = pool[compat_col].apply(
-                    lambda x: _compatibility_score(tmod, x)
+                    lambda x: _compatibility_score(tmod, x, brand=tb)   # pass brand for size-group logic
                 )
                 pool["_score"] += compat_scores
                 strict_hits  = (compat_scores == SCORE_MODEL_MATCH_STRICT).sum()
@@ -4327,6 +4365,8 @@ def run_wearables_engine(
                 )
                 if not has_any_compat_hit:
                     notes.append("⚠️ No compat match — relying on brand/popularity fallback")
+            else:
+                notes.append(f"⚠️ Column '{compat_col}' not found in pool — skipping compat scoring")
  
         # ═══════════════════════════════════════════════════
         # SCORING LAYER 2 — Persona / Use-Case Affinity
@@ -4438,7 +4478,7 @@ def run_wearables_engine(
         rc["Assigned_Slot"]  = slot_num
         rc["Slot_Role"]      = role
         rc["Persona"]        = persona_label
-        rc["Score"]          = chosen_score
+        rc["Final_Score"]    = chosen_score          # ← matches app.py column name
         rc["Fallback_Used"]  = fallback_used
         rc["Marketing_Copy"] = WEARABLE_MARKETING_COPY.get(
             hierarchies[0],
@@ -4478,9 +4518,11 @@ def run_wearables_engine(
     return recs_df, diag, slot_notes, score_breakdown
  
  
+ 
 # ═══════════════════════════════════════════════════════════════
 # 5.  DIAGNOSTIC PRETTY-PRINT HELPER
 # ═══════════════════════════════════════════════════════════════
+
  
 def print_wearables_diag(diag: list, slot_notes: dict, score_breakdown: dict) -> None:
     """Pretty-print the diagnostics returned by run_wearables_engine."""
@@ -4509,7 +4551,6 @@ def print_wearables_diag(diag: list, slot_notes: dict, score_breakdown: dict) ->
             f"Ratio={bd['price_ratio']}  Fallback={bd['fallback']}"
         )
     print("═" * 72 + "\n")
- 
 
 # ═════════════════════════════════════════════════════════════
 # 🟢 LAPTOPS ENGINE — Mainstream / Road Warrior
