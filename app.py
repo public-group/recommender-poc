@@ -2217,7 +2217,7 @@ else:
             sel = st.sidebar.selectbox("", tvs['Title'].unique(), label_visibility="collapsed", key="tv_sel")
             trigger = tvs[tvs['Title']==sel].iloc[0] if sel else None
                  
-     elif active_cluster == "Projectors":
+    elif active_cluster == "Projectors":
         if df_products.empty: st.stop()
         # Fetch by Level 2 or Hierarchy depending on your Excel mapping
         projs = df_products[df_products['Level 2'].fillna('').astype(str).str.strip().str.upper() == 'PROJECTORS'].copy()
