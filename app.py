@@ -591,6 +591,44 @@ SLOTS_ATHLETE: list[tuple] = [
 ]
 
 # ═════════════════════════════════════════════════════════════
+# 🟢 CLIMATISM (AC) CONFIGURATION
+# ═════════════════════════════════════════════════════════════
+
+# Αντιστοίχιση BTU με τετραγωνικά για φιλτράρισμα συσκευών treatment
+BTU_AREA_MAP = {
+    9000: 20,
+    12000: 25,
+    18000: 40,
+    24000: 60
+}
+
+CLIMA_SUMMER_SLOTS = [
+    (1,  'Ανεμιστήρας Δαπέδου', ['Ανεμιστήρες Δαπέδου'], 'BRAND_SYNC'),
+    (2,  'Αφυγραντήρας',       ['Αφυγραντήρες'],       'AREA_MATCH'),
+    (3,  'Καθαριστής Αέρα',    ['Καθαριστές Αέρα'],    'AREA_MATCH'),
+    (4,  'Weather Gadget',     ['WEATHER GADGETS'],    'GENERIC'),
+    (5,  'Ανεμιστήρας Επιτραπέζιος', ['Ανεμιστήρες Επιτραπέζιοι'], 'GENERIC'),
+    (6,  'Ιονιστής',           ['Ιονιστές'],           'IONIZER_CHECK'),
+    (7,  'Ανεμιστήρας Δαπέδου 2', ['Ανεμιστήρες Δαπέδου'], 'SALES_BOOST'),
+    (8,  'Αφυγραντήρας 2',     ['Αφυγραντήρες'],       'BEST_VALUE'),
+    (9,  'Καθαριστής Αέρα 2',  ['Καθαριστές Αέρα'],    'GENERIC'),
+    (10, 'Weather Gadget 2',    ['WEATHER GADGETS'],    'PREMIUM_DISPLAY'),
+]
+
+CLIMA_WINTER_SLOTS = [
+    (1,  'Αφυγραντήρας',       ['Αφυγραντήρες'],       'AREA_MATCH'),
+    (2,  'Αερόθερμο',          ['Αερόθερμα'],          'GENERIC'),
+    (3,  'Καθαριστής Αέρα',    ['Καθαριστές Αέρα'],    'AREA_MATCH'),
+    (4,  'Weather Gadget',     ['WEATHER GADGETS'],    'HUMIDITY_FOCUS'),
+    (5,  'Καλοριφέρ Mica',      ['Καλοριφέρ Mica'],      'GENERIC'),
+    (6,  'Ηλεκτρική Κουβέρτα', ['Ηλεκτρικές Κουβέρτες'], 'ECONOMY_BOOST'),
+    (7,  'Θερμάστρα Ηλεκτρική', ['Θερμάστρες Ηλεκτρικές'], 'GENERIC'),
+    (8,  'Ηλεκτρικό Καλοριφέρ', ['Ηλεκτρικά Καλοριφέρ'], 'GENERIC'),
+    (9,  'Αφυγραντήρας 2',     ['Αφυγραντήρες'],       'CLOTHES_DRYING'),
+    (10, 'Weather Gadget 2',    ['WEATHER GADGETS'],    'GENERIC'),
+]
+
+# ═════════════════════════════════════════════════════════════
 # 🟢 FLOOR CARE CONFIGURATION
 # ═════════════════════════════════════════════════════════════
 FLOOR_CARE_TRIGGER_HIERARCHIES = {
@@ -1684,6 +1722,11 @@ def load_all_data():
         dstat = pd.read_excel(excel_file, sheet_name='Stationery')
         dstat.columns = dstat.columns.str.strip()
     else: dstat = pd.DataFrame()
+
+    if 'Air' in available_sheets:
+        dair = pd.read_excel(excel_file, sheet_name='Air')
+        dair.columns = dair.columns.str.strip()
+    else: dair = pd.DataFrame()
     
     if not dp.empty:
         parts = [dp[c].fillna('').astype(str).str.strip() for c in COMPAT_COLS if c in dp.columns]
@@ -1700,11 +1743,11 @@ def load_all_data():
     if not db.empty and CC not in db.columns:
         db[CC] = ''
     
-    return dp, dm, dh, ds, db, dl, dv, dper, dstat, available_sheets
+    return dp, dm, dh, ds, db, dl, dv, dper, dstat, dair, available_sheets
 
 try:
 
-    df_products, df_music, df_history, df_slots, df_books, df_laptops, df_vacuums, df_peripherals, df_stationery, sheets_loaded = load_all_data()
+    df_products, df_music, df_history, df_slots, df_books, df_laptops, df_vacuums, df_peripherals, df_stationery, df_air, sheets_loaded = load_all_data()
     compat_cols_found = [c for c in COMPAT_COLS if c in df_products.columns]
 except Exception as e:
     st.error(f"🚨 Error loading data: {e}")
@@ -1818,8 +1861,11 @@ L2_CHILDREN = {
                   {"key": "",      "label": "Τετράδια",    "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5'%3E%3Cpath d='M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z'/%3E%3C/svg%3E"},
                   {"key": "Notepads",       "label": "Σημειωμ.",    "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5'%3E%3Cpath d='M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z'/%3E%3C/svg%3E"},
                  ],
-    "SDA":       [{"key": "Floor Care", "label": "Σκούπες",
-                   "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 2v8l4-2'/%3E%3Cpath d='M12 10l-4-2'/%3E%3Ccircle cx='12' cy='18' r='4'/%3E%3Cline x1='12' y1='10' x2='12' y2='14'/%3E%3C/svg%3E"}],
+    "SDA": [
+        {"key": "Floor Care", "label": "Σκούπες", "icon_svg": "..."},
+        {"key": "Climatism", "label": "Κλιματισμός\n& Θέρμανση", # <--- ΕΝΗΜΕΡΩΣΗ
+         "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5'%3E%3Cpath d='M12 2v20M2 12h20M4.93 4.93l14.14 14.14M19.07 4.93L4.93 19.07'/%3E%3C/svg%3E"}
+    ],
     "TV": [
         {"key": "TVs", "label": "Τηλεοράσεις",
             "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='2' y='7' width='20' height='15' rx='2' ry='2'/%3E%3Cpolyline points='17 2 12 7 7 2'/%3E%3C/svg%3E"},
@@ -2106,7 +2152,7 @@ else:
                 st.sidebar.markdown('<p class="sidebar-section">Επιλέξτε Laptop</p>', unsafe_allow_html=True)
                 sel = st.sidebar.selectbox("", laptops['Title'].unique(), label_visibility="collapsed", key="lt_sel")
                 trigger = laptops[laptops['Title']==sel].iloc[0] if sel else None
-
+    
     elif active_cluster == "TVs":
         if df_products.empty: st.stop()
         
@@ -2149,7 +2195,22 @@ else:
             st.sidebar.markdown('<p class="sidebar-section">Επιλέξτε Τηλεόραση</p>', unsafe_allow_html=True)
             sel = st.sidebar.selectbox("", tvs['Title'].unique(), label_visibility="collapsed", key="tv_sel")
             trigger = tvs[tvs['Title']==sel].iloc[0] if sel else None
-
+            
+    elif active_cluster == "Climatism":
+        if df_air.empty: 
+            st.sidebar.warning("Το sheet 'Air' είναι άδειο.")
+        else:
+            # Επιλέγουμε τα κλιματιστικά ως Trigger από το sheet Air
+            ac_hiers = ['Κλιματιστικά Τοίχου 16.000-28.000 BTU', 'Κλιματιστικά Τοίχου 9.000-15.000 BTU', 'Φορητά Κλιματιστικά']
+            ac_units = df_air[df_air['Hierarchy'].isin(ac_hiers)]
+            
+            if ac_units.empty:
+                st.sidebar.warning("Δεν βρέθηκαν κλιματιστικά στο sheet Air.")
+            else:
+                st.sidebar.markdown('<p class="sidebar-section">Επιλέξτε Κλιματιστικό</p>', unsafe_allow_html=True)
+                sel = st.sidebar.selectbox("", ac_units['Title'].unique(), label_visibility="collapsed", key="ac_sel")
+                trigger = ac_units[ac_units['Title']==sel].iloc[0] if sel else None
+                
     elif active_cluster == "Projectors":
         if df_products.empty: st.stop()
         # Fetch by Level 2 or Hierarchy depending on your Excel mapping
@@ -5737,8 +5798,81 @@ def run_laptops_engine(trigger, df_products, df_history):
 
 
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# CLIMA ENGINE
+# ═══════════════════════════════════════════════════════════════════════════════
 
+def run_climatism_engine(trigger, df_air, df_history):
+    diag, slot_notes, all_recs = [], {}, []
+    
+    tm = trigger['Material']
+    tt = str(trigger.get('Title', ''))
+    tb = str(trigger.get('Κατασκευαστής', '')).strip().upper()
+    
+    # Εξαγωγή BTU για σωστό Area Matching
+    btu_match = re.search(r'(\d{1,2})[\s\.]?000', tt)
+    t_btu = int(btu_match.group(0).replace('.', '').replace(' ', '')) if btu_match else 12000
+    t_area = BTU_AREA_MAP.get(t_btu, 25)
+    
+    # Προσδιορισμός Εποχής βάσει μήνα
+    import datetime
+    current_month = datetime.datetime.now().month
+    season = 'SUMMER' if 5 <= current_month <= 10 else 'WINTER'
+    active_slots = CLIMA_SUMMER_SLOTS if season == 'SUMMER' else CLIMA_WINTER_SLOTS
+    
+    diag.append(("0. Context", f"Εποχή: {season}, Ισχύς: {t_btu} BTU", f"Area Match: {t_area}m²"))
 
+    # Προετοιμασία υποψηφίων από το sheet Air
+    c = df_air[df_air['Material'] != tm].copy()
+    c['Sales_Tiebreaker'] = pd.to_numeric(c.get('Sum of Sales', 0), errors='coerce').fillna(0)
+    c['_p'] = pd.to_numeric(c.get('LIST PRICE', 0), errors='coerce').fillna(0)
+    
+    used_materials = {tm}
+
+    for slot_num, role, hierarchies, logic_key in active_slots:
+        notes = [f"Logic: {logic_key}"]
+        
+        # Φιλτράρισμα βάσει των ιεραρχιών που όρισες (Summer/Winter)
+        pool = c[c['Hierarchy'].fillna('').astype(str).isin(hierarchies)].copy()
+        pool = pool[~pool['Material'].isin(used_materials)]
+        
+        if pool.empty: continue
+
+        pool['Final_Score'] = 0.0
+        
+        for idx, item in pool.iterrows():
+            score = 0.0
+            item_title = str(item.get('Title', '')).lower()
+            item_brand = str(item.get('Κατασκευαστής', '')).upper()
+            
+            # 1. Brand Sync (+50k)
+            if item_brand == tb: score += 50000
+            
+            # 2. Area Match (+30k) - Σύγκριση τετραγωνικών
+            item_area_raw = str(item.get('Για χώρους έως', ''))
+            item_area_match = re.search(r'(\d+)', item_area_raw)
+            if item_area_match:
+                if abs(int(item_area_match.group(1)) - t_area) <= 10: score += 30000
+            
+            # 3. Best Value / Sales (+20k)
+            if logic_key == 'BEST_VALUE' and 'Best Value' in str(item.get('Experts Rating ≡', '')):
+                score += 40000
+
+            pool.at[idx, 'Final_Score'] = score
+
+        pool = pool.sort_values(['Final_Score', 'Sales_Tiebreaker'], ascending=[False, False])
+        
+        if not pool.empty:
+            chosen = pool.iloc[0]
+            rc = chosen.copy()
+            rc['Assigned_Slot'] = slot_num
+            rc['Slot_Role'] = role
+            rc['Marketing_Copy'] = "Ιδανική επιλογή για τη βελτίωση του κλίματος στο χώρο σου."
+            all_recs.append(rc)
+            used_materials.add(chosen['Material'])
+            slot_notes[slot_num] = notes
+
+    return pd.DataFrame(all_recs), diag, slot_notes, pd.DataFrame(all_recs)
 
 # ═══════════════════════════════════════════════════════════════
 # 🟢 FLOOR CARE ENGINE — "Perfect Fit" Ecosystem
@@ -9241,6 +9375,10 @@ elif active_cluster == "Turntables":
     full_candidates = recs
 elif active_cluster == "Wearables":
     recs, diag, slot_notes, full_candidates = run_wearables_engine(trigger, df_products, df_history)
+    slot_diag = []    
+elif active_cluster == "Climatism":
+    # Περνάμε το df_air στη μηχανή
+    recs, diag, slot_notes, full_candidates = run_climatism_engine(trigger, df_air, df_history)
     slot_diag = []    
 elif active_cluster in ("Mouse", "Keyboard", "Gaming Mouse", "Gaming Keyboard"):
     recs, diag, slot_notes, full_candidates = run_peripherals_engine(trigger, df_peripherals, df_history, active_cluster)
