@@ -490,12 +490,10 @@ def _budget_range(role, ttier):
 ATHLETE_BRANDS   = {"GARMIN", "SUUNTO", "POLAR", "COROS"}
 ECOSYSTEM_BRANDS = {"APPLE", "SAMSUNG", "GOOGLE", "HUAWEI", "XIAOMI", "FITBIT"}
  
-# Apple gets a stronger ecosystem-lock boost in specific slots so an
-# Apple Watch buyer is offered Apple's own charger / earbuds first.
-APPLE_LOCK_SLOTS = {5, 6, 7}     # Wall charger, Wearable charger, Over-ear / TWS
-APPLE_LOCK_BRAND = "APPLE"
+# Target number of products the engine always tries to return.
+TARGET_FILLED_SLOTS = 10
  
-# ── Price Tiers (informational only — used for diagnostics & sweet-spot widening) ──
+# ── Price Tiers (informational; used for sweet-spot widening) ────
 def get_wearable_tier(price: float) -> str:
     if price >= 700:
         return "Flagship"
@@ -506,35 +504,25 @@ def get_wearable_tier(price: float) -> str:
     return "Entry"
  
 # ── DYNAMIC BUDGET ENGINE ─────────────────────────────────────────
-# Each accessory category claims a share of the trigger's price.
-# The cap is then clamped between a sensible floor and ceiling so
-# entry watches still see decent earbuds and flagship watches don't
-# get capped at toy prices.
-#
-#   cap(trigger_price, key) = clamp(trigger_price × share, min_cap, max_cap)
-#
+# Each accessory category claims a share of the trigger price, clamped between
+# a floor and ceiling. cap = clamp(trigger × share, min, max)
 BUDGET_SHARES: dict[str, tuple[float, float, float]] = {
     # budget_key: (share_of_trigger_price, min_cap_eur, max_cap_eur)
     "protection":  (0.10, 15,  70),
     "straps":      (0.20, 20, 150),
-    "audio":       (0.35, 40, 450),   # earbuds, over-ear, speakers — biggest cross-sell
+    "audio":       (0.35, 40, 450),
     "scales":      (0.20, 25, 200),
-    "power":       (0.08, 15,  80),   # wall + wearable chargers
+    "power":       (0.08, 15,  80),
     "mounts":      (0.08, 15,  80),
     "car_charger": (0.05, 12,  50),
 }
  
 def get_dynamic_cap(trigger_price: float, budget_key: str) -> float:
-    """Cap scales with trigger price, clamped to a floor and ceiling per category."""
     share, min_cap, max_cap = BUDGET_SHARES.get(budget_key, BUDGET_SHARES["power"])
     return max(min_cap, min(max_cap, trigger_price * share))
  
 def _sweet_spot_min_ratio(trigger_price: float) -> float:
-    """
-    Wider sweet-spot for premium triggers. A €900 watch buyer who's looking
-    at €150 earbuds shouldn't be told they're 'below sweet spot' — at that
-    trigger price, even mid-range accessories are perfectly proportional.
-    """
+    """Wider sweet-spot for premium triggers — at €700+ we accept down to 30 % of cap."""
     if trigger_price >= 700:
         return 0.30
     if trigger_price >= 400:
@@ -544,9 +532,8 @@ def _sweet_spot_min_ratio(trigger_price: float) -> float:
 # ── Scoring Constants ────────────────────────────────────────────
 SCORE_MODEL_MATCH_STRICT  = 1_000_000
 SCORE_MODEL_MATCH_PARTIAL =   500_000
-SCORE_ECOSYSTEM_LOCK      =   400_000   # NEW: Apple's own products in slots 5/6/7
 SCORE_USE_CASE_AFFINITY   =   300_000
-SCORE_SAME_BRAND          =   200_000
+SCORE_SAME_BRAND          =   200_000   # universal brand boost — never a requirement
 SCORE_IN_BUDGET_SWEET     =   150_000
 SCORE_POPULARITY_BOOST    =   100_000
 SCORE_BELOW_SWEET         =    75_000
@@ -556,7 +543,7 @@ PENALTY_OVER_CAP_HARD     =  -400_000
 PENALTY_WAY_OVER_CAP      =  -900_000
 PENALTY_BRAND_DIVERSITY   =  -150_000
  
-SCORE_MINIMUM_THRESHOLD   = PENALTY_OVER_CAP_HARD  # -400 000
+SCORE_MINIMUM_THRESHOLD   = PENALTY_OVER_CAP_HARD
  
 # ── Marketing Copy ───────────────────────────────────────────────
 WEARABLE_MARKETING_COPY: dict[str, str] = {
@@ -1365,13 +1352,19 @@ def _model_tokens(model_str: str) -> set[str]:
     return {t for t in raw if len(t) >= 2 and t not in _NOISE}
  
 def _compatibility_score(model_str: str, compat_field, brand: str = "") -> int:
+    """
+    Score the accessory's 'Συμβατό με' field against the trigger's Μοντέλο.
+    ① Verbatim full-string match     → STRICT  (1,000,000)
+    ② ≥50 % token overlap            → PARTIAL (500,000)
+    ③ Same brand-specific size group → PARTIAL (500,000)
+    """
     if not model_str or pd.isna(compat_field):
         return 0
     compat_upper = str(compat_field).upper()
     model_upper  = model_str.strip().upper()
     if re.search(re.escape(model_upper), compat_upper):
         return SCORE_MODEL_MATCH_STRICT
-    tokens  = _model_tokens(model_str)
+    tokens = _model_tokens(model_str)
     if tokens:
         matched = sum(1 for t in tokens if t in compat_upper)
         if matched >= max(2, len(tokens) // 2):
@@ -1385,10 +1378,6 @@ def _compatibility_score(model_str: str, compat_field, brand: str = "") -> int:
     return 0
  
 def _price_affinity_score(item_price: float, cap: float, trigger_price: float) -> int:
-    """
-    Reward items in the sweet-spot; penalise those over the cap.
-    Sweet-spot lower bound widens for premium triggers.
-    """
     if item_price <= 0 or cap <= 0:
         return 0
     ratio    = item_price / cap
@@ -1409,10 +1398,7 @@ def _build_hierarchy_pool(
     hierarchies: list[str],
     used_materials: set,
 ) -> pd.DataFrame:
-    """
-    Case-insensitive hierarchy filter. Fixes the v2 bug where 'Bluetooth'
-    (mixed case) never matched 'BLUETOOTH' (already-uppercased column).
-    """
+    """Case-insensitive hierarchy filter. Excludes already-used materials."""
     hier_pattern = "|".join(re.escape(h) for h in hierarchies)
     mask = (
         candidates["Hierarchy"]
@@ -1429,22 +1415,14 @@ def _score_pool(
     *,
     logic_key: str,
     budget_key: str,
-    slot_num: int,
     tmod: str,
     tb: str,
     trigger_price: float,
     is_athlete: bool,
     brand_slot_count: dict,
     sales_p80: float,
-    strict_compat_required: bool,
 ) -> tuple[pd.DataFrame, list[str], bool]:
-    """
-    Apply all six scoring layers to a candidate pool. Returns the scored pool,
-    the diagnostic notes, and a flag telling us if compat-matching was satisfied.
-    Used both by the main pass (strict_compat_required=True for MODEL_MATCH_STRICT
-    slots) and by the wraparound-fill pass (strict_compat_required=False, so we
-    don't hard-skip).
-    """
+    """Apply all scoring layers. Returns (scored_pool, notes, has_compat_hit)."""
     notes: list[str] = [f"Logic={logic_key}", f"BudgetKey={budget_key}"]
     pool["_score"] = 0.0
     cap = get_dynamic_cap(trigger_price, budget_key)
@@ -1452,7 +1430,7 @@ def _score_pool(
  
     has_compat_hit = False
  
-    # Layer 1 — Compatibility
+    # Layer 1 — Compatibility (Μοντέλο ↔ Συμβατό με)
     if logic_key == "MODEL_MATCH_STRICT" and tmod and "Συμβατό με" in pool.columns:
         compat_scores = pool["Συμβατό με"].apply(
             lambda x: _compatibility_score(tmod, x, brand=tb)
@@ -1463,7 +1441,7 @@ def _score_pool(
         has_compat_hit = (strict_hits + partial_hits) > 0
         notes.append(f"Compat strict={strict_hits} partial={partial_hits}")
  
-    # Layer 2 — Persona / Use-Case Affinity
+    # Layer 2 — Use-case affinity (audio, mount)
     if logic_key == "AUDIO_USE_CASE":
         if is_athlete:
             sport_mask = pool["Title"].str.contains(
@@ -1477,15 +1455,8 @@ def _score_pool(
                 r"Buds|AirPods|FreeBuds|TWS|True\s*Wireless|Galaxy\s*Buds",
                 case=False, na=False, regex=True,
             )
-            same_brand_tws = tws_mask & (
-                pool["Κατασκευαστής"].fillna("").str.upper() == tb
-            )
-            pool.loc[same_brand_tws,  "_score"] += SCORE_USE_CASE_AFFINITY + SCORE_SAME_BRAND
-            pool.loc[tws_mask & ~same_brand_tws, "_score"] += SCORE_USE_CASE_AFFINITY
-            notes.append(
-                f"TWS boost: same-brand={int(same_brand_tws.sum())} "
-                f"other={int(tws_mask.sum() - same_brand_tws.sum())}"
-            )
+            pool.loc[tws_mask, "_score"] += SCORE_USE_CASE_AFFINITY
+            notes.append(f"TWS boost: {int(tws_mask.sum())} items")
     elif logic_key == "MOUNT_USE_CASE":
         if is_athlete:
             bike_mask = pool["Title"].str.contains(
@@ -1502,15 +1473,9 @@ def _score_pool(
             pool.loc[dock_mask, "_score"] += SCORE_USE_CASE_AFFINITY
             notes.append(f"Dock/Stand boost: {int(dock_mask.sum())} items")
  
-    # Layer 3a — Same brand
+    # Layer 3 — Universal brand BOOST (never a requirement, never slot-specific)
     same_brand_mask = pool["Κατασκευαστής"].fillna("").str.upper() == tb
     pool.loc[same_brand_mask, "_score"] += SCORE_SAME_BRAND
- 
-    # Layer 3b — Apple ecosystem lock (slots 5/6/7 only)
-    if tb == APPLE_LOCK_BRAND and slot_num in APPLE_LOCK_SLOTS:
-        apple_mask = pool["Κατασκευαστής"].fillna("").str.upper() == APPLE_LOCK_BRAND
-        pool.loc[apple_mask, "_score"] += SCORE_ECOSYSTEM_LOCK
-        notes.append(f"Apple ecosystem lock: {int(apple_mask.sum())} items")
  
     # Layer 4 — Brand diversity penalty
     for brand, count in brand_slot_count.items():
@@ -1518,12 +1483,12 @@ def _score_pool(
             over_mask = pool["Κατασκευαστής"].fillna("").str.upper() == brand
             pool.loc[over_mask, "_score"] += PENALTY_BRAND_DIVERSITY * (count - 1)
  
-    # Layer 5 — Price affinity (dynamic cap, dynamic sweet-spot)
+    # Layer 5 — Price affinity (dynamic cap)
     pool["_score"] += pool["_p"].apply(
         lambda p: _price_affinity_score(p, cap, trigger_price)
     )
  
-    # Layer 6 — Popularity boost
+    # Layer 6 — Popularity tie-breaker
     popular_mask = pool["Sales_Tiebreaker"] >= sales_p80
     pool.loc[popular_mask, "_score"] += SCORE_POPULARITY_BOOST
  
@@ -1531,7 +1496,26 @@ def _score_pool(
     return pool, notes, has_compat_hit
  
  
-
+def _assign_to_slot(
+    chosen: pd.Series,
+    *,
+    assigned_slot: int,
+    role: str,
+    persona_label: str,
+    fallback: bool,
+    hierarchies: list[str],
+) -> pd.Series:
+    rc = chosen.copy()
+    rc["Assigned_Slot"]  = assigned_slot
+    rc["Slot_Role"]      = role
+    rc["Persona"]        = persona_label
+    rc["Final_Score"]    = chosen["_score"]
+    rc["Fallback_Used"]  = fallback
+    rc["Marketing_Copy"] = WEARABLE_MARKETING_COPY.get(
+        hierarchies[0], "Ιδανική επιλογή για το smartwatch σου."
+    )
+    return rc
+ 
 # ═════════════════════════════════════════════════════════════
 # 🟢 LAPTOPS HELPERS
 # ═════════════════════════════════════════════════════════════
@@ -4369,16 +4353,17 @@ def run_tablets_engine(trigger, df_products, df_history):
 # ═════════════════════════════════════════════════════════════
 
 
+
 def run_wearables_engine(
     trigger: dict,
     df_products: pd.DataFrame,
     df_history: pd.DataFrame,
 ) -> tuple[pd.DataFrame, list, dict, dict]:
  
-    diag: list            = []
-    slot_notes: dict      = {}
-    score_breakdown: dict = {}
-    all_recs_by_slot: dict = {}   # slot_num → row (for ordered output)
+    diag: list             = []
+    slot_notes: dict       = {}
+    score_breakdown: dict  = {}
+    all_recs_by_slot: dict = {}
  
     # ── Parse Trigger ────────────────────────────────────────
     tm     = trigger["Material"]
@@ -4387,7 +4372,7 @@ def run_wearables_engine(
     tprice = parse_euro_price(trigger.get("LIST PRICE", 0))
     ttier  = get_wearable_tier(tprice)
  
-    is_athlete   = tb in ATHLETE_BRANDS
+    is_athlete    = tb in ATHLETE_BRANDS
     persona_label = "Athlete" if is_athlete else "Ecosystem User"
  
     diag.append((
@@ -4410,61 +4395,56 @@ def run_wearables_engine(
     brand_slot_count: dict = {}
  
     # ═══════════════════════════════════════════════════════════
-    # PASS 1 — Main slot loop
+    # PASS 1 — Main slot loop. STRICT slots stay empty if no compat hit.
     # ═══════════════════════════════════════════════════════════
     for slot_num, role, hierarchies, logic_key, budget_key in slot_definitions:
  
         pool = _build_hierarchy_pool(c, hierarchies, used_materials)
- 
         if pool.empty:
-            diag.append((f"Slot {slot_num}", role, "⚪ Pool empty — will retry in fill pass"))
-            slot_notes[slot_num] = [f"Logic={logic_key}", "Pool empty"]
+            diag.append((f"Slot {slot_num}", role, "⚪ Pool empty — left empty"))
+            slot_notes[slot_num] = [f"Logic={logic_key}", "⚪ Pool empty"]
             continue
  
         scored, notes, has_compat_hit = _score_pool(
             pool,
             logic_key=logic_key,
             budget_key=budget_key,
-            slot_num=slot_num,
             tmod=tmod,
             tb=tb,
             trigger_price=tprice,
             is_athlete=is_athlete,
             brand_slot_count=brand_slot_count,
             sales_p80=sales_p80,
-            strict_compat_required=True,
         )
  
-        # Hard skip for strict compat slots with no compat hit at all
+        # Strict-compat slots: no compat match → LEAVE EMPTY. Never substitute.
         if logic_key == "MODEL_MATCH_STRICT" and tmod and not has_compat_hit:
             diag.append((
                 f"Slot {slot_num} ⬜",
                 role,
-                f"No compat match for '{tmod}' — will retry in fill pass",
+                f"No Συμβατό με ↔ '{tmod}' — left empty (compensated via slot 11+)",
             ))
-            slot_notes[slot_num] = notes + ["No compat match in pass 1"]
+            slot_notes[slot_num] = notes + ["⬜ Left empty: no compat match"]
             continue
  
         best_score = scored["_score"].iloc[0]
         if best_score < SCORE_MINIMUM_THRESHOLD:
             diag.append((f"Slot {slot_num}", role, f"⛔ Best score {best_score} below threshold"))
-            slot_notes[slot_num] = notes + ["Below threshold in pass 1"]
+            slot_notes[slot_num] = notes + ["⛔ Below threshold"]
             continue
  
         chosen = scored.iloc[0]
         chosen_brand = str(chosen.get("Κατασκευαστής", "")).strip().upper()
         brand_slot_count[chosen_brand] = brand_slot_count.get(chosen_brand, 0) + 1
  
-        rc = chosen.copy()
-        rc["Assigned_Slot"]  = slot_num
-        rc["Slot_Role"]      = role
-        rc["Persona"]        = persona_label
-        rc["Final_Score"]    = chosen["_score"]
-        rc["Fallback_Used"]  = False
-        rc["Marketing_Copy"] = WEARABLE_MARKETING_COPY.get(
-            hierarchies[0], "Ιδανική επιλογή για το smartwatch σου."
+        all_recs_by_slot[slot_num] = _assign_to_slot(
+            chosen,
+            assigned_slot=slot_num,
+            role=role,
+            persona_label=persona_label,
+            fallback=False,
+            hierarchies=hierarchies,
         )
-        all_recs_by_slot[slot_num] = rc
         used_materials.add(chosen["Material"])
         slot_notes[slot_num] = notes
  
@@ -4488,40 +4468,48 @@ def run_wearables_engine(
         ))
  
     # ═══════════════════════════════════════════════════════════
-    # PASS 2 — Wraparound fill
-    #   Goal: always return 10 recommendations.
-    #   For each empty slot, cycle through slot definitions starting
-    #   from slot 1, pulling the next-best unused product. Compat
-    #   matching is no longer required (we relax it so we can fill).
+    # PASS 2 — Overflow: add slots 11, 12, … until we reach 10 products.
+    #
+    # Empty strict slots from pass 1 stay empty. To compensate, we add extra
+    # recommendations at slot ids 11+, drawing from the slot definitions in
+    # cyclical order. Strict-slot hierarchies still require a compat hit
+    # during overflow too — we won't surface a non-compatible strap as
+    # "extra" either. Better to skip that hierarchy and try the next one.
     # ═══════════════════════════════════════════════════════════
-    empty_slot_nums = [n for n, *_ in slot_definitions if n not in all_recs_by_slot]
-    cursor = 0   # advances through slot_definitions as we consume hierarchies
+    overflow_slot_id = 11
+    cursor = 0
+    safety_counter = 0
+    MAX_OVERFLOW_ATTEMPTS = len(slot_definitions) * 3
  
-    for empty_slot_num in empty_slot_nums:
-        filled = False
-        # Try every slot-def at most twice (so we cycle around fully)
-        for attempt in range(len(slot_definitions) * 2):
-            sdef = slot_definitions[(cursor + attempt) % len(slot_definitions)]
+    while len(all_recs_by_slot) < TARGET_FILLED_SLOTS and safety_counter < MAX_OVERFLOW_ATTEMPTS:
+        safety_counter += 1
+        found = False
+ 
+        for attempt in range(len(slot_definitions)):
+            idx  = (cursor + attempt) % len(slot_definitions)
+            sdef = slot_definitions[idx]
             src_slot_num, src_role, src_hierarchies, src_logic, src_budget = sdef
  
             pool = _build_hierarchy_pool(c, src_hierarchies, used_materials)
             if pool.empty:
                 continue
  
-            scored, _notes, _ = _score_pool(
+            scored, _notes, has_compat_hit = _score_pool(
                 pool,
                 logic_key=src_logic,
                 budget_key=src_budget,
-                slot_num=empty_slot_num,         # slot position we're filling
                 tmod=tmod,
                 tb=tb,
                 trigger_price=tprice,
                 is_athlete=is_athlete,
                 brand_slot_count=brand_slot_count,
                 sales_p80=sales_p80,
-                strict_compat_required=False,
             )
-            # In fill pass we accept anything above WAY_OVER_CAP
+ 
+            # Strict hierarchies still require compat — even in overflow
+            if src_logic == "MODEL_MATCH_STRICT" and tmod and not has_compat_hit:
+                continue
+ 
             best_score = scored["_score"].iloc[0]
             if best_score <= PENALTY_WAY_OVER_CAP:
                 continue
@@ -4530,20 +4518,18 @@ def run_wearables_engine(
             chosen_brand = str(chosen.get("Κατασκευαστής", "")).strip().upper()
             brand_slot_count[chosen_brand] = brand_slot_count.get(chosen_brand, 0) + 1
  
-            rc = chosen.copy()
-            rc["Assigned_Slot"]  = empty_slot_num
-            rc["Slot_Role"]      = f"{src_role} (extra)"
-            rc["Persona"]        = persona_label
-            rc["Final_Score"]    = chosen["_score"]
-            rc["Fallback_Used"]  = True
-            rc["Marketing_Copy"] = WEARABLE_MARKETING_COPY.get(
-                src_hierarchies[0], "Ιδανική επιλογή για το smartwatch σου."
+            all_recs_by_slot[overflow_slot_id] = _assign_to_slot(
+                chosen,
+                assigned_slot=overflow_slot_id,
+                role=f"{src_role} (extra)",
+                persona_label=persona_label,
+                fallback=True,
+                hierarchies=src_hierarchies,
             )
-            all_recs_by_slot[empty_slot_num] = rc
             used_materials.add(chosen["Material"])
  
             cap_used = get_dynamic_cap(tprice, src_budget)
-            score_breakdown[empty_slot_num] = {
+            score_breakdown[overflow_slot_id] = {
                 "slot_role":   f"{src_role} (extra)",
                 "material":    chosen["Material"],
                 "title":       str(chosen.get("Title", ""))[:60],
@@ -4555,20 +4541,29 @@ def run_wearables_engine(
                 "fallback":    True,
                 "logic":       src_logic,
             }
+            slot_notes[overflow_slot_id] = [
+                f"🔁 Extra from slot {src_slot_num} ({src_role}) hierarchy",
+                f"Logic={src_logic}",
+                f"Cap=€{cap_used:.0f}",
+            ]
             diag.append((
-                f"Slot {empty_slot_num} 🔁",
-                f"Fill from slot {src_slot_num} ({src_role})  →  {str(chosen.get('Title', ''))[:45]}",
-                f"Score={round(chosen['_score']):,}  Price=€{chosen['_p']:.2f}  Cap=€{cap_used:.0f}",
+                f"Slot {overflow_slot_id} 🔁",
+                f"Extra from slot {src_slot_num} ({src_role})  →  {str(chosen.get('Title', ''))[:40]}",
+                f"Score={round(chosen['_score']):,}  Price=€{chosen['_p']:.2f}",
             ))
-            slot_notes[empty_slot_num] = (slot_notes.get(empty_slot_num, []) +
-                                          [f"🔁 Filled from slot {src_slot_num} hierarchy"])
-            # advance cursor past the slot we just consumed from
-            cursor = (cursor + attempt + 1)
-            filled = True
+ 
+            cursor = idx + 1
+            overflow_slot_id += 1
+            found = True
             break
  
-        if not filled:
-            diag.append((f"Slot {empty_slot_num} ❌", "Could not fill — no products remain", ""))
+        if not found:
+            diag.append((
+                "Overflow",
+                "Could not add more recommendations — candidate pool exhausted",
+                f"Final count: {len(all_recs_by_slot)} / {TARGET_FILLED_SLOTS}",
+            ))
+            break
  
     # ── Assemble Final DataFrame ────────────────────────────
     if all_recs_by_slot:
@@ -4587,7 +4582,7 @@ def run_wearables_engine(
  
 def print_wearables_diag(diag: list, slot_notes: dict, score_breakdown: dict) -> None:
     print("\n" + "═" * 72)
-    print("  WEARABLES ENGINE v3 — DIAGNOSTICS")
+    print("  WEARABLES ENGINE v4 — DIAGNOSTICS")
     print("═" * 72)
     for label, main, detail in diag:
         print(f"  [{label}]  {main}")
@@ -4611,7 +4606,7 @@ def print_wearables_diag(diag: list, slot_notes: dict, score_breakdown: dict) ->
             f"Ratio={bd['price_ratio']}  Fallback={bd['fallback']}"
         )
     print("═" * 72 + "\n")
-
+ 
  
 
 # ═════════════════════════════════════════════════════════════
