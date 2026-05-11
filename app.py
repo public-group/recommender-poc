@@ -2191,7 +2191,21 @@ else:
             sel = st.sidebar.selectbox("", tvs['Title'].unique(), label_visibility="collapsed", key="tv_sel")
             trigger = tvs[tvs['Title']==sel].iloc[0] if sel else None
             
-
+    # Μέσα στο Level 2 View (Sidebar)
+    elif active_cluster == "AirUnits":
+        if df_air.empty: 
+            st.sidebar.warning("Το sheet 'Air' είναι άδειο.")
+        else:
+            # Φιλτράρουμε τα κλιματιστικά ως Trigger
+            ac_hiers = ['Κλιματιστικά Τοίχου 16.000-28.000 BTU', 'Κλιματιστικά Τοίχου 9.000-15.000 BTU', 'Φορητά Κλιματιστικά']
+            ac_units = df_air[df_air['Hierarchy'].isin(ac_hiers)]
+            
+            if ac_units.empty:
+                st.sidebar.warning("Δεν βρέθηκαν κλιματιστικά στο sheet Air.")
+            else:
+                st.sidebar.markdown('<p class="sidebar-section">Επιλέξτε Κλιματιστικό</p>', unsafe_allow_html=True)
+                sel = st.sidebar.selectbox("", ac_units['Title'].unique(), label_visibility="collapsed", key="ac_sel")
+                trigger = ac_units[ac_units['Title']==sel].iloc[0] if sel else None
 
     elif active_cluster == "TVs":
         if df_products.empty: st.stop()
@@ -2202,23 +2216,8 @@ else:
             st.sidebar.markdown('<p class="sidebar-section">Επιλέξτε Τηλεόραση</p>', unsafe_allow_html=True)
             sel = st.sidebar.selectbox("", tvs['Title'].unique(), label_visibility="collapsed", key="tv_sel")
             trigger = tvs[tvs['Title']==sel].iloc[0] if sel else None
-            
-    elif active_cluster == "Climatism":
-        if df_air.empty: 
-            st.sidebar.warning("Το sheet 'Air' είναι άδειο.")
-        else:
-            # Επιλέγουμε τα κλιματιστικά ως Trigger από το sheet Air
-            ac_hiers = ['Κλιματιστικά Τοίχου 16.000-28.000 BTU', 'Κλιματιστικά Τοίχου 9.000-15.000 BTU', 'Φορητά Κλιματιστικά']
-            ac_units = df_air[df_air['Hierarchy'].isin(ac_hiers)]
-            
-            if ac_units.empty:
-                st.sidebar.warning("Δεν βρέθηκαν κλιματιστικά στο sheet Air.")
-            else:
-                st.sidebar.markdown('<p class="sidebar-section">Επιλέξτε Κλιματιστικό</p>', unsafe_allow_html=True)
-                sel = st.sidebar.selectbox("", ac_units['Title'].unique(), label_visibility="collapsed", key="ac_sel")
-                trigger = ac_units[ac_units['Title']==sel].iloc[0] if sel else None
-                
-    elif active_cluster == "Projectors":
+                 
+     "Projectors":
         if df_products.empty: st.stop()
         # Fetch by Level 2 or Hierarchy depending on your Excel mapping
         projs = df_products[df_products['Level 2'].fillna('').astype(str).str.strip().str.upper() == 'PROJECTORS'].copy()
@@ -9383,10 +9382,9 @@ elif active_cluster == "Turntables":
 elif active_cluster == "Wearables":
     recs, diag, slot_notes, full_candidates = run_wearables_engine(trigger, df_products, df_history)
     slot_diag = []    
-elif active_cluster == "Climatism":
-    # Περνάμε το df_air στη μηχανή
+elif active_cluster == "AirUnits":
     recs, diag, slot_notes, full_candidates = run_climatism_engine(trigger, df_air, df_history)
-    slot_diag = []    
+    slot_diag = [] 
 elif active_cluster in ("Mouse", "Keyboard", "Gaming Mouse", "Gaming Keyboard"):
     recs, diag, slot_notes, full_candidates = run_peripherals_engine(trigger, df_peripherals, df_history, active_cluster)
     slot_diag = []
