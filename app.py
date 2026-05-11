@@ -486,6 +486,7 @@ def _budget_range(role, ttier):
 
 
 
+
 # ── Brand Personas ──────────────────────────────────────────────
 ATHLETE_BRANDS   = {"GARMIN", "SUUNTO", "POLAR", "COROS"}
 ECOSYSTEM_BRANDS = {"APPLE", "SAMSUNG", "GOOGLE", "HUAWEI", "XIAOMI", "FITBIT"}
@@ -540,34 +541,52 @@ WEARABLE_MARKETING_COPY: dict[str, str] = {
     "MOUNTS & STANDS":             "Τακτοποίησε & φόρτιζε το smartwatch σου με στυλ.",
     "CAR CHARGERS":                "Κράτα κάθε συσκευή φορτισμένη σε κάθε διαδρομή.",
 }
-
-
-
+ 
+# ═══════════════════════════════════════════════════════════════
+# 2.  PERSONA-SPECIFIC SLOT DEFINITIONS
+#
+#     Format per slot:
+#       (slot_num, role_label, [hierarchy_strings], logic_key, budget_key)
+#
+#     Athlete  → 2 straps (sweat-resistant), protection, dedicated charger,
+#                sport audio, bike mount, scale, wall charger, speaker, car charger
+#     Ecosystem → 1 premium strap, protection, dedicated charger, dock/stand,
+#                 TWS earbuds, scale, wall charger, car charger, speaker, over-ear
+# ═══════════════════════════════════════════════════════════════
+ 
+# Slot order follows the canonical hierarchy list:
+#   ΠΡΟΣΤΑΣΙΑ ΟΘΟΝΗΣ WEARABLES · ΛΟΥΡΑΚΙΑ WEARABLES · Bluetooth ·
+#   BODY SCALES · WALL CHARGERS · ΦΟΡΤΙΣΤΕΣ WEARABLES ·
+#   OVERHEAD · ΗΧΕΙΑ ΦΟΡΗΤΟΥ ΗΧΟΥ · ΒΑΣΕΙΣ · CAR CHARGERS
+ 
 SLOTS_ECOSYSTEM: list[tuple] = [
-    (1,  "Λουράκι",               ["ΛΟΥΡΑΚΙΑ WEARABLES"],         "MODEL_MATCH_STRICT", "straps"),
-    (2,  "Προστασία Οθόνης",      ["ΠΡΟΣΤΑΣΙΑ ΟΘΟΝΗΣ WEARABLES"], "MODEL_MATCH_STRICT", "protection"),
-    (3,  "Φορτιστής Wearable",    ["ΦΟΡΤΙΣΤΕΣ WEARABLES"],        "MODEL_MATCH_STRICT", "power"),
-    (4,  "Βάση / Dock",           ["MOUNTS & STANDS"],            "MOUNT_USE_CASE",     "mounts"),
-    (5,  "TWS Earbuds",           ["Bluetooth"],                  "AUDIO_USE_CASE",     "audio"),
-    (6,  "Ζυγαριά",               ["BODY SCALES"],                "GENERIC",            "scales"),
-    (7,  "Φορτιστής Τοίχου",      ["WALL CHARGERS"],              "GENERIC",            "power"),
-    (8,  "Φορτιστής Αυτ/του",     ["CAR CHARGERS"],               "GENERIC",            "car_charger"),
-    (9,  "Φορητό Ηχείο",          ["ΗΧΕΙΑ ΦΟΡΗΤΟΥ ΗΧΟΥ"],         "GENERIC",            "audio"),
-    (10, "Over-Ear Headphones",   ["OVERHEAD"],                   "GENERIC",            "audio"),
+    (1,  "Προστασία Οθόνης",      ["ΠΡΟΣΤΑΣΙΑ ΟΘΟΝΗΣ WEARABLES"], "MODEL_MATCH_STRICT", "protection"),
+    (2,  "Λουράκι",               ["ΛΟΥΡΑΚΙΑ WEARABLES"],         "MODEL_MATCH_STRICT", "straps"),
+    (3,  "TWS Earbuds",           ["Bluetooth"],                  "AUDIO_USE_CASE",     "audio"),
+    (4,  "Ζυγαριά",               ["BODY SCALES"],                "GENERIC",            "scales"),
+    (5,  "Φορτιστής Τοίχου",      ["WALL CHARGERS"],              "GENERIC",            "power"),
+    (6,  "Φορτιστής Wearable",    ["ΦΟΡΤΙΣΤΕΣ WEARABLES"],        "MODEL_MATCH_STRICT", "power"),
+    (7,  "Over-Ear Headphones",   ["OVERHEAD"],                   "GENERIC",            "audio"),
+    (8,  "Φορητό Ηχείο",          ["ΗΧΕΙΑ ΦΟΡΗΤΟΥ ΗΧΟΥ"],         "GENERIC",            "audio"),
+    (9,  "Βάση / Dock",           ["ΒΑΣΕΙΣ"],                     "MOUNT_USE_CASE",     "mounts"),
+    (10, "Φορτιστής Αυτ/του",     ["CAR CHARGERS"],               "GENERIC",            "car_charger"),
 ]
  
 SLOTS_ATHLETE: list[tuple] = [
-    (1,  "Λουράκι Sport (κύριο)", ["ΛΟΥΡΑΚΙΑ WEARABLES"],         "MODEL_MATCH_STRICT", "straps"),
-    (2,  "Λουράκι Sport (εφεδρ.)",["ΛΟΥΡΑΚΙΑ WEARABLES"],         "MODEL_MATCH_STRICT", "straps"),
-    (3,  "Προστασία Οθόνης",      ["ΠΡΟΣΤΑΣΙΑ ΟΘΟΝΗΣ WEARABLES"], "MODEL_MATCH_STRICT", "protection"),
-    (4,  "Φορτιστής Wearable",    ["ΦΟΡΤΙΣΤΕΣ WEARABLES"],        "MODEL_MATCH_STRICT", "power"),
-    (5,  "Sport Audio",           ["Bluetooth"],                  "AUDIO_USE_CASE",     "audio"),
-    (6,  "Bike Mount / Βάση",     ["MOUNTS & STANDS"],            "MOUNT_USE_CASE",     "mounts"),
-    (7,  "Ζυγαριά",               ["BODY SCALES"],                "GENERIC",            "scales"),
-    (8,  "Φορτιστής Τοίχου",      ["WALL CHARGERS"],              "GENERIC",            "power"),
-    (9,  "Φορητό Ηχείο",          ["ΗΧΕΙΑ ΦΟΡΗΤΟΥ ΗΧΟΥ"],         "GENERIC",            "audio"),
+    (1,  "Προστασία Οθόνης",      ["ΠΡΟΣΤΑΣΙΑ ΟΘΟΝΗΣ WEARABLES"], "MODEL_MATCH_STRICT", "protection"),
+    (2,  "Λουράκι Sport (κύριο)", ["ΛΟΥΡΑΚΙΑ WEARABLES"],         "MODEL_MATCH_STRICT", "straps"),
+    (3,  "Λουράκι Sport (εφεδρ.)",["ΛΟΥΡΑΚΙΑ WEARABLES"],         "MODEL_MATCH_STRICT", "straps"),
+    (4,  "Sport Audio",           ["Bluetooth"],                  "AUDIO_USE_CASE",     "audio"),
+    (5,  "Φορτιστής Τοίχου",      ["WALL CHARGERS"],              "GENERIC",            "power"),
+    (6,  "Φορτιστής Wearable",    ["ΦΟΡΤΙΣΤΕΣ WEARABLES"],        "MODEL_MATCH_STRICT", "power"),
+    (7,  "Over-Ear Headphones",   ["OVERHEAD"],                   "GENERIC",            "audio"),
+    (8,  "Ζυγαριά",               ["BODY SCALES"],                "GENERIC",            "scales"),
+    (9,  "Bike Mount / Βάση",     ["ΒΑΣΕΙΣ"],                     "MOUNT_USE_CASE",     "mounts"),
     (10, "Φορτιστής Αυτ/του",     ["CAR CHARGERS"],               "GENERIC",            "car_charger"),
 ]
+ 
+ 
+
 
 # ═════════════════════════════════════════════════════════════
 # 🟢 FLOOR CARE CONFIGURATION
@@ -1418,8 +1437,7 @@ def _price_affinity_score(item_price: float, cap: float) -> int:
     if ratio <= 2.50:
         return PENALTY_OVER_CAP_HARD
     return PENALTY_WAY_OVER_CAP
-
-
+ 
 
 
 # ═════════════════════════════════════════════════════════════
@@ -4259,6 +4277,8 @@ def run_tablets_engine(trigger, df_products, df_history):
 # ═════════════════════════════════════════════════════════════
 
 
+
+
 def run_wearables_engine(
     trigger: dict,
     df_products: pd.DataFrame,
@@ -4364,9 +4384,25 @@ def run_wearables_engine(
                     f"Compat strict={strict_hits} partial={partial_hits}"
                 )
                 if not has_any_compat_hit:
-                    notes.append("⚠️ No compat match — relying on brand/popularity fallback")
+                    # ── HARD SKIP: no compat match means we have nothing
+                    #    relevant to show. A wrong accessory is worse than
+                    #    an empty slot — never fall back to popularity here.
+                    diag.append((
+                        f"Slot {slot_num} ⬜",
+                        role,
+                        f"No compat match for '{tmod}' in '{compat_col}' — slot left empty",
+                    ))
+                    slot_notes[slot_num] = notes + ["⬜ Skipped: no compat match"]
+                    continue
             else:
-                notes.append(f"⚠️ Column '{compat_col}' not found in pool — skipping compat scoring")
+                # Column missing entirely — also skip rather than guess
+                diag.append((
+                    f"Slot {slot_num} ⬜",
+                    role,
+                    f"Column '{compat_col}' not found in pool — slot left empty",
+                ))
+                slot_notes[slot_num] = notes + [f"⬜ Skipped: '{compat_col}' column missing"]
+                continue
  
         # ═══════════════════════════════════════════════════
         # SCORING LAYER 2 — Persona / Use-Case Affinity
@@ -4518,11 +4554,9 @@ def run_wearables_engine(
     return recs_df, diag, slot_notes, score_breakdown
  
  
- 
 # ═══════════════════════════════════════════════════════════════
 # 5.  DIAGNOSTIC PRETTY-PRINT HELPER
 # ═══════════════════════════════════════════════════════════════
-
  
 def print_wearables_diag(diag: list, slot_notes: dict, score_breakdown: dict) -> None:
     """Pretty-print the diagnostics returned by run_wearables_engine."""
@@ -4551,6 +4585,7 @@ def print_wearables_diag(diag: list, slot_notes: dict, score_breakdown: dict) ->
             f"Ratio={bd['price_ratio']}  Fallback={bd['fallback']}"
         )
     print("═" * 72 + "\n")
+ 
 
 # ═════════════════════════════════════════════════════════════
 # 🟢 LAPTOPS ENGINE — Mainstream / Road Warrior
