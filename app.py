@@ -491,7 +491,34 @@ LOCKABLE_BRANDS = {
     "APPLE", "SAMSUNG", "GOOGLE", "HUAWEI", "XIAOMI", "FITBIT",
     "GARMIN", "SUUNTO", "POLAR", "COROS",
 }
- 
+
+# ── BRAND ECOSYSTEM MAPPING ─────────────────────────────────────────────
+# Maps a trigger brand to its broader "ecosystem" of friendly brands.
+# Used by ecosystem-aware slot logic (LOCK / SOFT modes) so that e.g. an
+# Apple Watch trigger can pick Beats audio gear, or a Samsung trigger can
+# pick JBL / AKG (both Harman-owned by Samsung) for speakers & over-ear.
+WEARABLE_BRAND_ECOSYSTEM: dict[str, set[str]] = {
+    "APPLE":   {"APPLE", "BEATS"},                              # Apple owns Beats
+    "SAMSUNG": {"SAMSUNG", "JBL", "AKG", "HARMAN/KARDON"},      # Samsung owns Harman
+    "GOOGLE":  {"GOOGLE", "PIXEL"},
+    "HUAWEI":  {"HUAWEI", "HONOR"},
+    "XIAOMI":  {"XIAOMI", "REDMI", "POCO"},
+    "FITBIT":  {"FITBIT", "GOOGLE", "PIXEL"},                   # Google owns Fitbit
+    "GARMIN":  {"GARMIN"},
+    "SUUNTO":  {"SUUNTO"},
+    "POLAR":   {"POLAR"},
+    "COROS":   {"COROS"},
+}
+
+# The trigger brand itself is the "primary" ecosystem brand and gets a
+# higher boost than "secondary" (sister) brands like Beats / JBL.
+def get_wearable_ecosystem(brand: str) -> set[str]:
+    """Return the ecosystem brand-set for a given trigger brand."""
+    if not brand:
+        return set()
+    b = brand.strip().upper()
+    return WEARABLE_BRAND_ECOSYSTEM.get(b, {b})
+
 TARGET_FILLED_SLOTS = 10
  
 def get_wearable_tier(price: float) -> str:
@@ -524,6 +551,8 @@ def _sweet_spot_min_ratio(trigger_price: float) -> float:
 # ── Scoring Constants ────────────────────────────────────────────
 SCORE_MODEL_MATCH_STRICT  = 1_000_000
 SCORE_MODEL_MATCH_PARTIAL =   500_000
+SCORE_ECOSYSTEM_PRIMARY   =   500_000   # NEW: trigger's own brand inside ecosystem (e.g. APPLE for Apple Watch)
+SCORE_ECOSYSTEM_SECONDARY =   300_000   # NEW: sister brand inside ecosystem (e.g. BEATS for Apple Watch)
 SCORE_USE_CASE_AFFINITY   =   300_000
 SCORE_SAME_BRAND          =   200_000
 SCORE_IN_BUDGET_SWEET     =   150_000
@@ -547,6 +576,7 @@ WEARABLE_MARKETING_COPY: dict[str, str] = {
     "WALL CHARGERS":               "Γρήγορη φόρτιση για κάθε συσκευή σου στο σπίτι.",
     "ΦΟΡΤΙΣΤΕΣ WEARABLES":         "Εφεδρικός φορτιστής για το smartwatch σου — ποτέ ξεφόρτωτος.",
     "OVERHEAD":                    "Over-ear άνεση για μαραθώνιες συνεδρίες ήχου.",
+    "APPLE HEADPHONES":            "Premium over-ear ήχος για το Apple οικοσύστημα.",
     "ΗΧΕΙΑ ΦΟΡΗΤΟΥ ΗΧΟΥ":          "Φορητός ήχος 360° — για το σπίτι, το γυμναστήριο, την παραλία.",
     "ΒΑΣΕΙΣ":                      "Τακτοποίησε & φόρτιζε το smartwatch σου με στυλ.",
     "CAR CHARGERS":                "Κράτα κάθε συσκευή φορτισμένη σε κάθε διαδρομή.",
@@ -554,20 +584,39 @@ WEARABLE_MARKETING_COPY: dict[str, str] = {
  
 # ═══════════════════════════════════════════════════════════════
 # 2.  UNIFIED SLOT DEFINITIONS  (single list for all personas)
-#     Format: (slot_num, role_label, [hierarchies], logic_key, budget_key)
+#     Format: (slot_num, role_label, [hierarchies], logic_key, budget_key,
+#              ecosystem_mode, title_filter)
+#
+#     ecosystem_mode controls brand-ecosystem behavior:
+#       "OFF"  → no ecosystem influence (pure generic scoring)
+#       "SOFT" → ecosystem brands get a score boost; pool stays open
+#       "LOCK" → pool filtered to ecosystem brands first; falls back to full
+#                pool if locked pool fails the threshold (e.g. all over-cap)
+#
+#     title_filter (optional, default None) lets a slot prune mismatched items
+#     that share the same hierarchy. Dict of:
+#       {"include": <regex>, "exclude": <regex>}
+#     Used for slot 7 (Over-Ear) because the APPLE HEADPHONES hierarchy mixes
+#     AirPods Max (over-ear, wanted) with the legacy wired EarPods 3.5mm Jack
+#     (handsfree, unwanted). The filter keeps AirPods Max and drops EarPods.
 # ═══════════════════════════════════════════════════════════════
- 
+
+# Slot 7: keep over-ear / on-ear / cup-style products; block wired earbuds & jacks
+_OVEREAR_FILTER = {
+    "exclude": r"3\.?5\s*mm|Jack|Handsfree|EarPods\s+\d|Neckband|In.?Ear",
+}
+
 SLOTS: list[tuple] = [
-    (1,  "Προστασία Οθόνης",   ["ΠΡΟΣΤΑΣΙΑ ΟΘΟΝΗΣ WEARABLES"], "MODEL_MATCH_STRICT", "protection"),
-    (2,  "Λουράκι",            ["ΛΟΥΡΑΚΙΑ WEARABLES"],         "MODEL_MATCH_STRICT", "straps"),
-    (3,  "TWS Earbuds",        ["Bluetooth"],                  "AUDIO_USE_CASE",     "audio"),
-    (4,  "Ζυγαριά",            ["BODY SCALES"],                "GENERIC",            "scales"),
-    (5,  "Φορτιστής Τοίχου",   ["WALL CHARGERS"],              "GENERIC",            "power"),
-    (6,  "Φορτιστής Wearable", ["ΦΟΡΤΙΣΤΕΣ WEARABLES"],        "MODEL_MATCH_STRICT", "power"),
-    (7,  "Over-Ear Headphones",["OVERHEAD"],                   "GENERIC",            "audio"),
-    (8,  "Φορητό Ηχείο",       ["ΗΧΕΙΑ ΦΟΡΗΤΟΥ ΗΧΟΥ"],         "GENERIC",            "audio"),
-    (9,  "Βάση / Dock",        ["ΒΑΣΕΙΣ"],                     "MOUNT_USE_CASE",     "mounts"),
-    (10, "Φορτιστής Αυτ/του",  ["CAR CHARGERS"],               "GENERIC",            "car_charger"),
+    (1,  "Προστασία Οθόνης",   ["ΠΡΟΣΤΑΣΙΑ ΟΘΟΝΗΣ WEARABLES"],     "MODEL_MATCH_STRICT", "protection",  "LOCK", None),
+    (2,  "Λουράκι",            ["ΛΟΥΡΑΚΙΑ WEARABLES"],             "MODEL_MATCH_STRICT", "straps",      "LOCK", None),
+    (3,  "TWS Earbuds",        ["Bluetooth"],                      "AUDIO_USE_CASE",     "audio",       "LOCK", None),
+    (4,  "Ζυγαριά",            ["BODY SCALES"],                    "GENERIC",            "scales",      "OFF",  None),
+    (5,  "Φορτιστής Τοίχου",   ["WALL CHARGERS"],                  "GENERIC",            "power",       "SOFT", None),
+    (6,  "Φορτιστής Wearable", ["ΦΟΡΤΙΣΤΕΣ WEARABLES"],            "MODEL_MATCH_STRICT", "power",       "LOCK", None),
+    (7,  "Over-Ear Headphones",["OVERHEAD", "APPLE HEADPHONES"],   "GENERIC",            "audio",       "LOCK", _OVEREAR_FILTER),
+    (8,  "Φορητό Ηχείο",       ["ΗΧΕΙΑ ΦΟΡΗΤΟΥ ΗΧΟΥ"],             "GENERIC",            "audio",       "LOCK", None),
+    (9,  "Βάση / Dock",        ["ΒΑΣΕΙΣ"],                         "MOUNT_USE_CASE",     "mounts",      "OFF",  None),
+    (10, "Φορτιστής Αυτ/του",  ["CAR CHARGERS"],                   "GENERIC",            "car_charger", "SOFT", None),
 ]
 
 
@@ -1474,6 +1523,7 @@ def _score_pool(
     sales_p80: float,
     used_signatures: set,
     is_brand_locked: bool,
+    ecosystem: set[str] | None = None,
 ) -> tuple[pd.DataFrame, list[str], bool]:
     """
     Apply all scoring layers. Returns (scored_pool, notes, has_compat_hit).
@@ -1481,9 +1531,14 @@ def _score_pool(
     `used_signatures` is the set of (hierarchy_signature_tuples) already chosen
     for this hierarchy across the run; matching signatures get a hard penalty.
  
-    `is_brand_locked` means the pool was already filtered to the trigger brand —
-    in that case we skip the universal brand boost (everyone is same-brand) and
-    skip the brand-diversity penalty against the locked brand.
+    `is_brand_locked` means the pool was already filtered to the ecosystem —
+    in that case we skip the universal brand boost (everyone is in-ecosystem)
+    and skip the brand-diversity penalty against the trigger brand.
+ 
+    `ecosystem` is the set of friendly brand names (e.g. {"APPLE","BEATS"}).
+    When provided and the pool is NOT locked, items belonging to the ecosystem
+    get a tiered boost: primary (trigger brand itself) > secondary (sister brands).
+    This is what powers the "exclusive Apple boost" behaviour on SOFT slots.
     """
     notes: list[str] = [f"Logic={logic_key}", f"BudgetKey={budget_key}"]
     pool["_score"] = 0.0
@@ -1523,15 +1578,35 @@ def _score_pool(
         pool.loc[mount_mask, "_score"] += SCORE_USE_CASE_AFFINITY
         notes.append(f"Mount use-case boost: {int(mount_mask.sum())} items")
  
-    # Layer 3 — Same-brand boost (only meaningful when pool is NOT already locked)
-    if not is_brand_locked:
-        same_brand_mask = pool["Κατασκευαστής"].fillna("").str.upper() == tb
+    # Layer 3 — Brand / Ecosystem boost
+    # When pool is NOT already locked to ecosystem, apply tiered boosts:
+    #   • Primary brand (trigger brand itself, e.g. APPLE for Apple Watch)  → +500K
+    #   • Secondary brand (sister brand inside ecosystem, e.g. BEATS)       → +300K
+    # When pool IS locked, ALL items are already in-ecosystem; we still
+    # differentiate primary vs secondary within the locked pool so the
+    # trigger brand wins ties (e.g. AirPods > Beats for Apple Watch).
+    brand_upper = pool["Κατασκευαστής"].fillna("").str.upper()
+    if ecosystem:
+        primary_mask = (brand_upper == tb)
+        secondary_mask = brand_upper.isin(ecosystem - {tb})
+        pool.loc[primary_mask, "_score"]   += SCORE_ECOSYSTEM_PRIMARY
+        pool.loc[secondary_mask, "_score"] += SCORE_ECOSYSTEM_SECONDARY
+        if not is_brand_locked:
+            n_prim, n_sec = int(primary_mask.sum()), int(secondary_mask.sum())
+            if n_prim or n_sec:
+                notes.append(f"Ecosystem boost: {n_prim} primary ({tb}), {n_sec} secondary")
+    elif not is_brand_locked:
+        # No ecosystem defined → fall back to legacy same-brand boost
+        same_brand_mask = brand_upper == tb
         pool.loc[same_brand_mask, "_score"] += SCORE_SAME_BRAND
  
     # Layer 4 — Brand diversity penalty (skip the locked brand)
     for brand, count in brand_slot_count.items():
         if count >= 2 and not (is_brand_locked and brand == tb):
-            over_mask = pool["Κατασκευαστής"].fillna("").str.upper() == brand
+            # Don't penalise ecosystem brands when ecosystem-locking is active
+            if ecosystem and brand in ecosystem:
+                continue
+            over_mask = brand_upper == brand
             pool.loc[over_mask, "_score"] += PENALTY_BRAND_DIVERSITY * (count - 1)
  
     # Layer 5 — Price affinity (dynamic cap)
@@ -1590,17 +1665,29 @@ def _try_pick_for_slot(
     sales_p80: float,
     used_signatures_by_hier: dict,
     enforce_brand_lock: bool,
+    ecosystem_mode: str = "OFF",
+    title_filter: dict | None = None,
 ) -> tuple[pd.Series | None, list[str], bool, bool]:
     """
     Try to score & return the best candidate for a slot.
  
     Returns (chosen_row_or_None, notes, has_compat_hit, brand_locked_used).
  
-    Brand-lock strategy:
-      1. If enforce_brand_lock and brand is in LOCKABLE_BRANDS:
-           filter pool to that brand. If non-empty AND (for strict slots)
-           a compat hit exists, score & return the best. Else fall back.
-      2. Otherwise (or after fallback): score full pool & return best.
+    Ecosystem behaviour is controlled by `ecosystem_mode`:
+      • "OFF"  → legacy: no ecosystem boost, no ecosystem-filtered pool.
+                 (Brand-lock still applies if `enforce_brand_lock` is True,
+                  using the trigger brand alone — same as the v5 engine.)
+      • "SOFT" → ecosystem brands get a score boost in `_score_pool`,
+                 but the pool stays open (no pre-filtering).
+      • "LOCK" → pool filtered to the ecosystem set first; if non-empty
+                 AND best score passes threshold, return from locked pool.
+                 Otherwise fall back to full pool.
+ 
+    `title_filter` (optional) prunes the hierarchy pool by title pattern
+    BEFORE any ecosystem filtering or scoring. Used when a hierarchy mixes
+    products that don't all fit the slot's intent (e.g. APPLE HEADPHONES
+    contains both AirPods Max and legacy wired EarPods Jack).
+        {"include": <regex>, "exclude": <regex>}
     """
     hierarchy = hierarchies[0]
     used_sigs = used_signatures_by_hier.get(hierarchy, set())
@@ -1609,12 +1696,33 @@ def _try_pick_for_slot(
     if pool.empty:
         return None, [f"Logic={logic_key}", "⚪ Pool empty"], False, False
  
-    brand_locked_used = False
-    notes_prefix: list[str] = []
+    # ── Title filter (applied before ecosystem & scoring) ─────────────
+    filter_note = None
+    if title_filter:
+        before_n = len(pool)
+        titles = pool["Title"].fillna("").astype(str)
+        if title_filter.get("include"):
+            pool = pool[titles.str.contains(title_filter["include"], case=False, na=False, regex=True)].copy()
+            titles = pool["Title"].fillna("").astype(str)
+        if title_filter.get("exclude"):
+            pool = pool[~titles.str.contains(title_filter["exclude"], case=False, na=False, regex=True)].copy()
+        after_n = len(pool)
+        filter_note = f"Title-filter pruned {before_n - after_n} items ({before_n}→{after_n})"
+        if pool.empty:
+            return None, [f"Logic={logic_key}", filter_note, "⚪ Pool empty after title-filter"], False, False
  
-    # ── Step 1: Brand-locked attempt ────────────────────────
-    if enforce_brand_lock and tb in LOCKABLE_BRANDS:
-        brand_pool = pool[pool["Κατασκευαστής"].fillna("").str.upper() == tb].copy()
+    # Resolve ecosystem set (empty if mode is OFF or trigger brand has no entry)
+    ecosystem: set[str] = set()
+    if enforce_brand_lock and tb in LOCKABLE_BRANDS and ecosystem_mode in ("SOFT", "LOCK"):
+        ecosystem = get_wearable_ecosystem(tb)
+ 
+    notes_prefix: list[str] = []
+    if filter_note:
+        notes_prefix.append(filter_note)
+ 
+    # ── Step 1: Ecosystem-locked attempt (mode == LOCK only) ──────────
+    if ecosystem and ecosystem_mode == "LOCK":
+        brand_pool = pool[pool["Κατασκευαστής"].fillna("").str.upper().isin(ecosystem)].copy()
         if not brand_pool.empty:
             scored, notes, has_compat = _score_pool(
                 brand_pool,
@@ -1627,20 +1735,33 @@ def _try_pick_for_slot(
                 sales_p80=sales_p80,
                 used_signatures=used_sigs,
                 is_brand_locked=True,
+                ecosystem=ecosystem,
             )
-            notes = [f"🔒 Brand-locked to {tb}"] + notes
+            eco_label = "+".join(sorted(ecosystem))
+            notes = notes_prefix + [f"🔒 Ecosystem-locked to [{eco_label}]"] + notes
             # Strict slot needs compat in the locked pool to count as success
             if logic_key == "MODEL_MATCH_STRICT" and tmod and not has_compat:
-                notes_prefix = [f"Brand-lock failed (no compat in {tb}) — falling back"]
+                notes_prefix = notes_prefix + [f"Ecosystem-lock failed (no compat in [{eco_label}]) — falling back"]
             else:
-                best_score = scored["_score"].iloc[0]
-                if best_score >= SCORE_MINIMUM_THRESHOLD:
-                    return scored.iloc[0], notes, has_compat, True
-                notes_prefix = [f"Brand-lock failed (below threshold) — falling back"]
+                best_row    = scored.iloc[0]
+                best_score  = best_row["_score"]
+                cap_now     = get_dynamic_cap(trigger_price, budget_key)
+                price_ratio = best_row["_p"] / cap_now if cap_now > 0 else 0
+                # Two-gate decision: best score must clear threshold AND
+                # the price must be within 2x the dynamic cap. The price gate
+                # prevents the ecosystem boost from forcing absurdly-expensive
+                # picks (e.g. AirPods Max €589 for an Apple Watch SE 3 €270).
+                if best_score >= SCORE_MINIMUM_THRESHOLD and price_ratio <= 2.0:
+                    return best_row, notes, has_compat, True
+                if price_ratio > 2.0:
+                    notes_prefix = notes_prefix + [f"Ecosystem-lock failed (price ratio {price_ratio:.1f}× cap > 2.0) — falling back"]
+                else:
+                    notes_prefix = notes_prefix + [f"Ecosystem-lock failed (best score {int(best_score):,} below threshold) — falling back"]
         else:
-            notes_prefix = [f"Brand-lock skipped (no {tb} in hierarchy) — falling back"]
+            eco_label = "+".join(sorted(ecosystem))
+            notes_prefix = notes_prefix + [f"Ecosystem-lock skipped (no [{eco_label}] in hierarchy) — falling back"]
  
-    # ── Step 2: Fall back to full pool ──────────────────────
+    # ── Step 2: Fall back to full pool (with SOFT ecosystem boost if applicable) ──
     scored, notes, has_compat = _score_pool(
         pool,
         logic_key=logic_key,
@@ -1652,6 +1773,7 @@ def _try_pick_for_slot(
         sales_p80=sales_p80,
         used_signatures=used_sigs,
         is_brand_locked=False,
+        ecosystem=ecosystem if ecosystem_mode in ("SOFT", "LOCK") else None,
     )
     notes = notes_prefix + notes
  
@@ -4557,11 +4679,13 @@ def run_wearables_engine(
     ttier  = get_wearable_tier(tprice)
  
     is_lockable = tb in LOCKABLE_BRANDS
+    eco_set = get_wearable_ecosystem(tb) if is_lockable else set()
+    eco_label_full = "+".join(sorted(eco_set)) if eco_set else "—"
     persona_label = f"{tb} ({ttier})" if is_lockable else f"Cross-brand ({ttier})"
  
     diag.append((
         "0. Trigger",
-        f"Brand={tb}  Tier={ttier}  Brand-lock={'ON' if is_lockable else 'OFF'}",
+        f"Brand={tb}  Tier={ttier}  Brand-lock={'ON' if is_lockable else 'OFF'}  Ecosystem=[{eco_label_full}]",
         f"Price=€{tprice:.2f}  Model={tmod or '—'}",
     ))
  
@@ -4581,7 +4705,7 @@ def run_wearables_engine(
     # ═══════════════════════════════════════════════════════════
     # PASS 1 — Main slot loop
     # ═══════════════════════════════════════════════════════════
-    for slot_num, role, hierarchies, logic_key, budget_key in SLOTS:
+    for slot_num, role, hierarchies, logic_key, budget_key, ecosystem_mode, title_filter in SLOTS:
         hierarchy = hierarchies[0]
  
         chosen, notes, has_compat, locked = _try_pick_for_slot(
@@ -4596,6 +4720,8 @@ def run_wearables_engine(
             sales_p80=sales_p80,
             used_signatures_by_hier=used_signatures_by_hier,
             enforce_brand_lock=is_lockable,
+            ecosystem_mode=ecosystem_mode,
+            title_filter=title_filter,
         )
  
         if chosen is None:
@@ -4663,7 +4789,7 @@ def run_wearables_engine(
         for attempt in range(len(SLOTS)):
             idx  = (cursor + attempt) % len(SLOTS)
             sdef = SLOTS[idx]
-            src_slot_num, src_role, src_hierarchies, src_logic, src_budget = sdef
+            src_slot_num, src_role, src_hierarchies, src_logic, src_budget, src_eco_mode, src_title_filter = sdef
             hierarchy = src_hierarchies[0]
  
             chosen, notes, has_compat, locked = _try_pick_for_slot(
@@ -4678,6 +4804,8 @@ def run_wearables_engine(
                 sales_p80=sales_p80,
                 used_signatures_by_hier=used_signatures_by_hier,
                 enforce_brand_lock=is_lockable,
+                ecosystem_mode=src_eco_mode,
+                title_filter=src_title_filter,
             )
  
             if chosen is None:
@@ -4753,7 +4881,7 @@ def run_wearables_engine(
  
 def print_wearables_diag(diag: list, slot_notes: dict, score_breakdown: dict) -> None:
     print("\n" + "═" * 72)
-    print("  WEARABLES ENGINE v5 — DIAGNOSTICS")
+    print("  WEARABLES ENGINE v6 — DIAGNOSTICS (ecosystem-aware)")
     print("═" * 72)
     for label, main, detail in diag:
         print(f"  [{label}]  {main}")
