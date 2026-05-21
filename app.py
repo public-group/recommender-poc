@@ -102,7 +102,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v27 — Traditional Vacuums
+        🟢 Engine v27.1 — Traditional Vacuums (bidir bag match)
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -975,15 +975,14 @@ TRAD_VAC_TRIGGER_HIERARCHIES = {
     "Ηλεκτρικές Σκούπες", "ΗΛΕΚΤΡΙΚΕΣ ΣΚΟΥΠΕΣ", "ΗΛΕΚΤΡΙΚΈΣ ΣΚΟΎΠΕΣ",
 }
 
-# Test SKUs — top 5 traditional vacuums by sales (placeholder; swap freely)
-# To restrict the dropdown to specific SKUs, list them here. Leave empty to
-# show all 98 Ηλεκτρικές Σκούπες in the dropdown.
+# Test SKUs — five specific Ηλεκτρικές Σκούπες the user wants to demo.
+# Leave the set empty to show all 98 vacuums in the dropdown.
 TRAD_VAC_TEST_SKUS = {
-    "2084538",  # MIELE GUARD M1 PERFORMANCE — €219
-    "2004291",  # MIELE GUARD M1 STANDARD — €199
+    "2084538",  # MIELE GUARD M1 PERFORMANCE — €219 (has strict bag match)
     "1912945",  # ROHNSON Cyclone Tech R-1260 — €110
-    "2004292",  # MIELE GUARD M1 STANDARD FLEX — €249
+    "2004292",  # MIELE GUARD M1 STANDARD FLEX — €249 (catches the GUARD M1 series)
     "1863719",  # BOSCH BGL8BA3S — €229
+    "1470379",  # DYSON CY26 Big Ball Absolute 2 — €398 (bagless, expect 0 bag matches)
 }
 
 # (priority_rank, role_label, hierarchies, logic_key, max_in_round_1, max_total)
@@ -7296,42 +7295,93 @@ def _tv_build_strict_accessory_pool(base, trigger_brand, trigger_model,
     """STRICT-match-only accessory pool for Σακούλες and Εξαρτήματα.
 
     Eligibility: Για μάρκες ηλεκτρικής σκούπας contains trigger.brand
-                 AND Συμβατό μοντέλο contains trigger.model.
+                 AND Συμβατό μοντέλο matches trigger.model BIDIRECTIONALLY.
+
+    The bidirectional match handles a real-world data quirk: bag/accessory
+    compatibility strings often name a SERIES (e.g. "GUARD M1"), while
+    vacuum.Μοντέλο may name a specific VARIANT (e.g. "GUARD M1 STANDARD
+    FLEX"). A pure substring match in either direction misses one of the
+    cases — bidirectional catches both:
+
+        Direction A (forward):  trigger_model is substring of bag_compat
+                                e.g. trigger "GUARD M1" ∈ bag "GUARD M1"          ✓
+        Direction B (reverse):  any bag_compat token (≥4 chars, split on ; ,)
+                                is substring of trigger_model
+                                e.g. bag token "GUARD M1" ∈ trigger "GUARD M1 STANDARD FLEX"  ✓
+
+    The ≥4-char guard on tokens prevents short codes like "G", "M1", "VC"
+    from over-matching unrelated vacuum models.
+
+    Ideally vacuums would carry a `Τύπος Σακούλας` field saying which bag
+    family they accept (e.g. BOSCH BGL8BA3S → "G ALL"), enabling
+    Τύπος Σακούλας ↔ bag.Μοντέλο direct match. That field does not
+    currently exist in the Floor sheet; this bidirectional substring is
+    the next-best approach without data enrichment.
 
     Unlike the robot-vacuum accessory pool, there is NO universal fallback
     in this pool — universal αρωματικά live in their own dedicated slot
-    (UNIVERSAL_AROMA) and would otherwise double-up here. The
-    `exclude_universal_types` flag is used by the Εξαρτήματα slot to drop
-    αρωματικά so they don't appear twice."""
+    (UNIVERSAL_AROMA). The `exclude_universal_types` flag is used by the
+    Εξαρτήματα slot to drop αρωματικά so they don't appear twice."""
     if base.empty:
         return base
 
     pool = base.copy()
 
-    # ── STRICT MATCH: brand AND model both required ────────────────────
+    # ── BRAND filter (Για μάρκες ηλεκτρικής σκούπας) ─────────────────
     brand_mask = pd.Series(False, index=pool.index)
     if trigger_brand and 'Για μάρκες ηλεκτρικής σκούπας' in pool.columns:
         brand_mask = pool['Για μάρκες ηλεκτρικής σκούπας'].fillna('').astype(str).str.upper().str.contains(
             re.escape(trigger_brand), regex=True, na=False
         )
 
+    # ── BIDIRECTIONAL MODEL match ────────────────────────────────────
     model_mask = pd.Series(False, index=pool.index)
     if trigger_model and trigger_model.lower() not in ('n/a', 'nan', '', '0'):
         tm_norm = trigger_model.upper().strip()
         tm_alt = tm_norm.replace('Μ', 'M')  # Greek Μ → Latin M
+
+        # Forward direction: trigger model is substring of compat string
+        forward_mask = pd.Series(False, index=pool.index)
         for mcol in ['Συμβατό μοντέλο', 'Συμβατό μοντέλο.1']:
             if mcol in pool.columns:
                 cv = pool[mcol].fillna('').astype(str).str.upper()
                 ca = cv.str.replace('Μ', 'M', regex=False)
-                model_mask |= cv.str.contains(re.escape(tm_norm), regex=True, na=False) | \
-                              ca.str.contains(re.escape(tm_alt), regex=True, na=False)
+                forward_mask |= cv.str.contains(re.escape(tm_norm), regex=True, na=False) | \
+                                ca.str.contains(re.escape(tm_alt), regex=True, na=False)
+
+        # Reverse direction: any compat token (≥4 chars) is substring of trigger model
+        # Split on , and ; to handle multi-model compat strings like
+        # "T 11/1 Classic;T 11/1 Classic HEPA;..."
+        def _reverse_match(compat_str):
+            if not isinstance(compat_str, str) or not compat_str.strip():
+                return False
+            s = compat_str.upper().strip()
+            s_alt = s.replace('Μ', 'M')
+            for token in re.split(r'[;,]', s):
+                t = token.strip()
+                if len(t) >= 4 and t in tm_norm:
+                    return True
+            for token in re.split(r'[;,]', s_alt):
+                t = token.strip()
+                if len(t) >= 4 and t in tm_alt:
+                    return True
+            return False
+
+        reverse_mask = pd.Series(False, index=pool.index)
+        for mcol in ['Συμβατό μοντέλο', 'Συμβατό μοντέλο.1']:
+            if mcol in pool.columns:
+                reverse_mask |= pool[mcol].apply(_reverse_match)
+
+        model_mask = forward_mask | reverse_mask
+        notes.append(f"  Forward (model ⊆ compat): {forward_mask.sum()} "
+                     f"| Reverse (compat token ⊆ model, ≥4 chars): {reverse_mask.sum()} "
+                     f"| Combined model_mask: {model_mask.sum()}")
 
     strict_mask = brand_mask & model_mask
-    notes.append(f"  Brand pass: {brand_mask.sum()} | Model pass: {model_mask.sum()} "
-                 f"| STRICT brand AND model: {strict_mask.sum()}")
+    notes.append(f"  Brand pass: {brand_mask.sum()} "
+                 f"| STRICT brand AND model (bidirectional): {strict_mask.sum()}")
 
-    # ── Drop universal αρωματικά from the Εξαρτήματα slot (they have
-    # their own UNIVERSAL_AROMA slot)
+    # ── Drop universal αρωματικά from the Εξαρτήματα slot
     if exclude_universal_types and 'Τύπος συσκευής' in pool.columns:
         types_lower = pool['Τύπος συσκευής'].fillna('').astype(str).str.lower().str.strip()
         strict_mask &= ~types_lower.isin(ROBOT_VAC_UNIVERSAL_TYPES)
@@ -7342,6 +7392,9 @@ def _tv_build_strict_accessory_pool(base, trigger_brand, trigger_model,
 
     if pool.empty:
         notes.append(f"  ❌ Zero strict-match accessories — loop will redirect to companions")
+        notes.append(f"  💡 If the vacuum carries a `Τύπος Σακούλας` field listing the bag-family")
+        notes.append(f"     designation (e.g. 'G ALL' for BOSCH), wire it to bag.Μοντέλο for a")
+        notes.append(f"     stronger Tier-1 match — currently that field is missing from the data.")
         return pool
 
     pool['Final_Score'] = 0.0
