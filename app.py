@@ -1656,7 +1656,8 @@ def _model_tokens(model_str: str) -> set[str]:
 
 def _compatibility_score(model_str: str, compat_field, brand: str = "",
                           trigger_size: str = "",
-                          trigger_signature: tuple[str, str] = ("", "")) -> int:
+                          trigger_signature: tuple[str, str] = ("", ""),
+                          item_title: str = "") -> int:
     """Score how well a candidate's compat field matches the trigger.
 
     v7.1: Adds two HARD rejection filters BEFORE strict/partial scoring:
@@ -1664,8 +1665,15 @@ def _compatibility_score(model_str: str, compat_field, brand: str = "",
          exact size string is NOT listed in compat → reject (return 0).
          No group fallback; user wants EXACT size match for the strict slots.
       2) trigger_signature — if trigger model has (line, version) AND compat
-         mentions a different version of the same line (e.g. SE 2 vs SE 3,
-         GT3 vs GT 5, Series 9 vs Series 11) → reject.
+         OR ITEM TITLE mentions a different version of the same line (e.g.
+         SE 2 vs SE 3, GT3 vs GT 5, Series 9 vs Series 11, Ultra 2 vs Ultra
+         3) → reject.
+
+    v7.2: signature check now scans `item_title` too. Real-world case:
+    "PanzerGlass για Apple Watch Ultra/Ultra 2 49mm" has compat just
+    "Apple Watch 49mm" (no version mention) so passes if we only check
+    compat. The version conflict (Ultra 2 vs trigger Ultra 3) is in the
+    title — must scan it.
 
     Returns SCORE_MODEL_MATCH_STRICT (model substring in compat),
             SCORE_MODEL_MATCH_PARTIAL (≥half tokens match), or 0."""
@@ -1681,8 +1689,13 @@ def _compatibility_score(model_str: str, compat_field, brand: str = "",
             return 0
 
     # ── Filter 2: Model-signature (line+version) ──
+    # v7.2: scan title + compat together so titles like "Ultra/Ultra 2 49mm"
+    # are caught even when the structured compat field is generic.
     if trigger_signature and trigger_signature[0]:
-        if not _signature_in_compat(trigger_signature, compat_upper):
+        sig_haystack = compat_upper
+        if item_title:
+            sig_haystack = compat_upper + " " + str(item_title).upper()
+        if not _signature_in_compat(trigger_signature, sig_haystack):
             return 0
 
     # ── Standard strict / partial scoring ──
@@ -1766,10 +1779,14 @@ def _score_pool(
  
     # Layer 1 — Compatibility (Μοντέλο ↔ Συμβατό με)
     if logic_key == "MODEL_MATCH_STRICT" and tmod and "Συμβατό με" in pool.columns:
-        compat_scores = pool["Συμβατό με"].apply(
-            lambda x: _compatibility_score(tmod, x, brand=tb,
+        # v7.2: pass each row's title too, so signature can catch version
+        # conflicts like "Apple Watch Ultra/Ultra 2 49mm" that aren't in compat.
+        compat_scores = pool.apply(
+            lambda r: _compatibility_score(tmod, r.get("Συμβατό με", ""), brand=tb,
                                             trigger_size=trigger_size,
-                                            trigger_signature=trigger_signature)
+                                            trigger_signature=trigger_signature,
+                                            item_title=r.get("Title", "")),
+            axis=1,
         )
         pool["_score"] += compat_scores
         strict_hits  = int((compat_scores == SCORE_MODEL_MATCH_STRICT).sum())
@@ -2058,21 +2075,19 @@ def _try_pick_for_slot(
             else:
                 best_row    = scored.iloc[0]
                 best_score  = best_row["_score"]
-                cap_now     = get_dynamic_cap(trigger_price, budget_key)
-                price_ratio = best_row["_p"] / cap_now if cap_now > 0 else 0
-                guard       = get_price_ratio_guard(trigger_price)
-                # Two-gate decision: best score must clear threshold AND the
-                # price must be within the trigger-tier guard. Guard is:
-                #   • Mid (<€400):       2.0× cap
-                #   • Premium (€400-700): 2.5× cap
-                #   • Flagship (≥€700):  no cap (inf) — flagship gets flagship audio
-                if best_score >= SCORE_MINIMUM_THRESHOLD and price_ratio <= guard:
+                # v7.2: Apple-boost / ecosystem unconditional lock.
+                # Previously a price-ratio guard (2.0× mid / 2.5× premium /
+                # ∞ flagship) could fail the lock and fall back to non-Apple
+                # brands. User explicitly asked: "for apple I want apple boost,
+                # to showcase apple first unless there's no apple products".
+                # So whenever the locked pool is non-empty (i.e. ecosystem
+                # items exist in this hierarchy), the locked pool wins —
+                # even if AirPods Max €589 vastly exceeds the Apple Watch
+                # SE 3 €94 dynamic cap. The threshold guard stays in place
+                # to prevent absurdly-low scores from sneaking through.
+                if best_score >= SCORE_MINIMUM_THRESHOLD:
                     return best_row, notes, has_compat, True
-                if price_ratio > guard:
-                    guard_str = f"{guard:.1f}×" if guard != float('inf') else "∞"
-                    notes_prefix = notes_prefix + [f"Ecosystem-lock failed (price ratio {price_ratio:.1f}× cap > {guard_str}) — falling back"]
-                else:
-                    notes_prefix = notes_prefix + [f"Ecosystem-lock failed (best score {int(best_score):,} below threshold) — falling back"]
+                notes_prefix = notes_prefix + [f"Ecosystem-lock failed (best score {int(best_score):,} below threshold) — falling back"]
         else:
             eco_label = "+".join(sorted(ecosystem))
             notes_prefix = notes_prefix + [f"Ecosystem-lock skipped (no [{eco_label}] in hierarchy) — falling back"]
@@ -4980,33 +4995,61 @@ def run_tablets_engine(trigger, df_products, df_history):
 
 
 # ─────────────────────────────────────────────────────────────
-# v7.1: Kiddoboo wearables persona
+# v7.2: Kiddoboo wearables persona (rewrite)
 #
-# Mirror of the kiddoboo SMARTPHONE/TABLET template at line ~376
-# (`_build_kiddoboo_slots`), with one swap: positions 2 and 7 (Smartwatch ↔
-# Smartphone). Rationale: when the trigger is a kids' SMARTWATCH, recommending
-# a Smartphone in slot 2 is the higher-intent upsell (companion device);
-# another Smartwatch slides to slot 7 as a sibling-device cross-sell.
+# Slot template per user spec — 7 slots, then repeat for overflow:
+#   1. Overhead              (BRAND_MATCH — Kiddoboo only)
+#   2. Smartphone            (BRAND_MATCH — Kiddoboo only)
+#   3. Wall Charger          (ANY_BRAND   — any vendor, sorted by sales)
+#   4. Karaoke               (BRAND_MATCH — Kiddoboo only)
+#   5. Film Camera           (BRAND_MATCH — hierarchy doesn't exist yet,
+#                                            slot stays empty until catalog
+#                                            adds 'FILM CAMERAS' items)
+#   6. Tablet                (BRAND_MATCH — Kiddoboo only)
+#   7. Kick-scooter          (BRAND_MATCH — hierarchy doesn't exist yet)
 #
-# Logic is intentionally simple: BRAND_FIRST. Filter pool to KIDDOBOO; if any
-# items exist there, keep only them. Otherwise keep the full pool. Then sort
-# by Sales_Tiebreaker (best-sellers) and pick the top item not already used.
-# This matches the kiddoboo tablets engine's `_brand_first_filter` behaviour
-# (line ~1260).
+# "Brand match only" (user wording): if no Kiddoboo item exists in the
+# slot's hierarchy, the slot stays EMPTY. No fallback to other brands.
+# This is stricter than the v7.1 BRAND_FIRST which fell back to popular
+# items when Kiddoboo had nothing.
+#
+# Overflow: after one pass through the 7 slots, repeat the cycle as slots
+# 8-14, 15-21, etc. Picks the next-best item for each category that hasn't
+# been used yet. Stops when no slot can produce a new item.
 # ─────────────────────────────────────────────────────────────
 
-KIDDOBOO_WEARABLE_SLOTS: list[tuple[int, str, list[str]]] = [
-    (1,  'Overhead',         ['OVERHEAD']),
-    (2,  'Smartphone',       ['Smartphones']),                          # swap (was Smartwatch in phones template)
-    (3,  'Wall Charger',     ['WALL CHARGERS']),
-    (4,  'Cable',            ['ΚΑΛΩΔΙΑ ΔΕΔΟΜΕΝΩΝ', 'USB CABLES']),
-    (5,  'Party Speaker',    ['ΗΧΕΙΑ ΦΟΡΗΤΟΥ ΗΧΟΥ']),
-    (6,  'Action Camera',    ['IP CAMERAS', 'TRAVEL ACCESSORIES']),
-    (7,  'Smartwatch',       ['SMART WATCHES', 'ACTIVITY TRACKER']),    # swap (was Smartphone in phones template)
-    (8,  'Travel/Scooter',   ['TRAVEL ACCESSORIES']),
-    (9,  'Bluetooth',        ['Bluetooth']),
-    (10, 'Screen Protector', ['MOBILE SCREEN PROTECTORS']),
+# Hierarchy mapping. "Karaoke" → PARTY SPEAKERS (catalog has 49). 
+# FILM CAMERAS and KICK SCOOTERS hierarchies don't exist in the current
+# catalog; they're placeholders that will populate once items are added.
+KIDDOBOO_WEARABLE_SLOTS: list[tuple[int, str, list[str], str]] = [
+    (1, 'Overhead',     ['OVERHEAD'],         'BRAND_MATCH'),
+    (2, 'Smartphone',   ['Smartphones'],      'BRAND_MATCH'),
+    (3, 'Wall Charger', ['WALL CHARGERS'],    'ANY_BRAND'),   # explicit per user — no brand match
+    (4, 'Karaoke',      ['PARTY SPEAKERS'],   'BRAND_MATCH'),
+    (5, 'Film Camera',  ['FILM CAMERAS'],     'BRAND_MATCH'),
+    (6, 'Tablet',       ['TABLET PC'],        'BRAND_MATCH'),
+    (7, 'Kick-scooter', ['KICK SCOOTERS'],    'BRAND_MATCH'),
 ]
+KIDDOBOO_TARGET_SLOTS = 10   # Try to fill at least 10 slots overall
+
+
+def _kiddoboo_pick(pool: pd.DataFrame, logic: str) -> pd.Series | None:
+    """Pick the best item from a hierarchy pool per Kiddoboo logic.
+
+    BRAND_MATCH: keep only KIDDOBOO items; return None if empty.
+    ANY_BRAND:   keep all items; return None if empty.
+    Always sorts by Sales_Tiebreaker (best-sellers first), then price desc.
+    """
+    if pool.empty:
+        return None
+    if logic == 'BRAND_MATCH':
+        kb_mask = pool['Κατασκευαστής'].fillna('').str.upper().str.strip() == 'KIDDOBOO'
+        if not kb_mask.any():
+            return None
+        pool = pool[kb_mask].copy()
+    pool = pool.sort_values(['Sales_Tiebreaker', '_p'], ascending=[False, False])
+    pool['_score'] = pool['Sales_Tiebreaker'].fillna(0).astype(float)
+    return pool.iloc[0]
 
 
 def _run_kiddoboo_wearables_engine(
@@ -5022,7 +5065,7 @@ def _run_kiddoboo_wearables_engine(
     """Kiddoboo-only wearables engine. See block comment above."""
     diag.append((
         "0. Trigger (KIDDOBOO)",
-        f"Brand={tb}  Tier={ttier}  Persona=Kiddoboo Wearable Template",
+        f"Brand={tb}  Tier={ttier}  Persona=Kiddoboo Wearable Template (v7.2)",
         f"Price=€{tprice:.2f}  Model={tmod or '—'}",
     ))
 
@@ -5032,32 +5075,29 @@ def _run_kiddoboo_wearables_engine(
 
     used_materials: set    = {tm}
     all_recs_by_slot: dict = {}
+    overflow_slot_id       = 8   # First overflow slot starts at 8 (after 7 base slots)
 
-    for slot_num, role, hierarchies in KIDDOBOO_WEARABLE_SLOTS:
-        notes = [f"Logic=BRAND_FIRST (Kiddoboo)"]
+    # ── PASS 1: try each of the 7 template slots once ──
+    for slot_num, role, hierarchies, logic in KIDDOBOO_WEARABLE_SLOTS:
+        notes = [f"Logic={logic} (Kiddoboo)"]
         pool = c[c["Hierarchy"].isin(hierarchies)].copy()
         pool = pool[~pool["Material"].isin(used_materials)]
 
         if pool.empty:
-            diag.append((f"Slot {slot_num} ⚪", role, "Empty pool"))
-            slot_notes[slot_num] = notes + ["⚪ Pool empty"]
+            diag.append((f"Slot {slot_num} ⬜", role, f"No items in {hierarchies[0]}"))
+            slot_notes[slot_num] = notes + [f"⬜ Hierarchy {hierarchies[0]} has no items in catalog"]
             continue
 
-        # Brand-first: keep only KIDDOBOO if any present; else keep entire pool
-        kb_mask = pool["Κατασκευαστής"].fillna("").str.upper().str.strip() == "KIDDOBOO"
-        if kb_mask.any():
-            pool = pool[kb_mask].copy()
-            notes.append(f"Brand-first: {int(kb_mask.sum())} Kiddoboo items in pool")
-        else:
-            notes.append(f"No Kiddoboo items in this hierarchy — opening to full pool ({len(pool)})")
+        chosen = _kiddoboo_pick(pool, logic)
+        if chosen is None:
+            empty_marker = "⬜"
+            reason = f"⬜ No KIDDOBOO items in {hierarchies[0]} (brand-match required)" if logic == 'BRAND_MATCH' \
+                     else f"⬜ Pool empty for {hierarchies[0]}"
+            diag.append((f"Slot {slot_num} {empty_marker}", role, reason))
+            slot_notes[slot_num] = notes + [reason]
+            continue
 
-        # Sort by best-sellers
-        pool = pool.sort_values(["Sales_Tiebreaker", "_p"], ascending=[False, False])
-        # _assign_to_slot reads "_score" so add it (use Sales_Tiebreaker as a proxy)
-        pool["_score"] = pool["Sales_Tiebreaker"].fillna(0).astype(float)
-        chosen = pool.iloc[0]
         chosen_brand = str(chosen.get("Κατασκευαστής", "")).strip().upper()
-
         all_recs_by_slot[slot_num] = _assign_to_slot(
             chosen,
             assigned_slot=slot_num,
@@ -5067,7 +5107,6 @@ def _run_kiddoboo_wearables_engine(
             hierarchies=hierarchies,
         )
         used_materials.add(chosen["Material"])
-
         slot_notes[slot_num] = notes
         score_breakdown[slot_num] = {
             "slot_role":   role,
@@ -5083,19 +5122,68 @@ def _run_kiddoboo_wearables_engine(
             f"Brand={chosen_brand}  Price=€{float(chosen.get('_p', 0)):.2f}",
         ))
 
+    # ── PASS 2: overflow — repeat the cycle until target reached or no more items ──
+    MAX_OVERFLOW_PASSES = 5
+    for pass_n in range(MAX_OVERFLOW_PASSES):
+        if len(all_recs_by_slot) >= KIDDOBOO_TARGET_SLOTS:
+            break
+        progress_made = False
+        for slot_num, role, hierarchies, logic in KIDDOBOO_WEARABLE_SLOTS:
+            if len(all_recs_by_slot) >= KIDDOBOO_TARGET_SLOTS:
+                break
+            pool = c[c["Hierarchy"].isin(hierarchies)].copy()
+            pool = pool[~pool["Material"].isin(used_materials)]
+            if pool.empty:
+                continue
+            chosen = _kiddoboo_pick(pool, logic)
+            if chosen is None:
+                continue
+
+            chosen_brand = str(chosen.get("Κατασκευαστής", "")).strip().upper()
+            all_recs_by_slot[overflow_slot_id] = _assign_to_slot(
+                chosen,
+                assigned_slot=overflow_slot_id,
+                role=f"{role} (extra)",
+                persona_label=persona_label,
+                fallback=True,
+                hierarchies=hierarchies,
+            )
+            used_materials.add(chosen["Material"])
+            slot_notes[overflow_slot_id] = [f"🔁 Cycle {pass_n+1}: extra {role} (Logic={logic})"]
+            score_breakdown[overflow_slot_id] = {
+                "slot_role":   f"{role} (extra)",
+                "material":    chosen["Material"],
+                "title":       str(chosen.get("Title", ""))[:60],
+                "brand":       chosen_brand,
+                "final_score": round(float(chosen.get("Sales_Tiebreaker", 0))),
+                "price":       round(float(chosen.get("_p", 0)), 2),
+            }
+            diag.append((
+                f"Slot {overflow_slot_id} 🔁",
+                f"Extra from base slot {slot_num} ({role})  →  {str(chosen.get('Title',''))[:45]}",
+                f"Brand={chosen_brand}  Price=€{float(chosen.get('_p', 0)):.2f}",
+            ))
+            overflow_slot_id += 1
+            progress_made = True
+        if not progress_made:
+            break  # Nothing left to add
+
     print("\n" + "═" * 72)
-    print("  WEARABLES ENGINE v7.1 — DIAGNOSTICS (KIDDOBOO persona)")
+    print("  WEARABLES ENGINE v7.2 — DIAGNOSTICS (KIDDOBOO persona)")
     print("═" * 72)
     print(f"  Trigger: {tt}")
     for sn in sorted(all_recs_by_slot):
         rec = all_recs_by_slot[sn]
-        print(f"     Slot {sn:2d}: [{str(rec.get('Slot_Role','')):20s}] {str(rec.get('Title',''))[:55]}")
+        marker = "🔁" if "extra" in str(rec.get('Slot_Role', '')).lower() else "  "
+        print(f"   {marker} Slot {sn:2d}: [{str(rec.get('Slot_Role',''))[:20]:20s}] "
+              f"{str(rec.get('Κατασκευαστής',''))[:12]:12s} "
+              f"€{float(rec.get('_p',0) or 0):7.2f}  {str(rec.get('Title',''))[:55]}")
 
     recs_df = (pd.DataFrame(list(all_recs_by_slot.values())).sort_values("Assigned_Slot")
                if all_recs_by_slot else pd.DataFrame())
     return recs_df, diag, slot_notes, score_breakdown
 
- 
+
 def run_wearables_engine(
     trigger: dict,
     df_products: pd.DataFrame,
@@ -5368,7 +5456,7 @@ def run_wearables_engine(
  
 def print_wearables_diag(diag: list, slot_notes: dict, score_breakdown: dict) -> None:
     print("\n" + "═" * 72)
-    print("  WEARABLES ENGINE v7 — DIAGNOSTICS (smartphone-style + brand-match overflow)")
+    print("  WEARABLES ENGINE v7.2 — DIAGNOSTICS (Apple-boost + title-signature filter)")
     print("═" * 72)
     for label, main, detail in diag:
         print(f"  [{label}]  {main}")
