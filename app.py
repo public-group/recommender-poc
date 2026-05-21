@@ -102,7 +102,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v26.1 — Robot Vacuums (strict)
+        🟢 Engine v26.2 — Robot Vacuums (1 stick max)
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -893,17 +893,20 @@ ROBOT_VAC_TEST_SKUS = {
     "2116411",  # DYSON SPOT+SCRUB AI RB05-A
 }
 
-# (priority_rank, role_label, hierarchies, logic_key, max_in_round_1)
+# (priority_rank, role_label, hierarchies, logic_key, max_in_round_1, max_total)
 # Looping engine cycles through these in priority order, taking 1 item per
 # pool per round until 10 slots filled. Εξαρτήματα gets up to 3 in round 1
 # because brand/model-matched accessories are the most relevant cross-sell.
+# max_total caps the pool across ALL rounds (None = unlimited; loop fills
+# until target hit or pool exhausted). Σκούπα Stick is capped at 1 because
+# showing multiple stick vacuums alongside a robot vacuum is redundant.
 ROBOT_VAC_PRIORITY = [
-    (1, 'Αξεσουάρ',          ['Εξαρτήματα για σκούπες'], 'ACCESSORY_MATCH', 3),
-    (2, 'Σκούπα Stick',      ['Σκούπες Stick'],          'COMPANION',       1),
-    (3, 'Σκουπάκι',          ['Ηλεκτρικά Σκουπάκια'],    'COMPANION',       1),
-    (4, 'Ηλεκτρική Σκούπα',  ['Ηλεκτρικές Σκούπες'],     'COMPANION',       1),
-    (5, 'Ατμοκαθαριστής',    ['Ατμοκαθαριστές'],         'COMPANION',       1),
-    (6, 'Pet Care',          ['PET CARE'],               'PET_CARE',        1),
+    (1, 'Αξεσουάρ',          ['Εξαρτήματα για σκούπες'], 'ACCESSORY_MATCH', 3, None),
+    (2, 'Σκούπα Stick',      ['Σκούπες Stick'],          'COMPANION',       1, 1),
+    (3, 'Σκουπάκι',          ['Ηλεκτρικά Σκουπάκια'],    'COMPANION',       1, None),
+    (4, 'Ηλεκτρική Σκούπα',  ['Ηλεκτρικές Σκούπες'],     'COMPANION',       1, None),
+    (5, 'Ατμοκαθαριστής',    ['Ατμοκαθαριστές'],         'COMPANION',       1, None),
+    (6, 'Pet Care',          ['PET CARE'],               'PET_CARE',        1, None),
 ]
 
 # Total slot target — engine loops until this many filled or pools exhausted
@@ -7071,14 +7074,15 @@ def run_robot_vacuums_engine(trigger, df_floor, df_history):
         c['Sales_Tiebreaker'] = 0
 
     # ── Build a sorted pool per priority entry (in advance, so the loop is cheap)
-    pools = {}  # rank → (role_label, sorted_DataFrame, logic_key, max_round_1)
-    for rank, role_label, hiers, logic_key, max_r1 in ROBOT_VAC_PRIORITY:
-        notes = [f"=== Priority {rank}: {role_label} ({logic_key}) ==="]
+    pools = {}  # rank → (role_label, sorted_DataFrame, logic_key, max_round_1, max_total, notes)
+    for rank, role_label, hiers, logic_key, max_r1, max_total in ROBOT_VAC_PRIORITY:
+        notes = [f"=== Priority {rank}: {role_label} ({logic_key}) "
+                 f"| max_round_1={max_r1} | max_total={max_total if max_total else '∞'} ==="]
 
         # PET CARE gate: skip entirely for non-pet triggers
         if logic_key == 'PET_CARE' and not is_pet:
             notes.append("🚫 Trigger NOT pet-friendly → skipping PET CARE pool")
-            pools[rank] = (role_label, pd.DataFrame(), logic_key, max_r1, notes)
+            pools[rank] = (role_label, pd.DataFrame(), logic_key, max_r1, max_total, notes)
             continue
 
         hier_upper = {h.upper().strip() for h in hiers}
@@ -7086,7 +7090,7 @@ def run_robot_vacuums_engine(trigger, df_floor, df_history):
         notes.append(f"  Base pool size: {len(base_pool)} (hierarchies={hiers})")
 
         if base_pool.empty:
-            pools[rank] = (role_label, pd.DataFrame(), logic_key, max_r1, notes)
+            pools[rank] = (role_label, pd.DataFrame(), logic_key, max_r1, max_total, notes)
             continue
 
         # ── Score the pool based on its logic key
@@ -7109,27 +7113,35 @@ def run_robot_vacuums_engine(trigger, df_floor, df_history):
             scored = base_pool.copy()
             scored['Final_Score'] = scored['Sales_Tiebreaker']
 
-        pools[rank] = (role_label, scored, logic_key, max_r1, notes)
+        pools[rank] = (role_label, scored, logic_key, max_r1, max_total, notes)
         diag.append((f"Pool {rank} ({role_label})", len(scored), logic_key))
 
     # ── LOOPING: round-robin fill until target hit or all pools exhausted
     used_materials = {tm}
-    pool_cursors = {rank: 0 for rank in pools}  # next index to consume per pool
+    pool_cursors  = {rank: 0 for rank in pools}  # next index to consume per pool
+    pool_taken    = {rank: 0 for rank in pools}  # count of items actually added (enforces max_total)
     slot_num = 0
     round_idx = 0
 
     while slot_num < ROBOT_VAC_SLOT_TARGET:
         progress = False
         round_idx += 1
-        for rank, (role_label, scored, logic_key, max_r1, notes) in pools.items():
+        for rank, (role_label, scored, logic_key, max_r1, max_total, notes) in pools.items():
             if slot_num >= ROBOT_VAC_SLOT_TARGET:
                 break
             if scored is None or scored.empty:
                 continue
 
+            # Hard cap: skip this pool if max_total already reached
+            if max_total is not None and pool_taken[rank] >= max_total:
+                continue
+
             # Round 1 allows the priority's max_round_1 items in a single pass
             # (Εξαρτήματα = 3). Rounds 2+ take 1 per pool.
             take_n = max_r1 if round_idx == 1 else 1
+            # And never let take_n push past max_total
+            if max_total is not None:
+                take_n = min(take_n, max_total - pool_taken[rank])
 
             cursor = pool_cursors[rank]
             taken_this_pass = 0
@@ -7148,6 +7160,7 @@ def run_robot_vacuums_engine(trigger, df_floor, df_history):
                 all_recs.append(rc)
                 used_materials.add(row['Material'])
                 taken_this_pass += 1
+                pool_taken[rank] += 1
                 progress = True
 
                 # Per-slot detailed note (using same slot_notes dict the UI reads)
@@ -7163,14 +7176,17 @@ def run_robot_vacuums_engine(trigger, df_floor, df_history):
             pool_cursors[rank] = cursor
 
         if not progress:
-            diag.append(("Loop", round_idx, "All pools exhausted — stopping"))
+            diag.append(("Loop", round_idx, "All pools exhausted or capped — stopping"))
             break
 
     # ── Append pool diagnostics under slot 0 for inspection
     pool_diag_notes = []
-    for rank, (role_label, scored, logic_key, max_r1, notes) in pools.items():
+    for rank, (role_label, scored, logic_key, max_r1, max_total, notes) in pools.items():
         pool_diag_notes.extend(notes)
-        pool_diag_notes.append(f"  → consumed {pool_cursors[rank]} / {len(scored) if scored is not None else 0} from this pool")
+        cap_note = f" (capped at {max_total})" if max_total is not None else ""
+        pool_diag_notes.append(
+            f"  → consumed {pool_taken[rank]} / {len(scored) if scored is not None else 0} from this pool{cap_note}"
+        )
         pool_diag_notes.append("")
     slot_notes[0] = pool_diag_notes
 
