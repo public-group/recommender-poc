@@ -566,6 +566,83 @@ PENALTY_BRAND_DIVERSITY   =  -150_000
 PENALTY_SPEC_DUPLICATE    =  -250_000   # NEW: when overflow has same spec as already-chosen
  
 SCORE_MINIMUM_THRESHOLD   = PENALTY_OVER_CAP_HARD
+
+# ── Smartphone-style audio/power slot enhancements (v7) ──────────
+# Adapted from `run_smartphones_engine`. Applied to wearables audio
+# (slots 3, 7, 8) and power (slots 5, 10) slots to deliver:
+#   • Price-tier floor — cuts cheap junk audio/chargers below a min price
+#   • Ultra-premium filter — restricts to Pro/Ultra/Max-labeled items for
+#     flagship watch triggers (≥€700), matching iPhone-15-Pro behaviour
+#   • Year boost — +score for accessories newer/same/previous year as trigger
+#   • Tiered price-ratio guard — stricter for mid, looser for flagship
+
+WEARABLE_AUDIO_PRICE_TIERS: list[tuple[float, float]] = [
+    (800, 60),   # Flagship+: min €60 audio
+    (500, 40),   # Flagship-lite: min €40
+    (300, 25),   # Premium: min €25
+    (180, 15),   # Mid: min €15
+    (0,   0),    # Entry: no floor
+]
+WEARABLE_POWER_PRICE_TIERS: list[tuple[float, float]] = [
+    (800, 25),   # Flagship+: min €25 charger
+    (500, 18),
+    (300, 12),
+    (180,  8),
+    (0,    0),
+]
+WEARABLE_ULTRA_PREMIUM_THRESHOLD = 700   # Watch equivalent of iPhone's €1700 mark
+WEARABLE_ULTRA_PREMIUM_KEYWORDS = ['pro', 'ultra', 'max', 'studio', 'elite', 'classic']
+
+# Year-boost score values. Conservative: max boost (150K) < ecosystem-gap
+# (primary 500K - secondary 300K = 200K) so year can never flip a primary
+# brand to a secondary brand — same hierarchy smartphones uses.
+SCORE_YEAR_NEWER = 150_000
+SCORE_YEAR_SAME  = 100_000
+SCORE_YEAR_PREV  =  50_000
+
+
+def get_min_price_for_slot(trigger_price: float, style: str) -> float:
+    """Return the minimum acceptable accessory price for a smartphone-style slot."""
+    tiers = WEARABLE_AUDIO_PRICE_TIERS if style == "audio" else WEARABLE_POWER_PRICE_TIERS
+    for threshold, min_price in tiers:
+        if trigger_price >= threshold:
+            return min_price
+    return 0
+
+
+def get_price_ratio_guard(trigger_price: float) -> float:
+    """Return the max allowed (item_price / dynamic_cap) ratio under
+    ecosystem-lock. Tiered so flagship triggers can afford AirPods Max etc.
+        • Ultra-premium (≥€700): no cap (inf) — flagship watch gets flagship audio
+        • Premium (€400–700):     2.5× cap
+        • Mid/Entry  (<€400):     2.0× cap (v6 default)
+    """
+    if trigger_price >= 700: return float('inf')
+    if trigger_price >= 400: return 2.5
+    return 2.0
+
+
+def _wearable_extract_year(title: str, model: str = "") -> int | None:
+    """Year extractor for wearable triggers & accessories. Same logic as
+    `extract_year_from_accessory` in `run_smartphones_engine` — duplicated
+    here so the wearables engine doesn't depend on that function's scope."""
+    text = f"{title} {model}".lower()
+    year_match = re.search(r'\b(202[3-9])\b', text)
+    if year_match: return int(year_match.group(1))
+    buds_match = re.search(r'buds\s*(\d|fe|pro|live)', text)
+    if buds_match:
+        v = buds_match.group(1)
+        if v == '4':    return 2025
+        if v == '3':    return 2024
+        if v == '2':    return 2022
+        if v == 'fe':   return 2023
+        if v == 'pro':  return 2022
+        if v == 'live': return 2020
+    watch_match = re.search(r'(galaxy\s*)?watch\s*(\d)', text)
+    if watch_match: return 2018 + int(watch_match.group(2))
+    fit_match = re.search(r'(galaxy\s*)?fit\s*(\d)', text)
+    if fit_match: return 2021 + int(fit_match.group(2))
+    return None
  
 # ── Marketing Copy ───────────────────────────────────────────────
 WEARABLE_MARKETING_COPY: dict[str, str] = {
@@ -585,7 +662,7 @@ WEARABLE_MARKETING_COPY: dict[str, str] = {
 # ═══════════════════════════════════════════════════════════════
 # 2.  UNIFIED SLOT DEFINITIONS  (single list for all personas)
 #     Format: (slot_num, role_label, [hierarchies], logic_key, budget_key,
-#              ecosystem_mode, title_filter)
+#              ecosystem_mode, title_filter, smartphone_style)
 #
 #     ecosystem_mode controls brand-ecosystem behavior:
 #       "OFF"  → no ecosystem influence (pure generic scoring)
@@ -599,6 +676,13 @@ WEARABLE_MARKETING_COPY: dict[str, str] = {
 #     Used for slot 7 (Over-Ear) because the APPLE HEADPHONES hierarchy mixes
 #     AirPods Max (over-ear, wanted) with the legacy wired EarPods 3.5mm Jack
 #     (handsfree, unwanted). The filter keeps AirPods Max and drops EarPods.
+#
+#     smartphone_style (NEW in v7, default None) enables the four-mechanism
+#     smartphones-engine recipe on this slot:
+#       "audio" → audio price tiers + ultra-premium filter + year boost
+#       "power" → charger price tiers + year boost  (no ultra-premium filter
+#                 because chargers don't have Pro/Ultra-style naming)
+#       None    → legacy behaviour (slots 1, 2, 4, 6, 9)
 # ═══════════════════════════════════════════════════════════════
 
 # Slot 7: keep over-ear / on-ear / cup-style products; block wired earbuds & jacks
@@ -607,16 +691,16 @@ _OVEREAR_FILTER = {
 }
 
 SLOTS: list[tuple] = [
-    (1,  "Προστασία Οθόνης",   ["ΠΡΟΣΤΑΣΙΑ ΟΘΟΝΗΣ WEARABLES"],     "MODEL_MATCH_STRICT", "protection",  "LOCK", None),
-    (2,  "Λουράκι",            ["ΛΟΥΡΑΚΙΑ WEARABLES"],             "MODEL_MATCH_STRICT", "straps",      "LOCK", None),
-    (3,  "TWS Earbuds",        ["Bluetooth"],                      "AUDIO_USE_CASE",     "audio",       "LOCK", None),
-    (4,  "Ζυγαριά",            ["BODY SCALES"],                    "GENERIC",            "scales",      "OFF",  None),
-    (5,  "Φορτιστής Τοίχου",   ["WALL CHARGERS"],                  "GENERIC",            "power",       "SOFT", None),
-    (6,  "Φορτιστής Wearable", ["ΦΟΡΤΙΣΤΕΣ WEARABLES"],            "MODEL_MATCH_STRICT", "power",       "LOCK", None),
-    (7,  "Over-Ear Headphones",["OVERHEAD", "APPLE HEADPHONES"],   "GENERIC",            "audio",       "LOCK", _OVEREAR_FILTER),
-    (8,  "Φορητό Ηχείο",       ["ΗΧΕΙΑ ΦΟΡΗΤΟΥ ΗΧΟΥ"],             "GENERIC",            "audio",       "LOCK", None),
-    (9,  "Βάση / Dock",        ["ΒΑΣΕΙΣ"],                         "MOUNT_USE_CASE",     "mounts",      "OFF",  None),
-    (10, "Φορτιστής Αυτ/του",  ["CAR CHARGERS"],                   "GENERIC",            "car_charger", "SOFT", None),
+    (1,  "Προστασία Οθόνης",   ["ΠΡΟΣΤΑΣΙΑ ΟΘΟΝΗΣ WEARABLES"],     "MODEL_MATCH_STRICT", "protection",  "LOCK", None,             None),
+    (2,  "Λουράκι",            ["ΛΟΥΡΑΚΙΑ WEARABLES"],             "MODEL_MATCH_STRICT", "straps",      "LOCK", None,             None),
+    (3,  "TWS Earbuds",        ["Bluetooth"],                      "AUDIO_USE_CASE",     "audio",       "LOCK", None,             "audio"),
+    (4,  "Ζυγαριά",            ["BODY SCALES"],                    "GENERIC",            "scales",      "OFF",  None,             None),
+    (5,  "Φορτιστής Τοίχου",   ["WALL CHARGERS"],                  "GENERIC",            "power",       "SOFT", None,             None),
+    (6,  "Φορτιστής Wearable", ["ΦΟΡΤΙΣΤΕΣ WEARABLES"],            "MODEL_MATCH_STRICT", "power",       "LOCK", None,             None),
+    (7,  "Over-Ear Headphones",["OVERHEAD", "APPLE HEADPHONES"],   "GENERIC",            "audio",       "LOCK", _OVEREAR_FILTER,  "audio"),
+    (8,  "Φορητό Ηχείο",       ["ΗΧΕΙΑ ΦΟΡΗΤΟΥ ΗΧΟΥ"],             "GENERIC",            "audio",       "LOCK", None,             "audio"),
+    (9,  "Βάση / Dock",        ["ΒΑΣΕΙΣ"],                         "MOUNT_USE_CASE",     "mounts",      "OFF",  None,             None),
+    (10, "Φορτιστής Αυτ/του",  ["CAR CHARGERS"],                   "GENERIC",            "car_charger", "SOFT", None,             None),
 ]
 
 
@@ -1439,33 +1523,169 @@ def parse_euro_price(raw) -> float:
  
  
 # ── Size-group tables for strap / screen-protector compatibility ──
+# v7.1: Apple updated to include 46mm (Series 10/11) and 49mm (Ultra) in the
+# larger group. Used only as FALLBACK; the wearables strict slots use EXACT
+# size matching first.
 _APPLE_WATCH_SIZE_GROUPS: list[set[str]] = [
-    {"38MM", "40MM", "41MM"},
-    {"42MM", "44MM", "45MM", "49MM"},
+    {"38MM", "40MM", "41MM", "42MM"},
+    {"44MM", "45MM", "46MM", "49MM"},
 ]
 _SAMSUNG_WATCH_SIZE_GROUPS: list[set[str]] = [
+    {"40MM", "41MM", "42MM"},
+    {"44MM", "45MM", "46MM", "47MM"},
+]
+_HUAWEI_WATCH_SIZE_GROUPS: list[set[str]] = [
+    {"41MM", "42MM", "43MM"},
+    {"46MM", "47MM", "48MM"},
+]
+_GARMIN_WATCH_SIZE_GROUPS: list[set[str]] = [
     {"40MM", "41MM", "42MM"},
     {"44MM", "45MM", "46MM", "47MM"},
 ]
 _BRAND_SIZE_GROUPS: dict[str, list[set[str]]] = {
     "APPLE":   _APPLE_WATCH_SIZE_GROUPS,
     "SAMSUNG": _SAMSUNG_WATCH_SIZE_GROUPS,
+    "HUAWEI":  _HUAWEI_WATCH_SIZE_GROUPS,
+    "HONOR":   _HUAWEI_WATCH_SIZE_GROUPS,
+    "GARMIN":  _GARMIN_WATCH_SIZE_GROUPS,
 }
- 
+
 def _extract_sizes(text: str) -> set[str]:
     return {m.upper() for m in re.findall(r"\d{2}mm", text, re.IGNORECASE)}
- 
+
+def _extract_wearable_size_from_title(title: str) -> str:
+    """Pull the watch case size out of a trigger title.
+    'Apple Watch SE 3 GPS 40mm Starlight Aluminum...' → '40MM'
+    'Smartwatch Huawei Watch GT 5 46mm - Black'      → '46MM'
+    'Smartwatch Garmin Venu 4 45mm - Slate'          → '45MM'
+    Returns '' if no size found."""
+    m = re.search(r'(\d{2})\s*mm', str(title), re.IGNORECASE)
+    return f"{m.group(1)}MM" if m else ""
+
+# v7.1: Model-line signatures for cross-version rejection
+#  • (SE, 3) means "SE generation 3" — reject straps for SE 2, SE 1.
+#  • (GT, 5) means "Watch GT5" — reject straps for GT3, GT2 etc.
+#  • (SERIES, 11) — reject straps for Series 9, Series 10.
+# Patterns ordered longer → shorter so two-word matches win.
+_WEARABLE_LINE_PATTERNS: list[tuple[str, str]] = [
+    ("GALAXYWATCH", r"\bGALAXY\s*WATCH\s*(\d+)"),
+    ("PIXELWATCH",  r"\bPIXEL\s*WATCH\s*(\d+)"),
+    ("FORERUNNER",  r"\bFORERUNNER\s*(\d+)"),
+    ("VIVOMOVE",    r"\bVIVOMOVE\s*(\d+)"),
+    ("VIVOACTIVE",  r"\bVIVOACTIVE\s*(\d+)"),
+    ("INSTINCT",    r"\bINSTINCT\s*(\d+)"),
+    ("SERIES",      r"\bSERIES\s*(\d+)"),
+    ("ULTRA",       r"\bULTRA\s*(\d+)"),
+    ("FENIX",       r"\bFENIX\s*(\d+)"),
+    ("EPIX",        r"\bEPIX\s*(\d+)"),
+    ("VENU",        r"\bVENU\s*(\d+)"),
+    ("BUDS",        r"\bBUDS\s*(\d+)"),
+    ("SE",          r"\bSE\s*(\d+)"),
+    ("GT",          r"\bGT\s*(\d+)"),
+    ("FIT",         r"\bFIT\s*(\d+)"),
+    ("WATCH",       r"\bWATCH\s*(\d+)"),
+]
+
+# Compat-side patterns capture digit blocks (e.g. "SERIES 9/10/11" → "9/10/11").
+# v7.1 NOTE: "WATCH" intentionally NOT included here. Compat strings like
+# "Apple Watch 40mm" would otherwise be falsely detected as model "Watch 40",
+# making the signature filter reject every Apple strap (size mistaken for
+# version). Brand-specific patterns (GALAXY WATCH, PIXEL WATCH, GT, SE,
+# SERIES, ULTRA, VENU, etc.) are sufficient to catch real model-line
+# mentions; "Watch 40mm" alone has no real version to enforce against.
+_WEARABLE_LINE_COMPAT_PATTERNS: dict[str, str] = {
+    "GALAXYWATCH": r"\bGALAXY\s*WATCH\s*(\d+(?:[/\\]\d+)*)",
+    "PIXELWATCH":  r"\bPIXEL\s*WATCH\s*(\d+(?:[/\\]\d+)*)",
+    "FORERUNNER":  r"\bFORERUNNER\s*(\d+(?:[/\\]\d+)*)",
+    "VIVOMOVE":    r"\bVIVOMOVE\s*(\d+(?:[/\\]\d+)*)",
+    "VIVOACTIVE":  r"\bVIVOACTIVE\s*(\d+(?:[/\\]\d+)*)",
+    "INSTINCT":    r"\bINSTINCT\s*(\d+(?:[/\\]\d+)*)",
+    "SERIES":      r"\bSERIES\s*(\d+(?:[/\\]\d+)*)",
+    "ULTRA":       r"\bULTRA\s*(\d+(?:[/\\]\d+)*)",
+    "FENIX":       r"\bFENIX\s*(\d+(?:[/\\]\d+)*)",
+    "EPIX":        r"\bEPIX\s*(\d+(?:[/\\]\d+)*)",
+    "VENU":        r"\bVENU\s*(\d+(?:[/\\]\d+)*)",
+    "BUDS":        r"\bBUDS\s*(\d+(?:[/\\]\d+)*)",
+    "SE":          r"\bSE\s*(\d+(?:[/\\]\d+)*)",
+    "GT":          r"\bGT\s*(\d+(?:[/\\]\d+)*)",
+    "FIT":         r"\bFIT\s*(\d+(?:[/\\]\d+)*)",
+}
+
+def _extract_model_signature(model_str: str) -> tuple[str, str]:
+    """Returns (line, version) e.g. ('SE','3'), ('SERIES','11'), ('GT','5').
+    Empty tuple ('','') if model has no parseable signature."""
+    if not model_str:
+        return ("", "")
+    s = str(model_str).strip().upper()
+    for line_label, pat in _WEARABLE_LINE_PATTERNS:
+        m = re.search(pat, s)
+        if m:
+            return (line_label, m.group(1))
+    return ("", "")
+
+def _signature_in_compat(trigger_sig: tuple[str, str], compat_upper: str) -> bool:
+    """True if compat is compatible with the trigger's (line, version).
+       • No trigger signature → True (no filter)
+       • Compat has NO model signatures → True (generic compat — accept)
+       • Compat has signatures but NONE for trigger's line → False (different product)
+       • Compat has signatures for trigger's line → True iff trigger version is listed
+    """
+    line, version = trigger_sig
+    if not line or not version:
+        return True
+    # Does compat mention ANY model signature at all?
+    has_any = any(re.search(p, compat_upper) for p in _WEARABLE_LINE_COMPAT_PATTERNS.values())
+    if not has_any:
+        return True
+    pat = _WEARABLE_LINE_COMPAT_PATTERNS.get(line)
+    if not pat:
+        return False
+    blocks = re.findall(pat, compat_upper)
+    if not blocks:
+        return False
+    nums = set()
+    for block in blocks:
+        nums.update(re.findall(r"\d+", block))
+    return version in nums
+
 def _model_tokens(model_str: str) -> set[str]:
     _NOISE = {"AND", "OR", "WITH", "FOR", "THE", "GPS", "CELLULAR",
               "LTE", "NFC", "WIFI", "BT", "PLUS", "PRO", "MAX"}
     raw = re.split(r"[\s\-/,+&]+", model_str.strip().upper())
     return {t for t in raw if len(t) >= 2 and t not in _NOISE}
- 
-def _compatibility_score(model_str: str, compat_field, brand: str = "") -> int:
+
+def _compatibility_score(model_str: str, compat_field, brand: str = "",
+                          trigger_size: str = "",
+                          trigger_signature: tuple[str, str] = ("", "")) -> int:
+    """Score how well a candidate's compat field matches the trigger.
+
+    v7.1: Adds two HARD rejection filters BEFORE strict/partial scoring:
+      1) trigger_size — if both trigger and compat have sizes and trigger's
+         exact size string is NOT listed in compat → reject (return 0).
+         No group fallback; user wants EXACT size match for the strict slots.
+      2) trigger_signature — if trigger model has (line, version) AND compat
+         mentions a different version of the same line (e.g. SE 2 vs SE 3,
+         GT3 vs GT 5, Series 9 vs Series 11) → reject.
+
+    Returns SCORE_MODEL_MATCH_STRICT (model substring in compat),
+            SCORE_MODEL_MATCH_PARTIAL (≥half tokens match), or 0."""
     if not model_str or pd.isna(compat_field):
         return 0
     compat_upper = str(compat_field).upper()
     model_upper  = model_str.strip().upper()
+
+    # ── Filter 1: EXACT size match (no group fallback) ──
+    if trigger_size:
+        compat_sizes = _extract_sizes(compat_upper)
+        if compat_sizes and trigger_size.upper() not in compat_sizes:
+            return 0
+
+    # ── Filter 2: Model-signature (line+version) ──
+    if trigger_signature and trigger_signature[0]:
+        if not _signature_in_compat(trigger_signature, compat_upper):
+            return 0
+
+    # ── Standard strict / partial scoring ──
     if re.search(re.escape(model_upper), compat_upper):
         return SCORE_MODEL_MATCH_STRICT
     tokens = _model_tokens(model_str)
@@ -1473,12 +1693,6 @@ def _compatibility_score(model_str: str, compat_field, brand: str = "") -> int:
         matched = sum(1 for t in tokens if t in compat_upper)
         if matched >= max(2, len(tokens) // 2):
             return SCORE_MODEL_MATCH_PARTIAL
-    model_sizes  = _extract_sizes(model_upper)
-    compat_sizes = _extract_sizes(compat_upper)
-    if model_sizes and compat_sizes:
-        for group in _BRAND_SIZE_GROUPS.get(brand.upper(), []):
-            if model_sizes & group and compat_sizes & group:
-                return SCORE_MODEL_MATCH_PARTIAL
     return 0
  
 def _price_affinity_score(item_price: float, cap: float, trigger_price: float) -> int:
@@ -1524,6 +1738,9 @@ def _score_pool(
     used_signatures: set,
     is_brand_locked: bool,
     ecosystem: set[str] | None = None,
+    trigger_year: int | None = None,
+    trigger_size: str = "",
+    trigger_signature: tuple[str, str] = ("", ""),
 ) -> tuple[pd.DataFrame, list[str], bool]:
     """
     Apply all scoring layers. Returns (scored_pool, notes, has_compat_hit).
@@ -1550,13 +1767,24 @@ def _score_pool(
     # Layer 1 — Compatibility (Μοντέλο ↔ Συμβατό με)
     if logic_key == "MODEL_MATCH_STRICT" and tmod and "Συμβατό με" in pool.columns:
         compat_scores = pool["Συμβατό με"].apply(
-            lambda x: _compatibility_score(tmod, x, brand=tb)
+            lambda x: _compatibility_score(tmod, x, brand=tb,
+                                            trigger_size=trigger_size,
+                                            trigger_signature=trigger_signature)
         )
         pool["_score"] += compat_scores
         strict_hits  = int((compat_scores == SCORE_MODEL_MATCH_STRICT).sum())
         partial_hits = int((compat_scores == SCORE_MODEL_MATCH_PARTIAL).sum())
+        rejected     = int((compat_scores == 0).sum())
         has_compat_hit = (strict_hits + partial_hits) > 0
-        notes.append(f"Compat strict={strict_hits} partial={partial_hits}")
+        size_lbl = f" size={trigger_size}" if trigger_size else ""
+        sig_lbl  = f" sig={trigger_signature[0]}{trigger_signature[1]}" if trigger_signature and trigger_signature[0] else ""
+        notes.append(f"Compat strict={strict_hits} partial={partial_hits} rejected={rejected}{size_lbl}{sig_lbl}")
+        # v7.1: HARD prune the pool to only items that score > 0 (i.e., passed
+        # size + signature filters). Without this, rejected items with score 0
+        # still get popularity / ecosystem boosts and can win the slot.
+        pool = pool[compat_scores > 0].copy()
+        if pool.empty:
+            return pool, notes + ["⛔ All items rejected by size/signature filters"], has_compat_hit
  
     # Layer 2 — Use-case affinity (audio / mount)
     if logic_key == "AUDIO_USE_CASE":
@@ -1617,6 +1845,24 @@ def _score_pool(
     # Layer 6 — Popularity tie-breaker
     popular_mask = pool["Sales_Tiebreaker"] >= sales_p80
     pool.loc[popular_mask, "_score"] += SCORE_POPULARITY_BOOST
+
+    # Layer 6b — Year boost (smartphone-style, v7)
+    # Score newer/same/previous-year accessories higher. Conservative values
+    # keep year boost below the ecosystem-primary-vs-secondary gap (200K) so
+    # year can never flip a primary brand to a secondary brand.
+    if trigger_year is not None:
+        acc_year = pool.apply(
+            lambda r: _wearable_extract_year(str(r.get("Title", "")), str(r.get("Μοντέλο", ""))),
+            axis=1,
+        )
+        n_newer = int((acc_year > trigger_year).sum())
+        n_same  = int((acc_year == trigger_year).sum())
+        n_prev  = int((acc_year == trigger_year - 1).sum())
+        pool.loc[acc_year > trigger_year, "_score"] += SCORE_YEAR_NEWER
+        pool.loc[acc_year == trigger_year, "_score"] += SCORE_YEAR_SAME
+        pool.loc[acc_year == trigger_year - 1, "_score"] += SCORE_YEAR_PREV
+        if n_newer or n_same or n_prev:
+            notes.append(f"Year boost ({trigger_year}): {n_newer} newer, {n_same} same, {n_prev} prev")
  
     # Layer 7 — Spec-variety penalty (only active in overflow when used_signatures is non-empty)
     if used_signatures and SPEC_SIGNATURE_COLUMNS.get(hierarchy):
@@ -1667,12 +1913,17 @@ def _try_pick_for_slot(
     enforce_brand_lock: bool,
     ecosystem_mode: str = "OFF",
     title_filter: dict | None = None,
+    smartphone_style: str | None = None,
+    overflow_brand_lock: str | None = None,
+    trigger_year: int | None = None,
+    trigger_size: str = "",
+    trigger_signature: tuple[str, str] = ("", ""),
 ) -> tuple[pd.Series | None, list[str], bool, bool]:
     """
     Try to score & return the best candidate for a slot.
- 
+
     Returns (chosen_row_or_None, notes, has_compat_hit, brand_locked_used).
- 
+
     Ecosystem behaviour is controlled by `ecosystem_mode`:
       • "OFF"  → legacy: no ecosystem boost, no ecosystem-filtered pool.
                  (Brand-lock still applies if `enforce_brand_lock` is True,
@@ -1682,22 +1933,33 @@ def _try_pick_for_slot(
       • "LOCK" → pool filtered to the ecosystem set first; if non-empty
                  AND best score passes threshold, return from locked pool.
                  Otherwise fall back to full pool.
- 
+
     `title_filter` (optional) prunes the hierarchy pool by title pattern
     BEFORE any ecosystem filtering or scoring. Used when a hierarchy mixes
     products that don't all fit the slot's intent (e.g. APPLE HEADPHONES
     contains both AirPods Max and legacy wired EarPods Jack).
         {"include": <regex>, "exclude": <regex>}
+
+    `smartphone_style` (NEW in v7): "audio" / "power" / None. Enables the
+    smartphone-engine recipe — price-tier floor, ultra-premium filter for
+    flagship triggers (≥€700, audio slots only), and forwards `trigger_year`
+    to `_score_pool` for the year-boost layer.
+
+    `overflow_brand_lock` (NEW in v7): when set, hard-filters the pool to the
+    given brand (case-insensitive) BEFORE any ecosystem logic. Used by PASS 2
+    to guarantee that an overflow slot for hierarchy X picks the same brand
+    that hierarchy X's first-pick used. Stops the "AirPods then JBL" problem.
     """
     hierarchy = hierarchies[0]
     used_sigs = used_signatures_by_hier.get(hierarchy, set())
- 
+
     pool = _build_hierarchy_pool(full_pool, hierarchies, used_materials)
     if pool.empty:
         return None, [f"Logic={logic_key}", "⚪ Pool empty"], False, False
- 
+
+    notes_prefix: list[str] = []
+
     # ── Title filter (applied before ecosystem & scoring) ─────────────
-    filter_note = None
     if title_filter:
         before_n = len(pool)
         titles = pool["Title"].fillna("").astype(str)
@@ -1707,22 +1969,68 @@ def _try_pick_for_slot(
         if title_filter.get("exclude"):
             pool = pool[~titles.str.contains(title_filter["exclude"], case=False, na=False, regex=True)].copy()
         after_n = len(pool)
-        filter_note = f"Title-filter pruned {before_n - after_n} items ({before_n}→{after_n})"
+        notes_prefix.append(f"Title-filter pruned {before_n - after_n} items ({before_n}→{after_n})")
         if pool.empty:
-            return None, [f"Logic={logic_key}", filter_note, "⚪ Pool empty after title-filter"], False, False
- 
+            return None, [f"Logic={logic_key}"] + notes_prefix + ["⚪ Pool empty after title-filter"], False, False
+
+    # ── Price-tier floor (smartphone-style, v7) ───────────────────────
+    # Cuts cheap audio/charger junk that would never be a good upsell.
+    # Applied BEFORE ecosystem so the lock operates on a cleaned pool.
+    if smartphone_style in ("audio", "power"):
+        min_price = get_min_price_for_slot(trigger_price, smartphone_style)
+        if min_price > 0:
+            before_n = len(pool)
+            price_filtered = pool[pool["_p"] >= min_price]
+            if not price_filtered.empty:
+                pool = price_filtered.copy()
+                notes_prefix.append(f"Price tier (€{trigger_price:.0f} watch, {smartphone_style}): min €{min_price:.0f} → {before_n}→{len(pool)}")
+            else:
+                notes_prefix.append(f"Price tier: no items ≥€{min_price:.0f}, keeping all {before_n}")
+
+    # ── Ultra-premium filter is applied INSIDE the ecosystem-lock
+    #    branch only (see Step 1 below). Rationale: outside the ecosystem,
+    #    the Pro/Ultra/Max keywords can accidentally match weak brands
+    #    whose name happens to contain "Pro" (e.g. Audio Pro) while
+    #    cutting legitimate flagships like "JBL Charge 6" that don't use
+    #    Pro/Max naming. Keeping the filter ecosystem-scoped matches the
+    #    iPhone-15-Pro behaviour: filter operates on AirPods variants,
+    #    not on every brand that happens to share the keyword.
+
+    # ── Overflow brand-lock (v7) — HARD filter ─────────────────────────
+    # When PASS 2 asks for a same-brand refill, restrict the pool to that
+    # exact brand. Bypasses ecosystem because user wants brand match, not
+    # ecosystem match (AirPods → AirPods, not AirPods → Beats).
+    if overflow_brand_lock:
+        before_n = len(pool)
+        brand_target = overflow_brand_lock.strip().upper()
+        pool = pool[pool["Κατασκευαστής"].fillna("").str.upper() == brand_target].copy()
+        notes_prefix.append(f"🔁 Overflow brand-lock to {brand_target}: {before_n}→{len(pool)}")
+        if pool.empty:
+            return None, [f"Logic={logic_key}"] + notes_prefix + [f"⚪ No more {brand_target} items"], False, False
+
     # Resolve ecosystem set (empty if mode is OFF or trigger brand has no entry)
     ecosystem: set[str] = set()
     if enforce_brand_lock and tb in LOCKABLE_BRANDS and ecosystem_mode in ("SOFT", "LOCK"):
         ecosystem = get_wearable_ecosystem(tb)
  
-    notes_prefix: list[str] = []
-    if filter_note:
-        notes_prefix.append(filter_note)
- 
     # ── Step 1: Ecosystem-locked attempt (mode == LOCK only) ──────────
     if ecosystem and ecosystem_mode == "LOCK":
         brand_pool = pool[pool["Κατασκευαστής"].fillna("").str.upper().isin(ecosystem)].copy()
+
+        # Ultra-premium filter (v7) — applied INSIDE the locked pool only.
+        # Audio slots ≥€700 trigger restricted to Pro/Ultra/Max/Studio/Elite
+        # variants. Scoped to ecosystem so we don't accidentally cut JBL
+        # Charge 6 when falling back outside Apple+Beats.
+        if (smartphone_style == "audio"
+                and trigger_price >= WEARABLE_ULTRA_PREMIUM_THRESHOLD
+                and not brand_pool.empty):
+            before_n = len(brand_pool)
+            pattern = "|".join(WEARABLE_ULTRA_PREMIUM_KEYWORDS)
+            premium_pool = brand_pool[brand_pool["Title"].fillna("").str.lower().str.contains(pattern, regex=True, na=False)]
+            if not premium_pool.empty:
+                brand_pool = premium_pool.copy()
+                notes_prefix.append(f"Ultra-premium filter (€{trigger_price:.0f}): {before_n}→{len(brand_pool)} (Pro/Ultra/Max only)")
+
         if not brand_pool.empty:
             scored, notes, has_compat = _score_pool(
                 brand_pool,
@@ -1736,31 +2044,39 @@ def _try_pick_for_slot(
                 used_signatures=used_sigs,
                 is_brand_locked=True,
                 ecosystem=ecosystem,
+                trigger_year=trigger_year,
+                trigger_size=trigger_size,
+                trigger_signature=trigger_signature,
             )
             eco_label = "+".join(sorted(ecosystem))
             notes = notes_prefix + [f"🔒 Ecosystem-locked to [{eco_label}]"] + notes
             # Strict slot needs compat in the locked pool to count as success
-            if logic_key == "MODEL_MATCH_STRICT" and tmod and not has_compat:
+            if logic_key == "MODEL_MATCH_STRICT" and tmod and (scored.empty or not has_compat):
                 notes_prefix = notes_prefix + [f"Ecosystem-lock failed (no compat in [{eco_label}]) — falling back"]
+            elif scored.empty:
+                notes_prefix = notes_prefix + [f"Ecosystem-lock failed (pool emptied by filters) — falling back"]
             else:
                 best_row    = scored.iloc[0]
                 best_score  = best_row["_score"]
                 cap_now     = get_dynamic_cap(trigger_price, budget_key)
                 price_ratio = best_row["_p"] / cap_now if cap_now > 0 else 0
-                # Two-gate decision: best score must clear threshold AND
-                # the price must be within 2x the dynamic cap. The price gate
-                # prevents the ecosystem boost from forcing absurdly-expensive
-                # picks (e.g. AirPods Max €589 for an Apple Watch SE 3 €270).
-                if best_score >= SCORE_MINIMUM_THRESHOLD and price_ratio <= 2.0:
+                guard       = get_price_ratio_guard(trigger_price)
+                # Two-gate decision: best score must clear threshold AND the
+                # price must be within the trigger-tier guard. Guard is:
+                #   • Mid (<€400):       2.0× cap
+                #   • Premium (€400-700): 2.5× cap
+                #   • Flagship (≥€700):  no cap (inf) — flagship gets flagship audio
+                if best_score >= SCORE_MINIMUM_THRESHOLD and price_ratio <= guard:
                     return best_row, notes, has_compat, True
-                if price_ratio > 2.0:
-                    notes_prefix = notes_prefix + [f"Ecosystem-lock failed (price ratio {price_ratio:.1f}× cap > 2.0) — falling back"]
+                if price_ratio > guard:
+                    guard_str = f"{guard:.1f}×" if guard != float('inf') else "∞"
+                    notes_prefix = notes_prefix + [f"Ecosystem-lock failed (price ratio {price_ratio:.1f}× cap > {guard_str}) — falling back"]
                 else:
                     notes_prefix = notes_prefix + [f"Ecosystem-lock failed (best score {int(best_score):,} below threshold) — falling back"]
         else:
             eco_label = "+".join(sorted(ecosystem))
             notes_prefix = notes_prefix + [f"Ecosystem-lock skipped (no [{eco_label}] in hierarchy) — falling back"]
- 
+
     # ── Step 2: Fall back to full pool (with SOFT ecosystem boost if applicable) ──
     scored, notes, has_compat = _score_pool(
         pool,
@@ -1774,16 +2090,21 @@ def _try_pick_for_slot(
         used_signatures=used_sigs,
         is_brand_locked=False,
         ecosystem=ecosystem if ecosystem_mode in ("SOFT", "LOCK") else None,
+        trigger_year=trigger_year,
+        trigger_size=trigger_size,
+        trigger_signature=trigger_signature,
     )
     notes = notes_prefix + notes
- 
-    if logic_key == "MODEL_MATCH_STRICT" and tmod and not has_compat:
+
+    if logic_key == "MODEL_MATCH_STRICT" and tmod and (scored.empty or not has_compat):
         return None, notes + ["⬜ No compat in fallback pool"], False, False
- 
+    if scored.empty:
+        return None, notes + ["⚪ Pool emptied by filters"], False, False
+
     best_score = scored["_score"].iloc[0]
     if best_score < SCORE_MINIMUM_THRESHOLD:
         return None, notes + [f"⛔ Below threshold ({best_score})"], has_compat, False
- 
+
     return scored.iloc[0], notes, has_compat, False
  
 
@@ -4658,6 +4979,121 @@ def run_tablets_engine(trigger, df_products, df_history):
 # ═════════════════════════════════════════════════════════════
 
 
+# ─────────────────────────────────────────────────────────────
+# v7.1: Kiddoboo wearables persona
+#
+# Mirror of the kiddoboo SMARTPHONE/TABLET template at line ~376
+# (`_build_kiddoboo_slots`), with one swap: positions 2 and 7 (Smartwatch ↔
+# Smartphone). Rationale: when the trigger is a kids' SMARTWATCH, recommending
+# a Smartphone in slot 2 is the higher-intent upsell (companion device);
+# another Smartwatch slides to slot 7 as a sibling-device cross-sell.
+#
+# Logic is intentionally simple: BRAND_FIRST. Filter pool to KIDDOBOO; if any
+# items exist there, keep only them. Otherwise keep the full pool. Then sort
+# by Sales_Tiebreaker (best-sellers) and pick the top item not already used.
+# This matches the kiddoboo tablets engine's `_brand_first_filter` behaviour
+# (line ~1260).
+# ─────────────────────────────────────────────────────────────
+
+KIDDOBOO_WEARABLE_SLOTS: list[tuple[int, str, list[str]]] = [
+    (1,  'Overhead',         ['OVERHEAD']),
+    (2,  'Smartphone',       ['Smartphones']),                          # swap (was Smartwatch in phones template)
+    (3,  'Wall Charger',     ['WALL CHARGERS']),
+    (4,  'Cable',            ['ΚΑΛΩΔΙΑ ΔΕΔΟΜΕΝΩΝ', 'USB CABLES']),
+    (5,  'Party Speaker',    ['ΗΧΕΙΑ ΦΟΡΗΤΟΥ ΗΧΟΥ']),
+    (6,  'Action Camera',    ['IP CAMERAS', 'TRAVEL ACCESSORIES']),
+    (7,  'Smartwatch',       ['SMART WATCHES', 'ACTIVITY TRACKER']),    # swap (was Smartphone in phones template)
+    (8,  'Travel/Scooter',   ['TRAVEL ACCESSORIES']),
+    (9,  'Bluetooth',        ['Bluetooth']),
+    (10, 'Screen Protector', ['MOBILE SCREEN PROTECTORS']),
+]
+
+
+def _run_kiddoboo_wearables_engine(
+    *,
+    trigger: dict,
+    tm, tt: str, tb: str, tmod: str, tprice: float, ttier: str,
+    persona_label: str,
+    df_products: pd.DataFrame,
+    diag: list,
+    slot_notes: dict,
+    score_breakdown: dict,
+) -> tuple[pd.DataFrame, list, dict, dict]:
+    """Kiddoboo-only wearables engine. See block comment above."""
+    diag.append((
+        "0. Trigger (KIDDOBOO)",
+        f"Brand={tb}  Tier={ttier}  Persona=Kiddoboo Wearable Template",
+        f"Price=€{tprice:.2f}  Model={tmod or '—'}",
+    ))
+
+    c = df_products[df_products["Material"] != tm].copy()
+    c["Sales_Tiebreaker"] = pd.to_numeric(c.get("Sum of Sales", 0), errors="coerce").fillna(0)
+    c["_p"] = c["LIST PRICE"].apply(parse_euro_price)
+
+    used_materials: set    = {tm}
+    all_recs_by_slot: dict = {}
+
+    for slot_num, role, hierarchies in KIDDOBOO_WEARABLE_SLOTS:
+        notes = [f"Logic=BRAND_FIRST (Kiddoboo)"]
+        pool = c[c["Hierarchy"].isin(hierarchies)].copy()
+        pool = pool[~pool["Material"].isin(used_materials)]
+
+        if pool.empty:
+            diag.append((f"Slot {slot_num} ⚪", role, "Empty pool"))
+            slot_notes[slot_num] = notes + ["⚪ Pool empty"]
+            continue
+
+        # Brand-first: keep only KIDDOBOO if any present; else keep entire pool
+        kb_mask = pool["Κατασκευαστής"].fillna("").str.upper().str.strip() == "KIDDOBOO"
+        if kb_mask.any():
+            pool = pool[kb_mask].copy()
+            notes.append(f"Brand-first: {int(kb_mask.sum())} Kiddoboo items in pool")
+        else:
+            notes.append(f"No Kiddoboo items in this hierarchy — opening to full pool ({len(pool)})")
+
+        # Sort by best-sellers
+        pool = pool.sort_values(["Sales_Tiebreaker", "_p"], ascending=[False, False])
+        # _assign_to_slot reads "_score" so add it (use Sales_Tiebreaker as a proxy)
+        pool["_score"] = pool["Sales_Tiebreaker"].fillna(0).astype(float)
+        chosen = pool.iloc[0]
+        chosen_brand = str(chosen.get("Κατασκευαστής", "")).strip().upper()
+
+        all_recs_by_slot[slot_num] = _assign_to_slot(
+            chosen,
+            assigned_slot=slot_num,
+            role=role,
+            persona_label=persona_label,
+            fallback=False,
+            hierarchies=hierarchies,
+        )
+        used_materials.add(chosen["Material"])
+
+        slot_notes[slot_num] = notes
+        score_breakdown[slot_num] = {
+            "slot_role":   role,
+            "material":    chosen["Material"],
+            "title":       str(chosen.get("Title", ""))[:60],
+            "brand":       chosen_brand,
+            "final_score": round(float(chosen.get("Sales_Tiebreaker", 0))),
+            "price":       round(float(chosen.get("_p", 0)), 2),
+        }
+        diag.append((
+            f"Slot {slot_num} ✅",
+            f"{role}  →  {str(chosen.get('Title', ''))[:50]}",
+            f"Brand={chosen_brand}  Price=€{float(chosen.get('_p', 0)):.2f}",
+        ))
+
+    print("\n" + "═" * 72)
+    print("  WEARABLES ENGINE v7.1 — DIAGNOSTICS (KIDDOBOO persona)")
+    print("═" * 72)
+    print(f"  Trigger: {tt}")
+    for sn in sorted(all_recs_by_slot):
+        rec = all_recs_by_slot[sn]
+        print(f"     Slot {sn:2d}: [{str(rec.get('Slot_Role','')):20s}] {str(rec.get('Title',''))[:55]}")
+
+    recs_df = (pd.DataFrame(list(all_recs_by_slot.values())).sort_values("Assigned_Slot")
+               if all_recs_by_slot else pd.DataFrame())
+    return recs_df, diag, slot_notes, score_breakdown
 
  
 def run_wearables_engine(
@@ -4673,6 +5109,7 @@ def run_wearables_engine(
  
     # ── Parse Trigger ────────────────────────────────────────
     tm     = trigger["Material"]
+    tt     = str(trigger.get("Title", ""))
     tb     = str(trigger.get("Κατασκευαστής", "")).strip().upper()
     tmod   = str(trigger.get("Μοντέλο", "")).strip()
     tprice = parse_euro_price(trigger.get("LIST PRICE", 0))
@@ -4701,13 +5138,41 @@ def run_wearables_engine(
     brand_slot_count: dict = {}
     # Track per-hierarchy spec signatures we've already used (for variety in overflow)
     used_signatures_by_hier: dict[str, set] = {}
- 
+    # NEW (v7): track per-hierarchy first-pick brand IFF that pick was made
+    # under successful ecosystem-lock — used to keep overflow refills on the
+    # same brand (Galaxy Buds FE → Galaxy Buds 3 FE, not Galaxy Buds → JBL).
+    first_pick_brand_by_hier: dict[str, str] = {}
+    # NEW (v7): year for the trigger (Galaxy Watch8 → 2026, Buds-style models).
+    # For Apple Watch the extractor returns None and year-boost simply doesn't fire.
+    trigger_year = _wearable_extract_year(tt, tmod)
+
+    # NEW (v7.1): size + model-line signature for strict-match slots.
+    # Size comes from the TITLE (model field rarely has "40mm" embedded).
+    # Signature is the (line, version) tuple used to reject cross-version
+    # accessories (e.g. Huawei GT3 strap won't match Watch GT 5 trigger).
+    tsize       = _extract_wearable_size_from_title(tt)
+    tsignature  = _extract_model_signature(tmod) if tmod else ("", "")
+    if not tsignature[0]:
+        tsignature = _extract_model_signature(tt)  # fallback to title
+
+    # NEW (v7.1): Kiddoboo branch — kids smartwatches use the kiddoboo
+    # 10-slot template (same as kiddoboo tablets, but with Smartphone in
+    # slot 2 and Smartwatch in slot 7 — swapped because trigger is a watch).
+    if tb == "KIDDOBOO":
+        return _run_kiddoboo_wearables_engine(
+            trigger=trigger,
+            tm=tm, tt=tt, tb=tb, tmod=tmod, tprice=tprice,
+            ttier=ttier, persona_label=f"KIDDOBOO ({ttier})",
+            df_products=df_products,
+            diag=diag, slot_notes=slot_notes, score_breakdown=score_breakdown,
+        )
+
     # ═══════════════════════════════════════════════════════════
     # PASS 1 — Main slot loop
     # ═══════════════════════════════════════════════════════════
-    for slot_num, role, hierarchies, logic_key, budget_key, ecosystem_mode, title_filter in SLOTS:
+    for slot_num, role, hierarchies, logic_key, budget_key, ecosystem_mode, title_filter, smartphone_style in SLOTS:
         hierarchy = hierarchies[0]
- 
+
         chosen, notes, has_compat, locked = _try_pick_for_slot(
             full_pool=c,
             hierarchies=hierarchies,
@@ -4722,8 +5187,12 @@ def run_wearables_engine(
             enforce_brand_lock=is_lockable,
             ecosystem_mode=ecosystem_mode,
             title_filter=title_filter,
+            smartphone_style=smartphone_style,
+            trigger_year=trigger_year,
+            trigger_size=tsize,
+            trigger_signature=tsignature,
         )
- 
+
         if chosen is None:
             # Strict slot stays empty; non-strict slot just had an empty pool / threshold miss
             empty_marker = "⬜" if logic_key == "MODEL_MATCH_STRICT" else "⚪"
@@ -4734,13 +5203,21 @@ def run_wearables_engine(
             ))
             slot_notes[slot_num] = notes + [f"{empty_marker} Left empty"]
             continue
- 
+
         chosen_brand = str(chosen.get("Κατασκευαστής", "")).strip().upper()
         brand_slot_count[chosen_brand] = brand_slot_count.get(chosen_brand, 0) + 1
- 
+
         # Track signature for variety
         used_signatures_by_hier.setdefault(hierarchy, set()).add(_signature(chosen, hierarchy))
- 
+
+        # NEW (v7): if this pick was made under a successful ecosystem-lock,
+        # remember its brand so PASS 2 overflow refills the same brand.
+        # We DON'T track when the pick came via fallback (e.g. slot 1
+        # Catalyst for Apple Watch — Apple has no protection items, so
+        # fallback picks freely → overflow stays free for diversity).
+        if locked and chosen_brand and hierarchy not in first_pick_brand_by_hier:
+            first_pick_brand_by_hier[hierarchy] = chosen_brand
+
         all_recs_by_slot[slot_num] = _assign_to_slot(
             chosen,
             assigned_slot=slot_num,
@@ -4789,9 +5266,14 @@ def run_wearables_engine(
         for attempt in range(len(SLOTS)):
             idx  = (cursor + attempt) % len(SLOTS)
             sdef = SLOTS[idx]
-            src_slot_num, src_role, src_hierarchies, src_logic, src_budget, src_eco_mode, src_title_filter = sdef
+            src_slot_num, src_role, src_hierarchies, src_logic, src_budget, src_eco_mode, src_title_filter, src_smartphone_style = sdef
             hierarchy = src_hierarchies[0]
- 
+
+            # NEW (v7): if PASS 1 picked a same-ecosystem brand for this
+            # hierarchy, force the overflow refill to that exact brand.
+            # Bridges the "AirPods then JBL" gap.
+            overflow_lock = first_pick_brand_by_hier.get(hierarchy)
+
             chosen, notes, has_compat, locked = _try_pick_for_slot(
                 full_pool=c,
                 hierarchies=src_hierarchies,
@@ -4806,6 +5288,11 @@ def run_wearables_engine(
                 enforce_brand_lock=is_lockable,
                 ecosystem_mode=src_eco_mode,
                 title_filter=src_title_filter,
+                smartphone_style=src_smartphone_style,
+                overflow_brand_lock=overflow_lock,
+                trigger_year=trigger_year,
+                trigger_size=tsize,
+                trigger_signature=tsignature,
             )
  
             if chosen is None:
@@ -4881,7 +5368,7 @@ def run_wearables_engine(
  
 def print_wearables_diag(diag: list, slot_notes: dict, score_breakdown: dict) -> None:
     print("\n" + "═" * 72)
-    print("  WEARABLES ENGINE v6 — DIAGNOSTICS (ecosystem-aware)")
+    print("  WEARABLES ENGINE v7 — DIAGNOSTICS (smartphone-style + brand-match overflow)")
     print("═" * 72)
     for label, main, detail in diag:
         print(f"  [{label}]  {main}")
