@@ -577,11 +577,15 @@ SCORE_MINIMUM_THRESHOLD   = PENALTY_OVER_CAP_HARD
 #   • Tiered price-ratio guard — stricter for mid, looser for flagship
 
 WEARABLE_AUDIO_PRICE_TIERS: list[tuple[float, float]] = [
-    (800, 60),   # Flagship+: min €60 audio
-    (500, 40),   # Flagship-lite: min €40
-    (300, 25),   # Premium: min €25
-    (180, 15),   # Mid: min €15
-    (0,   0),    # Entry: no floor
+    # v7.3+: Elite tier added. A €1299 Garmin Fenix 8 Pro shouldn't be
+    # cross-sold €149 AirPods 4 or €149 JBL Charge 6. Force genuinely
+    # premium audio on very expensive triggers.
+    (1000, 200),  # Elite (≥€1000):           min €200 audio
+    (700,  100),  # Ultra-flagship (€700+):   min €100
+    (500,   60),  # Flagship+ (€500+):        min €60   (was 40)
+    (300,   30),  # Premium (€300+):          min €30   (was 25)
+    (180,   15),  # Mid (€180+):              min €15
+    (0,      0),  # Entry: no floor
 ]
 WEARABLE_POWER_PRICE_TIERS: list[tuple[float, float]] = [
     (800, 25),   # Flagship+: min €25 charger
@@ -5220,6 +5224,21 @@ def run_wearables_engine(
         pd.to_numeric(c.get("Sum of Sales", 0), errors="coerce").fillna(0)
     )
     c["_p"] = c["LIST PRICE"].apply(parse_euro_price)
+
+    # v7.3: Kids-brand segregation. Kiddoboo is a kids-only brand whose
+    # OVERHEAD items (Kiddoboo P13, Delulu, etc.) kept winning the slot 7
+    # / slot 13 (Over-Ear) overflow for adult smartwatch triggers like
+    # Xiaomi Redmi Watch and Apple Watch — they scored well on price
+    # affinity + year boost in fallback pools that had no ecosystem
+    # over-ear items. Recommending children's headphones to an adult
+    # watch buyer is wrong. So: when the trigger isn't itself a kids
+    # brand, drop all kids-brand items from the candidate pool entirely.
+    KIDS_BRANDS = {"KIDDOBOO"}   # extend as new kids brands appear
+    if tb not in KIDS_BRANDS:
+        before_n = len(c)
+        c = c[~c["Κατασκευαστής"].fillna("").str.upper().str.strip().isin(KIDS_BRANDS)].copy()
+        # (No diag entry; the filter applies uniformly across every slot.)
+
     sales_p80 = c["Sales_Tiebreaker"].quantile(0.80) if not c.empty else 0
  
     used_materials: set    = {tm}
