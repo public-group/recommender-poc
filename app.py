@@ -756,30 +756,46 @@ CLIMA_ACCESSORY_BUDGET = {
     'Premium': {'fan': 700, 'dehum': 700, 'purifier': 1200, 'weather': 100}
 }
 
+# ─── Slot 1: Συμβατότητα-driven αξεσουάρ κλιματιστικού ───────────────────────
+# Path: Αξεσουάρ > Air Condition Accessories > Air Condition (Hierarchy='Air Condition')
+# Φιλτράρουμε με τη στήλη "Συμβατότητα" στο pool.
+CLIMA_AC_ACCESSORY_HIERARCHY = 'Air Condition'
+CLIMA_COMPAT_UNIVERSAL_LABEL = 'Universal'
+
+# Εντοπισμός σειράς του trigger κλιματιστικού (πρώτο match κερδίζει).
+# Tuple: (Συμβατότητα label στη βάση, [regex patterns σε Title/Μοντέλο], required brand ή None)
+# Σημείωση: τα patterns δέχονται και Latin "II" και Greek "ΙΙ" (case-insensitive).
+CLIMA_COMPAT_SERIES_DETECTION = [
+    ('Juro-Pro Refresh Eco ΙΙ',  [r'refresh\s*eco\s*(?:ii|ιι|2)'],                              'JURO-PRO'),
+    ('Juro-Pro ECO II Series',   [r'oxygen\s*eco\s*(?:ii|ιι|2)', r'\beco\s*(?:ii|ιι)\b'],       'JURO-PRO'),
+]
+
 CLIMA_SUMMER_SLOTS = [
-    (1,  'Ανεμιστήρας Δαπέδου', ['Ανεμιστήρες Δαπέδου'], 'BRAND_SYNC'),
-    (2,  'Αφυγραντήρας',       ['Αφυγραντήρες'],       'AREA_MATCH'),
-    (3,  'Καθαριστής Αέρα',    ['Καθαριστές Αέρα'],    'AREA_MATCH'),
-    (4,  'Weather Gadget',     ['WEATHER GADGETS'],    'GENERIC'),
-    (5,  'Ανεμιστήρας Επιτραπέζιος', ['Ανεμιστήρες Επιτραπέζιοι'], 'GENERIC'),
-    (6,  'Ιονιστής',           ['Ιονιστές'],           'IONIZER_CHECK'),
-    (7,  'Μπαταρίες (AAA)',    ['ΑΛΚΑΛΙΚΕΣ'],          'BATTERY_AAA'),
-    (8,  'Προστασία Ρεύματος', ['SURGE PROTECTORS'],   'GENERIC'),
-    (9,  'Ανεμιστήρας Δαπέδου 2', ['Ανεμιστήρες Δαπέδου'], 'SALES_BOOST'),
-    (10, 'Αφυγραντήρας 2',     ['Αφυγραντήρες'],       'BEST_VALUE'),
+    (1,  'Αξεσουάρ Κλιματιστικού', [CLIMA_AC_ACCESSORY_HIERARCHY], 'AC_ACCESSORY_COMPAT'),
+    (2,  'Ανεμιστήρας Δαπέδου', ['Ανεμιστήρες Δαπέδου'], 'BRAND_SYNC'),
+    (3,  'Αφυγραντήρας',       ['Αφυγραντήρες'],       'AREA_MATCH'),
+    (4,  'Καθαριστής Αέρα',    ['Καθαριστές Αέρα'],    'AREA_MATCH'),
+    (5,  'Weather Gadget',     ['WEATHER GADGETS'],    'GENERIC'),
+    (6,  'Ανεμιστήρας Επιτραπέζιος', ['Ανεμιστήρες Επιτραπέζιοι'], 'GENERIC'),
+    (7,  'Ιονιστής',           ['Ιονιστές'],           'IONIZER_CHECK'),
+    (8,  'Μπαταρίες (AAA)',    ['ΑΛΚΑΛΙΚΕΣ'],          'BATTERY_AAA'),
+    (9,  'Προστασία Ρεύματος', ['SURGE PROTECTORS'],   'GENERIC'),
+    (10, 'Ανεμιστήρας Δαπέδου 2', ['Ανεμιστήρες Δαπέδου'], 'SALES_BOOST'),
+    (11, 'Αφυγραντήρας 2',     ['Αφυγραντήρες'],       'BEST_VALUE'),
 ]
 
 CLIMA_WINTER_SLOTS = [
-    (1,  'Αφυγραντήρας',       ['Αφυγραντήρες'],       'AREA_MATCH'),
-    (2,  'Αερόθερμο',          ['Αερόθερμα'],          'GENERIC'),
-    (3,  'Καθαριστής Αέρα',    ['Καθαριστές Αέρα'],    'AREA_MATCH'),
-    (4,  'Weather Gadget',     ['WEATHER GADGETS'],    'HUMIDITY_FOCUS'),
-    (5,  'Καλοριφέρ Mica',      ['Καλοριφέρ Mica'],      'GENERIC'),
-    (6,  'Ηλεκτρική Κουβέρτα', ['Ηλεκτρικές Κουβέρτες'], 'GENERIC'),
-    (7,  'Θερμάστρα Ηλεκτρική', ['Θερμάστρες Ηλεκτρικές'], 'GENERIC'),
-    (8,  'Ηλεκτρικό Καλοριφέρ', ['Ηλεκτρικά Καλοριφέρ'], 'GENERIC'),
-    (9,  'Μπαταρίες',          ['ΑΛΚΑΛΙΚΕΣ'],          'GENERIC'),
-    (10, 'Προστασία Ρεύματος', ['SURGE PROTECTORS'],   'GENERIC'),
+    (1,  'Αξεσουάρ Κλιματιστικού', [CLIMA_AC_ACCESSORY_HIERARCHY], 'AC_ACCESSORY_COMPAT'),
+    (2,  'Αφυγραντήρας',       ['Αφυγραντήρες'],       'AREA_MATCH'),
+    (3,  'Αερόθερμο',          ['Αερόθερμα'],          'GENERIC'),
+    (4,  'Καθαριστής Αέρα',    ['Καθαριστές Αέρα'],    'AREA_MATCH'),
+    (5,  'Weather Gadget',     ['WEATHER GADGETS'],    'HUMIDITY_FOCUS'),
+    (6,  'Καλοριφέρ Mica',      ['Καλοριφέρ Mica'],      'GENERIC'),
+    (7,  'Ηλεκτρική Κουβέρτα', ['Ηλεκτρικές Κουβέρτες'], 'GENERIC'),
+    (8,  'Θερμάστρα Ηλεκτρική', ['Θερμάστρες Ηλεκτρικές'], 'GENERIC'),
+    (9,  'Ηλεκτρικό Καλοριφέρ', ['Ηλεκτρικά Καλοριφέρ'], 'GENERIC'),
+    (10, 'Μπαταρίες',          ['ΑΛΚΑΛΙΚΕΣ'],          'GENERIC'),
+    (11, 'Προστασία Ρεύματος', ['SURGE PROTECTORS'],   'GENERIC'),
 ]
 
 def get_clima_tier_by_btu(price, btu):
@@ -788,6 +804,22 @@ def get_clima_tier_by_btu(price, btu):
     if price >= thresholds['Premium']: return 'Premium'
     if price >= thresholds['Mid']: return 'Mid'
     return 'Entry'
+
+def detect_clima_compat_series(trigger):
+    """Επιστρέφει το ακριβές string της στήλης 'Συμβατότητα' που πρέπει να φιλτράρουμε
+    για το συγκεκριμένο trigger κλιματιστικό (π.χ. 'Juro-Pro ECO II Series').
+    Αν δεν εντοπιστεί καμία σειρά, επιστρέφει το CLIMA_COMPAT_UNIVERSAL_LABEL."""
+    tt = str(trigger.get('Title', '') or '')
+    tmodel = str(trigger.get('Μοντέλο', '') or '')
+    tb = str(trigger.get('Κατασκευαστής', '') or '').strip().upper()
+    haystack = f"{tt} {tmodel}".lower()
+    for series_label, patterns, required_brand in CLIMA_COMPAT_SERIES_DETECTION:
+        if required_brand and required_brand.upper() not in tb:
+            continue
+        for pat in patterns:
+            if re.search(pat, haystack, flags=re.IGNORECASE):
+                return series_label
+    return CLIMA_COMPAT_UNIVERSAL_LABEL
 
 # ═════════════════════════════════════════════════════════════
 # 🟢 FLOOR CARE CONFIGURATION
@@ -2245,62 +2277,55 @@ def filter_or_penalize(pool, keep_mask, label, penalty=150000):
 # ─────────────────────────────────────────────────────────────
 # DATA
 # ─────────────────────────────────────────────────────────────
-EXCEL_FILE = "Recommendations GitHub.xlsx"  
+# Spec data may be split across multiple files when a single workbook
+# exceeds GitHub's 25 MB upload cap. The loader probes each candidate
+# file and builds a sheet→file map; the first file that contains a
+# given sheet wins. Files that don't exist are silently skipped, so
+# the app still works if you only have one of them locally.
+EXCEL_FILES = [
+    "Recommendations GitHub.xlsx",
+    "Recommendations GitHub Home.xlsx",
+]
 
 @st.cache_data(ttl=600)
 def load_all_data():
-    excel_file = pd.ExcelFile(EXCEL_FILE, engine='openpyxl')
-    available_sheets = excel_file.sheet_names
+    # Build {sheet_name: ExcelFile} across all available files.
+    sheet_source = {}
+    opened_files = []
+    for path in EXCEL_FILES:
+        try:
+            ef = pd.ExcelFile(path, engine='openpyxl')
+        except (FileNotFoundError, OSError):
+            continue
+        opened_files.append(path)
+        for sh in ef.sheet_names:
+            sheet_source.setdefault(sh, ef)  # first file wins on duplicates
     
-    if 'Products' in available_sheets:
-        dp = pd.read_excel(excel_file, sheet_name='Products')
-        dp.columns = dp.columns.str.strip()
-    else: dp = pd.DataFrame()
+    if not opened_files:
+        raise FileNotFoundError(
+            f"None of the spec workbooks were found. Looked for: {EXCEL_FILES}"
+        )
     
-    if 'History' in available_sheets:
-        dh = pd.read_excel(excel_file, sheet_name='History')
-        dh.columns = dh.columns.str.strip()
-    else: dh = pd.DataFrame()
+    available_sheets = list(sheet_source.keys())
     
-    if 'Slot_Matrix' in available_sheets:
-        ds = pd.read_excel(excel_file, sheet_name='Slot_Matrix')
-        ds.columns = ds.columns.str.strip()
-    else: ds = pd.DataFrame()
-        
-    if 'Music' in available_sheets:
-        dm = pd.read_excel(excel_file, sheet_name='Music')
-        dm.columns = dm.columns.str.strip()
-    else: dm = pd.DataFrame()
-        
-    if 'Books' in available_sheets:
-        db = pd.read_excel(excel_file, sheet_name='Books')
-        db.columns = db.columns.str.strip()
-    else: db = pd.DataFrame()
-
-    if 'Laptops' in available_sheets:
-        dl = pd.read_excel(excel_file, sheet_name='Laptops')
-        dl.columns = dl.columns.str.strip()
-    else: dl = pd.DataFrame()
-
-    if 'Vacuums' in available_sheets:
-        dv = pd.read_excel(excel_file, sheet_name='Vacuums')
-        dv.columns = dv.columns.str.strip()
-    else: dv = pd.DataFrame()
-
-    if 'Peripherals' in available_sheets:
-        dper = pd.read_excel(excel_file, sheet_name='Peripherals')
-        dper.columns = dper.columns.str.strip()
-    else: dper = pd.DataFrame()
-
-    if 'Stationery' in available_sheets:
-        dstat = pd.read_excel(excel_file, sheet_name='Stationery')
-        dstat.columns = dstat.columns.str.strip()
-    else: dstat = pd.DataFrame()
-
-    if 'Air' in available_sheets:
-        dair = pd.read_excel(excel_file, sheet_name='Air')
-        dair.columns = dair.columns.str.strip()
-    else: dair = pd.DataFrame()
+    def _load(sheet_name):
+        ef = sheet_source.get(sheet_name)
+        if ef is None:
+            return pd.DataFrame()
+        df = pd.read_excel(ef, sheet_name=sheet_name)
+        df.columns = df.columns.str.strip()
+        return df
+    
+    dp    = _load('Products')
+    dh    = _load('History')
+    ds    = _load('Slot_Matrix')
+    dm    = _load('Music')
+    db    = _load('Books')
+    dl    = _load('Laptops')
+    dv    = _load('Vacuums')
+    dper  = _load('Peripherals')
+    dstat = _load('Stationery')
+    dair  = _load('Air')
     
     if not dp.empty:
         parts = [dp[c].fillna('').astype(str).str.strip() for c in COMPAT_COLS if c in dp.columns]
@@ -6656,7 +6681,11 @@ def run_climatism_engine(trigger, df_air, df_products, df_history):
     season = 'SUMMER' if 5 <= current_month <= 10 else 'WINTER'
     active_slots = CLIMA_SUMMER_SLOTS if season == 'SUMMER' else CLIMA_WINTER_SLOTS
     
+    # Slot-1 helper: εντόπισε σειρά για Συμβατότητα-driven αξεσουάρ
+    compat_series = detect_clima_compat_series(trigger)
+    
     diag.append(("0. Context", f"BTU: {t_btu}, Tier: {ptier}", f"Season: {season}, Area: {t_area}m²"))
+    diag.append(("0b. Compat", f"Series: {compat_series}", f"Brand: {tb}"))
 
     # --- ΣΥΝΕΝΩΣΗ ΠΗΓΩΝ ΔΕΔΟΜΕΝΩΝ ---
     # Ενώνουμε το sheet Air με το sheet Products για να έχουμε πρόσβαση σε μπαταρίες/surge protectors
@@ -6676,6 +6705,51 @@ def run_climatism_engine(trigger, df_air, df_products, df_history):
         pool = pool[~pool['Material'].isin(used_materials)]
         
         if pool.empty: continue
+
+        # ── Slot 1: Συμβατότητα-driven αξεσουάρ κλιματιστικού ──
+        # Φιλτράρει το pool βάσει στήλης 'Συμβατότητα'. Αν το trigger ανήκει σε
+        # συγκεκριμένη σειρά (π.χ. JURO-PRO ECO II) προσπαθούμε πρώτα να βρούμε
+        # specific match· αλλιώς fallback στο 'Universal'.
+        if logic_key == 'AC_ACCESSORY_COMPAT':
+            if 'Συμβατότητα' not in pool.columns:
+                notes.append("⚠ Δεν υπάρχει στήλη 'Συμβατότητα' στο pool")
+                slot_notes[slot_num] = notes
+                continue
+            
+            compat_norm = pool['Συμβατότητα'].fillna('').astype(str).str.strip().str.lower()
+            universal_norm = CLIMA_COMPAT_UNIVERSAL_LABEL.lower()
+            
+            if compat_series != CLIMA_COMPAT_UNIVERSAL_LABEL:
+                series_norm = compat_series.lower()
+                specific_pool = pool[compat_norm == series_norm]
+                if not specific_pool.empty:
+                    pool = specific_pool.copy()
+                    notes.append(f"Series match: {compat_series} → {len(pool)} candidates")
+                else:
+                    pool = pool[compat_norm == universal_norm].copy()
+                    notes.append(f"Δεν βρέθηκε '{compat_series}' → fallback σε Universal → {len(pool)}")
+            else:
+                pool = pool[compat_norm == universal_norm].copy()
+                notes.append(f"Δεν εντοπίστηκε σειρά → Universal → {len(pool)}")
+            
+            if pool.empty:
+                slot_notes[slot_num] = notes
+                continue
+            
+            # Ranking: sales-first, μετά χαμηλότερη τιμή ως tiebreaker
+            pool['Final_Score'] = pool['Sales_Tiebreaker'].astype(float)
+            pool = pool.sort_values(['Final_Score', '_p'], ascending=[False, True])
+            
+            chosen = pool.iloc[0]
+            rc = chosen.copy()
+            rc['Assigned_Slot'] = slot_num
+            rc['Slot_Role'] = role
+            chosen_compat = str(chosen.get('Συμβατότητα', '')).strip()
+            rc['Marketing_Copy'] = f"Συμβατό αξεσουάρ ({chosen_compat}) για το κλιματιστικό σου."
+            all_recs.append(rc)
+            used_materials.add(chosen['Material'])
+            slot_notes[slot_num] = notes
+            continue  # skip το γενικό scoring loop
 
         pool['Final_Score'] = 0.0
         caps = CLIMA_ACCESSORY_BUDGET[ptier]
@@ -10303,6 +10377,7 @@ MARKETING_COPY = {
     "SMARTWATCH": "Ο απόλυτος σύντροφος.",
     "HOLDER": "Σταθερή τοποθέτηση για το αυτοκίνητο.",
     "ALT_CASE": "Premium προστασία.",
+    "Αξεσουάρ Κλιματιστικού": "Συμβατό αξεσουάρ για το κλιματιστικό σου.",
     "Series Book": "Η συνέχεια της περιπέτειας!",
     "Start from Beginning": "Ξεκίνα από την αρχή!", 
     "Other Box Set": "Ολόκληρη η συλλογή!", 
