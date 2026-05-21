@@ -102,7 +102,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v27.1 — Traditional Vacuums (bidir bag match)
+        🟢 Engine v27.2 — Traditional Vacuums (no stick-handheld dupes)
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -7168,6 +7168,21 @@ def run_robot_vacuums_engine(trigger, df_floor, df_history):
         base_pool = c[c['Hierarchy'].fillna('').astype(str).str.upper().str.strip().isin(hier_upper)].copy()
         notes.append(f"  Base pool size: {len(base_pool)} (hierarchies={hiers})")
 
+        # ── Drop stick-titled "handhelds" from the Σκουπάκι slot to prevent
+        # visual duplication with the Σκούπα Stick slot. Some products in
+        # Ηλεκτρικά Σκουπάκια are slim stick-style hybrids (e.g. SHARK WANDVAC)
+        # whose title literally contains "Stick" — surfacing them next to a
+        # real stick vacuum looks like two stick recommendations.
+        if role_label == 'Σκουπάκι' and not base_pool.empty:
+            before = len(base_pool)
+            mask = ~base_pool['Title'].fillna('').astype(str).str.contains(
+                r'stick', case=False, regex=True, na=False
+            )
+            base_pool = base_pool[mask]
+            dropped = before - len(base_pool)
+            if dropped > 0:
+                notes.append(f"  ⚙ Dropped {dropped} stick-titled handheld(s) to avoid visual duplication with Σκούπα Stick slot")
+
         if base_pool.empty:
             pools[rank] = (role_label, pd.DataFrame(), logic_key, max_r1, max_total, notes)
             continue
@@ -7494,6 +7509,21 @@ def run_traditional_vacuums_engine(trigger, df_floor, df_history):
         hier_upper = {h.upper().strip() for h in hiers}
         base_pool = c[c['Hierarchy'].fillna('').astype(str).str.upper().str.strip().isin(hier_upper)].copy()
         notes.append(f"  Base pool size: {len(base_pool)} (hierarchies={hiers})")
+
+        # ── Drop stick-titled "handhelds" from the Σκουπάκι slot to prevent
+        # visual duplication with the Σκούπα Stick slot. Some products in
+        # Ηλεκτρικά Σκουπάκια are slim stick-style hybrids (e.g. SHARK WANDVAC)
+        # whose title literally contains "Stick" — surfacing them next to a
+        # real stick vacuum looks like two stick recommendations.
+        if role_label == 'Σκουπάκι' and not base_pool.empty:
+            before = len(base_pool)
+            mask = ~base_pool['Title'].fillna('').astype(str).str.contains(
+                r'stick', case=False, regex=True, na=False
+            )
+            base_pool = base_pool[mask]
+            dropped = before - len(base_pool)
+            if dropped > 0:
+                notes.append(f"  ⚙ Dropped {dropped} stick-titled handheld(s) to avoid visual duplication with Σκούπα Stick slot")
 
         if base_pool.empty:
             pools[rank] = (role_label, pd.DataFrame(), logic_key, max_r1, max_total, notes)
