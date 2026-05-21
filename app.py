@@ -6704,7 +6704,13 @@ def run_climatism_engine(trigger, df_air, df_products, df_history):
         pool = c[c['Hierarchy'].fillna('').astype(str).isin(hierarchies)].copy()
         pool = pool[~pool['Material'].isin(used_materials)]
         
-        if pool.empty: continue
+        if pool.empty:
+            # Slot 1 (AC_ACCESSORY_COMPAT): make the empty state visible in the
+            # funnel so it's obvious whether accessory data is missing.
+            if logic_key == 'AC_ACCESSORY_COMPAT':
+                notes.append(f"⚠ Δεν βρέθηκαν rows με Hierarchy='{hierarchies[0]}' στο pool (df_air + df_products)")
+                slot_notes[slot_num] = notes
+            continue
 
         # ── Slot 1: Συμβατότητα-driven αξεσουάρ κλιματιστικού ──
         # Φιλτράρει το pool βάσει στήλης 'Συμβατότητα'. Αν το trigger ανήκει σε
