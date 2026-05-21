@@ -757,9 +757,11 @@ CLIMA_ACCESSORY_BUDGET = {
 }
 
 # ─── Slot 1: Συμβατότητα-driven αξεσουάρ κλιματιστικού ───────────────────────
-# Path: Αξεσουάρ > Air Condition Accessories > Air Condition (Hierarchy='Air Condition')
-# Φιλτράρουμε με τη στήλη "Συμβατότητα" στο pool.
-CLIMA_AC_ACCESSORY_HIERARCHY = 'Air Condition'
+# Schema note: στα AC αξεσουάρ, το διακριτό label βρίσκεται στη στήλη Level 2
+# (= 'Air Condition Accessories'). Η στήλη Hierarchy για αυτές τις γραμμές
+# περιέχει το γενικό 'Αξεσουάρ', που δεν είναι μοναδικό μεταξύ άλλων κατηγοριών
+# αξεσουάρ (π.χ. MDA/SDA), οπότε δεν φιλτράρουμε εκεί.
+CLIMA_AC_ACCESSORY_LEVEL2 = 'Air Condition Accessories'
 CLIMA_COMPAT_UNIVERSAL_LABEL = 'Universal'
 
 # Εντοπισμός σειράς του trigger κλιματιστικού (πρώτο match κερδίζει).
@@ -771,7 +773,7 @@ CLIMA_COMPAT_SERIES_DETECTION = [
 ]
 
 CLIMA_SUMMER_SLOTS = [
-    (1,  'Αξεσουάρ Κλιματιστικού', [CLIMA_AC_ACCESSORY_HIERARCHY], 'AC_ACCESSORY_COMPAT'),
+    (1,  'Αξεσουάρ Κλιματιστικού', [CLIMA_AC_ACCESSORY_LEVEL2], 'AC_ACCESSORY_COMPAT'),
     (2,  'Ανεμιστήρας Δαπέδου', ['Ανεμιστήρες Δαπέδου'], 'BRAND_SYNC'),
     (3,  'Αφυγραντήρας',       ['Αφυγραντήρες'],       'AREA_MATCH'),
     (4,  'Καθαριστής Αέρα',    ['Καθαριστές Αέρα'],    'AREA_MATCH'),
@@ -785,7 +787,7 @@ CLIMA_SUMMER_SLOTS = [
 ]
 
 CLIMA_WINTER_SLOTS = [
-    (1,  'Αξεσουάρ Κλιματιστικού', [CLIMA_AC_ACCESSORY_HIERARCHY], 'AC_ACCESSORY_COMPAT'),
+    (1,  'Αξεσουάρ Κλιματιστικού', [CLIMA_AC_ACCESSORY_LEVEL2], 'AC_ACCESSORY_COMPAT'),
     (2,  'Αφυγραντήρας',       ['Αφυγραντήρες'],       'AREA_MATCH'),
     (3,  'Αερόθερμο',          ['Αερόθερμα'],          'GENERIC'),
     (4,  'Καθαριστής Αέρα',    ['Καθαριστές Αέρα'],    'AREA_MATCH'),
@@ -6700,15 +6702,25 @@ def run_climatism_engine(trigger, df_air, df_products, df_history):
     for slot_num, role, hierarchies, logic_key in active_slots:
         notes = [f"Logic: {logic_key}"]
         
-        # Αναζήτηση στις ιεραρχίες
-        pool = c[c['Hierarchy'].fillna('').astype(str).isin(hierarchies)].copy()
+        # AC αξεσουάρ ζουν στο Level 2 (όχι Hierarchy) — βλ. schema note στα config
+        if logic_key == 'AC_ACCESSORY_COMPAT':
+            if 'Level 2' not in c.columns:
+                notes.append("⚠ Δεν υπάρχει στήλη 'Level 2' στο pool")
+                slot_notes[slot_num] = notes
+                continue
+            l2 = c['Level 2'].fillna('').astype(str).str.strip()
+            pool = c[l2 == hierarchies[0]].copy()
+        else:
+            # Default: φιλτράρισμα με βάση το Hierarchy (όπως όλα τα άλλα slots)
+            pool = c[c['Hierarchy'].fillna('').astype(str).isin(hierarchies)].copy()
+        
         pool = pool[~pool['Material'].isin(used_materials)]
         
         if pool.empty:
             # Slot 1 (AC_ACCESSORY_COMPAT): make the empty state visible in the
             # funnel so it's obvious whether accessory data is missing.
             if logic_key == 'AC_ACCESSORY_COMPAT':
-                notes.append(f"⚠ Δεν βρέθηκαν rows με Hierarchy='{hierarchies[0]}' στο pool (df_air + df_products)")
+                notes.append(f"⚠ Δεν βρέθηκαν rows με Level 2='{hierarchies[0]}' στο pool (df_air + df_products)")
                 slot_notes[slot_num] = notes
             continue
 
