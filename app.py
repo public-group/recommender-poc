@@ -1108,18 +1108,27 @@ AIR_FRYER_TEST_SKUS = {
 # (priority_rank, role_label, hierarchies, logic_key, max_in_round_1, max_total)
 # Mirror of ROBOT_VAC_PRIORITY pattern. The looping engine cycles through
 # these in priority order taking 1 item per pool per round until 10 slots
-# are filled. Accessories: max_r1=2 ensures the user's spec ("4× Αξεσουάρ
-# Συσκευών Μαγειρικής slots out of 10") is honored. max_total=6 (not 4)
-# lets accessories ABSORB any missing companion slots — e.g. when ΠΟΛΥΚΟΠΤΗΣ
-# and Τηγάνια‑Wok data aren't yet loaded, we end up with 6 accessories + 4
-# companions = 10 instead of dropping to 8. When all 7 priorities have data,
-# the loop naturally caps accessory consumption at 4 (round-robin math:
-# 2 in round 1 + 1 each in rounds 2-3 = 4, since rounds 2+ companions are
-# already capped and only accessories have remaining capacity).
+# are filled.
+#
+# Slot composition by design — 2 accessories + 8 companion categories:
+#   slots 1-2: Αξεσουάρ (universal/relevant accessories — 2 is the right
+#              dose; more than that and the carousel becomes parchment-paper
+#              spam, per user feedback).
+#   slots 3-7: Primary companions per the user's spec (Τοστιέρες, Βραστήρες,
+#              Σίδερα, Πολυκόπτης, Microwave, Wok).
+#   slots 8+: Secondary kitchen companions — kick in to displace
+#              accessory-overfill when primaries (esp. Πολυκόπτης + Wok)
+#              have no data. Ψηστιέρες/Γκριλιέρες is critical because it's
+#              the ONLY non-fryer hierarchy where NINJA has presence
+#              (4 SKUs) — solves the NINJA brand-orphan problem.
+#
+# When Πολυκόπτης + Wok data files arrive later, the loop will naturally
+# prefer them over the secondary companions (priority order) and the
+# lowest-priority secondaries (Αποχυμωτές, Ζυγαριές) drop off the carousel.
 AIR_FRYER_PRIORITY = [
     (1, 'Αξεσουάρ Συσκευών Μαγειρικής',
         ['Αξεσουάρ Συσκευών Μαγειρικής', 'Αξεσουάρ Μαγειρικής', 'Αξεσουάρ'],
-        'ACCESSORY_KITCHEN', 2, 6),
+        'ACCESSORY_KITCHEN', 2, 2),
     (2, 'Τοστιέρες',           ['Τοστιέρες'],            'COMPANION_APPL', 1, 1),
     (3, 'Βραστήρες',           ['Βραστήρες'],            'COMPANION_APPL', 1, 1),
     (4, 'Σίδερα',              ['Σίδερα'],               'COMPANION_APPL', 1, 1),
@@ -1130,6 +1139,14 @@ AIR_FRYER_PRIORITY = [
     (7, 'Τηγάνια - Wok',       ['Τηγάνια - Wok', 'Τηγάνια & Wok',
                                 'Τηγάνια', 'Wok', 'Σκεύη'],
                                                           'COMPANION_COOK', 1, 1),
+    # ── Secondary companions (slots 8+) — added to displace accessory overfill
+    (8, 'Ψηστιέρες, Γκριλιέρες',
+                                ['Ψηστιέρες, Γκριλιέρες', 'Ψηστιέρες', 'Γκριλιέρες'],
+                                                          'COMPANION_APPL', 1, 1),
+    (9, 'Φρυγανιέρες',         ['Φρυγανιέρες'],           'COMPANION_APPL', 1, 1),
+    (10,'Αποχυμωτές',          ['Αποχυμωτές'],            'COMPANION_APPL', 1, 1),
+    (11,'Ζυγαριές',            ['Ζυγαριές', 'Ζυγαριές Κουζίνας'],
+                                                          'COMPANION_APPL', 1, 1),
 ]
 
 # Total slot target — engine loops until this many filled or pools exhausted.
@@ -1144,6 +1161,11 @@ AIR_FRYER_MARKETING_COPY = {
     "Πολυκόπτης":          "Πρόπλασε τα υλικά γρήγορα πριν τα ψήσεις.",
     "Φούρνος Μικροκυμάτων": "Συμπληρωματικός τρόπος μαγειρέματος — ζεστά γεύματα σε λεπτά.",
     "Τηγάνια - Wok":       "Για όσα δεν χωρούν στη φριτέζα — μαγείρεψε με όλα τα μέσα.",
+    # Secondary companions
+    "Ψηστιέρες, Γκριλιέρες": "Εναλλακτικός τρόπος ψησίματος — γκριλάρισμα στιγμής.",
+    "Φρυγανιέρες":         "Φρυγανισμένο ψωμί στιγμής για πρωινό και ορεκτικά.",
+    "Αποχυμωτές":          "Φρέσκος χυμός — υγιεινή συνοδεία στα γεύματά σου.",
+    "Ζυγαριές":            "Ακρίβεια στις δόσεις — από συνταγή σε γεύμα.",
 }
 
 # Keyword heuristic — accessory title/description must contain at least one
