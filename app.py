@@ -1392,10 +1392,15 @@ WM_TEST_SKUS = {
 }
 
 # (priority_rank, role_label, hierarchies, logic_key, max_in_round_1, max_total)
-# Round-1 sum = 2+1+1+1+1+1+1+1+1 = 10 → fills the carousel exactly.
+# Round-1 sum = 1+1+1+1+1+1+1+1+1 = 9 → 1st dryer + 8 other companions in round 1.
+# Round 2 picks up the 2nd dryer (max_total=2 not yet hit), filling slot 10.
+# Net effect: slot 1 = matched-pair dryer (hero), slots 2-9 = variety mix
+# (stacking kit, iron, antivib, detergent, base, steam station, ironing
+# board, garment steamer), slot 10 = 2nd dryer alternative. Avoids the
+# back-to-back dryers in slots 1+2 that look like duplicate recommendations.
 #
 # Slot layout (the priority ORDER below is what the engine uses for round-robin):
-#   1. Στεγνωτήριο × 2 (the natural matched-pair companion — highest cross-sell)
+#   1. Στεγνωτήριο (the natural matched-pair companion — highest cross-sell)
 #   2. Βάση Σύνδεσης (stacking kit — for people stacking dryer on washer)
 #   3. Σίδερο (the post-wash workflow companion)
 #   4. Αντικραδασμικά Πέλματα (small attach — universal need)
@@ -1404,10 +1409,11 @@ WM_TEST_SKUS = {
 #   7. Σύστημα Σιδερώματος (premium iron alternative)
 #   8. Σιδερώστρα (pure post-wash workflow accessory)
 #   9. Σύστημα Ατμού (garment steamer — alternative-to-ironing audience)
+#  10. Στεγνωτήριο (2nd dryer — overflow into round 2 as alternative)
 WM_PRIORITY = [
     (1, 'Στεγνωτήριο',
         ['Στεγνωτήρια'],
-        'WM_DRYER', 2, 2),
+        'WM_DRYER', 1, 2),
     (2, 'Βάση Σύνδεσης',
         ['Αξεσουάρ Πλυντηρίου - Στεγνωτηρίου'],
         'WM_ACC_STACK', 1, 1),
