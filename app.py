@@ -102,7 +102,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v28.6 — PS5 reordered slots + fallback fill
+        🟢 Engine v28.8 — Nintendo Switch 2 cluster added
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -1165,20 +1165,52 @@ def get_vinyl_tier(price):
 PS5_CONSOLE_TRIGGER_HIERARCHIES = {'PS5 CONSOLE'}
 
 # (slot_num, role_label, [hierarchies], logic_key)
-# v28.6 — Order matches user spec; second game slot dropped (single game).
-#         NETWORK CABLES hierarchy is empty in catalog and always falls back.
-PS5_CONSOLE_SLOTS = [
+# v28.7 — Two slot configs based on whether the trigger console is a PS5 Pro:
+#   - Pro: keeps VR + Cover, with NETWORK CABLES at the end (slot 10)
+#   - Non-Pro: drops VR, shifts Cover and Network Cable up, adds 2nd game at slot 10
+# NETWORK CABLES data lives in the Peripherals sheet (not Gaming), so the
+# engine receives it via the df_peripherals parameter and the NETWORK_LOGIC
+# branch operates on a separate, isolated pool with its own scoring.
+
+PS5_PRO_SLOTS = [
     (1,  'Χειριστήριο PS5',     ['PS5 CONTROLLERS'],              'CONTROLLER_LOGIC'),
     (2,  'Top Selling Game',    ['PS5 GAMES'],                    'GAME_LOGIC'),
     (3,  'Φόρτιση & Καλώδια',   ['PS5 CABLES & CHARGERS'],        'CABLE_LOGIC'),
     (4,  'Gaming Headset',      ['PS5 HEADSETS'],                 'HEADSET_LOGIC'),
     (5,  'Prepaid Card',        ['PREPAID CARDS'],                'PREPAID_LOGIC'),
-    (6,  'Network Cable',       ['NETWORK CABLES'],               'NETWORK_LOGIC'),
-    (7,  'Αξεσουάρ Κονσόλας',   ['PS5 VARIOUS ACCESSORIES'],      'ACCESSORY_LOGIC'),
-    (8,  'Τιμονιέρα',           ['STEERING WHEELS'],              'STEERING_LOGIC'),
-    (9,  'PlayStation VR',      ['PLAYSTATION VR'],               'VR_LOGIC'),
-    (10, 'Κάλυμμα Κονσόλας',    ['PS5 CONSOLE CASES & SLEEVES'],  'COVER_LOGIC'),
+    (6,  'Αξεσουάρ Κονσόλας',   ['PS5 VARIOUS ACCESSORIES'],      'ACCESSORY_LOGIC'),
+    (7,  'Τιμονιέρα',           ['STEERING WHEELS'],              'STEERING_LOGIC'),
+    (8,  'PlayStation VR',      ['PLAYSTATION VR'],               'VR_LOGIC'),
+    (9,  'Κάλυμμα Κονσόλας',    ['PS5 CONSOLE CASES & SLEEVES'],  'COVER_LOGIC'),
+    (10, 'Network Cable',       ['NETWORK CABLES'],               'NETWORK_LOGIC'),
 ]
+
+PS5_NONPRO_SLOTS = [
+    (1,  'Χειριστήριο PS5',     ['PS5 CONTROLLERS'],              'CONTROLLER_LOGIC'),
+    (2,  'Top Selling Game',    ['PS5 GAMES'],                    'GAME_LOGIC'),
+    (3,  'Φόρτιση & Καλώδια',   ['PS5 CABLES & CHARGERS'],        'CABLE_LOGIC'),
+    (4,  'Gaming Headset',      ['PS5 HEADSETS'],                 'HEADSET_LOGIC'),
+    (5,  'Prepaid Card',        ['PREPAID CARDS'],                'PREPAID_LOGIC'),
+    (6,  'Αξεσουάρ Κονσόλας',   ['PS5 VARIOUS ACCESSORIES'],      'ACCESSORY_LOGIC'),
+    (7,  'Τιμονιέρα',           ['STEERING WHEELS'],              'STEERING_LOGIC'),
+    (8,  'Κάλυμμα Κονσόλας',    ['PS5 CONSOLE CASES & SLEEVES'],  'COVER_LOGIC'),
+    (9,  'Network Cable',       ['NETWORK CABLES'],               'NETWORK_LOGIC'),
+    (10, 'Δεύτερο Game',        ['PS5 GAMES'],                    'GAME_LOGIC'),
+]
+
+def get_ps5_slots(is_pro):
+    """Return the appropriate 10-slot config for this trigger.
+
+    Pro consoles get VR + Cover + Network Cable at slots 8-10.
+    Non-Pro consoles get Cover + Network Cable + 2nd Game at slots 8-10
+    (no VR, since most non-Pro buyers won't pair a €450 PSVR2 with a Slim/1TB).
+    """
+    return PS5_PRO_SLOTS if is_pro else PS5_NONPRO_SLOTS
+
+# Legacy alias — fallback fill code references this. Set to the Pro list so
+# `next((r for s, r, _, _ in PS5_CONSOLE_SLOTS if s == slot_num), '')` returns
+# a sensible default for any slot 1-10. The engine itself uses get_ps5_slots().
+PS5_CONSOLE_SLOTS = PS5_PRO_SLOTS
 
 PS5_CONSOLE_MARKETING_COPY = {
     "Χειριστήριο PS5":     "Έξτρα DualSense — co-op κάθε στιγμή.",
@@ -1186,18 +1218,18 @@ PS5_CONSOLE_MARKETING_COPY = {
     "Φόρτιση & Καλώδια":   "Πάντα φορτισμένο, πάντα έτοιμο.",
     "Gaming Headset":      "Καθαρός ήχος & επικοινωνία in-game.",
     "Prepaid Card":        "Πίστωση για games & PlayStation Plus.",
-    "Network Cable":       "Σταθερή ενσύρματη σύνδεση για online gaming.",
     "Αξεσουάρ Κονσόλας":   "Αναβάθμισε το PS5 setup σου.",
     "Τιμονιέρα":           "Racing εμπειρία στο σαλόνι σου.",
     "PlayStation VR":      "Βούτα σε εικονικούς κόσμους.",
     "Κάλυμμα Κονσόλας":    "Στιλ & προστασία για την κονσόλα.",
+    "Network Cable":       "Σταθερή ενσύρματη σύνδεση για online gaming.",
+    "Δεύτερο Game":        "Διπλή δόση παιχνιδιού.",
 }
 
 # Hierarchy → role/copy maps used by the fallback fill pass. When a slot
 # was skipped or its primary hierarchy is empty, we pull the next best
 # PS5 product from any eligible hierarchy and re-label the slot to match
-# what actually lands in it (e.g. a Network Cable slot filled by a
-# DualSense becomes "Έξτρα Χειριστήριο" in the UI).
+# what actually lands in it.
 PS5_HIERARCHY_TO_ROLE = {
     'PS5 CONTROLLERS':             'Έξτρα Χειριστήριο',
     'PS5 GAMES':                   'Παιχνίδι PS5',
@@ -1345,6 +1377,97 @@ def ps5_is_multi_controller_bundle(title):
     if not title:
         return False
     return bool(PS5_MULTI_CONTROLLER_PATTERN.search(title))
+
+
+# ═════════════════════════════════════════════════════════════
+# 🟢 GAMING — NINTENDO SWITCH 2 CONFIGURATION (v28.8)
+# ═════════════════════════════════════════════════════════════
+# Trigger detection: products in the Gaming sheet with Hierarchy =
+# 'NINTENDO SWITCH 2 CONSOLE' (15 raw rows → 9 unique SKUs after dedup).
+#
+# Approach: SALES-HEAVY HYBRID. Spec coverage on Switch 2 accessories is
+# actually excellent (brand 100%, color 100% on non-game hierarchies),
+# but the catalog is small enough that pure sales already does most of
+# the lifting. We layer surgical spec boosts on top.
+#
+# Key differences from the PS5 engine:
+#   1. NO TIER SYSTEM — all NS2 consoles sit €519-€578 (11% spread).
+#      One scoring config covers every trigger.
+#   2. 5 user-listed hierarchies → 10 slots with sensible repeats:
+#      3 game slots (121 SKUs, deepest pool),
+#      2 controller slots (Pro Controller vs Joy-Con),
+#      2 accessory slots (general sales vs MicroSD/storage tilt),
+#      2 case slots (full case vs screen protector),
+#      1 cable slot (only 1 SKU available — Charging Grip).
+#   3. Bundle awareness for the 5 known bundled-game patterns:
+#      Mario Kart World, AC Shadows (with 'Assasin' typo handling),
+#      Hogwart's Legacy, Pokemon Legends Z-A, EA Sports FC26.
+
+NS2_TRIGGER_HIERARCHIES = {'NINTENDO SWITCH 2 CONSOLE'}
+
+# (slot_num, role_label, [hierarchies], logic_key)
+NS2_SLOTS = [
+    (1,  'Pro Controller',     ['NINTENDO SWITCH 2 CONTROLLERS'],            'NS2_PRO_CTRL_LOGIC'),
+    (2,  'Top Selling Game',   ['NINTENDO SWITCH 2 GAMES'],                  'NS2_GAME_LOGIC'),
+    (3,  'Φόρτιση & Καλώδια',  ['NINTENDO SWITCH 2 CABLES & CHARGERS'],      'NS2_CABLE_LOGIC'),
+    (4,  'Θήκη Μεταφοράς',     ['NINTENDO SWITCH 2 CASES & PROTECTORS'],     'NS2_CASE_LOGIC'),
+    (5,  'Αξεσουάρ',           ['NINTENDO SWITCH 2 VARIOUS ACCESSORIES'],    'NS2_ACCESSORY_LOGIC'),
+    (6,  'Δεύτερο Game',       ['NINTENDO SWITCH 2 GAMES'],                  'NS2_GAME_LOGIC'),
+    (7,  'Joy-Con Pair',       ['NINTENDO SWITCH 2 CONTROLLERS'],            'NS2_JOYCON_LOGIC'),
+    (8,  'Προστασία Οθόνης',   ['NINTENDO SWITCH 2 CASES & PROTECTORS'],     'NS2_PROTECTOR_LOGIC'),
+    (9,  'MicroSD / Έξτρα',    ['NINTENDO SWITCH 2 VARIOUS ACCESSORIES'],    'NS2_STORAGE_LOGIC'),
+    (10, 'Τρίτο Game',         ['NINTENDO SWITCH 2 GAMES'],                  'NS2_GAME_LOGIC'),
+]
+
+NS2_MARKETING_COPY = {
+    'Pro Controller':     "Καλύτερη λαβή για ώρες παιχνιδιού.",
+    'Top Selling Game':   "Το παιχνίδι που ξεχωρίζει αυτή τη στιγμή.",
+    'Φόρτιση & Καλώδια':  "Φόρτιση χειριστηρίων εν κινήσει.",
+    'Θήκη Μεταφοράς':     "Προστασία για την κονσόλα παντού.",
+    'Αξεσουάρ':           "Αναβάθμισε το Switch 2 setup σου.",
+    'Δεύτερο Game':       "Διπλή δόση παιχνιδιού.",
+    'Joy-Con Pair':       "Έξτρα Joy-Con για παρέα.",
+    'Προστασία Οθόνης':   "Κράτα την οθόνη χωρίς γρατζουνιές.",
+    'MicroSD / Έξτρα':    "Περισσότερος χώρος για downloads.",
+    'Τρίτο Game':         "Ακόμα ένα παιχνίδι για τη συλλογή.",
+}
+
+# Hierarchy → role/copy maps used by the fallback fill pass.
+NS2_HIERARCHY_TO_ROLE = {
+    'NINTENDO SWITCH 2 CONTROLLERS':         'Έξτρα Χειριστήριο',
+    'NINTENDO SWITCH 2 GAMES':               'Παιχνίδι Switch 2',
+    'NINTENDO SWITCH 2 CASES & PROTECTORS':  'Προστασία',
+    'NINTENDO SWITCH 2 VARIOUS ACCESSORIES': 'Αξεσουάρ',
+    'NINTENDO SWITCH 2 CABLES & CHARGERS':   'Φόρτιση & Καλώδια',
+}
+
+NS2_HIERARCHY_TO_MARKETING = {
+    'NINTENDO SWITCH 2 CONTROLLERS':         'Έξτρα χειριστήριο για παρέα.',
+    'NINTENDO SWITCH 2 GAMES':               'Νέο παιχνίδι για τη συλλογή.',
+    'NINTENDO SWITCH 2 CASES & PROTECTORS':  'Στιλ & προστασία για το Switch 2.',
+    'NINTENDO SWITCH 2 VARIOUS ACCESSORIES': 'Αναβάθμισε το Switch 2 setup σου.',
+    'NINTENDO SWITCH 2 CABLES & CHARGERS':   'Πάντα φορτισμένο.',
+}
+
+# Bundled-game patterns. Each tuple is (detection_in_trigger_title,
+# exclude_regex_for_game_pool). The exclude regex uses word boundaries
+# and handles the 'Assasin' typo via [sz]+ character class.
+NS2_BUNDLED_GAMES = [
+    (r'\bmario kart\b',                              r'\bmario kart\b'),
+    (r'\bassa[sz]+in',                                r'\bassa[sz]+in'),
+    (r'\bhogwart',                                    r'\bhogwart'),
+    (r'\bpokemon legends',                            r'\bpokemon legends'),
+    (r'\b(?:ea sports )?fc\s*26\b|\bfc26\b',         r'\b(?:ea sports )?fc.?26\b|\bfc26\b'),
+]
+
+def ns2_extract_bundled_game_excludes(title):
+    """Return list of regex patterns to apply to the NS2 GAMES pool to
+    exclude the game(s) already included in a console+game bundle.
+    Empty list if the trigger is the plain base console."""
+    if not title:
+        return []
+    t = title.lower()
+    return [exc for det, exc in NS2_BUNDLED_GAMES if re.search(det, t)]
 
 
 # ─────────────────────────────────────────────────────────────
@@ -2874,6 +2997,8 @@ L2_CHILDREN = {
     "Gaming": [
         {"key": "PS5 Console", "label": "PS5\nConsole",
          "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='2' y='8' width='20' height='10' rx='5' ry='5'/%3E%3Cline x1='7' y1='13' x2='9' y2='13'/%3E%3Cline x1='8' y1='12' x2='8' y2='14'/%3E%3Ccircle cx='15.5' cy='12' r='0.8'/%3E%3Ccircle cx='17.5' cy='14' r='0.8'/%3E%3C/svg%3E"},
+        {"key": "Nintendo Switch 2", "label": "Switch 2",
+         "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='5' width='18' height='14' rx='2'/%3E%3Cline x1='9' y1='5' x2='9' y2='19'/%3E%3Cline x1='15' y1='5' x2='15' y2='19'/%3E%3Ccircle cx='6' cy='9' r='0.5'/%3E%3Ccircle cx='18' cy='15' r='0.5'/%3E%3C/svg%3E"},
     ],
 }
 
@@ -3558,6 +3683,50 @@ else:
                 st.sidebar.markdown('<p class="sidebar-section">Επιλέξτε PlayStation 5</p>', unsafe_allow_html=True)
                 sel = st.sidebar.selectbox("", ps5_consoles['Title'].unique(), label_visibility="collapsed", key="ps5_sel")
                 trigger = ps5_consoles[ps5_consoles['Title']==sel].iloc[0] if sel else None
+
+
+    elif active_cluster == "Nintendo Switch 2":
+        # Trigger pool: NS2 consoles from the Gaming sheet (15 raw rows → 9
+        # unique SKUs after dedup). NS2_TEST_SKUS keeps the dropdown focused
+        # on the 6 representative bundles + the base console for demos.
+        if df_gaming is None or df_gaming.empty:
+            sheets_str = ", ".join(sheets_loaded) if sheets_loaded else "(none)"
+            st.sidebar.warning(
+                "Sheet 'Gaming' is empty or missing.\n\n"
+                f"**Sheets loaded**: {sheets_str}\n\n"
+                "Make sure the Home workbook is committed alongside the main one."
+            )
+        else:
+            hier_upper = df_gaming['Hierarchy'].fillna('').astype(str).str.upper().str.strip()
+            ns2_trigger_hiers = {h.upper().strip() for h in NS2_TRIGGER_HIERARCHIES}
+            ns2_consoles = df_gaming[hier_upper.isin(ns2_trigger_hiers)].copy()
+
+            # 🧪 TEST LIST: 6 representative triggers (base + 5 bundle types)
+            NS2_TEST_SKUS = {
+                "2024856",  # Switch 2 - Μαύρο (base, no bundle)
+                "2025653",  # Mario Kart World Bundle (top seller — 126k sales)
+                "2119219",  # Assassin's Creed Shadows Bundle
+                "2119221",  # Hogwart's Legacy Bundle
+                "2119220",  # Mario Kart + Assassin's Creed combo
+                "2064558",  # Pokemon Legends Z-A Bundle
+            }
+            if NS2_TEST_SKUS:
+                mat_clean = ns2_consoles['Material'].astype(str).str.strip().str.replace(r'\.0$', '', regex=True)
+                ns2_consoles_f = ns2_consoles[mat_clean.isin(NS2_TEST_SKUS)]
+                if not ns2_consoles_f.empty:
+                    ns2_consoles = ns2_consoles_f
+
+            # De-dupe: highest-sales row per Material
+            if not ns2_consoles.empty and 'Sum of Sales' in ns2_consoles.columns:
+                ns2_consoles = ns2_consoles.sort_values('Sum of Sales', ascending=False)
+                ns2_consoles = ns2_consoles.drop_duplicates(subset=['Material'], keep='first')
+
+            if ns2_consoles.empty:
+                st.sidebar.warning("Δεν βρέθηκαν Nintendo Switch 2 consoles στο sheet Gaming.")
+            else:
+                st.sidebar.markdown('<p class="sidebar-section">Επιλέξτε Nintendo Switch 2</p>', unsafe_allow_html=True)
+                sel = st.sidebar.selectbox("", ns2_consoles['Title'].unique(), label_visibility="collapsed", key="ns2_sel")
+                trigger = ns2_consoles[ns2_consoles['Title']==sel].iloc[0] if sel else None
 
 
 # ───── Compatibility shim: rest of app expects `active_cluster` as a string ─────
@@ -11215,7 +11384,7 @@ def run_projectors_engine(trigger, df_products, df_history):
 #   5. Applies logic-specific boosts (color match, Sony brand, title tokens…)
 #   6. Sorts by Final_Score, then by sales, picks top-1 deduped by Material
 
-def run_ps5_console_engine(trigger, df_gaming, df_history):
+def run_ps5_console_engine(trigger, df_gaming, df_history, df_peripherals=None):
     diag, slot_notes, all_recs = [], {}, []
 
     if df_gaming is None or df_gaming.empty:
@@ -11229,46 +11398,47 @@ def run_ps5_console_engine(trigger, df_gaming, df_history):
     tprice = parse_euro_price(trigger.get('LIST PRICE', 0))
     ttier  = get_ps5_tier(tprice)
 
-    # ── Title-based signal extraction (covers cases where spec cols are empty) ──
+    # ── Title-based signal extraction ──
     tt_lower    = tt.lower()
     is_slim     = 'slim' in tt_lower
     is_pro      = 'pro' in tt_lower
     is_digital  = 'digital' in tt_lower
     has_white   = 'white' in tt_lower or 'λευκ' in tt_lower or 'λευκό' in tcolor or 'λευκή' in tcolor
     has_black   = 'black' in tt_lower or 'μαύρ' in tt_lower or 'μαύρο' in tcolor or 'μαύρη' in tcolor
-    # Default PS5 color (when nothing said) = white — Sony's stock color
     if not has_white and not has_black:
         has_white = True
 
-    # ── Bundle detection (drives slot-skipping and game filtering) ──
+    # ── Bundle detection ──
     bundle_game_excludes = ps5_extract_bundled_game_excludes(tt)
     is_multi_ctrl_bundle = ps5_is_multi_controller_bundle(tt)
 
-    # Tier-aware Sony first-party boost amount
     sony_boost = 15000 if ttier == 'Premium' else (8000 if ttier == 'Mid' else 5000)
+
+    # ── Pick slot config: Pro keeps VR + Network at slot 10;
+    #    Non-Pro drops VR, shifts Cover/Network up, adds 2nd Game at slot 10 ──
+    active_slots = get_ps5_slots(is_pro)
 
     diag.append((
         "0. Trigger",
         f"Tier={ttier} (€{tprice:.0f}) · Slim={is_slim} · Pro={is_pro} · Digital={is_digital}",
-        f"white={has_white} · MultiCtrl={is_multi_ctrl_bundle} · BundledGames={len(bundle_game_excludes)} · SonyBoost=+{sony_boost}",
+        f"white={has_white} · MultiCtrl={is_multi_ctrl_bundle} · BundledGames={len(bundle_game_excludes)} · "
+        f"SonyBoost=+{sony_boost} · SlotConfig={'PRO (10)' if is_pro else 'NON-PRO (10, no VR)'}",
     ))
     if bundle_game_excludes:
         diag.append(("0a. Bundle filter", len(bundle_game_excludes), f"Excluding patterns: {bundle_game_excludes}"))
 
-    # ── Prep candidate pool ──
+    # ── Prep candidate pool from Gaming sheet (NETWORK CABLES pool prepped below) ──
     pool_full = df_gaming.copy()
     pool_full['Sales_30'] = pd.to_numeric(pool_full.get('Sum of Sales', 0), errors='coerce').fillna(0)
     pool_full['_p']       = pool_full['LIST PRICE'].apply(parse_euro_price)
-    # De-dupe by Material to collapse multi-price-row SKUs into one
     pool_full = pool_full.drop_duplicates(subset=['Material'], keep='first')
-    # Drop the trigger itself
     pool_full = pool_full[pool_full['Material'] != tm].copy()
 
     used_materials = {tm}
     caps  = PS5_CONSOLE_BUDGET[ttier]
     bands = PS5_PRICE_BANDS[ttier]
 
-    for slot_num, role, hierarchies, logic_key in PS5_CONSOLE_SLOTS:
+    for slot_num, role, hierarchies, logic_key in active_slots:
         notes = [f"Logic: {logic_key} · Tier: {ttier}"]
 
         # ── SKIP CHECKS (upfront, before any pool work) ──
@@ -11282,6 +11452,61 @@ def run_ps5_console_engine(trigger, df_gaming, df_history):
             diag.append((f"Slot {slot_num} ({role})", 0, msg))
             slot_notes[slot_num] = notes + ["⊘ " + msg]
             continue
+
+        # ── NETWORK_LOGIC: isolated branch, pool from Peripherals sheet ──
+        if logic_key == 'NETWORK_LOGIC':
+            if df_peripherals is None or df_peripherals.empty:
+                msg = "Skipped: Peripherals sheet not loaded — fallback will fill"
+                diag.append((f"Slot {slot_num} ({role})", 0, msg))
+                slot_notes[slot_num] = notes + ["⊘ " + msg]
+                continue
+            per_hier_col = df_peripherals['Hierarchy'].fillna('').astype(str).str.upper().str.strip()
+            net_pool = df_peripherals[per_hier_col == 'NETWORK CABLES'].copy()
+            net_pool = net_pool.drop_duplicates(subset=['Material'], keep='first')
+            net_pool = net_pool[~net_pool['Material'].isin(used_materials)]
+            if net_pool.empty:
+                msg = "No network-cable products available in Peripherals"
+                diag.append((f"Slot {slot_num} ({role})", 0, msg))
+                slot_notes[slot_num] = notes + ["⊘ " + msg]
+                continue
+
+            net_pool['Sales_30'] = pd.to_numeric(net_pool.get('Sum of Sales', 0), errors='coerce').fillna(0)
+            net_pool['_p']       = net_pool['LIST PRICE'].apply(parse_euro_price)
+            # Smaller scoring scale — peripherals sales are 0-600, not 0-70 000
+            net_pool['Final_Score'] = net_pool['Sales_30'].astype(float)
+            if 'AVAILABILITY' in net_pool.columns:
+                avail = net_pool['AVAILABILITY'].fillna('').astype(str).str.strip() == 'Άμεσα Διαθέσιμο'
+                net_pool.loc[avail, 'Final_Score'] += 50
+                unavail = net_pool['AVAILABILITY'].fillna('').astype(str).str.contains(
+                    'Μη Διαθέσιμο|Εξαντλημένο|Εξαντλήθηκε', regex=True, na=False
+                )
+                net_pool.loc[unavail, 'Final_Score'] -= 5000
+                notes.append(f"✓ Availability boost: +50 to {int(avail.sum())} in-stock cables")
+
+            # Cat.6+ boost for Premium tier (Pro buyers care about latency)
+            if ttier == 'Premium':
+                cat6_mask = net_pool['Title'].fillna('').astype(str).str.contains(
+                    r'Cat\.?\s*[678]', case=False, regex=True, na=False
+                )
+                if cat6_mask.any():
+                    net_pool.loc[cat6_mask, 'Final_Score'] += 300
+                    notes.append(f"💎 Premium tier: Cat.6+ boost +300 to {int(cat6_mask.sum())} items")
+
+            net_pool = net_pool.sort_values(['Final_Score', 'Sales_30'], ascending=[False, False])
+            chosen = net_pool.iloc[0]
+            rc = chosen.copy()
+            rc['Assigned_Slot']  = slot_num
+            rc['Slot_Role']      = role
+            rc['Marketing_Copy'] = PS5_CONSOLE_MARKETING_COPY.get(role, "Σταθερή σύνδεση internet.")
+            all_recs.append(rc)
+            used_materials.add(chosen['Material'])
+            slot_notes[slot_num] = notes
+            diag.append((
+                f"Slot {slot_num} ({role})",
+                1,
+                f"€{float(chosen.get('_p', 0)):.0f} · sales={float(chosen.get('Sales_30', 0)):.0f} · score={float(chosen.get('Final_Score', 0)):.0f} · {str(chosen.get('Title', ''))[:60]}",
+            ))
+            continue  # NETWORK_LOGIC handled entirely above
 
         hiers_upper = {h.upper().strip() for h in hierarchies}
         hier_col_upper = pool_full['Hierarchy'].fillna('').astype(str).str.upper().str.strip()
@@ -11500,33 +11725,34 @@ def run_ps5_console_engine(trigger, df_gaming, df_history):
 
     # ═══════════════════════════════════════════════════════════════
     # ── SECOND PASS: fallback fill for skipped/empty slots ──
-    # Walks the slot order, finds any position that didn't get a product
-    # in the first pass (skipped by digital/multi-ctrl/cover rules, or had
-    # an empty hierarchy like NETWORK CABLES), and fills it with the next
-    # best PS5 product from any eligible hierarchy. The slot's role label
-    # and marketing copy adapt to what actually lands in the slot.
+    # Walks the (per-tier) slot list, finds any position that didn't get
+    # a product, and fills it with the next best PS5 product from any
+    # eligible Gaming-sheet hierarchy. NETWORK CABLES is excluded from
+    # the fallback pool because that data lives in Peripherals — if its
+    # own slot couldn't be filled, the fallback shouldn't try to fill
+    # other empty slots with a network cable.
     # ═══════════════════════════════════════════════════════════════
     filled_slot_nums = {int(r['Assigned_Slot']) for r in all_recs} if all_recs else set()
-    empty_slot_nums  = sorted(s for s, _, _, _ in PS5_CONSOLE_SLOTS if s not in filled_slot_nums)
+    empty_slot_nums  = sorted(s for s, _, _, _ in active_slots if s not in filled_slot_nums)
 
     if empty_slot_nums:
-        # Build the universe of eligible PS5 hierarchies (all 10 slot hierarchies)
+        # Build the universe of eligible hierarchies from the ACTIVE slot list
         all_ps5_hiers = set()
-        for _, _, hiers, _ in PS5_CONSOLE_SLOTS:
+        for _, _, hiers, _ in active_slots:
             all_ps5_hiers.update(h.upper().strip() for h in hiers)
+        # NETWORK CABLES isn't in the Gaming sheet (lives in Peripherals);
+        # also it doesn't make sense to fall back to one in another slot.
+        all_ps5_hiers.discard('NETWORK CABLES')
 
-        # Trigger-specific exclusions: don't push back products that were
-        # deliberately skipped by the primary logic.
+        # Trigger-specific exclusions
         excluded_hiers = set()
         if is_digital:
-            excluded_hiers.add('PS5 GAMES')        # Digital console → no physical games anywhere
+            excluded_hiers.add('PS5 GAMES')        # Digital → no physical games anywhere
         if is_multi_ctrl_bundle:
-            excluded_hiers.add('PS5 CONTROLLERS')  # Already includes extras
+            excluded_hiers.add('PS5 CONTROLLERS')
         if not is_slim and not is_pro:
-            excluded_hiers.add('PS5 CONSOLE CASES & SLEEVES')  # Slim covers won't fit fat PS5
+            excluded_hiers.add('PS5 CONSOLE CASES & SLEEVES')
         if is_pro:
-            # Pro can't use Slim covers either; the cover slot already skipped, but keep
-            # them out of the fallback pool too.
             excluded_hiers.add('PS5 CONSOLE CASES & SLEEVES')
 
         eligible_hiers = all_ps5_hiers - excluded_hiers
@@ -11648,7 +11874,7 @@ def run_ps5_console_engine(trigger, df_gaming, df_history):
                     chosen = fb_pool.iloc[0]
 
                 chosen_hier = str(chosen.get('Hierarchy', '')).upper().strip()
-                orig_role = next((r for s, r, _, _ in PS5_CONSOLE_SLOTS if s == slot_num), '')
+                orig_role = next((r for s, r, _, _ in active_slots if s == slot_num), '')
                 rc = chosen.copy()
                 rc['Assigned_Slot']  = slot_num
                 rc['Slot_Role']      = PS5_HIERARCHY_TO_ROLE.get(chosen_hier, 'Πρόσθετο PS5')
@@ -11667,6 +11893,294 @@ def run_ps5_console_engine(trigger, df_gaming, df_history):
                 ))
                 slot_notes[slot_num] = (slot_notes.get(slot_num) or []) + [
                     f"↻ Fallback fill: replaced {orig_role} with a {PS5_HIERARCHY_TO_ROLE.get(chosen_hier, '?')} ({chosen_hier})"
+                ]
+
+    recs_df = pd.DataFrame(all_recs) if all_recs else pd.DataFrame()
+    if not recs_df.empty:
+        recs_df = recs_df.sort_values('Assigned_Slot').reset_index(drop=True)
+        recs_df['Draft_Score'] = recs_df['Assigned_Slot']
+    return recs_df, diag, slot_notes, recs_df
+
+
+# ═══════════════════════════════════════════════════════════════
+# 🟢 NINTENDO SWITCH 2 ENGINE (v28.8)
+# ═══════════════════════════════════════════════════════════════
+# Sales-heavy hybrid engine with single-tier scoring. See the NS2 config
+# block above for design notes. The engine handles:
+#   - Bundle-game exclusion (Mario Kart World, AC Shadows, Hogwart's Legacy,
+#     Pokemon Legends Z-A, EA Sports FC26)
+#   - Pro Controller vs Joy-Con role differentiation across slots 1 & 7
+#   - Full Case vs Screen Protector role differentiation across slots 4 & 8
+#   - Storage-tilt for slot 9 (MicroSD / niche accessory) vs general accessory
+#     for slot 5
+#   - Nintendo first-party boost (modest +1500) — third parties like Hori,
+#     Trust, JBL are legitimate competitors here, unlike Sony's dominance in
+#     the PS5 ecosystem
+#   - Black color match (universal across all NS2 consoles in catalog)
+#   - Fallback fill for any slot whose primary hierarchy couldn't be filled
+
+def run_ns2_console_engine(trigger, df_gaming, df_history):
+    diag, slot_notes, all_recs = [], {}, []
+
+    if df_gaming is None or df_gaming.empty:
+        diag.append(("0. Data", 0, "Sheet 'Gaming' is empty or missing"))
+        return pd.DataFrame(), diag, slot_notes, pd.DataFrame()
+
+    tm     = trigger['Material']
+    tt     = str(trigger.get('Title', ''))
+    tprice = parse_euro_price(trigger.get('LIST PRICE', 0))
+    tt_lower = tt.lower()
+
+    # Console color — all NS2 consoles are Black ('Μαύρο') in the current catalog
+    is_black = 'μαύρ' in tt_lower or 'black' in tt_lower
+    if not is_black:
+        is_black = True  # default
+
+    # Bundle detection — extract which games come with this trigger
+    bundle_game_excludes = ns2_extract_bundled_game_excludes(tt)
+
+    diag.append((
+        "0. Trigger",
+        f"€{tprice:.0f}",
+        f"Black={is_black} · BundledGames={len(bundle_game_excludes)}",
+    ))
+    if bundle_game_excludes:
+        diag.append(("0a. Bundle filter", len(bundle_game_excludes), f"Excluding patterns: {bundle_game_excludes}"))
+
+    # ── Prep candidate pool ──
+    pool_full = df_gaming.copy()
+    pool_full['Sales_30'] = pd.to_numeric(pool_full.get('Sum of Sales', 0), errors='coerce').fillna(0)
+    pool_full['_p']       = pool_full['LIST PRICE'].apply(parse_euro_price)
+    pool_full = pool_full.drop_duplicates(subset=['Material'], keep='first')
+    pool_full = pool_full[pool_full['Material'] != tm].copy()
+
+    used_materials = {tm}
+
+    for slot_num, role, hierarchies, logic_key in NS2_SLOTS:
+        notes = [f"Logic: {logic_key}"]
+
+        hiers_upper = {h.upper().strip() for h in hierarchies}
+        hier_col_upper = pool_full['Hierarchy'].fillna('').astype(str).str.upper().str.strip()
+        pool = pool_full[hier_col_upper.isin(hiers_upper)].copy()
+        pool = pool[~pool['Material'].isin(used_materials)]
+
+        if pool.empty:
+            diag.append((f"Slot {slot_num} ({role})", 0, "Empty pool (hierarchy missing)"))
+            slot_notes[slot_num] = notes + ["⚠ No products in: " + ", ".join(hierarchies)]
+            continue
+
+        # ── Exclude bundled games from GAME slots ──
+        if logic_key == 'NS2_GAME_LOGIC' and bundle_game_excludes:
+            total_excluded = 0
+            for ex_pattern in bundle_game_excludes:
+                title_lower = pool['Title'].fillna('').astype(str).str.lower()
+                ex_mask = title_lower.str.contains(ex_pattern, regex=True, na=False)
+                total_excluded += int(ex_mask.sum())
+                pool = pool[~ex_mask]
+            if total_excluded:
+                notes.append(f"⛔ Bundled-game exclude: removed {total_excluded} variants")
+
+        if pool.empty:
+            diag.append((f"Slot {slot_num} ({role})", 0, "Empty after filters"))
+            slot_notes[slot_num] = notes
+            continue
+
+        # ── Base score: sales + availability boost ──
+        pool['Final_Score'] = pool['Sales_30'].astype(float)
+        if 'AVAILABILITY' in pool.columns:
+            avail = pool['AVAILABILITY'].fillna('').astype(str).str.strip() == 'Άμεσα Διαθέσιμο'
+            pool.loc[avail, 'Final_Score'] += 500
+            unavail = pool['AVAILABILITY'].fillna('').astype(str).str.contains(
+                'Μη Διαθέσιμο|Εξαντλημένο|Εξαντλήθηκε', regex=True, na=False
+            )
+            pool.loc[unavail, 'Final_Score'] -= 50000
+
+        brand_col = pool['Κατασκευαστής'].fillna('').astype(str).str.upper().str.strip()
+        title_col = pool['Title'].fillna('').astype(str)
+
+        # ── Nintendo first-party boost (non-game/cable slots) ──
+        nintendo_mask = (brand_col == 'NINTENDO') | title_col.str.contains(
+            r'\bNintendo\b', case=False, regex=True, na=False
+        )
+        if logic_key not in ('NS2_GAME_LOGIC', 'NS2_CABLE_LOGIC') and nintendo_mask.any():
+            pool.loc[nintendo_mask, 'Final_Score'] += 1500
+            notes.append(f"🏷 Nintendo first-party boost: +1500 to {int(nintendo_mask.sum())} items")
+
+        # ── Black color match (most NS2 consoles are black) ──
+        if is_black and logic_key not in ('NS2_GAME_LOGIC', 'NS2_CABLE_LOGIC'):
+            color_col = pool.get('Χρώμα', pd.Series([''] * len(pool))).fillna('').astype(str).str.lower()
+            black_mask = color_col.str.contains('μαύρ|black', regex=True, na=False) | \
+                         title_col.str.contains('μαύρ|black', case=False, regex=True, na=False)
+            if black_mask.any():
+                pool.loc[black_mask, 'Final_Score'] += 800
+                notes.append(f"🎨 Color match black: +800 to {int(black_mask.sum())} items")
+
+        # ── Per-logic refinements ──
+        if logic_key == 'NS2_PRO_CTRL_LOGIC':
+            # Slot 1: prefer Pro Controller (vs Joy-Con)
+            pro_mask = title_col.str.contains(r'Pro Controller', case=False, regex=True, na=False)
+            if pro_mask.any():
+                pool.loc[pro_mask, 'Final_Score'] += 5000
+                notes.append(f"⚡ Pro Controller priority: +5000 to {int(pro_mask.sum())} items")
+
+        elif logic_key == 'NS2_JOYCON_LOGIC':
+            # Slot 7: prefer Joy-Con pair (and deprioritize Pro Controller — already in slot 1)
+            joycon_mask = title_col.str.contains(r'Joy.?Con|Joy Con', case=False, regex=True, na=False)
+            pro_mask = title_col.str.contains(r'Pro Controller', case=False, regex=True, na=False)
+            if joycon_mask.any():
+                pool.loc[joycon_mask, 'Final_Score'] += 5000
+                notes.append(f"⚡ Joy-Con priority: +5000 to {int(joycon_mask.sum())} items")
+            if pro_mask.any():
+                pool.loc[pro_mask, 'Final_Score'] -= 5000
+                notes.append(f"⊘ Pro Controller deprioritized (already in slot 1): −5000")
+
+        elif logic_key == 'NS2_CASE_LOGIC':
+            # Slot 4: prefer full carry cases (vs screen protectors)
+            case_mask = title_col.str.contains(
+                r'\b(?:Case|Carry|Θήκη|Pouch|Sleeve)\b', case=False, regex=True, na=False
+            )
+            pure_protector = title_col.str.contains(
+                r'\b(?:Protector|Filter|Προστατευτικό|Glass)\b', case=False, regex=True, na=False
+            ) & ~case_mask
+            if case_mask.any():
+                pool.loc[case_mask, 'Final_Score'] += 3000
+                notes.append(f"📦 Carry-case priority: +3000 to {int(case_mask.sum())} items")
+            if pure_protector.any():
+                pool.loc[pure_protector, 'Final_Score'] -= 3000
+                notes.append(f"📦 Pure protector deprioritized: −3000 to {int(pure_protector.sum())} items")
+
+        elif logic_key == 'NS2_PROTECTOR_LOGIC':
+            # Slot 8: prefer screen protectors
+            protector_mask = title_col.str.contains(
+                r'\b(?:Protector|Filter|Προστατευτικό|Glass|Tempered)\b', case=False, regex=True, na=False
+            )
+            if protector_mask.any():
+                pool.loc[protector_mask, 'Final_Score'] += 3000
+                notes.append(f"🛡 Screen protector priority: +3000 to {int(protector_mask.sum())} items")
+
+        elif logic_key == 'NS2_STORAGE_LOGIC':
+            # Slot 9: prefer storage-related accessories (MicroSD, wheel, etc.)
+            storage_mask = title_col.str.contains(
+                r'MicroSD|SD Card|Κάρτα Μνήμης|microSD|Memory Card', case=False, regex=True, na=False
+            )
+            if storage_mask.any():
+                pool.loc[storage_mask, 'Final_Score'] += 4000
+                notes.append(f"💾 MicroSD/storage priority: +4000 to {int(storage_mask.sum())} items")
+
+        elif logic_key == 'NS2_ACCESSORY_LOGIC':
+            # Slot 5: general accessory by sales (no extra logic)
+            pass
+
+        elif logic_key == 'NS2_GAME_LOGIC':
+            # Pure past-month sales sort. Bundle exclusion already done above;
+            # used_materials handles dedup across the 3 game slots.
+            pass
+
+        elif logic_key == 'NS2_CABLE_LOGIC':
+            # Cables hierarchy has only 1 SKU; just sales-sort and pick.
+            pass
+
+        # ── Selection ──
+        pool = pool.sort_values(['Final_Score', 'Sales_30'], ascending=[False, False])
+        if pool.empty:
+            diag.append((f"Slot {slot_num} ({role})", 0, "Empty after scoring"))
+            slot_notes[slot_num] = notes
+            continue
+
+        chosen = pool.iloc[0]
+        rc = chosen.copy()
+        rc['Assigned_Slot']  = slot_num
+        rc['Slot_Role']      = role
+        rc['Marketing_Copy'] = NS2_MARKETING_COPY.get(role, "Ιδανική επιλογή για Switch 2.")
+        all_recs.append(rc)
+        used_materials.add(chosen['Material'])
+        slot_notes[slot_num] = notes
+        diag.append((
+            f"Slot {slot_num} ({role})",
+            1,
+            f"€{float(chosen.get('_p', 0)):.0f} · sales={float(chosen.get('Sales_30', 0)):.0f} · score={float(chosen.get('Final_Score', 0)):.0f} · {str(chosen.get('Title', ''))[:60]}",
+        ))
+
+    # ═══════════════════════════════════════════════════════════════
+    # ── FALLBACK FILL for empty/skipped slots ──
+    # Walks the slot list, finds any empty position, and fills it with
+    # the next best NS2 product from any eligible hierarchy.
+    # ═══════════════════════════════════════════════════════════════
+    filled_slot_nums = {int(r['Assigned_Slot']) for r in all_recs} if all_recs else set()
+    empty_slot_nums  = sorted(s for s, _, _, _ in NS2_SLOTS if s not in filled_slot_nums)
+
+    if empty_slot_nums:
+        all_ns2_hiers = set()
+        for _, _, hiers, _ in NS2_SLOTS:
+            all_ns2_hiers.update(h.upper().strip() for h in hiers)
+
+        hier_col = pool_full['Hierarchy'].fillna('').astype(str).str.upper().str.strip()
+        fb_pool = pool_full[hier_col.isin(all_ns2_hiers)].copy()
+        fb_pool = fb_pool[~fb_pool['Material'].isin(used_materials)]
+
+        # Re-apply bundled-game exclude for fallback
+        if bundle_game_excludes and not fb_pool.empty:
+            is_game = fb_pool['Hierarchy'].fillna('').astype(str).str.upper().str.strip() == 'NINTENDO SWITCH 2 GAMES'
+            for ex_pattern in bundle_game_excludes:
+                title_lower = fb_pool['Title'].fillna('').astype(str).str.lower()
+                ex_mask = is_game & title_lower.str.contains(ex_pattern, regex=True, na=False)
+                fb_pool = fb_pool[~ex_mask]
+
+        if not fb_pool.empty:
+            fb_pool['Final_Score'] = fb_pool['Sales_30'].astype(float)
+            if 'AVAILABILITY' in fb_pool.columns:
+                avail = fb_pool['AVAILABILITY'].fillna('').astype(str).str.strip() == 'Άμεσα Διαθέσιμο'
+                fb_pool.loc[avail, 'Final_Score'] += 500
+                unavail = fb_pool['AVAILABILITY'].fillna('').astype(str).str.contains(
+                    'Μη Διαθέσιμο|Εξαντλημένο|Εξαντλήθηκε', regex=True, na=False
+                )
+                fb_pool.loc[unavail, 'Final_Score'] -= 50000
+
+            fb_brand = fb_pool['Κατασκευαστής'].fillna('').astype(str).str.upper().str.strip()
+            fb_pool.loc[fb_brand == 'NINTENDO', 'Final_Score'] += 1500
+
+            fb_pool = fb_pool.sort_values(['Final_Score', 'Sales_30'], ascending=[False, False])
+
+            diag.append((
+                "── Fallback pass ──",
+                len(empty_slot_nums),
+                f"{len(empty_slot_nums)} empty slot(s) to fill from {len(fb_pool)} eligible products",
+            ))
+
+            # Simple sig-based dedup so fallback doesn't duplicate primary picks
+            def _ns2_sig(t):
+                txt = re.sub(r'[^a-zA-Z0-9\sα-ωΑ-Ωά-ώΆ-Ώ]', ' ', str(t))
+                skip = {'nintendo', 'switch', 'για', 'gaming', 'edition', 'pack', 'with',
+                        'controller', 'and', 'pair', 'set'}
+                words = [w.lower() for w in txt.split() if len(w) >= 3 and w.lower() not in skip]
+                return tuple(words[:2])
+
+            used_sigs = {_ns2_sig(r['Title']) for r in all_recs}
+
+            for slot_num in empty_slot_nums:
+                if fb_pool.empty:
+                    diag.append((f"Slot {slot_num} (Fallback)", 0, "Fallback pool exhausted"))
+                    continue
+                fb_sigs_now = fb_pool['Title'].fillna('').astype(str).apply(_ns2_sig)
+                non_dup_pool = fb_pool[~fb_sigs_now.isin(used_sigs)]
+                chosen = (non_dup_pool if not non_dup_pool.empty else fb_pool).iloc[0]
+                chosen_hier = str(chosen.get('Hierarchy', '')).upper().strip()
+                orig_role = next((r for s, r, _, _ in NS2_SLOTS if s == slot_num), '')
+                rc = chosen.copy()
+                rc['Assigned_Slot']  = slot_num
+                rc['Slot_Role']      = NS2_HIERARCHY_TO_ROLE.get(chosen_hier, 'Πρόσθετο Switch 2')
+                rc['Marketing_Copy'] = NS2_HIERARCHY_TO_MARKETING.get(chosen_hier, 'Πρόταση για το Switch 2.')
+                all_recs.append(rc)
+                used_materials.add(chosen['Material'])
+                used_sigs.add(_ns2_sig(chosen['Title']))
+                fb_pool = fb_pool[fb_pool['Material'] != chosen['Material']]
+                diag.append((
+                    f"Slot {slot_num} (fallback → {chosen_hier})",
+                    1,
+                    f"was: {orig_role} · €{float(chosen.get('_p', 0)):.0f} · sales={float(chosen.get('Sales_30', 0)):.0f} · {str(chosen.get('Title', ''))[:55]}",
+                ))
+                slot_notes[slot_num] = (slot_notes.get(slot_num) or []) + [
+                    f"↻ Fallback fill: replaced {orig_role} with a {NS2_HIERARCHY_TO_ROLE.get(chosen_hier, '?')} ({chosen_hier})"
                 ]
 
     recs_df = pd.DataFrame(all_recs) if all_recs else pd.DataFrame()
@@ -11926,7 +12440,10 @@ elif active_cluster == "Turntables":
     slot_diag = []
     full_candidates = recs
 elif active_cluster == "PS5 Console":
-    recs, diag, slot_notes, full_candidates = run_ps5_console_engine(trigger, df_gaming, df_history)
+    recs, diag, slot_notes, full_candidates = run_ps5_console_engine(trigger, df_gaming, df_history, df_peripherals)
+    slot_diag = []
+elif active_cluster == "Nintendo Switch 2":
+    recs, diag, slot_notes, full_candidates = run_ns2_console_engine(trigger, df_gaming, df_history)
     slot_diag = []
 elif active_cluster == "Wearables":
     recs, diag, slot_notes, full_candidates = run_wearables_engine(trigger, df_products, df_history)
