@@ -1197,12 +1197,123 @@ def _af_detect_subtype(trigger_row) -> str:
     if is_oil:            return 'OIL'
     return 'UNKNOWN'
 
+# Multi-word brand prefixes — when title starts with one of these words AND
+# the next token doesn't look SKU-ish, treat the brand as "WORD1 WORD2".
+AF_MULTIWORD_BRAND_HEADS = {
+    'HOME': 'HOME VERO',
+    'BLACK': 'BLACK & DECKER',
+    'BERLINGER': 'BERLINGER HAUS',
+    'RUSSELL': 'RUSSELL HOBBS',
+    'BROIL': 'BROIL KING',
+    'PROFI': 'PROFI COOK',
+}
+
+def _af_extract_brand_prefix(title: str) -> str:
+    """Detect a brand-SKU prefix structurally: title starts with an all-caps
+    ASCII (Latin) word and the next 1-2 tokens contain a digit (SKU code).
+    Returns the brand string, or '' if the item appears universal.
+
+    This is intentionally generic — it covers BEPER, LODGE, JATA, HOMEVERO,
+    BERLINGER HAUS, etc. without needing a hardcoded brand list.
+
+    Examples:
+      'ROHNSON AF01D Αντικολλητικό…'      → 'ROHNSON'    (SKU 'AF01D')
+      'ROHNSON AF 01G Σχάρα…'             → 'ROHNSON'    (SKU split 'AF 01G' — also detected)
+      'IZZY IZ-8232 50τμχ Αντικολλητικό…' → 'IZZY'       (SKU 'IZ-8232')
+      'BEPER C102SPE002 Σπρέι Λαδιού'     → 'BEPER'
+      'LODGE ASAHH11 για Dutch Oven…'     → 'LODGE'
+      'HOME VERO HV-AF20SET Kit…'         → 'HOME VERO'  (2-word brand)
+      'JATA HACC4545 150 ML…'             → 'JATA'
+      'Ψεκαστήρας Λαδιού JATA HACC4545…'  → ''           (brand mid-title → universal-style listing)
+      'ΙΖΖΥ Αντικολλητικό Χαρτί…'         → ''           (Greek glyphs ≠ ASCII → universal)
+      'Αντικολλητικό Χαρτί για Φριτέζα…'  → ''           (no brand prefix at all)
+    """
+    if not title:
+        return ''
+    tokens = str(title).strip().split()
+    if len(tokens) < 2:
+        return ''
+
+    t0 = tokens[0]
+    # First token must be all-uppercase ASCII (Latin) — guards against Greek
+    # descriptive openings and against title-case product names.
+    if not (t0.isascii() and t0.isupper() and len(t0) >= 2 and any(c.isalpha() for c in t0)):
+        return ''
+
+    # Handle multi-word brand heads (HOME VERO, BLACK & DECKER, etc.)
+    brand = t0
+    sku_start_idx = 1
+    if t0 in AF_MULTIWORD_BRAND_HEADS and len(tokens) >= 3:
+        # Verify the 2nd token isn't itself the SKU (i.e. it should be a brand word, not digits)
+        if tokens[1].isascii() and tokens[1].isupper() and not any(c.isdigit() for c in tokens[1]):
+            brand = AF_MULTIWORD_BRAND_HEADS[t0]
+            sku_start_idx = 2
+        elif tokens[1] == '&' and len(tokens) >= 4:
+            # "BLACK & DECKER ..."  pattern
+            brand = AF_MULTIWORD_BRAND_HEADS.get(t0, f"{t0} & {tokens[2]}")
+            sku_start_idx = 3
+
+    # The next 1-2 tokens after the brand should contain a digit (SKU code).
+    # Checking tokens individually (not joined) so a trailing Greek
+    # descriptive word like 'Αντικολλητικό' doesn't poison the ASCII check.
+    # Handles the "ROHNSON AF 01G" case where the SKU is split across spaces:
+    # token1='AF' (no digit) but token2='01G' has one → still detected.
+    sku_tokens = tokens[sku_start_idx:sku_start_idx + 2]
+    if not sku_tokens:
+        return ''
+    has_sku = any(
+        tk.isascii() and any(c.isdigit() for c in tk)
+        for tk in sku_tokens
+    )
+    if not has_sku:
+        return ''
+
+    return brand
+
+# Accessory type classifier for the diversity guard. Each accessory is
+# mapped to one of these buckets; the engine then caps consumption at
+# AF_TYPE_DIVERSITY_CAP items per bucket so the carousel doesn't fill with
+# 4 parchment papers in a row.
+def _af_classify_accessory_type(title: str) -> str:
+    """Returns one of: parchment, silicone_mold, rack, basket, kit, plate,
+    oil_sprayer, vacuum_bag, mixer_attachment, other."""
+    t = (title or '').lower()
+    if 'αντικολλητικό χαρτί' in t or 'parchment' in t or 'περγαμ' in t:
+        return 'parchment'
+    if 'σιλικόν' in t or 'silicone' in t or 'φόρμ' in t:
+        return 'silicone_mold'
+    if 'σχάρ' in t:
+        return 'rack'
+    if 'καλάθ' in t:
+        return 'basket'
+    if 'kit' in t or 'σετ αξεσουάρ' in t:
+        return 'kit'
+    if 'πιάτο' in t:
+        return 'plate'
+    if 'σπρέι' in t or 'ψεκαστήρ' in t:
+        return 'oil_sprayer'
+    if 'κενού αέρος' in t or 'vacuum' in t or 'σακούλ' in t:
+        return 'vacuum_bag'
+    if 'εξάρτημ' in t or 'πολυμίξερ' in t:
+        return 'mixer_attachment'
+    return 'other'
+
+# Max copies of any single accessory type allowed in the final 10-slot
+# carousel. 2 keeps the user's "4× accessory slots" structure achievable
+# even when one type dominates the pool (e.g. 24/48 of our AF-relevant
+# items are parchment paper).
+AF_TYPE_DIVERSITY_CAP = 2
+
 # Scoring constants for Air Fryers engine — calibrated so brand-ecosystem
 # always outranks pure sales but never overrides exact accessory relevance.
 AF_S_AVAILABILITY        = 100_000   # In-stock boost (Άμεσα Διαθέσιμο)
 AF_S_ACCESSORY_RELEVANT  = 1_500_000 # Title/desc mentions air-fryer keyword (Tier A)
 AF_S_BRAND_MATCH         =   400_000 # Same Κατασκευαστής as trigger (ecosystem boost)
 AF_S_BRAND_NEIGHBOR      =   120_000 # Premium brand pairing (TEFAL↔BOSCH, PHILIPS↔BRAUN)
+AF_S_BRAND_PREFIX_MISMATCH = -400_000 # Accessory titled with a DIFFERENT brand SKU code
+                                      # — physically sized for that brand's basket.
+                                      # Knocks cross-brand items below universal ones.
+AF_S_UNIVERSAL_BOOST     =   150_000 # No brand prefix in title → fits any basket
 AF_S_PRICE_SAME_TIER     =   200_000 # Companion in same price tier
 AF_S_PRICE_ONE_OFF       =    70_000 # Companion ±1 price tier
 AF_S_RATING_TOP          =   150_000 # Experts Rating = Top Quality / Excellent
@@ -8576,20 +8687,33 @@ def _af_is_relevant_accessory(title: str, desc: str = '') -> bool:
 
 
 def _af_build_accessory_pool(c_acc, trigger_brand, trigger_subtype, notes):
-    """Score the Αξεσουάρ Συσκευών Μαγειρικής pool with three tiers:
+    """Score the Αξεσουάρ Συσκευών Μαγειρικής pool with multiple tiers:
 
-    Tier A — Title/desc mentions φριτέζα/αέρος/etc.   →  +1,500,000
-    Tier B — Same brand as trigger (ecosystem)        →  +400,000
-    Tier C — Neither (pure sales fallback)            →  base sales only
+    Tier A — Title/desc mentions φριτέζα/αέρος/etc.    →  +1,500,000
+    Tier B — Same brand as trigger (ecosystem)         →  +400,000
+    Tier B' — Brand-prefix MISMATCH (different brand's SKU code in title,
+              e.g. 'ROHNSON AF01D' shown to a NINJA fryer — physically
+              sized for ROHNSON's basket)              →  -400,000
+    Tier B'' — Universal item (no brand prefix in title, fits any basket)
+                                                       →  +150,000
+    Tier C — Pure sales fallback (base score only)
 
-    Subtype nudge: oil-fryer accessories prefer OIL/BOTH triggers, AIR-only
+    Plus subtype nudge: oil-fryer accessories prefer OIL/BOTH triggers, AIR-only
     accessories prefer AIR/BOTH triggers (small +60k).
+
+    Tags each row with `_af_type` for downstream diversity-cap enforcement.
     """
     if c_acc.empty:
         return c_acc
 
     pool = c_acc.copy()
     pool['Final_Score'] = 0.0
+
+    # ── Type tagging (used later by the loop's diversity guard)
+    pool['_af_type'] = pool['Title'].fillna('').astype(str).apply(_af_classify_accessory_type)
+
+    # ── Brand-prefix detection per row
+    pool['_af_brand_prefix'] = pool['Title'].fillna('').astype(str).apply(_af_extract_brand_prefix)
 
     # ── Availability boost
     if 'AVAILABILITY' in pool.columns:
@@ -8627,9 +8751,26 @@ def _af_build_accessory_pool(c_acc, trigger_brand, trigger_subtype, notes):
         if same_brand.any():
             notes.append(f"  ✓ Tier B — brand match ({trigger_brand}): {same_brand.sum()} (+{AF_S_BRAND_MATCH:,})")
 
-    # Note: Tier C is implicit — items with neither relevance nor brand match
-    # rank purely by sales+availability, which is exactly what we want as a fallback.
-    notes.append(f"  Pool size after scoring: {len(pool)} (Tier C fallback covers {(~rel_mask & (pool['Final_Score'] < AF_S_BRAND_MATCH)).sum()} unmatched items)")
+    # ── Tier B': brand-prefix MISMATCH penalty (cross-brand SKU)
+    # Item title starts with "<BRAND> <SKU>" where <BRAND> ≠ trigger brand
+    # → physically sized for that brand's basket, won't fit the trigger.
+    if trigger_brand:
+        mismatch_mask = (pool['_af_brand_prefix'] != '') & (pool['_af_brand_prefix'] != trigger_brand)
+    else:
+        # No trigger brand → anything brand-coded is suspect (penalize all
+        # brand-prefixed items so universal items rise to the top)
+        mismatch_mask = pool['_af_brand_prefix'] != ''
+    pool.loc[mismatch_mask, 'Final_Score'] += AF_S_BRAND_PREFIX_MISMATCH
+    if mismatch_mask.any():
+        notes.append(f"  ✗ Tier B' — brand-prefix MISMATCH penalty: {mismatch_mask.sum()} cross-brand SKU items ({AF_S_BRAND_PREFIX_MISMATCH:+,})")
+
+    # ── Tier B'': universal boost — no brand prefix in title, fits any basket
+    universal_mask = pool['_af_brand_prefix'] == ''
+    pool.loc[universal_mask & rel_mask, 'Final_Score'] += AF_S_UNIVERSAL_BOOST
+    if (universal_mask & rel_mask).any():
+        notes.append(f"  ✓ Tier B'' — universal-fitment boost: {(universal_mask & rel_mask).sum()} items (+{AF_S_UNIVERSAL_BOOST:,})")
+
+    notes.append(f"  Pool size after scoring: {len(pool)}")
 
     return pool.sort_values('Final_Score', ascending=False)
 
@@ -8847,6 +8988,10 @@ def run_air_fryer_engine(trigger, df_sda, df_mda, df_history):
     used_materials = {tm}
     pool_cursors  = {rank: 0 for rank in pools}
     pool_taken    = {rank: 0 for rank in pools}
+    # Type-diversity guard: track how many of each _af_type have been taken
+    # from each accessory-style pool. Caps at AF_TYPE_DIVERSITY_CAP per type
+    # so the carousel doesn't fill with 4 parchment papers in a row.
+    pool_type_counts = {rank: {} for rank in pools}
     slot_num = 0
     round_idx = 0
 
@@ -8867,6 +9012,11 @@ def run_air_fryer_engine(trigger, df_sda, df_mda, df_history):
             if max_total is not None:
                 take_n = min(take_n, max_total - pool_taken[rank])
 
+            # Type-diversity applies only to accessory-style pools (multiple
+            # items expected). Companion pools take 1 item total → no
+            # diversity guard needed there.
+            apply_type_diversity = (logic_key == 'ACCESSORY_KITCHEN')
+
             cursor = pool_cursors[rank]
             taken_this_pass = 0
             while taken_this_pass < take_n and cursor < len(scored) \
@@ -8875,6 +9025,14 @@ def run_air_fryer_engine(trigger, df_sda, df_mda, df_history):
                 cursor += 1
                 if row['Material'] in used_materials:
                     continue
+
+                # Type-diversity guard for accessories
+                if apply_type_diversity:
+                    row_type = row.get('_af_type', 'other')
+                    if pool_type_counts[rank].get(row_type, 0) >= AF_TYPE_DIVERSITY_CAP:
+                        # Skip this candidate — too many of its type already taken
+                        continue
+
                 slot_num += 1
                 rc = row.copy()
                 rc['Assigned_Slot'] = slot_num
@@ -8885,15 +9043,19 @@ def run_air_fryer_engine(trigger, df_sda, df_mda, df_history):
                 used_materials.add(row['Material'])
                 taken_this_pass += 1
                 pool_taken[rank] += 1
+                if apply_type_diversity:
+                    row_type = row.get('_af_type', 'other')
+                    pool_type_counts[rank][row_type] = pool_type_counts[rank].get(row_type, 0) + 1
                 progress = True
 
                 title_preview = str(row.get('Title', ''))[:70]
                 score_val = float(row.get('Final_Score', 0))
+                type_hint = f" | type={row.get('_af_type','')}" if apply_type_diversity else ""
                 if slot_num not in slot_notes:
                     slot_notes[slot_num] = []
                 slot_notes[slot_num].append(
                     f"Round {round_idx} | Pool '{role_label}' | "
-                    f"Score: {score_val:,.0f} | {title_preview}"
+                    f"Score: {score_val:,.0f}{type_hint} | {title_preview}"
                 )
 
             pool_cursors[rank] = cursor
