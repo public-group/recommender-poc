@@ -102,7 +102,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v28.2 — Stick Vacuums (™ normalize + 3-char tokens)
+        🟢 Engine v28.3 — Gaming · PlayStation 5 Console (sales-heavy hybrid)
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -1140,6 +1140,107 @@ def get_vinyl_tier(price):
     if price >= 280: return 'Premium'
     if price >= 120: return 'Mid'
     return 'Entry'
+
+# ═════════════════════════════════════════════════════════════
+# 🟢 GAMING — PS5 CONSOLE CONFIGURATION
+# ═════════════════════════════════════════════════════════════
+# Trigger detection: products in the Gaming sheet with Hierarchy = 'PS5 CONSOLE'.
+# Approach: SALES-HEAVY HYBRID. Spec coverage on gaming SKUs is sparse
+# (≈20% have brand/color/model), so we use Sum-of-Sales as the primary
+# signal and layer 5 surgical spec boosts/filters on top:
+#   1. Console tier (Standard < €700 / Premium ≥ €700) for budget caps & Pro→premium hints
+#   2. Color match (white console → white controller/headset)
+#   3. Title-based PS5-compatibility check for cross-platform hierarchies
+#      (STEERING WHEELS, PREPAID CARDS, PLAYSTATION VR)
+#   4. Sony first-party brand boost (Κατασκευαστής + title contains "Sony"/"PlayStation")
+#   5. Slim-vs-Standard cover match by title token
+
+# Hierarchies that trigger the engine
+PS5_CONSOLE_TRIGGER_HIERARCHIES = {'PS5 CONSOLE'}
+
+# (slot_num, role_label, [hierarchies], logic_key)
+PS5_CONSOLE_SLOTS = [
+    (1,  'Χειριστήριο PS5',     ['PS5 CONTROLLERS'],                          'CONTROLLER_LOGIC'),
+    (2,  'Top Selling Game',    ['PS5 GAMES'],                                'GAME_LOGIC'),
+    (3,  'Gaming Headset',      ['PS5 HEADSETS'],                             'HEADSET_LOGIC'),
+    (4,  'Φόρτιση & Καλώδια',   ['PS5 CABLES & CHARGERS', 'NETWORK CABLES'],  'CABLE_LOGIC'),
+    (5,  'Δεύτερο Game',        ['PS5 GAMES'],                                'GAME_LOGIC'),
+    (6,  'Αξεσουάρ Κονσόλας',   ['PS5 VARIOUS ACCESSORIES'],                  'ACCESSORY_LOGIC'),
+    (7,  'Τιμονιέρα',           ['STEERING WHEELS'],                          'STEERING_LOGIC'),
+    (8,  'Κάλυμμα Κονσόλας',    ['PS5 CONSOLE CASES & SLEEVES'],              'COVER_LOGIC'),
+    (9,  'PlayStation VR',      ['PLAYSTATION VR'],                           'VR_LOGIC'),
+    (10, 'Prepaid Card',        ['PREPAID CARDS'],                            'PREPAID_LOGIC'),
+]
+
+PS5_CONSOLE_MARKETING_COPY = {
+    "Χειριστήριο PS5":     "Έξτρα DualSense — co-op κάθε στιγμή.",
+    "Top Selling Game":    "Το παιχνίδι που ξεχωρίζει αυτή τη στιγμή.",
+    "Gaming Headset":      "Καθαρός ήχος & επικοινωνία in-game.",
+    "Φόρτιση & Καλώδια":   "Πάντα φορτισμένο, πάντα έτοιμο.",
+    "Δεύτερο Game":        "Διπλή δόση παιχνιδιού.",
+    "Αξεσουάρ Κονσόλας":   "Αναβάθμισε το PS5 setup σου.",
+    "Τιμονιέρα":           "Racing εμπειρία στο σαλόνι σου.",
+    "Κάλυμμα Κονσόλας":    "Στιλ & προστασία για την κονσόλα.",
+    "PlayStation VR":      "Βούτα σε εικονικούς κόσμους.",
+    "Prepaid Card":        "Πίστωση για games & PlayStation Plus.",
+}
+
+# Budget caps per console tier (€) — keeps recs proportional to the trigger
+# price so that a Standard PS5 doesn't get paired with an Edge controller +
+# Pulse Elite + PSVR2 combo that exceeds the console's own price.
+PS5_CONSOLE_BUDGET = {
+    'Standard': {
+        'controller':  90,
+        'headset':     90,
+        'cable':       40,
+        'accessory':  260,
+        'steering':   350,
+        'cover':       70,
+        'vr':         500,
+        'prepaid':    100,
+    },
+    'Premium': {
+        'controller': 220,   # allow DualSense Edge (~€240) for Pro buyers
+        'headset':    230,   # Pulse Elite, Razer Kaira Pro tier
+        'cable':       60,
+        'accessory':  280,   # Portal Remote Player
+        'steering':   500,   # G923 / Logitech high-end
+        'cover':       80,
+        'vr':         500,
+        'prepaid':    100,
+    },
+}
+
+# Premium-only slots: dropped entirely when console is Standard tier
+PS5_PREMIUM_ONLY_LOGIC = set()  # currently we *show* VR but the cap controls it
+
+# Hierarchies that are PS5-exclusive by construction (no platform filter needed)
+PS5_LOCKED_HIERARCHIES = {
+    'PS5 CONTROLLERS', 'PS5 GAMES', 'PS5 HEADSETS', 'PS5 CABLES & CHARGERS',
+    'PS5 VARIOUS ACCESSORIES', 'PS5 CONSOLE CASES & SLEEVES',
+}
+
+# Hierarchies that span platforms — need title-based PS5 filter
+PS5_CROSSPLATFORM_HIERARCHIES = {
+    'STEERING WHEELS', 'PREPAID CARDS', 'PLAYSTATION VR',
+}
+
+# Regex tokens that prove PS5 compatibility from a title
+PS5_TITLE_PATTERN = re.compile(
+    r'\b(PS5|PlayStation\s*5|PlayStation|PSVR2?|DualSense|PS\s*Plus|FIFA|FUT)\b',
+    re.IGNORECASE,
+)
+
+def get_ps5_tier(price):
+    """Map a PS5 console LIST PRICE (€) to a tier string.
+    Standard (Slim / 1TB / Digital Edition): < 700
+    Premium (Pro / Bundle with extras / Twin-controller): >= 700
+    """
+    try:
+        p = float(price)
+    except (TypeError, ValueError):
+        p = 0.0
+    return 'Premium' if p >= 700 else 'Standard'
 
 # ─────────────────────────────────────────────────────────────
 # 🟢 KIDS BOOKS CONFIGURATION
@@ -2483,6 +2584,9 @@ def load_all_data():
     dper  = _load('Peripherals')
     dstat = _load('Stationery')
     dair  = _load('Air')
+    # ── Gaming sheet: PS5 consoles + accessories, games, controllers, headsets,
+    # steering wheels, prepaid cards, VR. Used by the PS5 Console engine.
+    dgaming = _load('Gaming')
     # ── Floor sheet (Home file): contains Σκούπες ρομπότ, Stick, Ηλεκτρικές,
     # Σκουπάκια, Ατμοκαθαριστές, Εξαρτήματα για σκούπες, PET CARE — used by
     # the Robot Vacuums engine.
@@ -2503,11 +2607,11 @@ def load_all_data():
     if not db.empty and CC not in db.columns:
         db[CC] = ''
     
-    return dp, dm, dh, ds, db, dl, dv, dper, dstat, dair, dfloor, available_sheets
+    return dp, dm, dh, ds, db, dl, dv, dper, dstat, dair, dfloor, dgaming, available_sheets
 
 try:
 
-    df_products, df_music, df_history, df_slots, df_books, df_laptops, df_vacuums, df_peripherals, df_stationery, df_air, df_floor, sheets_loaded = load_all_data()
+    df_products, df_music, df_history, df_slots, df_books, df_laptops, df_vacuums, df_peripherals, df_stationery, df_air, df_floor, df_gaming, sheets_loaded = load_all_data()
     compat_cols_found = [c for c in COMPAT_COLS if c in df_products.columns]
 except Exception as e:
     st.error(f"🚨 Error loading data: {e}")
@@ -2575,6 +2679,11 @@ L1_CATEGORIES = [
         "key": "TV",
         "label": "Εικόνα\n& Ήχος",
         "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='2' y='7' width='20' height='15' rx='2' ry='2'/%3E%3Cpolyline points='17 2 12 7 7 2'/%3E%3C/svg%3E",
+    },
+    {
+        "key": "Gaming",
+        "label": "Gaming",
+        "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='2' y='8' width='20' height='10' rx='5' ry='5'/%3E%3Cline x1='7' y1='13' x2='9' y2='13'/%3E%3Cline x1='8' y1='12' x2='8' y2='14'/%3E%3Ccircle cx='15.5' cy='12' r='0.8'/%3E%3Ccircle cx='17.5' cy='14' r='0.8'/%3E%3C/svg%3E",
     },
 ]
 
@@ -2645,6 +2754,10 @@ L2_CHILDREN = {
             "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='4' y='6' width='16' height='12' rx='2' ry='2'/%3E%3Ccircle cx='12' cy='12' r='3'/%3E%3Cline x1='2' y1='12' x2='4' y2='12'/%3E%3Cline x1='20' y1='12' x2='22' y2='12'/%3E%3C/svg%3E"},
         {"key": "Turntables", "label": "Πικάπ", 
          "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3Ccircle cx='12' cy='12' r='2'/%3E%3Cpath d='M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83'/%3E%3C/svg%3E"}
+    ],
+    "Gaming": [
+        {"key": "PS5 Console", "label": "PS5\nConsole",
+         "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='2' y='8' width='20' height='10' rx='5' ry='5'/%3E%3Cline x1='7' y1='13' x2='9' y2='13'/%3E%3Cline x1='8' y1='12' x2='8' y2='14'/%3E%3Ccircle cx='15.5' cy='12' r='0.8'/%3E%3Ccircle cx='17.5' cy='14' r='0.8'/%3E%3C/svg%3E"},
     ],
 }
 
@@ -3278,6 +3391,48 @@ else:
                     matching_books['_has_series'] = matching_books['Σειρά βιβλίου'].apply(lambda x: 0 if (pd.isna(x) or str(x).strip().lower() in ['', '0', 'nan']) else 1)
                     matching_books = matching_books.sort_values('_has_series', ascending=False)
                 trigger = matching_books.iloc[0]
+
+
+    elif active_cluster == "PS5 Console":
+        # Trigger pool: PS5 consoles from the Gaming sheet.
+        # If PS5_CONSOLE_TEST_SKUS is non-empty, restrict the dropdown to those
+        # SKUs (placeholder = a mix of Slim / Digital / Pro / bundles).
+        if df_gaming is None or df_gaming.empty:
+            st.sidebar.warning("Sheet 'Gaming' is empty or missing.")
+        else:
+            hier_upper = df_gaming['Hierarchy'].fillna('').astype(str).str.upper().str.strip()
+            trigger_hiers_upper = {h.upper().strip() for h in PS5_CONSOLE_TRIGGER_HIERARCHIES}
+            ps5_consoles = df_gaming[hier_upper.isin(trigger_hiers_upper)].copy()
+
+            # 🧪 TEST LIST: restrict the dropdown to a handful of representative SKUs
+            # so the dropdown stays usable for demos. Leave empty to show all.
+            PS5_CONSOLE_TEST_SKUS = {
+                "2078105",  # Sony PlayStation 5 Slim
+                "2078108",  # Sony PlayStation 5 Digital Edition - 825GB
+                "2090408",  # Sony PlayStation 5 Pro - 2TB
+                "1885292",  # Sony PlayStation 5 - 1TB
+                "2090406",  # PS5 - 1TB Two DualSense Controllers Bundle
+                "1866113",  # PS5 - EA Sports FC 24 Bundle
+            }
+            if PS5_CONSOLE_TEST_SKUS:
+                mat_clean = ps5_consoles['Material'].astype(str).str.strip().str.replace(r'\.0$', '', regex=True)
+                ps5_consoles_f = ps5_consoles[mat_clean.isin(PS5_CONSOLE_TEST_SKUS)]
+                if not ps5_consoles_f.empty:
+                    ps5_consoles = ps5_consoles_f
+
+            # De-duplicate by Material (the sheet has multiple rows per SKU
+            # for different shelf prices — keep the highest-sales row so the
+            # title only appears once in the dropdown).
+            if not ps5_consoles.empty and 'Sum of Sales' in ps5_consoles.columns:
+                ps5_consoles = ps5_consoles.sort_values('Sum of Sales', ascending=False)
+                ps5_consoles = ps5_consoles.drop_duplicates(subset=['Material'], keep='first')
+
+            if ps5_consoles.empty:
+                st.sidebar.warning("Δεν βρέθηκαν PS5 Consoles στο sheet Gaming.")
+            else:
+                st.sidebar.markdown('<p class="sidebar-section">Επιλέξτε PlayStation 5</p>', unsafe_allow_html=True)
+                sel = st.sidebar.selectbox("", ps5_consoles['Title'].unique(), label_visibility="collapsed", key="ps5_sel")
+                trigger = ps5_consoles[ps5_consoles['Title']==sel].iloc[0] if sel else None
 
 
 # ───── Compatibility shim: rest of app expects `active_cluster` as a string ─────
@@ -10922,6 +11077,236 @@ def run_projectors_engine(trigger, df_products, df_history):
 
 
 # ═══════════════════════════════════════════════════════════════
+# 🟢 PS5 CONSOLE ENGINE — Gaming (sales-heavy hybrid)
+# ═══════════════════════════════════════════════════════════════
+# Approach: sales as primary signal + 5 surgical spec layers.
+# Slot config lives in PS5_CONSOLE_SLOTS (top of file).
+#
+# Per slot the engine:
+#   1. Filters df_gaming by hierarchy (case-insensitive, trimmed)
+#   2. Removes the trigger itself and any items already used in previous slots
+#   3. Applies a base availability boost ("Άμεσα Διαθέσιμο" wins ties)
+#   4. Applies a per-tier budget cap penalty (over-cap items pushed down)
+#   5. Applies logic-specific boosts (color match, Sony brand, title tokens…)
+#   6. Sorts by Final_Score, then by sales, picks top-1 deduped by Material
+
+def run_ps5_console_engine(trigger, df_gaming, df_history):
+    diag, slot_notes, all_recs = [], {}, []
+
+    if df_gaming is None or df_gaming.empty:
+        diag.append(("0. Data", 0, "Sheet 'Gaming' is empty or missing"))
+        return pd.DataFrame(), diag, slot_notes, pd.DataFrame()
+
+    tm     = trigger['Material']
+    tt     = str(trigger.get('Title', ''))
+    tb     = str(trigger.get('Κατασκευαστής', '')).strip().upper()
+    tcolor = str(trigger.get('Χρώμα', '')).strip().lower()
+    tprice = parse_euro_price(trigger.get('LIST PRICE', 0))
+    ttier  = get_ps5_tier(tprice)
+
+    # ── Title-based signal extraction (covers cases where spec cols are empty) ──
+    tt_lower    = tt.lower()
+    is_slim     = 'slim' in tt_lower
+    is_pro      = 'pro' in tt_lower
+    is_digital  = 'digital' in tt_lower
+    has_white   = 'white' in tt_lower or 'λευκ' in tt_lower or 'λευκό' in tcolor or 'λευκή' in tcolor
+    has_black   = 'black' in tt_lower or 'μαύρ' in tt_lower or 'μαύρο' in tcolor or 'μαύρη' in tcolor
+    # Default PS5 color (when nothing said) = white — Sony's stock color
+    if not has_white and not has_black:
+        has_white = True
+
+    diag.append((
+        "0. Trigger",
+        f"Tier={ttier} (€{tprice:.0f}) · Slim={is_slim} · Pro={is_pro} · Digital={is_digital}",
+        f"Color hint: white={has_white}, black={has_black}",
+    ))
+
+    # ── Prep candidate pool ──
+    pool_full = df_gaming.copy()
+    pool_full['Sales_30'] = pd.to_numeric(pool_full.get('Sum of Sales', 0), errors='coerce').fillna(0)
+    pool_full['_p']       = pool_full['LIST PRICE'].apply(parse_euro_price)
+    # De-dupe by (Material, price) to keep one row per SKU+price variant
+    pool_full = pool_full.drop_duplicates(subset=['Material'], keep='first')
+    # Drop the trigger itself
+    pool_full = pool_full[pool_full['Material'] != tm].copy()
+
+    used_materials = {tm}
+    caps = PS5_CONSOLE_BUDGET[ttier]
+
+    for slot_num, role, hierarchies, logic_key in PS5_CONSOLE_SLOTS:
+        notes = [f"Logic: {logic_key} · Tier: {ttier}"]
+
+        hiers_upper = {h.upper().strip() for h in hierarchies}
+        hier_col_upper = pool_full['Hierarchy'].fillna('').astype(str).str.upper().str.strip()
+        pool = pool_full[hier_col_upper.isin(hiers_upper)].copy()
+        pool = pool[~pool['Material'].isin(used_materials)]
+
+        if pool.empty:
+            diag.append((f"Slot {slot_num} ({role})", 0, "Empty pool (hierarchy missing in catalog)"))
+            slot_notes[slot_num] = notes + ["⚠ No products found in any of: " + ", ".join(hierarchies)]
+            continue
+
+        # ── Cross-platform PS5 compatibility filter ──
+        # PS5_CROSSPLATFORM_HIERARCHIES span multiple consoles; keep PS5-titled rows
+        if any(h in PS5_CROSSPLATFORM_HIERARCHIES for h in hiers_upper):
+            ps5_mask = pool['Title'].fillna('').astype(str).apply(
+                lambda s: bool(PS5_TITLE_PATTERN.search(s))
+            )
+            if ps5_mask.any():
+                dropped = int((~ps5_mask).sum())
+                pool = pool[ps5_mask]
+                if dropped:
+                    notes.append(f"🎯 Cross-platform filter: kept {len(pool)} PS5-titled items, dropped {dropped}")
+
+        if pool.empty:
+            diag.append((f"Slot {slot_num} ({role})", 0, "Empty after PS5 title filter"))
+            slot_notes[slot_num] = notes
+            continue
+
+        # ── Base score: sales + availability boost ──
+        pool['Final_Score'] = pool['Sales_30'].astype(float)
+        if 'AVAILABILITY' in pool.columns:
+            avail_mask = pool['AVAILABILITY'].fillna('').astype(str).str.strip() == 'Άμεσα Διαθέσιμο'
+            # Tie-breaking boost: ~+1500 sales worth, enough to flip near-equals
+            pool.loc[avail_mask, 'Final_Score'] += 1500
+            # Hard penalty for "Μη Διαθέσιμο" / "Προσωρινά Εξαντλημένο" / "Οπς, μόλις εξαντλήθηκε"
+            unavail_mask = pool['AVAILABILITY'].fillna('').astype(str).str.contains(
+                'Μη Διαθέσιμο|Εξαντλημένο|Εξαντλήθηκε', regex=True, na=False
+            )
+            pool.loc[unavail_mask, 'Final_Score'] -= 50000
+
+        # ── Budget cap penalty by logic key ──
+        cap = None
+        if   logic_key == 'CONTROLLER_LOGIC': cap = caps['controller']
+        elif logic_key == 'HEADSET_LOGIC':    cap = caps['headset']
+        elif logic_key == 'CABLE_LOGIC':      cap = caps['cable']
+        elif logic_key == 'ACCESSORY_LOGIC':  cap = caps['accessory']
+        elif logic_key == 'STEERING_LOGIC':   cap = caps['steering']
+        elif logic_key == 'COVER_LOGIC':      cap = caps['cover']
+        elif logic_key == 'VR_LOGIC':         cap = caps['vr']
+        elif logic_key == 'PREPAID_LOGIC':    cap = caps['prepaid']
+
+        if cap is not None and '_p' in pool.columns:
+            over_budget = pool['_p'] > cap
+            pool.loc[over_budget, 'Final_Score'] -= 30000
+            if over_budget.any():
+                notes.append(f"💶 Budget cap [{ttier}/{logic_key}]: Penalized {int(over_budget.sum())} items over €{cap}")
+
+        # ── Sony / first-party boost (applies broadly) ──
+        brand_col = pool['Κατασκευαστής'].fillna('').astype(str).str.upper().str.strip()
+        title_col = pool['Title'].fillna('').astype(str)
+        sony_mask = (brand_col == 'SONY') | title_col.str.contains(r'\bSony\b|\bPlayStation\b', case=False, na=False, regex=True)
+        if sony_mask.any() and logic_key not in ('GAME_LOGIC', 'STEERING_LOGIC', 'PREPAID_LOGIC'):
+            pool.loc[sony_mask, 'Final_Score'] += 5000
+            notes.append(f"🏷 Sony first-party boost: {int(sony_mask.sum())} items +5000")
+
+        # ── Per-logic refinements ──
+        if logic_key == 'CONTROLLER_LOGIC':
+            # Color match: white console → boost white controllers
+            color_col = pool['Χρώμα'].fillna('').astype(str).str.lower()
+            if has_white:
+                wm = color_col.str.contains('λευκ', na=False) | title_col.str.contains('white|λευκ', case=False, na=False, regex=True)
+                pool.loc[wm, 'Final_Score'] += 8000
+                notes.append(f"🎨 Color match white: +8000 to {int(wm.sum())} items")
+            elif has_black:
+                bm = color_col.str.contains('μαύρ', na=False) | title_col.str.contains('black|midnight|μαύρ', case=False, na=False, regex=True)
+                pool.loc[bm, 'Final_Score'] += 8000
+                notes.append(f"🎨 Color match black: +8000 to {int(bm.sum())} items")
+            # Pro tier: allow Edge premium variant to surface
+            if ttier == 'Premium':
+                edge_mask = title_col.str.contains('Edge', case=False, na=False)
+                pool.loc[edge_mask, 'Final_Score'] += 3000
+                if edge_mask.any():
+                    notes.append("⚡ Pro tier: DualSense Edge +3000")
+
+        elif logic_key == 'HEADSET_LOGIC':
+            color_col = pool['Χρώμα'].fillna('').astype(str).str.lower()
+            if has_white:
+                wm = color_col.str.contains('λευκ', na=False) | title_col.str.contains('white|λευκ', case=False, na=False, regex=True)
+                pool.loc[wm, 'Final_Score'] += 6000
+                notes.append(f"🎨 Color match white: +6000 to {int(wm.sum())} items")
+            # Wireless preference (especially for Pro)
+            wireless_mask = title_col.str.contains('Wireless|Ασύρμ|Bluetooth', case=False, na=False, regex=True)
+            wl_boost = 5000 if ttier == 'Premium' else 2000
+            pool.loc[wireless_mask, 'Final_Score'] += wl_boost
+            notes.append(f"📡 Wireless preference: +{wl_boost} to {int(wireless_mask.sum())} items")
+
+        elif logic_key == 'CABLE_LOGIC':
+            # Charging dock takes priority over plain cables for console buyers
+            dock_mask = title_col.str.contains('Charger|Charging Dock|Βάση Φόρτισης', case=False, na=False, regex=True)
+            pool.loc[dock_mask, 'Final_Score'] += 4000
+            if dock_mask.any():
+                notes.append(f"🔌 Dock/Charger priority: +4000 to {int(dock_mask.sum())} items")
+
+        elif logic_key == 'COVER_LOGIC':
+            # Match Slim cover with Slim console, Standard cover with Standard
+            if is_slim:
+                slim_mask = title_col.str.contains('Slim', case=False, na=False)
+                pool.loc[slim_mask, 'Final_Score'] += 10000
+                pool.loc[~slim_mask, 'Final_Score'] -= 3000
+                notes.append(f"🎯 Slim console → Slim cover +10000, non-Slim −3000")
+            elif is_pro:
+                # PS5 Pro uses its own cover; if no Pro covers exist, fall back to highest-sales
+                pro_mask = title_col.str.contains(r'\bPro\b', case=False, na=False, regex=True)
+                if pro_mask.any():
+                    pool.loc[pro_mask, 'Final_Score'] += 10000
+                    notes.append(f"🎯 Pro console → Pro cover +10000")
+
+        elif logic_key == 'VR_LOGIC':
+            # Already filtered by hierarchy. Title filter already kept PS5/PSVR.
+            # Premium tier doubles the relevance; Standard tier shows it too but
+            # the budget cap keeps it reasonable.
+            if ttier == 'Premium':
+                pool['Final_Score'] += 2000
+                notes.append("⚡ Pro tier: PSVR2 surfacing boost")
+
+        elif logic_key == 'STEERING_LOGIC':
+            # PS5-compat filter already applied. Logitech G dominates this hierarchy;
+            # let sales speak — no extra boost needed.
+            pass
+
+        elif logic_key == 'PREPAID_LOGIC':
+            # Boost PlayStation cards over FIFA FUT cards (which are legacy/inactive)
+            ps_mask = title_col.str.contains('PlayStation|Playstation', case=False, na=False, regex=True)
+            fut_mask = title_col.str.contains('FUT Points|FIFA', case=False, na=False, regex=True)
+            pool.loc[ps_mask, 'Final_Score'] += 5000
+            pool.loc[fut_mask, 'Final_Score'] -= 5000
+            notes.append(f"🎮 PlayStation card priority: PS +5000 ({int(ps_mask.sum())}), FIFA-FUT −5000 ({int(fut_mask.sum())})")
+
+        elif logic_key == 'GAME_LOGIC':
+            # Pure sales — no extra boost. Top-2 games are pulled across slots 2 & 5
+            # so we simply skip whatever is already used.
+            pass
+
+        # ── Selection ──
+        pool = pool.sort_values(['Final_Score', 'Sales_30'], ascending=[False, False])
+
+        if pool.empty:
+            diag.append((f"Slot {slot_num} ({role})", 0, "Empty after scoring"))
+            slot_notes[slot_num] = notes
+            continue
+
+        chosen = pool.iloc[0]
+        rc = chosen.copy()
+        rc['Assigned_Slot']  = slot_num
+        rc['Slot_Role']      = role
+        rc['Marketing_Copy'] = PS5_CONSOLE_MARKETING_COPY.get(role, "Ιδανική επιλογή για PS5.")
+        all_recs.append(rc)
+        used_materials.add(chosen['Material'])
+        slot_notes[slot_num] = notes
+        diag.append((
+            f"Slot {slot_num} ({role})",
+            1,
+            f"€{float(chosen.get('_p', 0)):.0f} · sales={float(chosen.get('Sales_30', 0)):.0f} · score={float(chosen.get('Final_Score', 0)):.0f} · {str(chosen.get('Title', ''))[:60]}",
+        ))
+
+    recs_df = pd.DataFrame(all_recs) if all_recs else pd.DataFrame()
+    if not recs_df.empty:
+        recs_df['Draft_Score'] = recs_df['Assigned_Slot']
+    return recs_df, diag, slot_notes, recs_df
+
+
+# ═══════════════════════════════════════════════════════════════
 # 🟢 VINYL & TURNTABLES ENGINE
 # ═══════════════════════════════════════════════════════════════
 
@@ -11170,6 +11555,9 @@ elif active_cluster == "Turntables":
     recs, diag, slot_notes, full_candidates = run_vinyl_engine(trigger, df_products, df_peripherals, df_music, df_history)
     slot_diag = []
     full_candidates = recs
+elif active_cluster == "PS5 Console":
+    recs, diag, slot_notes, full_candidates = run_ps5_console_engine(trigger, df_gaming, df_history)
+    slot_diag = []
 elif active_cluster == "Wearables":
     recs, diag, slot_notes, full_candidates = run_wearables_engine(trigger, df_products, df_history)
     slot_diag = []    
