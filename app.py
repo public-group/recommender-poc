@@ -102,7 +102,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v28.5 — PS5 Console refinements (3-tier bands · bundle awareness)
+        🟢 Engine v28.6 — PS5 reordered slots + fallback fill
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -1165,30 +1165,63 @@ def get_vinyl_tier(price):
 PS5_CONSOLE_TRIGGER_HIERARCHIES = {'PS5 CONSOLE'}
 
 # (slot_num, role_label, [hierarchies], logic_key)
+# v28.6 — Order matches user spec; second game slot dropped (single game).
+#         NETWORK CABLES hierarchy is empty in catalog and always falls back.
 PS5_CONSOLE_SLOTS = [
-    (1,  'Χειριστήριο PS5',     ['PS5 CONTROLLERS'],                          'CONTROLLER_LOGIC'),
-    (2,  'Top Selling Game',    ['PS5 GAMES'],                                'GAME_LOGIC'),
-    (3,  'Gaming Headset',      ['PS5 HEADSETS'],                             'HEADSET_LOGIC'),
-    (4,  'Φόρτιση & Καλώδια',   ['PS5 CABLES & CHARGERS', 'NETWORK CABLES'],  'CABLE_LOGIC'),
-    (5,  'Δεύτερο Game',        ['PS5 GAMES'],                                'GAME_LOGIC'),
-    (6,  'Αξεσουάρ Κονσόλας',   ['PS5 VARIOUS ACCESSORIES'],                  'ACCESSORY_LOGIC'),
-    (7,  'Τιμονιέρα',           ['STEERING WHEELS'],                          'STEERING_LOGIC'),
-    (8,  'Κάλυμμα Κονσόλας',    ['PS5 CONSOLE CASES & SLEEVES'],              'COVER_LOGIC'),
-    (9,  'PlayStation VR',      ['PLAYSTATION VR'],                           'VR_LOGIC'),
-    (10, 'Prepaid Card',        ['PREPAID CARDS'],                            'PREPAID_LOGIC'),
+    (1,  'Χειριστήριο PS5',     ['PS5 CONTROLLERS'],              'CONTROLLER_LOGIC'),
+    (2,  'Top Selling Game',    ['PS5 GAMES'],                    'GAME_LOGIC'),
+    (3,  'Φόρτιση & Καλώδια',   ['PS5 CABLES & CHARGERS'],        'CABLE_LOGIC'),
+    (4,  'Gaming Headset',      ['PS5 HEADSETS'],                 'HEADSET_LOGIC'),
+    (5,  'Prepaid Card',        ['PREPAID CARDS'],                'PREPAID_LOGIC'),
+    (6,  'Network Cable',       ['NETWORK CABLES'],               'NETWORK_LOGIC'),
+    (7,  'Αξεσουάρ Κονσόλας',   ['PS5 VARIOUS ACCESSORIES'],      'ACCESSORY_LOGIC'),
+    (8,  'Τιμονιέρα',           ['STEERING WHEELS'],              'STEERING_LOGIC'),
+    (9,  'PlayStation VR',      ['PLAYSTATION VR'],               'VR_LOGIC'),
+    (10, 'Κάλυμμα Κονσόλας',    ['PS5 CONSOLE CASES & SLEEVES'],  'COVER_LOGIC'),
 ]
 
 PS5_CONSOLE_MARKETING_COPY = {
     "Χειριστήριο PS5":     "Έξτρα DualSense — co-op κάθε στιγμή.",
     "Top Selling Game":    "Το παιχνίδι που ξεχωρίζει αυτή τη στιγμή.",
-    "Gaming Headset":      "Καθαρός ήχος & επικοινωνία in-game.",
     "Φόρτιση & Καλώδια":   "Πάντα φορτισμένο, πάντα έτοιμο.",
-    "Δεύτερο Game":        "Διπλή δόση παιχνιδιού.",
+    "Gaming Headset":      "Καθαρός ήχος & επικοινωνία in-game.",
+    "Prepaid Card":        "Πίστωση για games & PlayStation Plus.",
+    "Network Cable":       "Σταθερή ενσύρματη σύνδεση για online gaming.",
     "Αξεσουάρ Κονσόλας":   "Αναβάθμισε το PS5 setup σου.",
     "Τιμονιέρα":           "Racing εμπειρία στο σαλόνι σου.",
-    "Κάλυμμα Κονσόλας":    "Στιλ & προστασία για την κονσόλα.",
     "PlayStation VR":      "Βούτα σε εικονικούς κόσμους.",
-    "Prepaid Card":        "Πίστωση για games & PlayStation Plus.",
+    "Κάλυμμα Κονσόλας":    "Στιλ & προστασία για την κονσόλα.",
+}
+
+# Hierarchy → role/copy maps used by the fallback fill pass. When a slot
+# was skipped or its primary hierarchy is empty, we pull the next best
+# PS5 product from any eligible hierarchy and re-label the slot to match
+# what actually lands in it (e.g. a Network Cable slot filled by a
+# DualSense becomes "Έξτρα Χειριστήριο" in the UI).
+PS5_HIERARCHY_TO_ROLE = {
+    'PS5 CONTROLLERS':             'Έξτρα Χειριστήριο',
+    'PS5 GAMES':                   'Παιχνίδι PS5',
+    'PS5 HEADSETS':                'Gaming Headset',
+    'PS5 CABLES & CHARGERS':       'Φόρτιση & Καλώδια',
+    'PS5 VARIOUS ACCESSORIES':     'Αξεσουάρ Κονσόλας',
+    'PS5 CONSOLE CASES & SLEEVES': 'Κάλυμμα Κονσόλας',
+    'STEERING WHEELS':             'Τιμονιέρα',
+    'PLAYSTATION VR':              'PlayStation VR',
+    'PREPAID CARDS':               'Prepaid Card',
+    'NETWORK CABLES':              'Network Cable',
+}
+
+PS5_HIERARCHY_TO_MARKETING = {
+    'PS5 CONTROLLERS':             'Έξτρα DualSense για co-op παιχνίδια.',
+    'PS5 GAMES':                   'Νέο παιχνίδι για τη συλλογή σου.',
+    'PS5 HEADSETS':                'Καθαρός ήχος για in-game επικοινωνία.',
+    'PS5 CABLES & CHARGERS':       'Κράτα την κονσόλα πάντα φορτισμένη.',
+    'PS5 VARIOUS ACCESSORIES':     'Αναβάθμισε το PS5 setup σου.',
+    'PS5 CONSOLE CASES & SLEEVES': 'Στιλ & προστασία για την κονσόλα.',
+    'STEERING WHEELS':             'Πραγματική racing εμπειρία.',
+    'PLAYSTATION VR':              'Βούτα σε εικονικούς κόσμους.',
+    'PREPAID CARDS':               'Πίστωση για games & PlayStation Plus.',
+    'NETWORK CABLES':              'Σταθερή σύνδεση internet για online gaming.',
 }
 
 # 3-tier budget caps (hard ceiling — over-cap gets a −30 000 penalty)
@@ -11438,6 +11471,11 @@ def run_ps5_console_engine(trigger, df_gaming, df_history):
             # is already included in a bundle trigger.
             pass
 
+        elif logic_key == 'NETWORK_LOGIC':
+            # NETWORK CABLES hierarchy is empty in the current catalog → slot
+            # naturally falls through to the v28.6 fallback fill pass below.
+            pass
+
         # ── Selection ──
         pool = pool.sort_values(['Final_Score', 'Sales_30'], ascending=[False, False])
 
@@ -11460,8 +11498,180 @@ def run_ps5_console_engine(trigger, df_gaming, df_history):
             f"€{float(chosen.get('_p', 0)):.0f} · sales={float(chosen.get('Sales_30', 0)):.0f} · score={float(chosen.get('Final_Score', 0)):.0f} · {str(chosen.get('Title', ''))[:60]}",
         ))
 
+    # ═══════════════════════════════════════════════════════════════
+    # ── SECOND PASS: fallback fill for skipped/empty slots ──
+    # Walks the slot order, finds any position that didn't get a product
+    # in the first pass (skipped by digital/multi-ctrl/cover rules, or had
+    # an empty hierarchy like NETWORK CABLES), and fills it with the next
+    # best PS5 product from any eligible hierarchy. The slot's role label
+    # and marketing copy adapt to what actually lands in the slot.
+    # ═══════════════════════════════════════════════════════════════
+    filled_slot_nums = {int(r['Assigned_Slot']) for r in all_recs} if all_recs else set()
+    empty_slot_nums  = sorted(s for s, _, _, _ in PS5_CONSOLE_SLOTS if s not in filled_slot_nums)
+
+    if empty_slot_nums:
+        # Build the universe of eligible PS5 hierarchies (all 10 slot hierarchies)
+        all_ps5_hiers = set()
+        for _, _, hiers, _ in PS5_CONSOLE_SLOTS:
+            all_ps5_hiers.update(h.upper().strip() for h in hiers)
+
+        # Trigger-specific exclusions: don't push back products that were
+        # deliberately skipped by the primary logic.
+        excluded_hiers = set()
+        if is_digital:
+            excluded_hiers.add('PS5 GAMES')        # Digital console → no physical games anywhere
+        if is_multi_ctrl_bundle:
+            excluded_hiers.add('PS5 CONTROLLERS')  # Already includes extras
+        if not is_slim and not is_pro:
+            excluded_hiers.add('PS5 CONSOLE CASES & SLEEVES')  # Slim covers won't fit fat PS5
+        if is_pro:
+            # Pro can't use Slim covers either; the cover slot already skipped, but keep
+            # them out of the fallback pool too.
+            excluded_hiers.add('PS5 CONSOLE CASES & SLEEVES')
+
+        eligible_hiers = all_ps5_hiers - excluded_hiers
+
+        fb_hier_col = pool_full['Hierarchy'].fillna('').astype(str).str.upper().str.strip()
+        fb_pool = pool_full[fb_hier_col.isin(eligible_hiers)].copy()
+        fb_pool = fb_pool[~fb_pool['Material'].isin(used_materials)]
+
+        # Re-apply the bundled-game exclusion in case PS5 GAMES is still in the
+        # fallback pool (it is, for non-Digital bundle triggers like FC24 Bundle).
+        if bundle_game_excludes and not fb_pool.empty:
+            is_game = fb_pool['Hierarchy'].fillna('').astype(str).str.upper().str.strip() == 'PS5 GAMES'
+            for ex_pattern in bundle_game_excludes:
+                title_lower = fb_pool['Title'].fillna('').astype(str).str.lower()
+                ex_mask = is_game & title_lower.str.contains(ex_pattern, regex=True, na=False)
+                fb_pool = fb_pool[~ex_mask]
+
+        # Cross-platform PS5 title filter for STEERING/PREPAID/VR
+        if not fb_pool.empty:
+            fbh = fb_pool['Hierarchy'].fillna('').astype(str).str.upper().str.strip()
+            crosspl_mask = fbh.isin(PS5_CROSSPLATFORM_HIERARCHIES)
+            if crosspl_mask.any():
+                ps5_title_mask = fb_pool['Title'].fillna('').astype(str).apply(
+                    lambda s: bool(PS5_TITLE_PATTERN.search(s))
+                )
+                fb_pool = fb_pool[~crosspl_mask | ps5_title_mask]
+
+        # Score the fallback pool: sales + availability + tier-aware Sony boost.
+        # Deliberately NOT applying tier price-band filters — fallback is about
+        # getting the best remaining product, not about strict tier matching.
+        if not fb_pool.empty:
+            fb_pool['Final_Score'] = fb_pool['Sales_30'].astype(float)
+            if 'AVAILABILITY' in fb_pool.columns:
+                avail = fb_pool['AVAILABILITY'].fillna('').astype(str).str.strip() == 'Άμεσα Διαθέσιμο'
+                fb_pool.loc[avail, 'Final_Score'] += 1500
+                unavail = fb_pool['AVAILABILITY'].fillna('').astype(str).str.contains(
+                    'Μη Διαθέσιμο|Εξαντλημένο|Εξαντλήθηκε', regex=True, na=False
+                )
+                fb_pool.loc[unavail, 'Final_Score'] -= 50000
+
+            fb_brand = fb_pool['Κατασκευαστής'].fillna('').astype(str).str.upper().str.strip()
+            fb_title = fb_pool['Title'].fillna('').astype(str)
+            fb_sony_mask = (fb_brand == 'SONY') | fb_title.str.contains(
+                r'\bSony\b|\bPlayStation\b', case=False, na=False, regex=True
+            )
+            fb_pool.loc[fb_sony_mask, 'Final_Score'] += sony_boost
+
+            fb_pool = fb_pool.sort_values(['Final_Score', 'Sales_30'], ascending=[False, False])
+
+            diag.append((
+                "── Fallback pass ──",
+                len(empty_slot_nums),
+                f"{len(empty_slot_nums)} empty slot(s) to fill from {len(fb_pool)} eligible products (excl: {sorted(excluded_hiers) or '—'})",
+            ))
+
+            # Coarse product signature for dedup — first 2 distinctive tokens
+            # after stripping common modifiers. Catches exact-name re-skus
+            # (e.g. 'Portal Remote' / 'Portal Remote Midnight').
+            def _ps5_title_sig(t):
+                txt = re.sub(r'[^a-zA-Z0-9\sα-ωΑ-Ωά-ώΆ-Ώ]', ' ', str(t))
+                skip = {'sony', 'για', 'gaming', 'wireless', 'wired', 'edition', 'pack',
+                        'with', 'ps5', 'ps4', 'psp', 'pc', 'usb', 'controller', 'and'}
+                words = [w.lower() for w in txt.split() if len(w) >= 3 and w.lower() not in skip]
+                return tuple(words[:2])
+
+            # Stricter product-family detection — catches DualSense White vs Black
+            # vs Hyperpop as all belonging to the 'dualsense' family so we don't
+            # end up with 3 controllers across 10 slots.
+            def _ps5_strict_family(t, h):
+                h_norm = str(h).strip().upper()
+                txt = str(t).lower()
+                # ordered: most-specific first wins
+                families = {
+                    'PS5 CONTROLLERS':         [('dualsense edge', 'dualsense_edge'),
+                                                 ('dualsense',      'dualsense')],
+                    'PS5 VARIOUS ACCESSORIES': [('portal remote',   'portal'),
+                                                 ('portal',          'portal')],
+                    'PS5 HEADSETS':            [('pulse explore',   'pulse_explore'),
+                                                 ('pulse elite',     'pulse_elite'),
+                                                 ('pulse 3d',        'pulse_3d'),
+                                                 ('kaira pro',       'kaira_pro'),
+                                                 ('kaira',           'kaira')],
+                }
+                for substr, key in families.get(h_norm, []):
+                    if substr in txt:
+                        return (h_norm, key)
+                return None
+
+            used_sigs = {_ps5_title_sig(r['Title']) for r in all_recs}
+            # Family count across primary + fallback. Cap at 2 per family.
+            fam_count = {}
+            for r in all_recs:
+                f = _ps5_strict_family(r['Title'], r.get('Hierarchy', ''))
+                if f:
+                    fam_count[f] = fam_count.get(f, 0) + 1
+            MAX_PER_FAMILY = 2
+
+            # Fill each empty slot in slot-order, dropping each chosen Material
+            # and avoiding both near-duplicate sigs AND saturated product families.
+            for slot_num in empty_slot_nums:
+                if fb_pool.empty:
+                    diag.append((f"Slot {slot_num} (Fallback)", 0, "Fallback pool exhausted"))
+                    continue
+                # Two-stage filter: (a) drop sigs already used,
+                #                   (b) drop families already at cap.
+                fb_sigs_now = fb_pool['Title'].fillna('').astype(str).apply(_ps5_title_sig)
+                fam_keys = fb_pool.apply(
+                    lambda r: _ps5_strict_family(r['Title'], r.get('Hierarchy', '')), axis=1
+                )
+                fam_saturated = fam_keys.apply(
+                    lambda k: k is not None and fam_count.get(k, 0) >= MAX_PER_FAMILY
+                )
+                non_dup_pool = fb_pool[~fb_sigs_now.isin(used_sigs) & ~fam_saturated]
+                if not non_dup_pool.empty:
+                    chosen = non_dup_pool.iloc[0]
+                else:
+                    # All remaining candidates are near-dups or family-saturated.
+                    # Better to fall through than leave the slot empty.
+                    chosen = fb_pool.iloc[0]
+
+                chosen_hier = str(chosen.get('Hierarchy', '')).upper().strip()
+                orig_role = next((r for s, r, _, _ in PS5_CONSOLE_SLOTS if s == slot_num), '')
+                rc = chosen.copy()
+                rc['Assigned_Slot']  = slot_num
+                rc['Slot_Role']      = PS5_HIERARCHY_TO_ROLE.get(chosen_hier, 'Πρόσθετο PS5')
+                rc['Marketing_Copy'] = PS5_HIERARCHY_TO_MARKETING.get(chosen_hier, 'Πρόταση για το PS5 setup σου.')
+                all_recs.append(rc)
+                used_materials.add(chosen['Material'])
+                used_sigs.add(_ps5_title_sig(chosen['Title']))
+                f = _ps5_strict_family(chosen['Title'], chosen_hier)
+                if f:
+                    fam_count[f] = fam_count.get(f, 0) + 1
+                fb_pool = fb_pool[fb_pool['Material'] != chosen['Material']]
+                diag.append((
+                    f"Slot {slot_num} (fallback → {chosen_hier})",
+                    1,
+                    f"was: {orig_role} · €{float(chosen.get('_p', 0)):.0f} · sales={float(chosen.get('Sales_30', 0)):.0f} · score={float(chosen.get('Final_Score', 0)):.0f} · {str(chosen.get('Title', ''))[:55]}",
+                ))
+                slot_notes[slot_num] = (slot_notes.get(slot_num) or []) + [
+                    f"↻ Fallback fill: replaced {orig_role} with a {PS5_HIERARCHY_TO_ROLE.get(chosen_hier, '?')} ({chosen_hier})"
+                ]
+
     recs_df = pd.DataFrame(all_recs) if all_recs else pd.DataFrame()
     if not recs_df.empty:
+        recs_df = recs_df.sort_values('Assigned_Slot').reset_index(drop=True)
         recs_df['Draft_Score'] = recs_df['Assigned_Slot']
     return recs_df, diag, slot_notes, recs_df
 
