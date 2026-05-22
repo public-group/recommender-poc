@@ -102,7 +102,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v28.11 — Air Fryers (Φριτέζες) — Small Kitchen Appliances cluster
+        🟢 Engine v28.12 — Washing Machines (Πλυντήρια Ρούχων) — Major Domestic Appliances cluster
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -1342,6 +1342,238 @@ AF_S_RATING_TOP          =   150_000 # Experts Rating = Top Quality / Excellent
 AF_S_RATING_BEST_VALUE   =    80_000 # Experts Rating = Best Value
 AF_S_SUBTYPE_MATCH       =    60_000 # Accessory matches air vs oil subtype
 AF_S_SALES_FACTOR        =       0.5 # Sales tiebreaker weight (kitchen sells less than vacuums)
+
+
+# ═════════════════════════════════════════════════════════════
+# 🟢 WASHING MACHINES CONFIGURATION (Πλυντήρια Ρούχων — Μεγάλες Συσκευές)
+# ═════════════════════════════════════════════════════════════
+# Trigger detection: products in MDA sheet with Hierarchy = "Πλυντήρια Ρούχων".
+#
+# Recommendation depth — HYBRID (sales × brand-ecosystem × parsed title specs):
+#   • The MDA sheet has NO real spec columns filled for washing machines
+#     (only Title, Sum of Sales, LIST PRICE, AVAILABILITY) — so full-spec
+#     cross-matching from columns isn't possible.
+#   • BUT every WM title is structured and parseable:
+#       "BOSCH WGG244ZPGR 9 kg 1.400 Στροφές Λευκό Πλυντήριο Ρούχων"
+#       "LG F2R9009TPWC Slim 9 kg 1.200 Στροφές Λευκό Πλυντήριο Ρούχων"
+#       "SAMSUNG WW90CGC04DAELE 9 kg 1.400 Στροφές Λευκό με Wi-Fi Πλυντήριο Ρούχων"
+#     → we extract brand, capacity (kg), spin speed (RPM), Wi-Fi & Slim flags.
+#   • Dryers are equally parseable, with the extra signal of "Αντλία Θερμότητας"
+#     (heat pump — the premium dryer type).
+#   • The strongest cross-sell signals are: same brand pair (BOSCH↔BOSCH for
+#     stackability & matched aesthetic), capacity-tier match (a 9kg washer
+#     pairs naturally with an 8-10kg dryer, NOT a 6kg one), and price-tier
+#     proximity (€1500 MIELE buyer shouldn't see €300 dryers).
+#   • Accessories (Αξεσουάρ Πλυντηρίου - Στεγνωτηρίου) have rich Είδος data:
+#     stacking kits, pedestals, anti-vibration pads, detergents, filters,
+#     drying baskets. We split them into 4 priority slots by Είδος keyword
+#     so we don't over-fill the carousel with one accessory type.
+#   • Iron-side companions (Σίδερα, Συστήματα Σιδερώματος, Σιδερώστρες,
+#     Συστήματα Ατμού) live in the SDA sheet. Brand crossover between
+#     washer brands (BOSCH/LG/SAMSUNG/MIELE/AEG) and iron brands
+#     (TEFAL/PHILIPS/BRAUN/ROWENTA/SINGER) is minimal — only BOSCH and
+#     PHILIPS span both worlds. So for SDA companions the brand boost
+#     rarely fires; sales + price-tier proximity dominates.
+
+WM_TRIGGER_HIERARCHIES = {
+    "Πλυντήρια Ρούχων", "ΠΛΥΝΤΗΡΙΑ ΡΟΥΧΩΝ", "Πλυντήρια ρούχων",
+}
+
+# Test SKUs — 6 representative washing machines spanning the spectrum:
+# budget compact, large-cap budget, mid WiFi, slim, mainstream best-seller,
+# and premium. Leave the set empty to show all 388 WMs in the dropdown.
+WM_TEST_SKUS = {
+    "1914801",  # BOSCH WGG244ZPGR 9 kg €499 — mainstream best-seller (109k sales)
+    "1912359",  # OMNYS WNM-12AW 12 kg €429 — large-capacity budget (12kg is rare)
+    "1850582",  # SAMSUNG WW90CGC04DAELE 9 kg WiFi €439 — mid-range smart
+    "1843506",  # LG F2R9009TPWC Slim 9 kg €569 — slim format (narrow apartments)
+    "2009370",  # MIELE WWA120 WCS Active 8 kg €949 — premium (MIELE ecosystem)
+    "2089627",  # CANDY GD 27SB7-S 7 kg €319 — budget compact (small household)
+}
+
+# (priority_rank, role_label, hierarchies, logic_key, max_in_round_1, max_total)
+# Round-1 sum = 2+1+1+1+1+1+1+1+1 = 10 → fills the carousel exactly.
+#
+# Slot layout (the priority ORDER below is what the engine uses for round-robin):
+#   1. Στεγνωτήριο × 2 (the natural matched-pair companion — highest cross-sell)
+#   2. Βάση Σύνδεσης (stacking kit — for people stacking dryer on washer)
+#   3. Σίδερο (the post-wash workflow companion)
+#   4. Αντικραδασμικά Πέλματα (small attach — universal need)
+#   5. Απορρυπαντικά / Αρωματικά (consumables — recurring purchase)
+#   6. Βάση Στήριξης (pedestal / cart — height/access accessory)
+#   7. Σύστημα Σιδερώματος (premium iron alternative)
+#   8. Σιδερώστρα (pure post-wash workflow accessory)
+#   9. Σύστημα Ατμού (garment steamer — alternative-to-ironing audience)
+WM_PRIORITY = [
+    (1, 'Στεγνωτήριο',
+        ['Στεγνωτήρια'],
+        'WM_DRYER', 2, 2),
+    (2, 'Βάση Σύνδεσης',
+        ['Αξεσουάρ Πλυντηρίου - Στεγνωτηρίου'],
+        'WM_ACC_STACK', 1, 1),
+    (3, 'Σίδερο',
+        ['Σίδερα'],
+        'WM_COMPANION_SDA', 1, 2),
+    (4, 'Αντικραδασμικά',
+        ['Αξεσουάρ Πλυντηρίου - Στεγνωτηρίου'],
+        'WM_ACC_ANTIVIB', 1, 1),
+    (5, 'Απορρυπαντικά / Αρωματικά',
+        ['Αξεσουάρ Πλυντηρίου - Στεγνωτηρίου'],
+        'WM_ACC_DETERGENT', 1, 2),
+    (6, 'Βάση Στήριξης',
+        ['Αξεσουάρ Πλυντηρίου - Στεγνωτηρίου'],
+        'WM_ACC_BASE', 1, 1),
+    (7, 'Σύστημα Σιδερώματος',
+        ['Συστήματα Σιδερώματος'],
+        'WM_COMPANION_SDA', 1, 1),
+    (8, 'Σιδερώστρα',
+        ['Σιδερώστρες'],
+        'WM_COMPANION_SDA_SALES', 1, 1),
+    (9, 'Σύστημα Ατμού',
+        ['Συστήματα ατμού'],
+        'WM_COMPANION_SDA_SALES', 1, 1),
+]
+
+WM_SLOT_TARGET = 10
+
+WM_MARKETING_COPY = {
+    "Στεγνωτήριο":              "Ολοκλήρωσε το set σου — στέγνωμα στο σπίτι, χωρίς αναμονή.",
+    "Βάση Σύνδεσης":            "Στοίβαξε στεγνωτήριο πάνω στο πλυντήριο — εξοικονόμηση χώρου.",
+    "Σίδερο":                   "Φρεσκάρισμα ρούχων μετά το πλύσιμο.",
+    "Αντικραδασμικά":           "Λιγότεροι κραδασμοί, λιγότερος θόρυβος.",
+    "Απορρυπαντικά / Αρωματικά": "Φροντίδα ρούχων — καθαριότητα και αρώματα διαρκείας.",
+    "Βάση Στήριξης":            "Άνοδος ύψους — άνετη φόρτωση χωρίς να σκύβεις.",
+    "Σύστημα Σιδερώματος":      "Επαγγελματικό σιδέρωμα με ατμό — γρήγορα και χωρίς κόπο.",
+    "Σιδερώστρα":               "Σταθερή επιφάνεια για άψογο σιδέρωμα.",
+    "Σύστημα Ατμού":            "Φρεσκάρισμα κρεμασμένων ρούχων — εναλλακτική του σιδέρου.",
+}
+
+# Είδος-keyword filters for the four accessory sub-slots. Matching is
+# case-insensitive substring against the Είδος column. Important: the
+# WM_ACC_BASE bucket explicitly EXCLUDES rows whose Είδος contains
+# 'σύνδεσ'/'συνδετικ' — those belong to WM_ACC_STACK. This is enforced
+# inside _wm_filter_accessory_subset (not by the dict ordering).
+WM_ACC_KEYWORDS = {
+    # Stacking kits — must contain σύνδεσ / συνδετικό (brand-critical pairing)
+    'WM_ACC_STACK':     ('σύνδεσ', 'συνδετικ'),
+    # Anti-vibration pads — small universal attach
+    'WM_ACC_ANTIVIB':   ('αντικραδασμικ', 'πέλματα'),
+    # Consumables — detergent/fragrance/tablets/dryer balls
+    'WM_ACC_DETERGENT': ('απορρυπαντικ', 'αρωματικ', 'ταμπλέτ', 'σφαιρίδι'),
+    # Generic bases / pedestals / carts (Βάσεις, Βάσεις Πλυντηρίου - Στεγνωτηρίου)
+    # — IMPORTANT: filter excludes 'σύνδεσ'/'συνδετικ' to avoid stealing stacking-kit rows.
+    'WM_ACC_BASE':      ('βάσ',),
+}
+
+# Brands that span both major-appliance and small-appliance worlds — used as
+# a hint only (the actual boost is computed per-row by comparing the trigger's
+# parsed brand to each candidate's Κατασκευαστής). Listed for transparency.
+WM_CROSS_WORLD_BRANDS = {
+    'BOSCH',     # WMs + irons + steam stations + dryers + dishwashers
+    'PHILIPS',   # irons + steam stations + WMs (rare)
+    'SIEMENS',   # WMs + steam stations
+    'SAMSUNG',   # WMs + dryers + accessories (rare in SDA)
+    'MIELE',     # WMs + dryers + detergents
+    'LG',        # WMs + dryers
+    'AEG',       # WMs + dryers + accessories + detergents
+    'ELECTROLUX',# WMs + dryers + dryer balls
+}
+
+# Universal-fit accessory brands — these aren't washer brands, they make
+# accessories that fit ANY washing machine. Used so we don't penalize them
+# when the trigger brand doesn't match.
+WM_UNIVERSAL_ACC_BRANDS = {
+    'ROLLER', 'MELICONI', 'LEIFHEIT', 'GUY LAROCHE', 'AQUASAN', 'ΚΕΝΤΙΑ',
+    'KENTIA', 'BERLINGER HAUS', 'HOMEVERO',
+}
+
+# Price tiers for washing machines (calibrated to the 2026 Greek market range).
+# WM prices observed: €240 (CANDY budget) → €2500+ (MIELE flagship).
+def _wm_price_tier(price: float) -> int:
+    """Returns 0=Budget(<€400), 1=Mainstream(€400-700), 2=Premium(€700-1100), 3=Luxury(>€1100)."""
+    if price < 400:   return 0
+    if price < 700:   return 1
+    if price < 1100:  return 2
+    return 3
+
+# Capacity tiers — drives the dryer pairing logic (a 9kg washer wants an
+# 8-10kg dryer, NOT a 6kg one). Roughly: small (≤7kg), mid (8-9kg),
+# large (10-11kg), xl (12+kg). Pairing is "same tier OR ±1 tier".
+def _wm_capacity_tier(kg) -> int:
+    """Returns 0=small(≤7kg), 1=mid(8-9kg), 2=large(10-11kg), 3=xl(12+kg), -1=unknown."""
+    if kg is None or kg <= 0: return -1
+    if kg <= 7:   return 0
+    if kg <= 9:   return 1
+    if kg <= 11:  return 2
+    return 3
+
+def _wm_parse_specs(title: str) -> dict:
+    """Parse a washing-machine or dryer title into structured specs.
+
+    Recognized patterns:
+      "BOSCH WGG244ZPGR 9 kg 1.400 Στροφές Λευκό [με Wi-Fi] Πλυντήριο Ρούχων"
+      "LG F2R9009TPWC Slim 9 kg 1.200 Στροφές Λευκό Πλυντήριο Ρούχων"
+      "MIELE TWD640WP EcoSpeed 9 kg με Αντλία Θερμότητας Λευκό με WiFi Στεγνωτήριο Ρούχων"
+
+    Returns: {brand, capacity_kg, rpm, wifi, slim, heat_pump, condenser, inverter}
+    All values may be None / False if absent.
+    """
+    t = str(title or '').strip()
+    if not t:
+        return {'brand': '', 'capacity_kg': None, 'rpm': None,
+                'wifi': False, 'slim': False, 'heat_pump': False,
+                'condenser': False, 'inverter': False}
+
+    tokens = t.split()
+    brand = tokens[0].upper() if tokens else ''
+
+    # Capacity: e.g. "9 kg" or "9.5 kg" or "12 kg"
+    cap_match = re.search(r'(\d{1,2}(?:[,.]\d)?)\s*kg', t, flags=re.IGNORECASE)
+    cap = float(cap_match.group(1).replace(',', '.')) if cap_match else None
+
+    # Spin speed RPM: "1.400 Στροφές" or "1,400 Στροφές" → 1400
+    rpm = None
+    rpm_match = re.search(r'(\d[\.\,]?\d{3})\s*Στροφ', t)
+    if rpm_match:
+        try:
+            rpm = int(rpm_match.group(1).replace('.', '').replace(',', ''))
+        except ValueError:
+            rpm = None
+
+    # Boolean flags
+    t_lower = t.lower()
+    wifi      = bool(re.search(r'wi[\-\s]?fi', t_lower))
+    slim      = bool(re.search(r'\bslim\b', t_lower))
+    heat_pump = ('αντλία θερμότητας' in t_lower) or ('heat pump' in t_lower)
+    condenser = ('συμπυκν' in t_lower) or ('condens' in t_lower)
+    inverter  = 'inverter' in t_lower
+
+    return {
+        'brand': brand,
+        'capacity_kg': cap,
+        'rpm': rpm,
+        'wifi': wifi,
+        'slim': slim,
+        'heat_pump': heat_pump,
+        'condenser': condenser,
+        'inverter': inverter,
+    }
+
+# Scoring constants for the Washing Machines engine — calibrated so the
+# dryer match (brand + capacity tier) always outranks pure sales, but
+# brand match alone never outranks an exact capacity-tier dryer match.
+WM_S_AVAILABILITY       =   100_000  # In-stock boost
+WM_S_BRAND_MATCH        =   600_000  # Trigger brand == candidate brand (matched pair)
+WM_S_BRAND_NEIGHBOR     =   150_000  # Premium-pairing crossover (BOSCH↔SIEMENS, etc.)
+WM_S_CAP_SAME_TIER      =   400_000  # Dryer capacity in same tier as washer
+WM_S_CAP_ONE_OFF        =   120_000  # Dryer capacity ±1 tier
+WM_S_PRICE_SAME_TIER    =   200_000  # Same price tier (companion appropriateness)
+WM_S_PRICE_ONE_OFF      =    70_000  # ±1 price tier
+WM_S_HEAT_PUMP_BOOST    =    80_000  # Heat-pump dryer (premium type — boost for tier≥1 triggers)
+WM_S_WIFI_MATCH         =    40_000  # Trigger has Wi-Fi → boost Wi-Fi dryers
+WM_S_UNIVERSAL_ACC      =   180_000  # ROLLER/MELICONI etc. — universal-fit accessory
+WM_S_BRAND_DISCOUNT     =  -300_000  # Candidate has wrong-brand SKU code (stacking kits — incompatible)
+WM_S_SALES_FACTOR       =       0.4  # Sales tiebreaker weight (lower than vacuums — WMs sell less per SKU)
 
 
 # ═════════════════════════════════════════════════════════════
@@ -3206,6 +3438,11 @@ L1_CATEGORIES = [
         "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 2v8l4-2'/%3E%3Cpath d='M12 10l-4-2'/%3E%3Ccircle cx='12' cy='18' r='4'/%3E%3Cline x1='12' y1='10' x2='12' y2='14'/%3E%3C/svg%3E",
     },
     {
+        "key": "MDA",
+        "label": "Μεγάλες\nΣυσκευές",
+        "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='4' y='2' width='16' height='20' rx='2' ry='2'/%3E%3Ccircle cx='12' cy='13' r='5'/%3E%3Ccircle cx='12' cy='13' r='2'/%3E%3Cline x1='8' y1='5' x2='8.01' y2='5'/%3E%3Cline x1='12' y1='5' x2='14' y2='5'/%3E%3C/svg%3E",
+    },
+    {
         "key": "Climatism",
         "label": "Κλιματισμός\n& Θέρμανση",
         "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5'%3E%3Cpath d='M12 2v20M2 12h20M4.93 4.93l14.14 14.14M19.07 4.93L4.93 19.07'/%3E%3C/svg%3E",
@@ -3284,6 +3521,10 @@ L2_CHILDREN = {
     "Climatism": [
         {"key": "AirUnits", "label": "Κλιματιστικά",
          "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5'%3E%3Cpath d='M12 2v20M2 12h20M4.93 4.93l14.14 14.14M19.07 4.93L4.93 19.07'/%3E%3C/svg%3E"}
+    ],
+    "MDA": [
+        {"key": "Washing Machines", "label": "Πλυντήρια\nΡούχων",
+         "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='4' y='2' width='16' height='20' rx='2' ry='2'/%3E%3Ccircle cx='12' cy='13' r='5'/%3E%3Ccircle cx='12' cy='13' r='2'/%3E%3Cline x1='8' y1='5' x2='8.01' y2='5'/%3E%3Cline x1='12' y1='5' x2='14' y2='5'/%3E%3C/svg%3E"}
     ],
     "TV": [
         {"key": "TVs", "label": "Τηλεοράσεις",
@@ -3778,6 +4019,29 @@ else:
                 st.sidebar.markdown('<p class="sidebar-section">Επιλέξτε Φριτέζα</p>', unsafe_allow_html=True)
                 sel = st.sidebar.selectbox("", fryers['Title'].unique(), label_visibility="collapsed", key="air_fryer_sel")
                 trigger = fryers[fryers['Title']==sel].iloc[0] if sel else None
+
+    elif active_cluster == "Washing Machines":
+        # Trigger pool: Πλυντήρια Ρούχων from the MDA sheet.
+        # If WM_TEST_SKUS is non-empty, restrict to those SKUs (6 demo WMs
+        # spanning budget/mainstream/premium × narrow/standard/large-cap).
+        if df_mda is None or df_mda.empty:
+            st.sidebar.warning("Sheet 'MDA' is empty or missing.")
+        else:
+            hier_upper = df_mda['Hierarchy'].fillna('').astype(str).str.upper().str.strip()
+            trigger_hiers_upper = {h.upper().strip() for h in WM_TRIGGER_HIERARCHIES}
+            washers = df_mda[hier_upper.isin(trigger_hiers_upper)].copy()
+
+            # 🧪 Optional test-list filter (leave WM_TEST_SKUS empty to show all 388)
+            if WM_TEST_SKUS:
+                mat_clean = washers['Material'].astype(str).str.strip().str.replace(r'\.0$', '', regex=True)
+                washers = washers[mat_clean.isin(WM_TEST_SKUS)]
+
+            if washers.empty:
+                st.sidebar.warning("Δεν βρέθηκαν Πλυντήρια Ρούχων στο sheet MDA.")
+            else:
+                st.sidebar.markdown('<p class="sidebar-section">Επιλέξτε Πλυντήριο</p>', unsafe_allow_html=True)
+                sel = st.sidebar.selectbox("", washers['Title'].unique(), label_visibility="collapsed", key="wm_sel")
+                trigger = washers[washers['Title']==sel].iloc[0] if sel else None
 
     elif active_cluster in ("Mouse", "Keyboard", "Gaming Mouse", "Gaming Keyboard"):
         if df_peripherals.empty:
@@ -9106,6 +9370,472 @@ def run_air_fryer_engine(trigger, df_sda, df_mda, df_history):
     return pd.DataFrame(), diag, slot_notes, pd.DataFrame()
 
 
+# ═══════════════════════════════════════════════════════════════
+# 🟢 WASHING MACHINES HELPERS — Πλυντήρια Ρούχων (Μεγάλες Συσκευές)
+# ═══════════════════════════════════════════════════════════════
+# Five pool builders + one accessory subset filter. The engine follows the
+# same looping pattern as Robot/Traditional/Stick Vacuums and Air Fryers:
+# pre-build & score every pool, then round-robin fill until 10 slots filled
+# or all pools exhausted.
+
+def _wm_filter_accessory_subset(c_pool, subset_key, notes):
+    """Filter the Αξεσουάρ Πλυντηρίου - Στεγνωτηρίου pool down to one of the
+    four sub-slot keys defined in WM_ACC_KEYWORDS. Matching is on the Είδος
+    column (case-insensitive substring).
+
+    Special case: WM_ACC_BASE explicitly EXCLUDES rows where Είδος contains
+    'σύνδεσ' or 'συνδετικ' — those belong to WM_ACC_STACK. Without that
+    filter, the broad 'βάσ' stem would also match 'Βάσεις Σύνδεσης
+    Πλυντηρίου - Στεγνωτηρίου' (32 rows) and steal them from the stacking
+    slot.
+    """
+    if c_pool.empty:
+        return c_pool
+
+    keywords = WM_ACC_KEYWORDS.get(subset_key, ())
+    if not keywords:
+        notes.append(f"  ⚠ No keywords defined for {subset_key} — returning empty pool")
+        return c_pool.iloc[0:0]
+
+    if 'Είδος' not in c_pool.columns:
+        notes.append(f"  ⚠ 'Είδος' column missing — accessory subset filter is a no-op")
+        return c_pool.iloc[0:0]
+
+    eidos_lower = c_pool['Είδος'].fillna('').astype(str).str.lower()
+    match_mask = pd.Series(False, index=c_pool.index)
+    for kw in keywords:
+        match_mask = match_mask | eidos_lower.str.contains(kw, regex=False, na=False)
+
+    # Subtract stacking keywords from the generic-base bucket so we don't
+    # double-count "Βάσεις Σύνδεσης" under both WM_ACC_STACK and WM_ACC_BASE.
+    if subset_key == 'WM_ACC_BASE':
+        stack_kw = WM_ACC_KEYWORDS.get('WM_ACC_STACK', ())
+        for kw in stack_kw:
+            match_mask = match_mask & ~eidos_lower.str.contains(kw, regex=False, na=False)
+
+    out = c_pool[match_mask].copy()
+    notes.append(f"  ✓ Subset filter ({subset_key}): {len(out)} / {len(c_pool)} rows match Είδος keywords {list(keywords)}")
+    return out
+
+
+def _wm_build_dryer_pool(c_pool, trigger_specs, trigger_tier, notes):
+    """Score the Στεγνωτήρια pool — the highest-cross-sell companion slot.
+
+    Signals stacked (most important first):
+      1. Brand match: same Κατασκευαστής as trigger → +600,000
+         (matched pair is the #1 reason people buy dryer with washer)
+      2. Capacity tier: dryer cap in same tier as washer → +400,000
+         (a 9kg washer pairs with 8-10kg dryer, NOT 6kg)
+      3. Price tier proximity: ±0 → +200,000, ±1 → +70,000
+      4. Heat pump (for premium triggers): tier≥1 trigger → +80,000 if HP
+         (heat-pump dryers are the modern, efficient type)
+      5. Wi-Fi mirror: trigger has Wi-Fi → matched Wi-Fi dryer → +40,000
+      6. Sales tiebreaker.
+    """
+    if c_pool.empty:
+        return c_pool
+
+    pool = c_pool.copy()
+    pool['Final_Score'] = 0.0
+
+    # ── Availability boost
+    if 'AVAILABILITY' in pool.columns:
+        pool.loc[pool['AVAILABILITY'] == 'Άμεσα Διαθέσιμο', 'Final_Score'] += WM_S_AVAILABILITY
+
+    # ── Sales baseline
+    pool['Final_Score'] += pool['Sales_Tiebreaker'].fillna(0) * WM_S_SALES_FACTOR
+
+    # ── Parse dryer specs from title (no MDA spec columns to lean on)
+    dryer_specs = pool['Title'].fillna('').astype(str).apply(_wm_parse_specs)
+    pool['_wm_dryer_brand']    = dryer_specs.apply(lambda d: d['brand'])
+    pool['_wm_dryer_cap']      = dryer_specs.apply(lambda d: d['capacity_kg'])
+    pool['_wm_dryer_cap_tier'] = pool['_wm_dryer_cap'].apply(_wm_capacity_tier)
+    pool['_wm_dryer_hp']       = dryer_specs.apply(lambda d: d['heat_pump'])
+    pool['_wm_dryer_wifi']     = dryer_specs.apply(lambda d: d['wifi'])
+
+    # ── 1. Brand match (matched pair)
+    tbrand = (trigger_specs.get('brand') or '').upper().strip()
+    if tbrand:
+        same_brand = pool['_wm_dryer_brand'].str.upper().str.strip() == tbrand
+        pool.loc[same_brand, 'Final_Score'] += WM_S_BRAND_MATCH
+        if same_brand.any():
+            notes.append(f"  ✓ Brand match ({tbrand}): {same_brand.sum()} matched-pair dryers (+{WM_S_BRAND_MATCH:,})")
+
+    # ── 2. Capacity tier match (a 9kg washer pairs with 8-10kg dryer)
+    t_cap_tier = _wm_capacity_tier(trigger_specs.get('capacity_kg'))
+    if t_cap_tier >= 0:
+        same_tier = pool['_wm_dryer_cap_tier'] == t_cap_tier
+        near_tier = (pool['_wm_dryer_cap_tier'] - t_cap_tier).abs() == 1
+        pool.loc[same_tier, 'Final_Score'] += WM_S_CAP_SAME_TIER
+        pool.loc[near_tier, 'Final_Score'] += WM_S_CAP_ONE_OFF
+        if same_tier.any() or near_tier.any():
+            notes.append(f"  ✓ Capacity-tier match (trigger tier {t_cap_tier} / {trigger_specs.get('capacity_kg')}kg): "
+                         f"same={same_tier.sum()}, ±1={near_tier.sum()}")
+
+    # ── 3. Price-tier proximity
+    if 'LIST PRICE' in pool.columns:
+        prices = pool['LIST PRICE'].apply(parse_euro_price)
+        tiers = prices.apply(_wm_price_tier)
+        same_p = tiers == trigger_tier
+        near_p = (tiers - trigger_tier).abs() == 1
+        pool.loc[same_p, 'Final_Score'] += WM_S_PRICE_SAME_TIER
+        pool.loc[near_p, 'Final_Score'] += WM_S_PRICE_ONE_OFF
+        if same_p.any() or near_p.any():
+            notes.append(f"  ✓ Price-tier match (tier {trigger_tier}): "
+                         f"same={same_p.sum()}, near={near_p.sum()}")
+
+    # ── 4. Heat pump preference (only for trigger tier ≥ 1)
+    if trigger_tier >= 1:
+        hp_mask = pool['_wm_dryer_hp'] == True
+        pool.loc[hp_mask, 'Final_Score'] += WM_S_HEAT_PUMP_BOOST
+        if hp_mask.any():
+            notes.append(f"  ✓ Heat-pump preference (premium trigger): {hp_mask.sum()} HP dryers (+{WM_S_HEAT_PUMP_BOOST:,})")
+
+    # ── 5. Wi-Fi mirror
+    if trigger_specs.get('wifi'):
+        wifi_mask = pool['_wm_dryer_wifi'] == True
+        pool.loc[wifi_mask, 'Final_Score'] += WM_S_WIFI_MATCH
+        if wifi_mask.any():
+            notes.append(f"  ✓ Wi-Fi mirror (trigger has Wi-Fi): {wifi_mask.sum()} Wi-Fi dryers (+{WM_S_WIFI_MATCH:,})")
+
+    notes.append(f"  Pool size after scoring: {len(pool)}")
+    return pool.sort_values('Final_Score', ascending=False)
+
+
+def _wm_build_accessory_brand_pool(c_pool, trigger_brand, notes, role_label):
+    """Score an accessory pool where brand-match is preferred (stacking kits,
+    pedestals). Logic:
+      • Same brand as trigger        → +600,000  (matched-pair compatibility)
+      • Universal accessory brand    → +180,000  (ROLLER/MELICONI fit anything)
+      • Other branded items          → neutral (sales decides)
+      • Wrong brand (stacking kits)  → -300,000  (physically incompatible)
+        — only applied when subset is WM_ACC_STACK, since stacking kits are
+          brand-specific by design.
+    """
+    if c_pool.empty:
+        return c_pool
+
+    pool = c_pool.copy()
+    pool['Final_Score'] = 0.0
+
+    if 'AVAILABILITY' in pool.columns:
+        pool.loc[pool['AVAILABILITY'] == 'Άμεσα Διαθέσιμο', 'Final_Score'] += WM_S_AVAILABILITY
+
+    pool['Final_Score'] += pool['Sales_Tiebreaker'].fillna(0) * WM_S_SALES_FACTOR
+
+    tb = (trigger_brand or '').upper().strip()
+    if 'Κατασκευαστής' in pool.columns:
+        cand_brand = pool['Κατασκευαστής'].fillna('').astype(str).str.upper().str.strip()
+        same_brand = (cand_brand == tb) if tb else pd.Series(False, index=pool.index)
+        universal  = cand_brand.isin(WM_UNIVERSAL_ACC_BRANDS)
+
+        pool.loc[same_brand, 'Final_Score'] += WM_S_BRAND_MATCH
+        pool.loc[universal,  'Final_Score'] += WM_S_UNIVERSAL_ACC
+
+        # Wrong-brand penalty for stacking kits ONLY (they're physically
+        # incompatible across brands — a BOSCH stacking kit won't fit an LG).
+        if role_label == 'Βάση Σύνδεσης' and tb:
+            wrong_brand = (~same_brand) & (~universal) & (cand_brand != '')
+            pool.loc[wrong_brand, 'Final_Score'] += WM_S_BRAND_DISCOUNT
+            if wrong_brand.any():
+                notes.append(f"  ✗ Wrong-brand penalty on stacking kit: {wrong_brand.sum()} kits for other brands ({WM_S_BRAND_DISCOUNT:+,})")
+
+        if same_brand.any():
+            notes.append(f"  ✓ Brand match ({tb}): {same_brand.sum()} same-brand accessories (+{WM_S_BRAND_MATCH:,})")
+        if universal.any():
+            notes.append(f"  ✓ Universal accessory brands: {universal.sum()} fits-any items (+{WM_S_UNIVERSAL_ACC:,})")
+
+    return pool.sort_values('Final_Score', ascending=False)
+
+
+def _wm_build_accessory_universal_pool(c_pool, trigger_brand, notes):
+    """Score a universal-need accessory pool (anti-vibration pads,
+    detergents, fragrance). These fit any washer, so the logic is mostly
+    sales-driven with a soft brand boost when MIELE/AEG triggers see their
+    own consumables (MIELE's UltraPhase fits MIELE machines especially well).
+    """
+    if c_pool.empty:
+        return c_pool
+
+    pool = c_pool.copy()
+    pool['Final_Score'] = 0.0
+
+    if 'AVAILABILITY' in pool.columns:
+        pool.loc[pool['AVAILABILITY'] == 'Άμεσα Διαθέσιμο', 'Final_Score'] += WM_S_AVAILABILITY
+
+    pool['Final_Score'] += pool['Sales_Tiebreaker'].fillna(0) * WM_S_SALES_FACTOR
+
+    tb = (trigger_brand or '').upper().strip()
+    if tb and 'Κατασκευαστής' in pool.columns:
+        cand_brand = pool['Κατασκευαστής'].fillna('').astype(str).str.upper().str.strip()
+        same_brand = cand_brand == tb
+        # Lighter boost than for stacking kits — these are universal-fit
+        # consumables, the brand boost is just a small kicker.
+        pool.loc[same_brand, 'Final_Score'] += WM_S_BRAND_NEIGHBOR
+        if same_brand.any():
+            notes.append(f"  ✓ Same-brand consumables ({tb}): {same_brand.sum()} (+{WM_S_BRAND_NEIGHBOR:,})")
+
+    return pool.sort_values('Final_Score', ascending=False)
+
+
+def _wm_build_sda_companion_pool(c_pool, trigger_brand, trigger_tier,
+                                  role_label, sales_only, notes):
+    """Score an SDA-based companion pool (Σίδερα, Συστήματα Σιδερώματος,
+    Σιδερώστρες, Συστήματα Ατμού).
+
+    Brand crossover between washer brands and iron brands is minimal —
+    only BOSCH and PHILIPS appear in both worlds. So the brand boost
+    rarely fires; sales + price-tier proximity dominate.
+
+    `sales_only=True` skips even the brand & price-tier boosts (used for
+    Σιδερώστρες and Συστήματα Ατμού — pure sales).
+    """
+    if c_pool.empty:
+        return c_pool
+
+    pool = c_pool.copy()
+    pool['Final_Score'] = 0.0
+
+    if 'AVAILABILITY' in pool.columns:
+        pool.loc[pool['AVAILABILITY'] == 'Άμεσα Διαθέσιμο', 'Final_Score'] += WM_S_AVAILABILITY
+
+    pool['Final_Score'] += pool['Sales_Tiebreaker'].fillna(0) * WM_S_SALES_FACTOR
+
+    if sales_only:
+        notes.append(f"  ✓ SALES-ONLY pool ({role_label}): {len(pool)} candidates, sorted by sales")
+        return pool.sort_values('Final_Score', ascending=False)
+
+    # ── Brand match (rare crossover — BOSCH, PHILIPS span both worlds)
+    tb = (trigger_brand or '').upper().strip()
+    if tb and 'Κατασκευαστής' in pool.columns:
+        cand_brand = pool['Κατασκευαστής'].fillna('').astype(str).str.upper().str.strip()
+        same_brand = cand_brand == tb
+        pool.loc[same_brand, 'Final_Score'] += WM_S_BRAND_MATCH
+        if same_brand.any():
+            notes.append(f"  ✓ Rare brand crossover ({tb}): {same_brand.sum()} (+{WM_S_BRAND_MATCH:,})")
+
+    # ── Price-tier proximity (premium washer buyer → premium iron, etc.)
+    if 'LIST PRICE' in pool.columns:
+        prices = pool['LIST PRICE'].apply(parse_euro_price)
+        tiers = prices.apply(_wm_price_tier)
+        same_p = tiers == trigger_tier
+        near_p = (tiers - trigger_tier).abs() == 1
+        pool.loc[same_p, 'Final_Score'] += WM_S_PRICE_SAME_TIER
+        pool.loc[near_p, 'Final_Score'] += WM_S_PRICE_ONE_OFF
+        if same_p.any() or near_p.any():
+            notes.append(f"  ✓ Price-tier proximity ({role_label}, trigger tier {trigger_tier}): "
+                         f"same={same_p.sum()}, near={near_p.sum()}")
+
+    return pool.sort_values('Final_Score', ascending=False)
+
+
+# ═══════════════════════════════════════════════════════════════
+# 🟢 WASHING MACHINES ENGINE — Πλυντήρια Ρούχων (Μεγάλες Συσκευές)
+# ═══════════════════════════════════════════════════════════════
+
+def run_washing_machine_engine(trigger, df_mda, df_sda, df_history):
+    """Build up to 10 cross-sell slots for a washing-machine trigger.
+
+    Pools span TWO sheets:
+      • MDA  →  Στεγνωτήρια  +  Αξεσουάρ Πλυντηρίου - Στεγνωτηρίου
+                (split into 4 sub-slots by Είδος keyword)
+      • SDA  →  Σίδερα, Συστήματα Σιδερώματος, Σιδερώστρες, Συστήματα Ατμού
+
+    Round 1 lets Στεγνωτήρια take 2 (the matched-pair carousel hero); every
+    other slot takes 1 per round. Empty pools are silently skipped — the
+    looping engine over-fills surviving pools to keep the carousel at 10.
+    """
+    diag = []
+    slot_notes = {}
+    all_recs = []
+
+    # ── Trigger attributes (parsed from Title since MDA has no spec columns)
+    tm = trigger['Material']
+    tt = str(trigger.get('Title', ''))
+    tprice = parse_euro_price(trigger.get('LIST PRICE', 0))
+    ttier = _wm_price_tier(tprice)
+    tspecs = _wm_parse_specs(tt)
+    tbrand = tspecs['brand']
+
+    diag.append(("0. Trigger",
+                 f"{tbrand} €{tprice:.0f}",
+                 f"cap={tspecs['capacity_kg']}kg | rpm={tspecs['rpm']} | "
+                 f"wifi={tspecs['wifi']} | slim={tspecs['slim']} | "
+                 f"price_tier={ttier} | cap_tier={_wm_capacity_tier(tspecs['capacity_kg'])}"))
+
+    if df_mda is None or df_mda.empty:
+        diag.append(("ERROR", 0, "MDA sheet is empty — engine cannot run"))
+        return pd.DataFrame(), diag, slot_notes, pd.DataFrame()
+
+    # ── Drop the trigger itself + any other washing machines (competitors).
+    # Also drop washer-dryer combos (Πλυντήρια - Στεγνωτήρια) — those are
+    # alternative purchases, not companions.
+    c_mda = df_mda[df_mda['Material'] != tm].copy()
+    trigger_hiers_norm = {h.upper().strip() for h in WM_TRIGGER_HIERARCHIES}
+    combo_hiers = {'ΠΛΥΝΤΗΡΙΑ - ΣΤΕΓΝΩΤΗΡΙΑ', 'ΕΝΤΟΙΧΙΖΟΜΕΝΑ ΠΛΥΝΤΗΡΙΑ ΡΟΥΧΩΝ'}
+    exclude = trigger_hiers_norm | combo_hiers
+    b4 = len(c_mda)
+    c_mda = c_mda[~c_mda['Hierarchy'].fillna('').astype(str).str.upper().str.strip().isin(exclude)]
+    diag.append(("1. Excl washers/combos", len(c_mda),
+                 f"Removed {b4 - len(c_mda)} competitors + combos"))
+
+    # ── Prep SDA pool (irons, steam stations, boards, garment steamers)
+    if df_sda is not None and not df_sda.empty:
+        c_sda = df_sda.copy()
+        diag.append(("1b. SDA pool", len(c_sda),
+                     "Loaded for Σίδερα / Σιδερώματος / Σιδερώστρες / Ατμού slots"))
+    else:
+        c_sda = pd.DataFrame()
+        diag.append(("1b. SDA pool", 0,
+                     "SDA sheet empty — iron-side slots will be skipped"))
+
+    # ── Sales-tiebreaker prep on both pools
+    for _df in (c_mda, c_sda):
+        if not _df.empty:
+            if 'Sum of Sales' in _df.columns:
+                _df['Sales_Tiebreaker'] = pd.to_numeric(_df['Sum of Sales'], errors='coerce').fillna(0)
+            else:
+                _df['Sales_Tiebreaker'] = 0
+
+    # ── Build a sorted pool per priority entry
+    pools = {}  # rank → (role_label, sorted_DataFrame, logic_key, max_round_1, max_total, notes)
+    for rank, role_label, hiers, logic_key, max_r1, max_total in WM_PRIORITY:
+        notes = [f"=== Priority {rank}: {role_label} ({logic_key}) "
+                 f"| max_round_1={max_r1} | max_total={max_total if max_total else '∞'} ==="]
+
+        # Pick the right base pool (MDA for dryers + accessories; SDA for iron-side)
+        if logic_key in ('WM_COMPANION_SDA', 'WM_COMPANION_SDA_SALES'):
+            source_pool = c_sda
+        else:
+            source_pool = c_mda
+
+        if source_pool.empty:
+            notes.append(f"  ⚠ Source sheet empty — skipping pool")
+            pools[rank] = (role_label, pd.DataFrame(), logic_key, max_r1, max_total, notes)
+            continue
+
+        hier_upper = {h.upper().strip() for h in hiers}
+        base_pool = source_pool[source_pool['Hierarchy'].fillna('').astype(str).str.upper().str.strip().isin(hier_upper)].copy()
+        notes.append(f"  Base pool size: {len(base_pool)} (hierarchies={hiers})")
+
+        if base_pool.empty:
+            notes.append(f"  ⚠ Hierarchy not present in data — slot will be filled from other pools")
+            pools[rank] = (role_label, pd.DataFrame(), logic_key, max_r1, max_total, notes)
+            continue
+
+        # ── Score the pool based on its logic key
+        if logic_key == 'WM_DRYER':
+            scored = _wm_build_dryer_pool(base_pool, tspecs, ttier, notes)
+
+        elif logic_key in ('WM_ACC_STACK', 'WM_ACC_ANTIVIB', 'WM_ACC_DETERGENT', 'WM_ACC_BASE'):
+            # First narrow Αξεσουάρ pool down to this Είδος subset, then score
+            subset = _wm_filter_accessory_subset(base_pool, logic_key, notes)
+            if subset.empty:
+                notes.append(f"  ⚠ No Είδος matches for {logic_key} — pool empty")
+                pools[rank] = (role_label, pd.DataFrame(), logic_key, max_r1, max_total, notes)
+                continue
+            # Stacking kits + pedestals → brand-preferred scoring;
+            # antivib + detergents → universal-need scoring.
+            if logic_key in ('WM_ACC_STACK', 'WM_ACC_BASE'):
+                scored = _wm_build_accessory_brand_pool(subset, tbrand, notes, role_label)
+            else:
+                scored = _wm_build_accessory_universal_pool(subset, tbrand, notes)
+
+        elif logic_key == 'WM_COMPANION_SDA':
+            scored = _wm_build_sda_companion_pool(base_pool, tbrand, ttier,
+                                                   role_label, sales_only=False, notes=notes)
+
+        elif logic_key == 'WM_COMPANION_SDA_SALES':
+            scored = _wm_build_sda_companion_pool(base_pool, tbrand, ttier,
+                                                   role_label, sales_only=True, notes=notes)
+
+        else:
+            # Unknown logic → fall back to pure sales
+            scored = base_pool.copy()
+            scored['Final_Score'] = scored['Sales_Tiebreaker']
+
+        pools[rank] = (role_label, scored, logic_key, max_r1, max_total, notes)
+        diag.append((f"Pool {rank} ({role_label})",
+                     len(scored) if scored is not None else 0, logic_key))
+
+    # ── LOOPING: round-robin fill until target hit or all pools exhausted
+    used_materials = {tm}
+    pool_cursors  = {rank: 0 for rank in pools}
+    pool_taken    = {rank: 0 for rank in pools}
+    slot_num = 0
+    round_idx = 0
+
+    while slot_num < WM_SLOT_TARGET:
+        progress = False
+        round_idx += 1
+        for rank, (role_label, scored, logic_key, max_r1, max_total, notes) in pools.items():
+            if slot_num >= WM_SLOT_TARGET:
+                break
+            if scored is None or scored.empty:
+                continue
+            if max_total is not None and pool_taken[rank] >= max_total:
+                continue
+
+            take_n = max_r1 if round_idx == 1 else 1
+            if max_total is not None:
+                take_n = min(take_n, max_total - pool_taken[rank])
+
+            cursor = pool_cursors[rank]
+            taken_this_pass = 0
+            while taken_this_pass < take_n and cursor < len(scored) \
+                  and slot_num < WM_SLOT_TARGET:
+                row = scored.iloc[cursor]
+                cursor += 1
+                if row['Material'] in used_materials:
+                    continue
+                slot_num += 1
+                rc = row.copy()
+                rc['Assigned_Slot'] = slot_num
+                rc['Slot_Role'] = role_label
+                rc['Marketing_Copy'] = WM_MARKETING_COPY.get(role_label, "Ιδανική επιλογή!")
+                rc['Item_Rank'] = round_idx
+                all_recs.append(rc)
+                used_materials.add(row['Material'])
+                taken_this_pass += 1
+                pool_taken[rank] += 1
+                progress = True
+
+                title_preview = str(row.get('Title', ''))[:70]
+                score_val = float(row.get('Final_Score', 0))
+                if slot_num not in slot_notes:
+                    slot_notes[slot_num] = []
+                slot_notes[slot_num].append(
+                    f"Round {round_idx} | Pool '{role_label}' | "
+                    f"Score: {score_val:,.0f} | {title_preview}"
+                )
+
+            pool_cursors[rank] = cursor
+
+        if not progress:
+            diag.append(("Loop", round_idx, "All pools exhausted or capped — stopping"))
+            break
+
+    # ── Pool diagnostics under slot 0
+    pool_diag_notes = []
+    for rank, (role_label, scored, logic_key, max_r1, max_total, notes) in pools.items():
+        pool_diag_notes.extend(notes)
+        cap_note = f" (capped at {max_total})" if max_total is not None else ""
+        pool_diag_notes.append(
+            f"  → consumed {pool_taken[rank]} / {len(scored) if scored is not None else 0} from this pool{cap_note}"
+        )
+        pool_diag_notes.append("")
+    slot_notes[0] = pool_diag_notes
+
+    diag.append(("TOTAL", len(all_recs),
+                 f"Filled {slot_num}/{WM_SLOT_TARGET} slots in {round_idx} rounds"))
+
+    if all_recs:
+        recs_df = pd.DataFrame(all_recs)
+        recs_df['Draft_Score'] = recs_df['Assigned_Slot']
+        return recs_df, diag, slot_notes, recs_df
+    return pd.DataFrame(), diag, slot_notes, pd.DataFrame()
+
+
 # ═════════════════════════════════════════════════════════════
 # 🟢 PERIPHERALS ENGINE — All IT Peripheral Clusters
 # Config-driven: each cluster is a dict of slot definitions
@@ -13204,6 +13934,12 @@ elif active_cluster == "Air Fryers":
     # are wired up but will gracefully skip if their data files aren't loaded.
     recs, diag, slot_notes, full_candidates = run_air_fryer_engine(trigger, df_sda, df_mda, df_history)
     slot_diag = []
+elif active_cluster == "Washing Machines":
+    # Πλυντήρια Ρούχων + Στεγνωτήρια + Αξεσουάρ Πλυντηρίου-Στεγνωτηρίου
+    # live in the MDA sheet; iron-side companions (Σίδερα, Συστήματα
+    # Σιδερώματος, Σιδερώστρες, Συστήματα Ατμού) live in the SDA sheet.
+    recs, diag, slot_notes, full_candidates = run_washing_machine_engine(trigger, df_mda, df_sda, df_history)
+    slot_diag = []
 elif active_cluster == "TVs":
     recs, diag, slot_notes, full_candidates = run_tv_engine(trigger, df_products, df_history)
     slot_diag = []
@@ -13466,6 +14202,12 @@ with st.expander("⚙️ System Diagnostics"):
         attr_keys_to_show = ['Material','Title','Level 2','Hierarchy','Κατασκευαστής','Μοντέλο',
                               'Κατηγορία','Χωρητικότητα.1','Ισχύς ≡','Experts Rating ≡',
                               'Χρώμα','Δυνατότητες','LIST PRICE']
+    elif active_cluster == "Washing Machines":
+        # MDA has no real spec columns filled for WMs — show what's there
+        # plus the basic taxonomy. Title-parsed specs (kg, RPM, Wi-Fi, Slim)
+        # appear in the diagnostics panel under "0. Trigger".
+        attr_keys_to_show = ['Material','Title','Level 1','Level 2','Hierarchy',
+                              'Sum of Sales','LIST PRICE','AVAILABILITY']
     else:
         attr_keys_to_show = ['Material','Title','Level 2','Hierarchy','Κατασκευαστής','Μοντέλο','LIST PRICE']
         
