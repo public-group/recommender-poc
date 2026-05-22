@@ -102,7 +102,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v28.3 — Gaming · PlayStation 5 Console (sales-heavy hybrid)
+        🟢 Engine v28.4 — Gaming · PS5 Console + robust sheet loader
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -2567,10 +2567,21 @@ def load_all_data():
     available_sheets = list(sheet_source.keys())
     
     def _load(sheet_name):
+        # 1. Exact match (fast path)
         ef = sheet_source.get(sheet_name)
+        actual_name = sheet_name
+        # 2. Case-insensitive + whitespace-tolerant fallback. Handles
+        #    "Gaming " (trailing space), "gaming" (lowercase), "GAMING", etc.
+        if ef is None:
+            target = sheet_name.strip().lower()
+            for cand_name, cand_ef in sheet_source.items():
+                if cand_name.strip().lower() == target:
+                    ef = cand_ef
+                    actual_name = cand_name
+                    break
         if ef is None:
             return pd.DataFrame()
-        df = pd.read_excel(ef, sheet_name=sheet_name)
+        df = pd.read_excel(ef, sheet_name=actual_name)
         df.columns = df.columns.str.strip()
         return df
     
@@ -3398,7 +3409,16 @@ else:
         # If PS5_CONSOLE_TEST_SKUS is non-empty, restrict the dropdown to those
         # SKUs (placeholder = a mix of Slim / Digital / Pro / bundles).
         if df_gaming is None or df_gaming.empty:
-            st.sidebar.warning("Sheet 'Gaming' is empty or missing.")
+            # Self-diagnosing warning — shows which sheets *did* load so you can
+            # immediately see if the issue is a missing file or a sheet-name typo.
+            sheets_str = ", ".join(sheets_loaded) if sheets_loaded else "(none)"
+            st.sidebar.warning(
+                "Sheet 'Gaming' is empty or missing.\n\n"
+                f"**Sheets loaded**: {sheets_str}\n\n"
+                "Make sure the Home workbook (`Recommendations GitHub Home.xlsx`) "
+                "is committed alongside the main one, and that the sheet is named "
+                "`Gaming` (any capitalisation / trailing spaces are now tolerated)."
+            )
         else:
             hier_upper = df_gaming['Hierarchy'].fillna('').astype(str).str.upper().str.strip()
             trigger_hiers_upper = {h.upper().strip() for h in PS5_CONSOLE_TRIGGER_HIERARCHIES}
