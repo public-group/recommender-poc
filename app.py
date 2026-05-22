@@ -102,7 +102,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v28.4 — Gaming · PS5 Console + robust sheet loader
+        🟢 Engine v28.5 — PS5 Console refinements (3-tier bands · bundle awareness)
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -1142,18 +1142,24 @@ def get_vinyl_tier(price):
     return 'Entry'
 
 # ═════════════════════════════════════════════════════════════
-# 🟢 GAMING — PS5 CONSOLE CONFIGURATION
+# 🟢 GAMING — PS5 CONSOLE CONFIGURATION (v28.5: 3-tier + bundle-aware)
 # ═════════════════════════════════════════════════════════════
 # Trigger detection: products in the Gaming sheet with Hierarchy = 'PS5 CONSOLE'.
 # Approach: SALES-HEAVY HYBRID. Spec coverage on gaming SKUs is sparse
 # (≈20% have brand/color/model), so we use Sum-of-Sales as the primary
-# signal and layer 5 surgical spec boosts/filters on top:
-#   1. Console tier (Standard < €700 / Premium ≥ €700) for budget caps & Pro→premium hints
-#   2. Color match (white console → white controller/headset)
-#   3. Title-based PS5-compatibility check for cross-platform hierarchies
-#      (STEERING WHEELS, PREPAID CARDS, PLAYSTATION VR)
-#   4. Sony first-party brand boost (Κατασκευαστής + title contains "Sony"/"PlayStation")
-#   5. Slim-vs-Standard cover match by title token
+# signal (interpreted as past-month sales) and layer surgical filters:
+#   1. 3-tier classification (Standard / Mid / Premium) with per-tier
+#      price BANDS for headset & steering (forces real differentiation,
+#      not just a top-end cap)
+#   2. Bundle-aware skipping:
+#        - skip controller slot when console title contains "Two DualSense" etc.
+#        - skip game slots for Digital Edition consoles
+#        - exclude bundled games from PS5 GAMES pool (FC24/FC26, Horizon FW,
+#          GoW, Spider-Man 2, Gran Turismo, Ghost of Yotei, Astro Bot, …)
+#   3. Color match (white console → white controller/headset)
+#   4. PS5 title-compatibility check for cross-platform hierarchies
+#   5. Sony first-party brand boost (tier-aware: +5000 / +8000 / +15000)
+#   6. Slim-vs-Pro cover match (skips slot when no Pro covers exist)
 
 # Hierarchies that trigger the engine
 PS5_CONSOLE_TRIGGER_HIERARCHIES = {'PS5 CONSOLE'}
@@ -1185,34 +1191,42 @@ PS5_CONSOLE_MARKETING_COPY = {
     "Prepaid Card":        "Πίστωση για games & PlayStation Plus.",
 }
 
-# Budget caps per console tier (€) — keeps recs proportional to the trigger
-# price so that a Standard PS5 doesn't get paired with an Edge controller +
-# Pulse Elite + PSVR2 combo that exceeds the console's own price.
+# 3-tier budget caps (hard ceiling — over-cap gets a −30 000 penalty)
 PS5_CONSOLE_BUDGET = {
     'Standard': {
-        'controller':  90,
-        'headset':     90,
-        'cable':       40,
-        'accessory':  260,
-        'steering':   350,
-        'cover':       70,
-        'vr':         500,
-        'prepaid':    100,
+        'controller':  90, 'headset':     90, 'cable':      40,
+        'accessory':  260, 'steering':   320, 'cover':      70,
+        'vr':         500, 'prepaid':    100,
+    },
+    'Mid': {
+        'controller': 140, 'headset':    160, 'cable':      50,
+        'accessory':  280, 'steering':   420, 'cover':      80,
+        'vr':         500, 'prepaid':    100,
     },
     'Premium': {
-        'controller': 220,   # allow DualSense Edge (~€240) for Pro buyers
-        'headset':    230,   # Pulse Elite, Razer Kaira Pro tier
-        'cable':       60,
-        'accessory':  280,   # Portal Remote Player
-        'steering':   500,   # G923 / Logitech high-end
-        'cover':       80,
-        'vr':         500,
-        'prepaid':    100,
+        'controller': 260, 'headset':    260, 'cable':      60,
+        'accessory':  280, 'steering':   550, 'cover':      80,
+        'vr':         500, 'prepaid':    100,
     },
 }
 
-# Premium-only slots: dropped entirely when console is Standard tier
-PS5_PREMIUM_ONLY_LOGIC = set()  # currently we *show* VR but the cap controls it
+# 3-tier price BANDS — items inside the band get +6000, outside gets a
+# tier-specific under/over penalty. This is what creates real per-tier
+# differentiation (rather than the top-seller dominating every tier).
+PS5_PRICE_BANDS = {
+    'Standard': {
+        'headset':  (25, 70),    # JBL Quantum 100P €30, Trust GXT 498 €50
+        'steering': (100, 280),  # Speedlink Drift, Logitech G29 €259
+    },
+    'Mid': {
+        'headset':  (60, 130),   # Razer Blackshark, Kaira Hyperspeed €100
+        'steering': (290, 420),  # G29 with shifter, G923 base €299
+    },
+    'Premium': {
+        'headset':  (130, 230),  # Sony Pulse Elite €149, Kaira Pro
+        'steering': (380, 500),  # G923 with shifter €439, Thrustmaster
+    },
+}
 
 # Hierarchies that are PS5-exclusive by construction (no platform filter needed)
 PS5_LOCKED_HIERARCHIES = {
@@ -1231,16 +1245,74 @@ PS5_TITLE_PATTERN = re.compile(
     re.IGNORECASE,
 )
 
+# Multi-controller bundle detector
+PS5_MULTI_CONTROLLER_PATTERN = re.compile(
+    r'\b(?:two|twin|2|2x)\s+(?:dualsense|controllers?|χειριστήρι)',
+    re.IGNORECASE,
+)
+
+# Bundled-game patterns. Each tuple is (detection_in_trigger_title, exclude_regex_for_game_pool).
+# When a trigger title matches the detection pattern, the exclude regex is applied
+# to the PS5 GAMES pool so the bundled game isn't recommended again.
+PS5_BUNDLED_GAMES = [
+    (r'\bhorizon\b.*\bforbidden\b',                  r'horizon.*forbidden'),
+    (r'\bgod of war\b',                              r'god of war|ragnar'),
+    (r'\b(?:ea sports )?fc\s*24\b|\bfifa\s*24\b',    r'\b(?:ea sports )?fc.?24\b|\bfifa.?24\b'),
+    (r'\b(?:ea sports )?fc\s*25\b|\bfifa\s*25\b',    r'\b(?:ea sports )?fc.?25\b|\bfifa.?25\b'),
+    (r'\b(?:ea sports )?fc\s*26\b|\bfc26\b',         r'\b(?:ea sports )?fc.?26\b|\bfc26\b'),
+    (r'\bfortnite\b',                                 r'fortnite'),
+    (r'\bghost of yotei\b',                           r'ghost of yotei'),
+    (r'\bghost of tsushima\b',                        r'ghost of tsushima'),
+    (r'\bastro bot\b',                                r'astro bot'),
+    (r'\bdeath stranding\b',                          r'death stranding'),
+    (r'\bspider.?man\s*2\b',                          r'spider.?man\s*2'),
+    (r'\bgran turismo\b',                             r'gran turismo'),
+    (r'\buncharted\b',                                r'uncharted'),
+    (r'\bratchet\b',                                   r'ratchet'),
+    (r'\bstellar blade\b',                            r'stellar blade'),
+    (r'\brise of the ronin\b',                        r'rise of the ronin'),
+    (r'\blost soul aside\b',                          r'lost soul aside'),
+    (r'\buntil dawn\b',                               r'until dawn'),
+    (r'\bthe last of us\b',                           r'the last of us|tlou'),
+    (r'\breturnal\b',                                  r'returnal'),
+    (r'\bdemon.?s souls\b',                           r'demon.?s souls'),
+    (r'\bfinal fantasy\b',                            r'final fantasy'),
+]
+
 def get_ps5_tier(price):
-    """Map a PS5 console LIST PRICE (€) to a tier string.
-    Standard (Slim / 1TB / Digital Edition): < 700
-    Premium (Pro / Bundle with extras / Twin-controller): >= 700
+    """Map a PS5 console LIST PRICE (€) to one of 3 tiers.
+      Standard (≤ €680): base Slim / Digital / cheap game bundles
+      Mid      (€680-800): twin-controller bundles, premium-game bundles
+      Premium  (≥ €800):  Pro / VR-bundle / top-tier
     """
     try:
         p = float(price)
     except (TypeError, ValueError):
         p = 0.0
-    return 'Premium' if p >= 700 else 'Standard'
+    if p >= 800: return 'Premium'
+    if p >= 680: return 'Mid'
+    return 'Standard'
+
+
+def ps5_extract_bundled_game_excludes(title):
+    """Return list of regex patterns to apply to the PS5 GAMES pool to exclude
+    the game(s) already included in a console+game bundle.
+
+    Empty list if the trigger is a plain console (no game in the bundle).
+    """
+    if not title:
+        return []
+    t = title.lower()
+    return [exc for det, exc in PS5_BUNDLED_GAMES if re.search(det, t)]
+
+
+def ps5_is_multi_controller_bundle(title):
+    """True if the console trigger title indicates extra controllers are
+    already in the box (e.g. 'Two DualSense Wireless Controllers Bundle')."""
+    if not title:
+        return False
+    return bool(PS5_MULTI_CONTROLLER_PATTERN.search(title))
+
 
 # ─────────────────────────────────────────────────────────────
 # 🟢 KIDS BOOKS CONFIGURATION
@@ -11135,26 +11207,48 @@ def run_ps5_console_engine(trigger, df_gaming, df_history):
     if not has_white and not has_black:
         has_white = True
 
+    # ── Bundle detection (drives slot-skipping and game filtering) ──
+    bundle_game_excludes = ps5_extract_bundled_game_excludes(tt)
+    is_multi_ctrl_bundle = ps5_is_multi_controller_bundle(tt)
+
+    # Tier-aware Sony first-party boost amount
+    sony_boost = 15000 if ttier == 'Premium' else (8000 if ttier == 'Mid' else 5000)
+
     diag.append((
         "0. Trigger",
         f"Tier={ttier} (€{tprice:.0f}) · Slim={is_slim} · Pro={is_pro} · Digital={is_digital}",
-        f"Color hint: white={has_white}, black={has_black}",
+        f"white={has_white} · MultiCtrl={is_multi_ctrl_bundle} · BundledGames={len(bundle_game_excludes)} · SonyBoost=+{sony_boost}",
     ))
+    if bundle_game_excludes:
+        diag.append(("0a. Bundle filter", len(bundle_game_excludes), f"Excluding patterns: {bundle_game_excludes}"))
 
     # ── Prep candidate pool ──
     pool_full = df_gaming.copy()
     pool_full['Sales_30'] = pd.to_numeric(pool_full.get('Sum of Sales', 0), errors='coerce').fillna(0)
     pool_full['_p']       = pool_full['LIST PRICE'].apply(parse_euro_price)
-    # De-dupe by (Material, price) to keep one row per SKU+price variant
+    # De-dupe by Material to collapse multi-price-row SKUs into one
     pool_full = pool_full.drop_duplicates(subset=['Material'], keep='first')
     # Drop the trigger itself
     pool_full = pool_full[pool_full['Material'] != tm].copy()
 
     used_materials = {tm}
-    caps = PS5_CONSOLE_BUDGET[ttier]
+    caps  = PS5_CONSOLE_BUDGET[ttier]
+    bands = PS5_PRICE_BANDS[ttier]
 
     for slot_num, role, hierarchies, logic_key in PS5_CONSOLE_SLOTS:
         notes = [f"Logic: {logic_key} · Tier: {ttier}"]
+
+        # ── SKIP CHECKS (upfront, before any pool work) ──
+        if slot_num == 1 and is_multi_ctrl_bundle:
+            msg = "Skipped: console bundle already includes multiple controllers"
+            diag.append((f"Slot {slot_num} ({role})", 0, msg))
+            slot_notes[slot_num] = notes + ["⊘ " + msg]
+            continue
+        if logic_key == 'GAME_LOGIC' and is_digital:
+            msg = "Skipped: Digital Edition console (no disc drive → physical games N/A)"
+            diag.append((f"Slot {slot_num} ({role})", 0, msg))
+            slot_notes[slot_num] = notes + ["⊘ " + msg]
+            continue
 
         hiers_upper = {h.upper().strip() for h in hierarchies}
         hier_col_upper = pool_full['Hierarchy'].fillna('').astype(str).str.upper().str.strip()
@@ -11167,7 +11261,6 @@ def run_ps5_console_engine(trigger, df_gaming, df_history):
             continue
 
         # ── Cross-platform PS5 compatibility filter ──
-        # PS5_CROSSPLATFORM_HIERARCHIES span multiple consoles; keep PS5-titled rows
         if any(h in PS5_CROSSPLATFORM_HIERARCHIES for h in hiers_upper):
             ps5_mask = pool['Title'].fillna('').astype(str).apply(
                 lambda s: bool(PS5_TITLE_PATTERN.search(s))
@@ -11178,8 +11271,19 @@ def run_ps5_console_engine(trigger, df_gaming, df_history):
                 if dropped:
                     notes.append(f"🎯 Cross-platform filter: kept {len(pool)} PS5-titled items, dropped {dropped}")
 
+        # ── Exclude bundled game(s) from GAME pool ──
+        if logic_key == 'GAME_LOGIC' and bundle_game_excludes:
+            total_excluded = 0
+            for ex_pattern in bundle_game_excludes:
+                title_lower = pool['Title'].fillna('').astype(str).str.lower()
+                ex_mask = title_lower.str.contains(ex_pattern, regex=True, na=False)
+                total_excluded += int(ex_mask.sum())
+                pool = pool[~ex_mask]
+            if total_excluded:
+                notes.append(f"⛔ Bundled-game exclude: removed {total_excluded} variants (patterns: {bundle_game_excludes})")
+
         if pool.empty:
-            diag.append((f"Slot {slot_num} ({role})", 0, "Empty after PS5 title filter"))
+            diag.append((f"Slot {slot_num} ({role})", 0, "Empty after filters"))
             slot_notes[slot_num] = notes
             continue
 
@@ -11187,9 +11291,7 @@ def run_ps5_console_engine(trigger, df_gaming, df_history):
         pool['Final_Score'] = pool['Sales_30'].astype(float)
         if 'AVAILABILITY' in pool.columns:
             avail_mask = pool['AVAILABILITY'].fillna('').astype(str).str.strip() == 'Άμεσα Διαθέσιμο'
-            # Tie-breaking boost: ~+1500 sales worth, enough to flip near-equals
             pool.loc[avail_mask, 'Final_Score'] += 1500
-            # Hard penalty for "Μη Διαθέσιμο" / "Προσωρινά Εξαντλημένο" / "Οπς, μόλις εξαντλήθηκε"
             unavail_mask = pool['AVAILABILITY'].fillna('').astype(str).str.contains(
                 'Μη Διαθέσιμο|Εξαντλημένο|Εξαντλήθηκε', regex=True, na=False
             )
@@ -11210,19 +11312,18 @@ def run_ps5_console_engine(trigger, df_gaming, df_history):
             over_budget = pool['_p'] > cap
             pool.loc[over_budget, 'Final_Score'] -= 30000
             if over_budget.any():
-                notes.append(f"💶 Budget cap [{ttier}/{logic_key}]: Penalized {int(over_budget.sum())} items over €{cap}")
+                notes.append(f"💶 Budget cap [{ttier}/{logic_key}] over €{cap}: −30000 to {int(over_budget.sum())} items")
 
-        # ── Sony / first-party boost (applies broadly) ──
+        # ── Sony / first-party boost (tier-aware) ──
         brand_col = pool['Κατασκευαστής'].fillna('').astype(str).str.upper().str.strip()
         title_col = pool['Title'].fillna('').astype(str)
         sony_mask = (brand_col == 'SONY') | title_col.str.contains(r'\bSony\b|\bPlayStation\b', case=False, na=False, regex=True)
         if sony_mask.any() and logic_key not in ('GAME_LOGIC', 'STEERING_LOGIC', 'PREPAID_LOGIC'):
-            pool.loc[sony_mask, 'Final_Score'] += 5000
-            notes.append(f"🏷 Sony first-party boost: {int(sony_mask.sum())} items +5000")
+            pool.loc[sony_mask, 'Final_Score'] += sony_boost
+            notes.append(f"🏷 Sony first-party boost [{ttier}]: {int(sony_mask.sum())} items +{sony_boost}")
 
         # ── Per-logic refinements ──
         if logic_key == 'CONTROLLER_LOGIC':
-            # Color match: white console → boost white controllers
             color_col = pool['Χρώμα'].fillna('').astype(str).str.lower()
             if has_white:
                 wm = color_col.str.contains('λευκ', na=False) | title_col.str.contains('white|λευκ', case=False, na=False, regex=True)
@@ -11232,61 +11333,99 @@ def run_ps5_console_engine(trigger, df_gaming, df_history):
                 bm = color_col.str.contains('μαύρ', na=False) | title_col.str.contains('black|midnight|μαύρ', case=False, na=False, regex=True)
                 pool.loc[bm, 'Final_Score'] += 8000
                 notes.append(f"🎨 Color match black: +8000 to {int(bm.sum())} items")
-            # Pro tier: allow Edge premium variant to surface
             if ttier == 'Premium':
                 edge_mask = title_col.str.contains('Edge', case=False, na=False)
                 pool.loc[edge_mask, 'Final_Score'] += 3000
                 if edge_mask.any():
-                    notes.append("⚡ Pro tier: DualSense Edge +3000")
+                    notes.append("⚡ Premium tier: DualSense Edge +3000")
 
         elif logic_key == 'HEADSET_LOGIC':
+            # Tier-targeted price band scoring — forces real differentiation
+            band_lo, band_hi = bands['headset']
+            in_band    = pool['_p'].between(band_lo, band_hi)
+            under_band = pool['_p'] < band_lo
+            over_band  = pool['_p'] > band_hi
+            pool.loc[in_band, 'Final_Score'] += 6000
+            if ttier == 'Premium':
+                # Pro buyers want premium — penalize cheap entry-level (the "floor")
+                pool.loc[under_band, 'Final_Score'] -= 8000
+                notes.append(f"💎 Premium headset band €{band_lo}-€{band_hi}: in={int(in_band.sum())} (+6000), under={int(under_band.sum())} (−8000)")
+            elif ttier == 'Mid':
+                pool.loc[under_band, 'Final_Score'] -= 3000
+                pool.loc[over_band, 'Final_Score']  -= 5000
+                notes.append(f"🎯 Mid headset band €{band_lo}-€{band_hi}: in={int(in_band.sum())} (+6000), under={int(under_band.sum())} (−3000), over={int(over_band.sum())} (−5000)")
+            else:
+                pool.loc[over_band, 'Final_Score'] -= 6000
+                notes.append(f"💵 Standard headset band €{band_lo}-€{band_hi}: in={int(in_band.sum())} (+6000), over={int(over_band.sum())} (−6000)")
+
+            # Color match
             color_col = pool['Χρώμα'].fillna('').astype(str).str.lower()
             if has_white:
                 wm = color_col.str.contains('λευκ', na=False) | title_col.str.contains('white|λευκ', case=False, na=False, regex=True)
                 pool.loc[wm, 'Final_Score'] += 6000
                 notes.append(f"🎨 Color match white: +6000 to {int(wm.sum())} items")
-            # Wireless preference (especially for Pro)
+
+            # Wireless preference (tier-aware)
             wireless_mask = title_col.str.contains('Wireless|Ασύρμ|Bluetooth', case=False, na=False, regex=True)
-            wl_boost = 5000 if ttier == 'Premium' else 2000
+            wl_boost = 5000 if ttier == 'Premium' else (3000 if ttier == 'Mid' else 2000)
             pool.loc[wireless_mask, 'Final_Score'] += wl_boost
             notes.append(f"📡 Wireless preference: +{wl_boost} to {int(wireless_mask.sum())} items")
 
         elif logic_key == 'CABLE_LOGIC':
-            # Charging dock takes priority over plain cables for console buyers
             dock_mask = title_col.str.contains('Charger|Charging Dock|Βάση Φόρτισης', case=False, na=False, regex=True)
             pool.loc[dock_mask, 'Final_Score'] += 4000
             if dock_mask.any():
                 notes.append(f"🔌 Dock/Charger priority: +4000 to {int(dock_mask.sum())} items")
 
         elif logic_key == 'COVER_LOGIC':
-            # Match Slim cover with Slim console, Standard cover with Standard
             if is_slim:
                 slim_mask = title_col.str.contains('Slim', case=False, na=False)
                 pool.loc[slim_mask, 'Final_Score'] += 10000
                 pool.loc[~slim_mask, 'Final_Score'] -= 3000
-                notes.append(f"🎯 Slim console → Slim cover +10000, non-Slim −3000")
+                notes.append("🎯 Slim console → Slim cover +10000, non-Slim −3000")
             elif is_pro:
-                # PS5 Pro uses its own cover; if no Pro covers exist, fall back to highest-sales
                 pro_mask = title_col.str.contains(r'\bPro\b', case=False, na=False, regex=True)
-                if pro_mask.any():
-                    pool.loc[pro_mask, 'Final_Score'] += 10000
-                    notes.append(f"🎯 Pro console → Pro cover +10000")
+                if not pro_mask.any():
+                    msg = "Skipped: PS5 Pro needs Pro-fit cover (none in catalog)"
+                    diag.append((f"Slot {slot_num} ({role})", 0, msg))
+                    slot_notes[slot_num] = notes + ["⊘ " + msg]
+                    continue
+                pool.loc[pro_mask, 'Final_Score'] += 10000
+                notes.append("🎯 Pro console → Pro cover +10000")
+            else:
+                # Original (fat) PS5 — Slim covers don't fit
+                msg = "Skipped: original PS5 (non-Slim/Pro) — only Slim covers in catalog"
+                diag.append((f"Slot {slot_num} ({role})", 0, msg))
+                slot_notes[slot_num] = notes + ["⊘ " + msg]
+                continue
 
         elif logic_key == 'VR_LOGIC':
-            # Already filtered by hierarchy. Title filter already kept PS5/PSVR.
-            # Premium tier doubles the relevance; Standard tier shows it too but
-            # the budget cap keeps it reasonable.
             if ttier == 'Premium':
                 pool['Final_Score'] += 2000
-                notes.append("⚡ Pro tier: PSVR2 surfacing boost")
+                notes.append("⚡ Premium tier: PSVR2 surfacing boost +2000")
 
         elif logic_key == 'STEERING_LOGIC':
-            # PS5-compat filter already applied. Logitech G dominates this hierarchy;
-            # let sales speak — no extra boost needed.
-            pass
+            # Tier-targeted price band scoring. Note: G29's sales (20 470) dominate
+            # G923's (6 556), so Mid/Premium need a strong under-band penalty
+            # (−10 000) to flip the choice toward G923-class wheels.
+            band_lo, band_hi = bands['steering']
+            in_band    = pool['_p'].between(band_lo, band_hi)
+            under_band = pool['_p'] < band_lo
+            over_band  = pool['_p'] > band_hi
+            pool.loc[in_band, 'Final_Score'] += 6000
+            if ttier == 'Premium':
+                pool.loc[under_band, 'Final_Score'] -= 10000
+                pool.loc[over_band,  'Final_Score'] -= 5000
+                notes.append(f"💎 Premium steering band €{band_lo}-€{band_hi}: in={int(in_band.sum())} (+6000), under={int(under_band.sum())} (−10000)")
+            elif ttier == 'Mid':
+                pool.loc[under_band, 'Final_Score'] -= 10000
+                pool.loc[over_band,  'Final_Score'] -=  5000
+                notes.append(f"🎯 Mid steering band €{band_lo}-€{band_hi}: in={int(in_band.sum())} (+6000), under={int(under_band.sum())} (−10000), over={int(over_band.sum())} (−5000)")
+            else:
+                pool.loc[over_band, 'Final_Score'] -= 5000
+                notes.append(f"💵 Standard steering band €{band_lo}-€{band_hi}: in={int(in_band.sum())} (+6000), over={int(over_band.sum())} (−5000)")
 
         elif logic_key == 'PREPAID_LOGIC':
-            # Boost PlayStation cards over FIFA FUT cards (which are legacy/inactive)
             ps_mask = title_col.str.contains('PlayStation|Playstation', case=False, na=False, regex=True)
             fut_mask = title_col.str.contains('FUT Points|FIFA', case=False, na=False, regex=True)
             pool.loc[ps_mask, 'Final_Score'] += 5000
@@ -11294,8 +11433,9 @@ def run_ps5_console_engine(trigger, df_gaming, df_history):
             notes.append(f"🎮 PlayStation card priority: PS +5000 ({int(ps_mask.sum())}), FIFA-FUT −5000 ({int(fut_mask.sum())})")
 
         elif logic_key == 'GAME_LOGIC':
-            # Pure sales — no extra boost. Top-2 games are pulled across slots 2 & 5
-            # so we simply skip whatever is already used.
+            # Pure past-month sales sort. Bundled-game exclusion + used_materials
+            # dedup ensure slots 2 & 5 show two different games, neither of which
+            # is already included in a bundle trigger.
             pass
 
         # ── Selection ──
