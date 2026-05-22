@@ -102,7 +102,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v28.10 — NS2 slot diversification (Camera + Τιμονιέρα slots)
+        🟢 Engine v28.11 — Air Fryers (Φριτέζες) — Small Kitchen Appliances cluster
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -1061,6 +1061,152 @@ STICK_VAC_SLOT_TARGET = 10
 
 # Reuse the same marketing copy keys as Traditional Vacuums — roles match 1:1
 STICK_VAC_MARKETING_COPY = TRAD_VAC_MARKETING_COPY
+
+
+# ═════════════════════════════════════════════════════════════
+# 🟢 AIR FRYERS CONFIGURATION (Φριτέζες — Small Kitchen Appliances)
+# ═════════════════════════════════════════════════════════════
+# Trigger detection: products in SDA sheet with Hierarchy = "Φριτέζες"
+# (covers air, oil and combo fryers — sub-type detected via title heuristic).
+#
+# Recommendation depth — HYBRID (sales × brand-ecosystem × price-tier):
+#   • Source has rich specs (capacity 7.1L+, power band, brand, color,
+#     expert rating, features) BUT slot hierarchies are different appliance
+#     categories — capacity in L doesn't map to a kettle, fryer power band
+#     doesn't map to an iron. Fully spec-based cross-matching would be noise.
+#   • Brand ecosystem is the strongest universal signal:
+#       IZZY  → 17 toasters, 15 kettles, 4 irons, 9 accessories
+#       ROHNSON → 12, 12, 10, 20 (richest ecosystem)
+#       TEFAL → 14 irons (very strong cross-sell to ironing)
+#       PHILIPS → 16 irons, 6 kettles
+#       NINJA → ZERO outside fryers → gracefully falls through to sales
+#   • Price tier proximity keeps the consumer budget consistent.
+#   • For Αξεσουάρ Συσκευών Μαγειρικής the pool is mostly stand-mixer/BBQ
+#     items — we add a 3rd spec: air-fryer relevance keyword in title/desc.
+#
+# Note on missing hierarchies: ΠΟΛΥΚΟΠΤΗΣ and Τηγάνια - Wok are not yet in
+# the data. The looping engine skips empty pools and over-fills other slots
+# to keep the carousel at 10 items.
+
+AIR_FRYER_TRIGGER_HIERARCHIES = {
+    "Φριτέζες", "ΦΡΙΤΕΖΕΣ", "Φριτέζα",
+}
+
+# Test SKUs — restrict the trigger dropdown to these five representative fryers.
+# Covers: mainstream best-seller (IZZY), premium AIR (NINJA), mid-range AIR
+# (ROHNSON), classic OIL fryer (TEFAL), brand-ecosystem test (TEFAL AIR).
+AIR_FRYER_TEST_SKUS = {
+    "1904212",  # IZZY IZ-8225 €139 10L AIR — mainstream best-seller
+    "1906001",  # NINJA AF500EU MegaZone €229 10.4L AIR — premium (NINJA-only)
+    "2076631",  # ROHNSON R-2881 €160 11.5L AIR — ecosystem-rich brand
+    "1903916",  # TEFAL Super Uno FR3140 €100 2.2L OIL — classic oil fryer
+    "2065726",  # TEFAL EY922D DUAL EASY FRY FLEX €259 9L AIR — TEFAL premium
+}
+
+# (priority_rank, role_label, hierarchies, logic_key, max_in_round_1, max_total)
+# Mirror of ROBOT_VAC_PRIORITY pattern. The looping engine cycles through
+# these in priority order taking 1 item per pool per round until 10 slots
+# are filled. Accessories: max_r1=2 ensures the user's spec ("4× Αξεσουάρ
+# Συσκευών Μαγειρικής slots out of 10") is honored. max_total=6 (not 4)
+# lets accessories ABSORB any missing companion slots — e.g. when ΠΟΛΥΚΟΠΤΗΣ
+# and Τηγάνια‑Wok data aren't yet loaded, we end up with 6 accessories + 4
+# companions = 10 instead of dropping to 8. When all 7 priorities have data,
+# the loop naturally caps accessory consumption at 4 (round-robin math:
+# 2 in round 1 + 1 each in rounds 2-3 = 4, since rounds 2+ companions are
+# already capped and only accessories have remaining capacity).
+AIR_FRYER_PRIORITY = [
+    (1, 'Αξεσουάρ Συσκευών Μαγειρικής',
+        ['Αξεσουάρ Συσκευών Μαγειρικής', 'Αξεσουάρ Μαγειρικής', 'Αξεσουάρ'],
+        'ACCESSORY_KITCHEN', 2, 6),
+    (2, 'Τοστιέρες',           ['Τοστιέρες'],            'COMPANION_APPL', 1, 1),
+    (3, 'Βραστήρες',           ['Βραστήρες'],            'COMPANION_APPL', 1, 1),
+    (4, 'Σίδερα',              ['Σίδερα'],               'COMPANION_APPL', 1, 1),
+    (5, 'Πολυκόπτης',          ['ΠΟΛΥΚΟΠΤΗΣ', 'Πολυκόπτης', 'Πολυκόπτες',
+                                'Πολυμηχανήματα Κουζίνας', 'Πολυκόπτες & Μίνι Μπλέντερ'],
+                                                          'COMPANION_APPL', 1, 1),
+    (6, 'Φούρνος Μικροκυμάτων', ['Φούρνοι Μικροκυμάτων'], 'COMPANION_MDA',  1, 1),
+    (7, 'Τηγάνια - Wok',       ['Τηγάνια - Wok', 'Τηγάνια & Wok',
+                                'Τηγάνια', 'Wok', 'Σκεύη'],
+                                                          'COMPANION_COOK', 1, 1),
+]
+
+# Total slot target — engine loops until this many filled or pools exhausted.
+# When ΠΟΛΥΚΟΠΤΗΣ & Τηγάνια‑Wok pools are empty, accessories absorb the gap.
+AIR_FRYER_SLOT_TARGET = 10
+
+AIR_FRYER_MARKETING_COPY = {
+    "Αξεσουάρ Συσκευών Μαγειρικής": "Ολοκλήρωσε τη φριτέζα σου με αξεσουάρ κουζίνας.",
+    "Τοστιέρες":           "Γρήγορο τοστ — η τέλεια συνοδεία στο πρωινό σου.",
+    "Βραστήρες":           "Ζεστό νερό άμεσα — για καφέ ή τσάι δίπλα στο γεύμα.",
+    "Σίδερα":              "Ολοκλήρωσε τη φροντίδα του σπιτιού σου.",
+    "Πολυκόπτης":          "Πρόπλασε τα υλικά γρήγορα πριν τα ψήσεις.",
+    "Φούρνος Μικροκυμάτων": "Συμπληρωματικός τρόπος μαγειρέματος — ζεστά γεύματα σε λεπτά.",
+    "Τηγάνια - Wok":       "Για όσα δεν χωρούν στη φριτέζα — μαγείρεψε με όλα τα μέσα.",
+}
+
+# Keyword heuristic — accessory title/description must contain at least one
+# of these tokens to qualify as air-fryer-relevant (Tier A). Other accessories
+# qualify only via same-brand boost (Tier B) or pure sales fallback (Tier C).
+AIR_FRYER_ACCESSORY_RELEVANCE_KW = {
+    'φριτέζ', 'αέρος', 'αερος', 'air fry', 'airfry', 'hot air',
+    'λαδιού', 'λαδιου',  # oil-fryer accessories
+    'parchment', 'περγαμηνή', 'περγαμινη', 'λάδωμα', 'λαδωμα',
+    'λωρίδες', 'λωριδες',  # liners
+    'καλάθι', 'καλαθι', 'καλάθα',  # basket
+    'σχάρα', 'σχαρα',  # rack
+    'silicone liner', 'σιλικόνης', 'σιλικονης',
+}
+
+# Brands known to span multiple kitchen appliance hierarchies — used purely
+# as a data-quality hint in diagnostics; the brand boost is awarded
+# dynamically by comparing trigger brand against pool brands.
+AIR_FRYER_KNOWN_ECOSYSTEM_BRANDS = {
+    'IZZY', 'ROHNSON', 'TEFAL', 'PHILIPS', 'BOSCH', 'BLACK & DECKER',
+    'MOULINEX', 'KENWOOD', 'BRAUN', 'SIEMENS', 'SEVERIN', 'KORONA',
+    'RUSSELL HOBBS', 'TURBOTRONIC', 'ESTIA', 'SINGER', 'TAURUS',
+}
+
+# Price tiers for proximity scoring on companion appliances (kitchen-appropriate).
+# Φριτέζες range €50-€449; companions in the SDA pool have similar spread.
+def _af_price_tier(price: float) -> int:
+    """Returns 0=Entry(<€80), 1=Mainstream(€80-150), 2=Premium(€150-250), 3=Pro(>€250)."""
+    if price < 80:    return 0
+    if price < 150:   return 1
+    if price < 250:   return 2
+    return 3
+
+# Air-fryer sub-type detection (Air vs Oil vs Combo). Used to nudge accessory
+# relevance — air-fryer-specific accessories prefer AIR/BOTH triggers; oil
+# liners are useless for AIR-only fryers.
+def _af_detect_subtype(trigger_row) -> str:
+    """Returns 'AIR', 'OIL', 'BOTH' or 'UNKNOWN'."""
+    parts = [
+        str(trigger_row.get('Title', '')),
+        str(trigger_row.get('Περιγραφή προϊόντος', '')),
+        str(trigger_row.get('Ειδικά χαρακτηριστικά', '')),
+        str(trigger_row.get('Κατηγορία', '')),
+    ]
+    txt = ' '.join(parts).lower()
+    is_air = any(k in txt for k in ('αέρος', 'αερος', 'αέρα', 'air fry',
+                                     'airfry', 'hot air', 'rapid air'))
+    is_oil = any(k in txt for k in ('λαδιού', 'λαδιου', ' oil ', 'με λάδι'))
+    if is_air and is_oil: return 'BOTH'
+    if is_air:            return 'AIR'
+    if is_oil:            return 'OIL'
+    return 'UNKNOWN'
+
+# Scoring constants for Air Fryers engine — calibrated so brand-ecosystem
+# always outranks pure sales but never overrides exact accessory relevance.
+AF_S_AVAILABILITY        = 100_000   # In-stock boost (Άμεσα Διαθέσιμο)
+AF_S_ACCESSORY_RELEVANT  = 1_500_000 # Title/desc mentions air-fryer keyword (Tier A)
+AF_S_BRAND_MATCH         =   400_000 # Same Κατασκευαστής as trigger (ecosystem boost)
+AF_S_BRAND_NEIGHBOR      =   120_000 # Premium brand pairing (TEFAL↔BOSCH, PHILIPS↔BRAUN)
+AF_S_PRICE_SAME_TIER     =   200_000 # Companion in same price tier
+AF_S_PRICE_ONE_OFF       =    70_000 # Companion ±1 price tier
+AF_S_RATING_TOP          =   150_000 # Experts Rating = Top Quality / Excellent
+AF_S_RATING_BEST_VALUE   =    80_000 # Experts Rating = Best Value
+AF_S_SUBTYPE_MATCH       =    60_000 # Accessory matches air vs oil subtype
+AF_S_SALES_FACTOR        =       0.5 # Sales tiebreaker weight (kitchen sells less than vacuums)
 
 
 # ═════════════════════════════════════════════════════════════
@@ -2837,6 +2983,15 @@ def load_all_data():
     # Σκουπάκια, Ατμοκαθαριστές, Εξαρτήματα για σκούπες, PET CARE — used by
     # the Robot Vacuums engine.
     dfloor = _load('Floor')
+    # ── SDA sheet (Home file): Small Domestic Appliances — covers Φριτέζες,
+    # Τοστιέρες, Βραστήρες, Σίδερα, Αξεσουάρ Συσκευών Μαγειρικής, Personal
+    # Care, Fitness, Health & Well-Being. Used by the Air Fryers engine
+    # (and future Small Kitchen Appliance engines: Toasters, Kettles, etc).
+    dsda = _load('SDA')
+    # ── MDA sheet (Home file): Major Domestic Appliances — used by the Air
+    # Fryers engine specifically for the Φούρνοι Μικροκυμάτων (Microwaves)
+    # companion slot, since microwaves live in MDA/Cooking not SDA.
+    dmda = _load('MDA')
     
     if not dp.empty:
         parts = [dp[c].fillna('').astype(str).str.strip() for c in COMPAT_COLS if c in dp.columns]
@@ -2853,11 +3008,11 @@ def load_all_data():
     if not db.empty and CC not in db.columns:
         db[CC] = ''
     
-    return dp, dm, dh, ds, db, dl, dv, dper, dstat, dair, dfloor, dgaming, available_sheets
+    return dp, dm, dh, ds, db, dl, dv, dper, dstat, dair, dfloor, dgaming, dsda, dmda, available_sheets
 
 try:
 
-    df_products, df_music, df_history, df_slots, df_books, df_laptops, df_vacuums, df_peripherals, df_stationery, df_air, df_floor, df_gaming, sheets_loaded = load_all_data()
+    df_products, df_music, df_history, df_slots, df_books, df_laptops, df_vacuums, df_peripherals, df_stationery, df_air, df_floor, df_gaming, df_sda, df_mda, sheets_loaded = load_all_data()
     compat_cols_found = [c for c in COMPAT_COLS if c in df_products.columns]
 except Exception as e:
     st.error(f"🚨 Error loading data: {e}")
@@ -2987,7 +3142,9 @@ L2_CHILDREN = {
         {"key": "Traditional Vacuums", "label": "Ηλεκτρικές\nΣκούπες",
          "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 19h14l-2-9H7l-2 9z'/%3E%3Cpath d='M12 10V5'/%3E%3Cpath d='M12 5h5'/%3E%3Ccircle cx='17' cy='5' r='1.5'/%3E%3C/svg%3E"},
         {"key": "Stick Vacuums", "label": "Σκούπες\nStick",
-         "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M14 3l-2 4h4l-2-4z'/%3E%3Cpath d='M12 7v11'/%3E%3Cpath d='M8 18h8l-1 3H9l-1-3z'/%3E%3Ccircle cx='12' cy='4' r='1'/%3E%3C/svg%3E"}
+         "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M14 3l-2 4h4l-2-4z'/%3E%3Cpath d='M12 7v11'/%3E%3Cpath d='M8 18h8l-1 3H9l-1-3z'/%3E%3Ccircle cx='12' cy='4' r='1'/%3E%3C/svg%3E"},
+        {"key": "Air Fryers", "label": "Φριτέζες",
+         "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 4h12a1 1 0 0 1 1 1v3H5V5a1 1 0 0 1 1-1z'/%3E%3Crect x='5' y='8' width='14' height='12' rx='2' ry='2'/%3E%3Ccircle cx='12' cy='14' r='3'/%3E%3Cline x1='8' y1='6' x2='8.01' y2='6'/%3E%3Cline x1='11' y1='6' x2='14' y2='6'/%3E%3C/svg%3E"}
     ],
     "Climatism": [
         {"key": "AirUnits", "label": "Κλιματιστικά",
@@ -3463,6 +3620,29 @@ else:
                 st.sidebar.markdown('<p class="sidebar-section">Επιλέξτε Σκούπα Stick</p>', unsafe_allow_html=True)
                 sel = st.sidebar.selectbox("", stick_vacs['Title'].unique(), label_visibility="collapsed", key="stick_vac_sel")
                 trigger = stick_vacs[stick_vacs['Title']==sel].iloc[0] if sel else None
+
+    elif active_cluster == "Air Fryers":
+        # Trigger pool: Φριτέζες (air, oil and combo fryers) from the SDA sheet.
+        # If AIR_FRYER_TEST_SKUS is non-empty, restrict to those SKUs
+        # (5 representative demo fryers spanning AIR/OIL × budget/premium).
+        if df_sda is None or df_sda.empty:
+            st.sidebar.warning("Sheet 'SDA' is empty or missing.")
+        else:
+            hier_upper = df_sda['Hierarchy'].fillna('').astype(str).str.upper().str.strip()
+            trigger_hiers_upper = {h.upper().strip() for h in AIR_FRYER_TRIGGER_HIERARCHIES}
+            fryers = df_sda[hier_upper.isin(trigger_hiers_upper)].copy()
+
+            # 🧪 Optional test-list filter (leave AIR_FRYER_TEST_SKUS empty to show all 349)
+            if AIR_FRYER_TEST_SKUS:
+                mat_clean = fryers['Material'].astype(str).str.strip().str.replace(r'\.0$', '', regex=True)
+                fryers = fryers[mat_clean.isin(AIR_FRYER_TEST_SKUS)]
+
+            if fryers.empty:
+                st.sidebar.warning("Δεν βρέθηκαν Φριτέζες στο sheet SDA.")
+            else:
+                st.sidebar.markdown('<p class="sidebar-section">Επιλέξτε Φριτέζα</p>', unsafe_allow_html=True)
+                sel = st.sidebar.selectbox("", fryers['Title'].unique(), label_visibility="collapsed", key="air_fryer_sel")
+                trigger = fryers[fryers['Title']==sel].iloc[0] if sel else None
 
     elif active_cluster in ("Mouse", "Keyboard", "Gaming Mouse", "Gaming Keyboard"):
         if df_peripherals.empty:
@@ -8379,6 +8559,367 @@ def run_stick_vacuums_engine(trigger, df_floor, df_history):
     return pd.DataFrame(), diag, slot_notes, pd.DataFrame()
 
 
+# ═══════════════════════════════════════════════════════════════
+# 🟢 AIR FRYERS HELPERS — Φριτέζες (Small Kitchen Appliances)
+# ═══════════════════════════════════════════════════════════════
+# Three pool builders + one keyword-relevance helper. The engine itself
+# follows the same looping pattern as Robot/Traditional/Stick Vacuums:
+# pre-build & score every pool, then round-robin fill until 10 slots filled
+# or all pools exhausted.
+
+def _af_is_relevant_accessory(title: str, desc: str = '') -> bool:
+    """Tier A: title or description contains an air-fryer-relevant keyword."""
+    blob = f"{title or ''} {desc or ''}".lower()
+    return any(kw in blob for kw in AIR_FRYER_ACCESSORY_RELEVANCE_KW)
+
+
+def _af_build_accessory_pool(c_acc, trigger_brand, trigger_subtype, notes):
+    """Score the Αξεσουάρ Συσκευών Μαγειρικής pool with three tiers:
+
+    Tier A — Title/desc mentions φριτέζα/αέρος/etc.   →  +1,500,000
+    Tier B — Same brand as trigger (ecosystem)        →  +400,000
+    Tier C — Neither (pure sales fallback)            →  base sales only
+
+    Subtype nudge: oil-fryer accessories prefer OIL/BOTH triggers, AIR-only
+    accessories prefer AIR/BOTH triggers (small +60k).
+    """
+    if c_acc.empty:
+        return c_acc
+
+    pool = c_acc.copy()
+    pool['Final_Score'] = 0.0
+
+    # ── Availability boost
+    if 'AVAILABILITY' in pool.columns:
+        pool.loc[pool['AVAILABILITY'] == 'Άμεσα Διαθέσιμο', 'Final_Score'] += AF_S_AVAILABILITY
+
+    # ── Base sales score
+    pool['Final_Score'] += pool['Sales_Tiebreaker'].fillna(0) * AF_S_SALES_FACTOR
+
+    # ── Tier A: keyword relevance
+    title_col = pool['Title'].fillna('').astype(str)
+    desc_col = pool['Περιγραφή προϊόντος'].fillna('').astype(str) if 'Περιγραφή προϊόντος' in pool.columns else pd.Series([''] * len(pool), index=pool.index)
+    rel_mask = pd.Series([_af_is_relevant_accessory(t, d) for t, d in zip(title_col, desc_col)], index=pool.index)
+    pool.loc[rel_mask, 'Final_Score'] += AF_S_ACCESSORY_RELEVANT
+    if rel_mask.any():
+        notes.append(f"  ✓ Tier A — air-fryer-relevant accessories: {rel_mask.sum()} (+{AF_S_ACCESSORY_RELEVANT:,})")
+
+    # ── Tier A.1: subtype-specific nudge
+    if trigger_subtype in ('AIR', 'BOTH') and rel_mask.any():
+        air_kw_mask = title_col.str.lower().str.contains('αέρος|αερος|αέρα|air fry|airfry|hot air|καλάθ|σχάρα|σχαρα|parchment|περγαμ', regex=True, na=False) | \
+                       desc_col.str.lower().str.contains('αέρος|αερος|αέρα|air fry|airfry|hot air|καλάθ|σχάρα|σχαρα', regex=True, na=False)
+        pool.loc[air_kw_mask, 'Final_Score'] += AF_S_SUBTYPE_MATCH
+        if air_kw_mask.any():
+            notes.append(f"  ✓ Subtype nudge ({trigger_subtype}): {air_kw_mask.sum()} air-style accessories (+{AF_S_SUBTYPE_MATCH:,})")
+    if trigger_subtype in ('OIL', 'BOTH') and rel_mask.any():
+        oil_kw_mask = title_col.str.lower().str.contains('λαδιού|λαδιου|λάδι', regex=True, na=False) | \
+                       desc_col.str.lower().str.contains('λαδιού|λαδιου|λάδι', regex=True, na=False)
+        pool.loc[oil_kw_mask, 'Final_Score'] += AF_S_SUBTYPE_MATCH
+        if oil_kw_mask.any():
+            notes.append(f"  ✓ Subtype nudge ({trigger_subtype}): {oil_kw_mask.sum()} oil-style accessories (+{AF_S_SUBTYPE_MATCH:,})")
+
+    # ── Tier B: same-brand boost (ecosystem cross-sell)
+    if trigger_brand and 'Κατασκευαστής' in pool.columns:
+        same_brand = pool['Κατασκευαστής'].fillna('').astype(str).str.upper().str.strip() == trigger_brand
+        pool.loc[same_brand, 'Final_Score'] += AF_S_BRAND_MATCH
+        if same_brand.any():
+            notes.append(f"  ✓ Tier B — brand match ({trigger_brand}): {same_brand.sum()} (+{AF_S_BRAND_MATCH:,})")
+
+    # Note: Tier C is implicit — items with neither relevance nor brand match
+    # rank purely by sales+availability, which is exactly what we want as a fallback.
+    notes.append(f"  Pool size after scoring: {len(pool)} (Tier C fallback covers {(~rel_mask & (pool['Final_Score'] < AF_S_BRAND_MATCH)).sum()} unmatched items)")
+
+    return pool.sort_values('Final_Score', ascending=False)
+
+
+def _af_build_companion_pool(c_pool, trigger_brand, trigger_tier, trigger_rating,
+                              role_label, notes):
+    """Score a companion-appliance pool (Τοστιέρες, Βραστήρες, Σίδερα, Πολυκόπτης).
+
+    Mix of sales + brand-ecosystem boost + price-tier proximity + expert
+    rating mirror. Mirrors the _rv_build_companion_pool signature.
+    """
+    if c_pool.empty:
+        return c_pool
+
+    pool = c_pool.copy()
+    pool['Final_Score'] = 0.0
+
+    # ── Availability boost
+    if 'AVAILABILITY' in pool.columns:
+        pool.loc[pool['AVAILABILITY'] == 'Άμεσα Διαθέσιμο', 'Final_Score'] += AF_S_AVAILABILITY
+
+    # ── Base sales signal
+    pool['Final_Score'] += pool['Sales_Tiebreaker'].fillna(0) * AF_S_SALES_FACTOR
+
+    # ── Brand-ecosystem boost (e.g. IZZY fryer → IZZY toaster)
+    if trigger_brand and 'Κατασκευαστής' in pool.columns:
+        same_brand = pool['Κατασκευαστής'].fillna('').astype(str).str.upper().str.strip() == trigger_brand
+        pool.loc[same_brand, 'Final_Score'] += AF_S_BRAND_MATCH
+        if same_brand.any():
+            notes.append(f"  ✓ Brand ecosystem ({trigger_brand}): {same_brand.sum()} (+{AF_S_BRAND_MATCH:,})")
+
+    # ── Price-tier proximity
+    if 'LIST PRICE' in pool.columns:
+        prices = pool['LIST PRICE'].apply(parse_euro_price)
+        tiers = prices.apply(_af_price_tier)
+        same_tier = tiers == trigger_tier
+        near_tier = (tiers - trigger_tier).abs() == 1
+        pool.loc[same_tier, 'Final_Score'] += AF_S_PRICE_SAME_TIER
+        pool.loc[near_tier, 'Final_Score'] += AF_S_PRICE_ONE_OFF
+        if same_tier.any() or near_tier.any():
+            notes.append(f"  ✓ Price-tier match (tier {trigger_tier}): "
+                         f"same={same_tier.sum()}, near={near_tier.sum()}")
+
+    # ── Quality mirror — keep recommendations at the trigger's quality level.
+    # "Best Value" trigger should not surface "Economy" companions; "Top
+    # Quality" trigger gets "Top Quality" / "Excellent" companions boosted.
+    rating_col = None
+    for cand in ('Experts Rating ≡', 'Experts Rating', 'Experts rating'):
+        if cand in pool.columns:
+            rating_col = cand
+            break
+    if rating_col and trigger_rating:
+        rating_clean = pool[rating_col].fillna('').astype(str).str.strip()
+        if trigger_rating in ('Top Quality', 'Excellent'):
+            top_mask = rating_clean.isin(['Top Quality', 'Excellent'])
+            pool.loc[top_mask, 'Final_Score'] += AF_S_RATING_TOP
+            if top_mask.any():
+                notes.append(f"  ✓ Quality mirror (trigger={trigger_rating}): {top_mask.sum()} Top/Excellent companions (+{AF_S_RATING_TOP:,})")
+        elif trigger_rating == 'Best Value':
+            bv_mask = rating_clean.isin(['Best Value', 'Excellent', 'Top Quality'])
+            pool.loc[bv_mask, 'Final_Score'] += AF_S_RATING_BEST_VALUE
+            if bv_mask.any():
+                notes.append(f"  ✓ Quality mirror (trigger=Best Value): {bv_mask.sum()} Best Value+ (+{AF_S_RATING_BEST_VALUE:,})")
+        # Economy triggers get no rating boost — let sales decide
+
+    return pool.sort_values('Final_Score', ascending=False)
+
+
+def _af_build_microwave_pool(c_pool, trigger_tier, trigger_brand, notes):
+    """Score the MDA Φούρνοι Μικροκυμάτων pool.
+
+    Microwave brands (SAMSUNG, LG, ELECTROLUX, SINGER, INVENTOR, MIDEA) do
+    NOT overlap with the major fryer brands (IZZY, NINJA, ROHNSON, TEFAL)
+    — so the brand boost rarely fires here. Falls back to price-tier +
+    sales. If, against expectations, the trigger brand IS present (e.g.
+    SAMSUNG, LG, IQ, IZZY), the brand boost applies.
+    """
+    if c_pool.empty:
+        return c_pool
+
+    pool = c_pool.copy()
+    pool['Final_Score'] = 0.0
+
+    if 'AVAILABILITY' in pool.columns:
+        pool.loc[pool['AVAILABILITY'] == 'Άμεσα Διαθέσιμο', 'Final_Score'] += AF_S_AVAILABILITY
+    pool['Final_Score'] += pool['Sales_Tiebreaker'].fillna(0) * AF_S_SALES_FACTOR
+
+    # Same-brand boost (rare but valuable when it fires — e.g. SAMSUNG fryer
+    # ↔ SAMSUNG microwave, IZZY ↔ IZZY, etc.)
+    if trigger_brand and 'Κατασκευαστής' in pool.columns:
+        same_brand = pool['Κατασκευαστής'].fillna('').astype(str).str.upper().str.strip() == trigger_brand
+        pool.loc[same_brand, 'Final_Score'] += AF_S_BRAND_MATCH
+        if same_brand.any():
+            notes.append(f"  ✓ Microwave brand match ({trigger_brand}): {same_brand.sum()}")
+
+    # Price-tier proximity matters more here — a €450 microwave next to a €100 fryer looks wrong
+    if 'LIST PRICE' in pool.columns:
+        prices = pool['LIST PRICE'].apply(parse_euro_price)
+        tiers = prices.apply(_af_price_tier)
+        same_tier = tiers == trigger_tier
+        near_tier = (tiers - trigger_tier).abs() == 1
+        pool.loc[same_tier, 'Final_Score'] += AF_S_PRICE_SAME_TIER
+        pool.loc[near_tier, 'Final_Score'] += AF_S_PRICE_ONE_OFF
+        if same_tier.any() or near_tier.any():
+            notes.append(f"  ✓ Microwave price-tier match: same={same_tier.sum()}, near={near_tier.sum()}")
+
+    return pool.sort_values('Final_Score', ascending=False)
+
+
+# ═══════════════════════════════════════════════════════════════
+# 🟢 AIR FRYERS ENGINE — Φριτέζες (Small Kitchen Appliances)
+# ═══════════════════════════════════════════════════════════════
+
+def run_air_fryer_engine(trigger, df_sda, df_mda, df_history):
+    """Build up to 10 cross-sell slots for an air-fryer trigger.
+
+    Round-robin loop through Αξεσουάρ Συσκευών Μαγειρικής → Τοστιέρες →
+    Βραστήρες → Σίδερα → Πολυκόπτης → Φούρνοι Μικροκυμάτων → Τηγάνια-Wok.
+    Round 1 lets Αξεσουάρ take up to 2; later rounds take 1 per pool, with
+    Αξεσουάρ capped at 4 total (per the user's slot layout).
+
+    Pools with empty data (e.g. Πολυκόπτης, Τηγάνια-Wok before their data
+    files are uploaded) are silently skipped and the loop over-fills other
+    slots to keep the carousel at 10.
+    """
+    diag = []
+    slot_notes = {}
+    all_recs = []
+
+    # ── Trigger attributes
+    tm = trigger['Material']
+    tt = str(trigger.get('Title', ''))
+    tb = str(trigger.get('Κατασκευαστής', '')).strip().upper()
+    tmodel = str(trigger.get('Μοντέλο', '')).strip()
+    tprice = parse_euro_price(trigger.get('LIST PRICE', 0))
+    ttier = _af_price_tier(tprice)
+    trating = str(trigger.get('Experts Rating ≡', '') or trigger.get('Experts Rating', '')).strip()
+    tsubtype = _af_detect_subtype(trigger)
+
+    diag.append(("0. Trigger", f"{tb} €{tprice:.0f}",
+                 f"Model={tmodel} | Tier={ttier} | Rating={trating} | Subtype={tsubtype}"))
+
+    if df_sda is None or df_sda.empty:
+        diag.append(("ERROR", 0, "SDA sheet is empty — engine cannot run"))
+        return pd.DataFrame(), diag, slot_notes, pd.DataFrame()
+
+    # ── Drop the trigger itself + any other fryers (these are competitors)
+    c_sda = df_sda[df_sda['Material'] != tm].copy()
+    trigger_hiers = {h.upper().strip() for h in AIR_FRYER_TRIGGER_HIERARCHIES}
+    b4 = len(c_sda)
+    c_sda = c_sda[~c_sda['Hierarchy'].fillna('').astype(str).str.upper().str.strip().isin(trigger_hiers)]
+    diag.append(("1. Excl fryers", len(c_sda), f"Removed {b4 - len(c_sda)} competitor fryers"))
+
+    # ── Prep MDA pool (for the microwave slot only)
+    if df_mda is not None and not df_mda.empty:
+        c_mda = df_mda.copy()
+        diag.append(("1b. MDA pool", len(c_mda), "Loaded for Φούρνοι Μικροκυμάτων slot"))
+    else:
+        c_mda = pd.DataFrame()
+        diag.append(("1b. MDA pool", 0, "MDA sheet empty — Microwave slot will be skipped"))
+
+    # ── Sales tiebreaker prep (on both pools)
+    for _df in (c_sda, c_mda):
+        if not _df.empty:
+            if 'Sum of Sales' in _df.columns:
+                _df['Sales_Tiebreaker'] = pd.to_numeric(_df['Sum of Sales'], errors='coerce').fillna(0)
+            else:
+                _df['Sales_Tiebreaker'] = 0
+
+    # ── Build a sorted pool per priority entry
+    pools = {}  # rank → (role_label, sorted_DataFrame, logic_key, max_round_1, max_total, notes)
+    for rank, role_label, hiers, logic_key, max_r1, max_total in AIR_FRYER_PRIORITY:
+        notes = [f"=== Priority {rank}: {role_label} ({logic_key}) "
+                 f"| max_round_1={max_r1} | max_total={max_total if max_total else '∞'} ==="]
+
+        hier_upper = {h.upper().strip() for h in hiers}
+
+        # Pick the right base pool (SDA for everything except microwaves)
+        if logic_key == 'COMPANION_MDA':
+            source_pool = c_mda
+        else:
+            source_pool = c_sda
+
+        if source_pool.empty:
+            notes.append(f"  ⚠ Source sheet empty — skipping pool")
+            pools[rank] = (role_label, pd.DataFrame(), logic_key, max_r1, max_total, notes)
+            continue
+
+        base_pool = source_pool[source_pool['Hierarchy'].fillna('').astype(str).str.upper().str.strip().isin(hier_upper)].copy()
+        notes.append(f"  Base pool size: {len(base_pool)} (hierarchies={hiers})")
+
+        if base_pool.empty:
+            # ΠΟΛΥΚΟΠΤΗΣ / Τηγάνια-Wok currently land here. Graceful skip — the
+            # looping engine will pull extra items from accessories/toasters/kettles
+            # to keep the slot count at 10.
+            notes.append(f"  ⚠ Hierarchy not present in data — slot will be filled from other pools")
+            pools[rank] = (role_label, pd.DataFrame(), logic_key, max_r1, max_total, notes)
+            continue
+
+        # ── Score the pool based on its logic key
+        if logic_key == 'ACCESSORY_KITCHEN':
+            scored = _af_build_accessory_pool(base_pool, tb, tsubtype, notes)
+        elif logic_key in ('COMPANION_APPL', 'COMPANION_COOK'):
+            scored = _af_build_companion_pool(base_pool, tb, ttier, trating, role_label, notes)
+        elif logic_key == 'COMPANION_MDA':
+            scored = _af_build_microwave_pool(base_pool, ttier, tb, notes)
+        else:
+            scored = base_pool.copy()
+            scored['Final_Score'] = scored['Sales_Tiebreaker']
+
+        pools[rank] = (role_label, scored, logic_key, max_r1, max_total, notes)
+        diag.append((f"Pool {rank} ({role_label})", len(scored), logic_key))
+
+    # ── LOOPING: round-robin fill until target hit or all pools exhausted
+    used_materials = {tm}
+    pool_cursors  = {rank: 0 for rank in pools}
+    pool_taken    = {rank: 0 for rank in pools}
+    slot_num = 0
+    round_idx = 0
+
+    while slot_num < AIR_FRYER_SLOT_TARGET:
+        progress = False
+        round_idx += 1
+        for rank, (role_label, scored, logic_key, max_r1, max_total, notes) in pools.items():
+            if slot_num >= AIR_FRYER_SLOT_TARGET:
+                break
+            if scored is None or scored.empty:
+                continue
+
+            # Hard cap: skip this pool if max_total already reached
+            if max_total is not None and pool_taken[rank] >= max_total:
+                continue
+
+            take_n = max_r1 if round_idx == 1 else 1
+            if max_total is not None:
+                take_n = min(take_n, max_total - pool_taken[rank])
+
+            cursor = pool_cursors[rank]
+            taken_this_pass = 0
+            while taken_this_pass < take_n and cursor < len(scored) \
+                  and slot_num < AIR_FRYER_SLOT_TARGET:
+                row = scored.iloc[cursor]
+                cursor += 1
+                if row['Material'] in used_materials:
+                    continue
+                slot_num += 1
+                rc = row.copy()
+                rc['Assigned_Slot'] = slot_num
+                rc['Slot_Role'] = role_label
+                rc['Marketing_Copy'] = AIR_FRYER_MARKETING_COPY.get(role_label, "Ιδανική επιλογή!")
+                rc['Item_Rank'] = round_idx
+                all_recs.append(rc)
+                used_materials.add(row['Material'])
+                taken_this_pass += 1
+                pool_taken[rank] += 1
+                progress = True
+
+                title_preview = str(row.get('Title', ''))[:70]
+                score_val = float(row.get('Final_Score', 0))
+                if slot_num not in slot_notes:
+                    slot_notes[slot_num] = []
+                slot_notes[slot_num].append(
+                    f"Round {round_idx} | Pool '{role_label}' | "
+                    f"Score: {score_val:,.0f} | {title_preview}"
+                )
+
+            pool_cursors[rank] = cursor
+
+        if not progress:
+            diag.append(("Loop", round_idx, "All pools exhausted or capped — stopping"))
+            break
+
+    # ── Pool diagnostics under slot 0
+    pool_diag_notes = []
+    for rank, (role_label, scored, logic_key, max_r1, max_total, notes) in pools.items():
+        pool_diag_notes.extend(notes)
+        cap_note = f" (capped at {max_total})" if max_total is not None else ""
+        pool_diag_notes.append(
+            f"  → consumed {pool_taken[rank]} / {len(scored) if scored is not None else 0} from this pool{cap_note}"
+        )
+        pool_diag_notes.append("")
+    slot_notes[0] = pool_diag_notes
+
+    diag.append(("TOTAL", len(all_recs), f"Filled {slot_num}/{AIR_FRYER_SLOT_TARGET} slots in {round_idx} rounds"))
+
+    if all_recs:
+        recs_df = pd.DataFrame(all_recs)
+        recs_df['Draft_Score'] = recs_df['Assigned_Slot']
+        return recs_df, diag, slot_notes, recs_df
+    return pd.DataFrame(), diag, slot_notes, pd.DataFrame()
+
+
 # ═════════════════════════════════════════════════════════════
 # 🟢 PERIPHERALS ENGINE — All IT Peripheral Clusters
 # Config-driven: each cluster is a dict of slot definitions
@@ -12471,6 +13012,12 @@ elif active_cluster == "Stick Vacuums":
     # Stick vacuums + accessories + companions all live in the Floor sheet
     recs, diag, slot_notes, full_candidates = run_stick_vacuums_engine(trigger, df_floor, df_history)
     slot_diag = []
+elif active_cluster == "Air Fryers":
+    # Φριτέζες + all kitchen-appliance companions live in the SDA sheet;
+    # microwaves come from the MDA sheet. ΠΟΛΥΚΟΠΤΗΣ and Τηγάνια-Wok pools
+    # are wired up but will gracefully skip if their data files aren't loaded.
+    recs, diag, slot_notes, full_candidates = run_air_fryer_engine(trigger, df_sda, df_mda, df_history)
+    slot_diag = []
 elif active_cluster == "TVs":
     recs, diag, slot_notes, full_candidates = run_tv_engine(trigger, df_products, df_history)
     slot_diag = []
@@ -12729,6 +13276,10 @@ with st.expander("⚙️ System Diagnostics"):
         attr_keys_to_show = ['Material','Title','Level 1','Level 2','Hierarchy','Κατασκευαστής','Μοντέλο','Προτεινόμενη χρήση','Μέγεθος οθόνης','Θύρες','LIST PRICE']
     elif active_cluster == "Tablets":
         attr_keys_to_show = ['Material','Title','Level 2','Κατασκευαστής','Μοντέλο','Experts Rating','Λειτουργικό σύστημα','LIST PRICE']
+    elif active_cluster == "Air Fryers":
+        attr_keys_to_show = ['Material','Title','Level 2','Hierarchy','Κατασκευαστής','Μοντέλο',
+                              'Κατηγορία','Χωρητικότητα.1','Ισχύς ≡','Experts Rating ≡',
+                              'Χρώμα','Δυνατότητες','LIST PRICE']
     else:
         attr_keys_to_show = ['Material','Title','Level 2','Hierarchy','Κατασκευαστής','Μοντέλο','LIST PRICE']
         
