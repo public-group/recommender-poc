@@ -102,7 +102,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v28.9 — NS2 slot-5 semantic dedup
+        🟢 Engine v28.10 — NS2 slot diversification (Camera + Τιμονιέρα slots)
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -1406,17 +1406,24 @@ def ps5_is_multi_controller_bundle(title):
 NS2_TRIGGER_HIERARCHIES = {'NINTENDO SWITCH 2 CONSOLE'}
 
 # (slot_num, role_label, [hierarchies], logic_key)
+# v28.10 — every slot has a distinct semantic type, no generic catch-all.
+#   Slot 5 (was "Αξεσουάρ"): now explicitly "Τιμονιέρα" with WHEEL_LOGIC
+#   Slot 9 (was "MicroSD/Έξτρα"): now explicitly "Κάρτα Μνήμης"
+#   Slot 10 (was "Τρίτο Game"): now "Camera" — surfaces the new NS2 Camera,
+#     a Switch 2 launch accessory that doesn't fit any other slot
+# Net change vs v28.9: keep 2 games (slots 2 + 6) instead of 3; gain a
+# Camera slot which showcases NS2's flagship new peripheral.
 NS2_SLOTS = [
     (1,  'Pro Controller',     ['NINTENDO SWITCH 2 CONTROLLERS'],            'NS2_PRO_CTRL_LOGIC'),
     (2,  'Top Selling Game',   ['NINTENDO SWITCH 2 GAMES'],                  'NS2_GAME_LOGIC'),
     (3,  'Φόρτιση & Καλώδια',  ['NINTENDO SWITCH 2 CABLES & CHARGERS'],      'NS2_CABLE_LOGIC'),
     (4,  'Θήκη Μεταφοράς',     ['NINTENDO SWITCH 2 CASES & PROTECTORS'],     'NS2_CASE_LOGIC'),
-    (5,  'Αξεσουάρ',           ['NINTENDO SWITCH 2 VARIOUS ACCESSORIES'],    'NS2_ACCESSORY_LOGIC'),
+    (5,  'Τιμονιέρα',          ['NINTENDO SWITCH 2 VARIOUS ACCESSORIES'],    'NS2_WHEEL_LOGIC'),
     (6,  'Δεύτερο Game',       ['NINTENDO SWITCH 2 GAMES'],                  'NS2_GAME_LOGIC'),
     (7,  'Joy-Con Pair',       ['NINTENDO SWITCH 2 CONTROLLERS'],            'NS2_JOYCON_LOGIC'),
     (8,  'Προστασία Οθόνης',   ['NINTENDO SWITCH 2 CASES & PROTECTORS'],     'NS2_PROTECTOR_LOGIC'),
-    (9,  'MicroSD / Έξτρα',    ['NINTENDO SWITCH 2 VARIOUS ACCESSORIES'],    'NS2_STORAGE_LOGIC'),
-    (10, 'Τρίτο Game',         ['NINTENDO SWITCH 2 GAMES'],                  'NS2_GAME_LOGIC'),
+    (9,  'Κάρτα Μνήμης',       ['NINTENDO SWITCH 2 VARIOUS ACCESSORIES'],    'NS2_STORAGE_LOGIC'),
+    (10, 'Switch 2 Camera',    ['NINTENDO SWITCH 2 VARIOUS ACCESSORIES'],    'NS2_CAMERA_LOGIC'),
 ]
 
 NS2_MARKETING_COPY = {
@@ -1424,12 +1431,12 @@ NS2_MARKETING_COPY = {
     'Top Selling Game':   "Το παιχνίδι που ξεχωρίζει αυτή τη στιγμή.",
     'Φόρτιση & Καλώδια':  "Φόρτιση χειριστηρίων εν κινήσει.",
     'Θήκη Μεταφοράς':     "Προστασία για την κονσόλα παντού.",
-    'Αξεσουάρ':           "Αναβάθμισε το Switch 2 setup σου.",
+    'Τιμονιέρα':          "Racing εμπειρία για Mario Kart & άλλα.",
     'Δεύτερο Game':       "Διπλή δόση παιχνιδιού.",
     'Joy-Con Pair':       "Έξτρα Joy-Con για παρέα.",
     'Προστασία Οθόνης':   "Κράτα την οθόνη χωρίς γρατζουνιές.",
-    'MicroSD / Έξτρα':    "Περισσότερος χώρος για downloads.",
-    'Τρίτο Game':         "Ακόμα ένα παιχνίδι για τη συλλογή.",
+    'Κάρτα Μνήμης':       "Περισσότερος χώρος για downloads.",
+    'Switch 2 Camera':    "Κάμερα για GameChat & video calls.",
 }
 
 # Hierarchy → role/copy maps used by the fallback fill pass.
@@ -12082,29 +12089,32 @@ def run_ns2_console_engine(trigger, df_gaming, df_history):
                 pool.loc[storage_mask, 'Final_Score'] += 4000
                 notes.append(f"💾 MicroSD/storage priority: +4000 to {int(storage_mask.sum())} items")
 
-        elif logic_key == 'NS2_ACCESSORY_LOGIC':
-            # Slot 5: general accessory. The VARIOUS ACCESSORIES hierarchy
-            # has only 11 SKUs and 4 of its top 5 sellers semantically belong
-            # in other dedicated slots:
-            #   - Carry Case & Screen Protector Set (case → slots 4/8)
-            #   - Hori Horipad Turbo (controller → slots 1/7)
-            #   - MicroSD Cards (storage → slot 9)
-            # Apply a strong −10000 penalty to those so the truly-unique
-            # accessories surface — typically the Joy-Con Wheel, Camera
-            # accessories, USB Stand, or AC Adapter.
-            case_pattern    = r'\b(?:Case|Carry|Protector|Filter|Θήκη|Προστατευτικό|Pouch|Sleeve|Glass|Tempered)\b'
-            # Note: matches "Joy-Con Pair/Charging/2 Pack" controllers but NOT
-            # "Joy-Con 2 Wheel" (the steering attachment is a legitimate slot-5 pick).
-            ctrl_pattern    = r'\b(?:Pro\s+Controller|Horipad|Gamepad)\b|Joy.?Con\s+(?:Pair|Charging|2\s+Pack)'
-            storage_pattern = r'MicroSD|SD\s+Card|Κάρτα\s+Μνήμης|Memory\s+Card'
-            overlap_mask = (
-                title_col.str.contains(case_pattern,    case=False, regex=True, na=False) |
-                title_col.str.contains(ctrl_pattern,    case=False, regex=True, na=False) |
-                title_col.str.contains(storage_pattern, case=False, regex=True, na=False)
+        elif logic_key == 'NS2_WHEEL_LOGIC':
+            # Slot 5: explicitly Joy-Con Wheel / steering accessory.
+            # Single SKU in catalog today (Nintendo Joy-Con 2 Wheel €30) but
+            # the logic also covers future wheel additions. Non-wheel items
+            # get −10000 so a charger or case can't sneak into this slot.
+            wheel_mask = title_col.str.contains(
+                r'\bWheel\b|Τιμονιέρα', case=False, regex=True, na=False
             )
-            if overlap_mask.any():
-                pool.loc[overlap_mask, 'Final_Score'] -= 10000
-                notes.append(f"⊘ Semantic dedup: −10000 to {int(overlap_mask.sum())} items (case/ctrl/SD belong in other slots)")
+            if wheel_mask.any():
+                pool.loc[wheel_mask, 'Final_Score']  += 8000
+                pool.loc[~wheel_mask, 'Final_Score'] -= 10000
+                notes.append(f"🏎 Wheel priority: +8000 to {int(wheel_mask.sum())} items, −10000 to {int((~wheel_mask).sum())} non-wheel items")
+
+        elif logic_key == 'NS2_CAMERA_LOGIC':
+            # Slot 10: Switch 2 Camera — flagship new launch accessory.
+            # Three SKUs available: Nintendo Switch 2 Camera Black €70 (base),
+            # Nintendo Switch 2 Camera Piranha Plant Edition €50 (themed),
+            # Hori USB Camera €40 (third-party). Nintendo first-party + black
+            # color match push the standard Camera Black to the top.
+            camera_mask = title_col.str.contains(
+                r'\bCamera\b|Κάμερα', case=False, regex=True, na=False
+            )
+            if camera_mask.any():
+                pool.loc[camera_mask, 'Final_Score']  += 8000
+                pool.loc[~camera_mask, 'Final_Score'] -= 10000
+                notes.append(f"📷 Camera priority: +8000 to {int(camera_mask.sum())} items, −10000 to {int((~camera_mask).sum())} non-camera items")
 
         elif logic_key == 'NS2_GAME_LOGIC':
             # Pure past-month sales sort. Bundle exclusion already done above;
