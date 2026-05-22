@@ -1092,15 +1092,17 @@ AIR_FRYER_TRIGGER_HIERARCHIES = {
     "Φριτέζες", "ΦΡΙΤΕΖΕΣ", "Φριτέζα",
 }
 
-# Test SKUs — restrict the trigger dropdown to these five representative fryers.
+# Test SKUs — restrict the trigger dropdown to these six representative fryers.
 # Covers: mainstream best-seller (IZZY), premium AIR (NINJA), mid-range AIR
-# (ROHNSON), classic OIL fryer (TEFAL), brand-ecosystem test (TEFAL AIR).
+# (ROHNSON x2), entry-level PHILIPS, compact NINJA. All are AIR fryers
+# reflecting the dominant 2026 category mix (81% AIR / 14% BOTH / 4% OIL).
 AIR_FRYER_TEST_SKUS = {
-    "1904212",  # IZZY IZ-8225 €139 10L AIR — mainstream best-seller
+    "1904212",  # IZZY IZ-8225 €139 10L AIR — mainstream best-seller (76k sales)
     "1906001",  # NINJA AF500EU MegaZone €229 10.4L AIR — premium (NINJA-only)
-    "2076631",  # ROHNSON R-2881 €160 11.5L AIR — ecosystem-rich brand
-    "1903916",  # TEFAL Super Uno FR3140 €100 2.2L OIL — classic oil fryer
-    "2065726",  # TEFAL EY922D DUAL EASY FRY FLEX €259 9L AIR — TEFAL premium
+    "1928108",  # PHILIPS NA231/00 2000 Series €100 6.2L AIR — PHILIPS entry
+    "1743911",  # ROHNSON SMARTCHEF XL R-2834 €109 8L AIR — ROHNSON mainstream
+    "1906168",  # NINJA AF180EU €168 6.2L AIR — NINJA compact mid-range
+    "2076631",  # ROHNSON R-2881 €160 11.5L AIR — ROHNSON ecosystem-rich
 }
 
 # (priority_rank, role_label, hierarchies, logic_key, max_in_round_1, max_total)
