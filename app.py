@@ -102,7 +102,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v28.8 — Nintendo Switch 2 cluster added
+        🟢 Engine v28.9 — NS2 slot-5 semantic dedup
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -12059,7 +12059,22 @@ def run_ns2_console_engine(trigger, df_gaming, df_history):
                 notes.append(f"🛡 Screen protector priority: +3000 to {int(protector_mask.sum())} items")
 
         elif logic_key == 'NS2_STORAGE_LOGIC':
-            # Slot 9: prefer storage-related accessories (MicroSD, wheel, etc.)
+            # Slot 9: prefer MicroSD / storage accessories. The VARIOUS
+            # ACCESSORIES hierarchy has cases & controllers mixed in with
+            # high sales baselines (the Carry Case Set has 7243 sales vs
+            # MicroSD's 1015), so we apply the same case+controller dedup
+            # as slot 5 — but DON'T dedup storage items (we want them here).
+            case_pattern = r'\b(?:Case|Carry|Protector|Filter|Θήκη|Προστατευτικό|Pouch|Sleeve|Glass|Tempered)\b'
+            ctrl_pattern = r'\b(?:Pro\s+Controller|Horipad|Gamepad)\b|Joy.?Con\s+(?:Pair|Charging|2\s+Pack)'
+            overlap_mask = (
+                title_col.str.contains(case_pattern, case=False, regex=True, na=False) |
+                title_col.str.contains(ctrl_pattern, case=False, regex=True, na=False)
+            )
+            if overlap_mask.any():
+                pool.loc[overlap_mask, 'Final_Score'] -= 10000
+                notes.append(f"⊘ Slot-9 dedup: −10000 to {int(overlap_mask.sum())} items (cases/ctrls belong elsewhere)")
+
+            # Storage boost — keep this as the main slot-9 signal
             storage_mask = title_col.str.contains(
                 r'MicroSD|SD Card|Κάρτα Μνήμης|microSD|Memory Card', case=False, regex=True, na=False
             )
@@ -12068,8 +12083,28 @@ def run_ns2_console_engine(trigger, df_gaming, df_history):
                 notes.append(f"💾 MicroSD/storage priority: +4000 to {int(storage_mask.sum())} items")
 
         elif logic_key == 'NS2_ACCESSORY_LOGIC':
-            # Slot 5: general accessory by sales (no extra logic)
-            pass
+            # Slot 5: general accessory. The VARIOUS ACCESSORIES hierarchy
+            # has only 11 SKUs and 4 of its top 5 sellers semantically belong
+            # in other dedicated slots:
+            #   - Carry Case & Screen Protector Set (case → slots 4/8)
+            #   - Hori Horipad Turbo (controller → slots 1/7)
+            #   - MicroSD Cards (storage → slot 9)
+            # Apply a strong −10000 penalty to those so the truly-unique
+            # accessories surface — typically the Joy-Con Wheel, Camera
+            # accessories, USB Stand, or AC Adapter.
+            case_pattern    = r'\b(?:Case|Carry|Protector|Filter|Θήκη|Προστατευτικό|Pouch|Sleeve|Glass|Tempered)\b'
+            # Note: matches "Joy-Con Pair/Charging/2 Pack" controllers but NOT
+            # "Joy-Con 2 Wheel" (the steering attachment is a legitimate slot-5 pick).
+            ctrl_pattern    = r'\b(?:Pro\s+Controller|Horipad|Gamepad)\b|Joy.?Con\s+(?:Pair|Charging|2\s+Pack)'
+            storage_pattern = r'MicroSD|SD\s+Card|Κάρτα\s+Μνήμης|Memory\s+Card'
+            overlap_mask = (
+                title_col.str.contains(case_pattern,    case=False, regex=True, na=False) |
+                title_col.str.contains(ctrl_pattern,    case=False, regex=True, na=False) |
+                title_col.str.contains(storage_pattern, case=False, regex=True, na=False)
+            )
+            if overlap_mask.any():
+                pool.loc[overlap_mask, 'Final_Score'] -= 10000
+                notes.append(f"⊘ Semantic dedup: −10000 to {int(overlap_mask.sum())} items (case/ctrl/SD belong in other slots)")
 
         elif logic_key == 'NS2_GAME_LOGIC':
             # Pure past-month sales sort. Bundle exclusion already done above;
