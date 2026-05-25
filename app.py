@@ -102,7 +102,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v28.16 — Refrigerators (Ψυγειοκαταψύκτες) — series-aware (SAMSUNG BESPOKE) + color-matched kitchen package
+        🟢 Engine v28.17 — Straighteners (Ισιωτικά Μαλλιών) — Personal Care cluster: brand-ecosystem × price-tier × color-aesthetic hair-styling package
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -1531,6 +1531,231 @@ AF_S_RATING_TOP          =   150_000 # Experts Rating = Top Quality / Excellent
 AF_S_RATING_BEST_VALUE   =    80_000 # Experts Rating = Best Value
 AF_S_SUBTYPE_MATCH       =    60_000 # Accessory matches air vs oil subtype
 AF_S_SALES_FACTOR        =       0.5 # Sales tiebreaker weight (kitchen sells less than vacuums)
+
+
+# ═════════════════════════════════════════════════════════════
+# 🟢 STRAIGHTENERS CONFIGURATION (Ισιωτικά Μαλλιών — Personal Care)
+# ═════════════════════════════════════════════════════════════
+# Trigger detection: products in SDA sheet with Hierarchy = "STRAIGHTENERS"
+# (Level 1 = Personal Care, Level 2 = Women's Care).
+#
+# Recommendation depth — HYBRID (sales × brand-ecosystem × price-tier × color):
+#   • Straighteners have 107 SKUs but limited structured specs beyond brand,
+#     price, color, and device-type. "Ειδικά χαρακτηριστικά" and "Δυνατότητες"
+#     are unstructured free text (lots of unique values) — unusable for
+#     cross-matching. So full-spec cross-matching would add noise, not signal.
+#   • Pure sales-only would miss the strongest cross-sell signal in this
+#     category: BRAND ECOSYSTEM. 13/14 straightener brands also make hair
+#     dryers; 10/14 also make curlers. A €459 DYSON Airstrait buyer expects
+#     to see a DYSON Supersonic, not a €15 REMINGTON dryer.
+#   • Three specs deployed alongside sales:
+#       1) Κατασκευαστής (brand) — direct match, parsed from Title for the
+#          male-grooming hierarchies where the column is empty (not used by
+#          straighteners but kept reusable for future Personal Care engines)
+#       2) LIST PRICE / price tier — proximity (Entry/Mainstream/Premium/Pro)
+#       3) Χρώμα (color group) — soft boost when colors match aesthetic
+#          (Ροζ↔Ροζ, Μαύρο↔Μαύρο). Color matters more here than in any other
+#          cluster except fridges, because Personal Care is a fashion-adjacent
+#          purchase — women coordinate their hair-styling tools by color.
+#
+# Slot composition (10 slots, 8 hierarchies):
+#   1. HAIR DRYERS         — top sales (1408), natural pair, max_total=2
+#   2. CURLERS & BRUSHES   — hair-styling sibling, strong overlap, max_total=2
+#   3. MULTISTYLERS        — premium alt-style (Dyson Airwrap class)
+#   4. ACCESSORIES         — heat protectants, oils, brushes (Personal Care)
+#   5. EPILATORS           — women's-care companion
+#   6. ELECTRIC TOOTHBRUSHES — universal personal-care wellness
+#   7. BODY SCALES         — wellness
+#   8. MASSAGE DEVICES     — wellness
+#
+# Round 1 = 1 per pool × 8 pools = 8 slots; round 2 overflows from HAIR DRYERS
+# and CURLERS (the only pools with max_total=2) to fill slots 9-10. This keeps
+# slots 1-2 as the hero hair-styling pair and slots 9-10 as natural overflow
+# rather than wedging more wellness items.
+#
+# We deliberately EXCLUDE the men's-grooming hierarchies (TRIMMERS, SHAVING
+# MACHINES, GROOMING SET, ΚΟΥΡΕΥΤΙΚΕΣ ΜΗΧΑΝΕΣ) for the straightener trigger.
+# Zero brand overlap (besides REMINGTON), and a women's hair-styling carousel
+# showing nose-hair trimmers reads as a categorization error. Those four
+# hierarchies will get their own dedicated engine when we add SHAVING MACHINES
+# as a trigger in a later iteration.
+
+STRAIGHTENER_TRIGGER_HIERARCHIES = {
+    "STRAIGHTENERS", "Straighteners", "straighteners",
+    "ΙΣΙΩΤΙΚΑ ΜΑΛΛΙΩΝ", "Ισιωτικά Μαλλιών", "Ισιωτικό Μαλλιών",
+}
+
+# Test SKUs — 6 representative straighteners spanning the full spectrum.
+# Set covers: premium DYSON multistyler hero (#1 seller), DYSON Corrale
+# pure-straightener premium, mid-range PHILIPS (#3 seller, mainstream price),
+# steam-tech BELLISSIMA (steam straightener subtype), entry-level IZZY
+# (budget mainstream), entry-level REMINGTON (budget classic with keratin).
+# Empty set = show all 107.
+STRAIGHTENER_TEST_SKUS = {
+    "2098479",  # DYSON AIRSTRAIT HT01 €459 Ροζ — #1 seller, premium hero
+    "1898709",  # DYSON CORRALE Special Edition €499 Blue Blush — premium classic
+    "1658773",  # PHILIPS BHS378/00 €45 Μαύρο — mainstream best-seller (18.5k)
+    "1984742",  # BELLISSIMA STEAM CERAMIC & KERATIN €70 — steam subtype
+    "480466",   # IZZY HS-568 €61 Μαύρο — entry-level budget
+    "1339080",  # REMINGTON KERATIN PROTECT S8540 €50 Χρυσό — keratin classic
+}
+
+# (priority_rank, role_label, hierarchies, logic_key, max_in_round_1, max_total)
+# Looping engine: cycle priority order taking 1 per pool per round until 10
+# slots filled. Pools with max_total=2 (HAIR DRYERS, CURLERS) overflow into
+# round 2 to fill the carousel; the other 6 are capped at 1.
+STRAIGHTENER_PRIORITY = [
+    (1, 'Πιστολάκι Μαλλιών',
+        ['HAIR DRYERS'],
+        'STR_HAIRSTYLING', 1, 2),
+    (2, 'Ψαλίδι Μπούκλας / Βούρτσα',
+        ['CURLERS & BRUSHES'],
+        'STR_HAIRSTYLING', 1, 2),
+    (3, 'Πολυσυσκευή Styling',
+        ['MULTISTYLERS'],
+        'STR_HAIRSTYLING', 1, 1),
+    (4, 'Αξεσουάρ Περιποίησης',
+        ['ACCESSORIES'],
+        'STR_PCARE_ACCESSORY', 1, 1),
+    (5, 'Συσκευή Αποτρίχωσης',
+        ['EPILATORS'],
+        'STR_WOMENS_CARE', 1, 1),
+    (6, 'Ηλεκτρική Οδοντόβουρτσα',
+        ['ELECTRIC TOOTHBRUSHES', 'ΗΛΕΚΤΡΙΚΕΣ ΟΔΟΝΤΟΒΟΥΡΤΣΕΣ'],
+        'STR_WELLNESS', 1, 1),
+    (7, 'Ζυγαριά Σώματος',
+        ['BODY SCALES'],
+        'STR_WELLNESS', 1, 1),
+    (8, 'Συσκευή Μασάζ',
+        ['MASSAGE DEVICES'],
+        'STR_WELLNESS', 1, 1),
+]
+
+STRAIGHTENER_SLOT_TARGET = 10
+
+STRAIGHTENER_MARKETING_COPY = {
+    "Πιστολάκι Μαλλιών":         "Ολοκλήρωσε το hair-styling set σου — ξήρανση και styling στο σπίτι.",
+    "Ψαλίδι Μπούκλας / Βούρτσα": "Βούρτσα ή ψαλίδι — η εναλλακτική επιλογή για κυματιστά μαλλιά.",
+    "Πολυσυσκευή Styling":       "Όλα-σε-ένα styling — ίσιωμα, μπούκλες και όγκος.",
+    "Αξεσουάρ Περιποίησης":      "Αξεσουάρ που προστατεύουν τα μαλλιά από τη θερμότητα.",
+    "Συσκευή Αποτρίχωσης":       "Ολοκληρωμένη φροντίδα ομορφιάς — επαγγελματικό αποτέλεσμα στο σπίτι.",
+    "Ηλεκτρική Οδοντόβουρτσα":   "Λευκό χαμόγελο, καθαριότητα επιπέδου οδοντιάτρου.",
+    "Ζυγαριά Σώματος":           "Παρακολούθησε την πρόοδό σου — υγεία και ευεξία.",
+    "Συσκευή Μασάζ":             "Χαλάρωσε τους μυς σου — wellness εμπειρία στο σπίτι.",
+}
+
+# Brand-ecosystem hints — these are the brands we know span multiple Personal
+# Care hierarchies in the data, used purely for diagnostics. The brand boost
+# is awarded dynamically by comparing the trigger brand against pool brands.
+STRAIGHTENER_KNOWN_ECOSYSTEM_BRANDS = {
+    'DYSON', 'PHILIPS', 'REMINGTON', 'BELLISSIMA', 'ROWENTA', 'VALERA',
+    'BRAUN', 'BABYLISS', 'REVLON', 'IZZY', 'ROHNSON', 'PROFICARE',
+    'TESLA', 'IQ', 'REVAMP', 'BEURER', 'ORAL-B',
+}
+
+# Price tiers for proximity scoring across Personal Care. Straighteners span
+# €19-€559 — much wider than kitchen appliances — so we use 4 tiers. DYSON
+# (€459+) sits in Pro; entry sub-€40 is the budget shelf.
+def _str_price_tier(price: float) -> int:
+    """Returns 0=Entry(<€40), 1=Mainstream(€40-100), 2=Premium(€100-250), 3=Pro(>€250)."""
+    if price < 40:    return 0
+    if price < 100:   return 1
+    if price < 250:   return 2
+    return 3
+
+# Color grouping for the Personal Care aesthetic boost. We bucket the noisy
+# Greek color labels into 5 broad families so "Ροζ" matches "Ροζ Χρυσό", and
+# "Μαύρο;Χρυσό" matches both Μαύρο and Χρυσό. Match logic: if ANY token in
+# the trigger color overlaps with ANY token in the candidate color, it's a
+# soft match (smaller boost than exact equality).
+def _str_color_group(color: str) -> set:
+    """Returns the set of color-family tokens for a (possibly multi-color) cell."""
+    if not color or pd.isna(color):
+        return set()
+    c = str(color).strip()
+    if not c or c == '—':
+        return set()
+    # Split on semicolon or slash (some rows use 'Μαύρο;Χρυσό' or 'Μαύρο/Χρυσό')
+    parts = re.split(r'[;/]', c)
+    groups = set()
+    for p in parts:
+        p_low = p.strip().lower()
+        if not p_low:
+            continue
+        if 'μαύρ' in p_low or 'black' in p_low:
+            groups.add('BLACK')
+        elif 'ροζ' in p_low or 'pink' in p_low or 'rose' in p_low or 'champagne' in p_low:
+            groups.add('PINK')
+        elif 'λευκ' in p_low or 'white' in p_low:
+            groups.add('WHITE')
+        elif 'χρυσ' in p_low or 'gold' in p_low or 'bronze' in p_low or 'μπρονζ' in p_low:
+            groups.add('GOLD')
+        elif 'ασημ' in p_low or 'silver' in p_low or 'inox' in p_low or 'γκρι' in p_low or 'gray' in p_low or 'grey' in p_low or 'ανθρακ' in p_low:
+            groups.add('SILVER')
+        elif 'μπλε' in p_low or 'blue' in p_low or 'γαλάζ' in p_low or 'γαλαζ' in p_low:
+            groups.add('BLUE')
+        elif 'κόκκιν' in p_low or 'κοκκιν' in p_low or 'red' in p_low:
+            groups.add('RED')
+        elif 'μωβ' in p_low or 'purple' in p_low or 'λιλά' in p_low or 'λιλα' in p_low or 'violet' in p_low:
+            groups.add('PURPLE')
+        elif 'πράσιν' in p_low or 'πρασιν' in p_low or 'green' in p_low:
+            groups.add('GREEN')
+        elif 'καφέ' in p_low or 'καφε' in p_low or 'brown' in p_low or 'μπεζ' in p_low or 'beige' in p_low:
+            groups.add('BROWN')
+    return groups
+
+# Detect whether the trigger is a multi-function straightener (also a multistyler)
+# via the Τύπος συσκευής column. If yes, the MULTISTYLERS slot becomes more of
+# an upsell ("you already have this functionality, here's the pro tier") so we
+# bias the score even harder toward premium-tier multistylers.
+def _str_is_multistyler_trigger(trigger_row) -> bool:
+    """True if Τύπος συσκευής indicates multi-function (Πρέσα + Ισιωτικό combo)."""
+    t = str(trigger_row.get('Τύπος συσκευής', '') or '').lower()
+    return ('πρέσα' in t and 'ισιωτικ' in t) or 'πολυ' in t
+
+# Title-brand parser — Personal Care hierarchies in the SDA sheet have the
+# Κατασκευαστής column populated for women's-care items (Hair Dryers, Curlers,
+# Straighteners, Multistylers, Epilators) but EMPTY for men's-grooming
+# hierarchies (Trimmers, Shaving Machines, Grooming Set, Κουρευτικές Μηχανές).
+# Straighteners don't cross-sell into those, so this helper is not invoked by
+# the straighteners engine — but it's defined here for the future personal-care
+# engines (e.g. Shaving Machines) that will need it.
+def _str_parse_brand_from_title(title: str) -> str:
+    """Extract brand as the first ALL-CAPS or known-brand token from title."""
+    if not title or pd.isna(title):
+        return ''
+    t = str(title).strip()
+    # Known brands seen in Personal Care SDA data — checked first as a fast path
+    KNOWN = ['REMINGTON', 'PHILIPS', 'BRAUN', 'PANASONIC', 'BABYLISS', 'WAHL',
+            'ROWENTA', 'BELLISSIMA', 'DYSON', 'IZZY', 'TESLA', 'VALERA',
+            'REVLON', 'REVAMP', 'PROFICARE', 'PROFI CARE', 'ROHNSON',
+            'BEURER', 'ORAL-B', 'ORAL B', 'SENCOR', 'AENO', 'LAIFEN',
+            'XIAOMI', 'MEDISANA', 'BLAUPUNKT', 'IQ ', 'SOGO',
+            'FOREO', 'AVEDA', 'NAIPO', 'THERABODY', 'HYPERICE', 'HOMEDICS',
+            'YESOUL', 'LAICA', 'TEFAL', 'BLACK & DECKER', 'SOEHNLE', 'MYZONE',
+            'FIRST AUSTRIA', 'BELLA CUCINA', 'HAIR MAJESTY', 'LEXICAL']
+    t_upper = t.upper()
+    for brand in KNOWN:
+        if t_upper.startswith(brand + ' ') or f' {brand} ' in t_upper or t_upper.startswith(brand + '-'):
+            return brand.strip()
+    # Fallback: first whitespace-separated token if it's all caps
+    first = t.split()[0] if t.split() else ''
+    if first.isupper() and len(first) >= 2 and first.isalpha():
+        return first
+    return ''
+
+# Scoring constants — calibrated so brand-ecosystem outranks pure sales,
+# price-tier proximity acts as a sieve, and color is the softest tiebreaker.
+# Mirrors the AF_S_* convention.
+STR_S_AVAILABILITY       = 100_000   # In-stock boost (Άμεσα Διαθέσιμο)
+STR_S_BRAND_MATCH        = 500_000   # Same Κατασκευαστής as trigger (ecosystem hero)
+STR_S_PRICE_SAME_TIER    = 250_000   # Companion in same price tier
+STR_S_PRICE_ONE_OFF      =  80_000   # Companion ±1 price tier
+STR_S_PRICE_TWO_OFF      = -150_000  # Companion ≥2 tiers away — penalize (€459 trigger ≠ €15 dryer)
+STR_S_COLOR_EXACT        =  60_000   # Color-group exact match (Ροζ↔Ροζ)
+STR_S_COLOR_PARTIAL      =  20_000   # Color-group token overlap (Μαύρο;Χρυσό ↔ Χρυσό)
+STR_S_MULTISTYLER_UPSELL = 100_000   # Multi-function trigger → premium multistyler boost
+STR_S_SALES_FACTOR       =       0.5 # Sales tiebreaker weight (personal care sells less than smartphones)
 
 
 # ═════════════════════════════════════════════════════════════
@@ -4098,6 +4323,12 @@ L1_CATEGORIES = [
     },
 
     {
+        "key": "Personal Care",
+        "label": "Φροντίδα\nΣώματος",
+        "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 2c-2 2-3 4-3 6a3 3 0 0 0 6 0c0-2-1-4-3-6z'/%3E%3Cpath d='M9 12v7'/%3E%3Cpath d='M15 12v7'/%3E%3Cpath d='M7 19h10'/%3E%3C/svg%3E",
+    },
+
+    {
         "key": "TV",
         "label": "Εικόνα\n& Ήχος",
         "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='2' y='7' width='20' height='15' rx='2' ry='2'/%3E%3Cpolyline points='17 2 12 7 7 2'/%3E%3C/svg%3E",
@@ -4172,6 +4403,10 @@ L2_CHILDREN = {
     "Climatism": [
         {"key": "AirUnits", "label": "Κλιματιστικά",
          "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5'%3E%3Cpath d='M12 2v20M2 12h20M4.93 4.93l14.14 14.14M19.07 4.93L4.93 19.07'/%3E%3C/svg%3E"}
+    ],
+    "Personal Care": [
+        {"key": "Straighteners", "label": "Ισιωτικά\nΜαλλιών",
+         "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9 3h6v3a3 3 0 0 1-3 3 3 3 0 0 1-3-3z'/%3E%3Cpath d='M12 9v12'/%3E%3Cpath d='M10 21h4'/%3E%3C/svg%3E"}
     ],
     "MDA": [
         {"key": "Washing Machines", "label": "Πλυντήρια\nΡούχων",
@@ -4689,6 +4924,30 @@ else:
                 st.sidebar.markdown('<p class="sidebar-section">Επιλέξτε Φριτέζα</p>', unsafe_allow_html=True)
                 sel = st.sidebar.selectbox("", fryers['Title'].unique(), label_visibility="collapsed", key="air_fryer_sel")
                 trigger = fryers[fryers['Title']==sel].iloc[0] if sel else None
+
+    elif active_cluster == "Straighteners":
+        # Trigger pool: STRAIGHTENERS (Ισιωτικά Μαλλιών) from the SDA sheet,
+        # Level 1 = Personal Care, Level 2 = Women's Care.
+        # If STRAIGHTENER_TEST_SKUS is non-empty, restrict to those 6 demo SKUs
+        # spanning premium DYSON / mid PHILIPS / steam BELLISSIMA / budget IZZY+REMINGTON.
+        if df_sda is None or df_sda.empty:
+            st.sidebar.warning("Sheet 'SDA' is empty or missing.")
+        else:
+            hier_upper = df_sda['Hierarchy'].fillna('').astype(str).str.upper().str.strip()
+            trigger_hiers_upper = {h.upper().strip() for h in STRAIGHTENER_TRIGGER_HIERARCHIES}
+            straighteners = df_sda[hier_upper.isin(trigger_hiers_upper)].copy()
+
+            # 🧪 Optional test-list filter (leave STRAIGHTENER_TEST_SKUS empty to show all 107)
+            if STRAIGHTENER_TEST_SKUS:
+                mat_clean = straighteners['Material'].astype(str).str.strip().str.replace(r'\.0$', '', regex=True)
+                straighteners = straighteners[mat_clean.isin(STRAIGHTENER_TEST_SKUS)]
+
+            if straighteners.empty:
+                st.sidebar.warning("Δεν βρέθηκαν Ισιωτικά Μαλλιών στο sheet SDA.")
+            else:
+                st.sidebar.markdown('<p class="sidebar-section">Επιλέξτε Ισιωτικό Μαλλιών</p>', unsafe_allow_html=True)
+                sel = st.sidebar.selectbox("", straighteners['Title'].unique(), label_visibility="collapsed", key="straightener_sel")
+                trigger = straighteners[straighteners['Title']==sel].iloc[0] if sel else None
 
     elif active_cluster == "Washing Machines":
         # Trigger pool: Πλυντήρια Ρούχων from the MDA sheet.
@@ -10279,6 +10538,342 @@ def run_air_fryer_engine(trigger, df_sda, df_mda, df_history):
 
 
 # ═══════════════════════════════════════════════════════════════
+# 🟢 STRAIGHTENERS HELPERS — Ισιωτικά Μαλλιών (Personal Care)
+# ═══════════════════════════════════════════════════════════════
+# Four pool builders, one per logic_key in STRAIGHTENER_PRIORITY:
+#   STR_HAIRSTYLING       — Hair Dryers / Curlers / Multistylers
+#   STR_PCARE_ACCESSORY   — Personal Care Accessories
+#   STR_WOMENS_CARE       — Epilators (and future women's-care hierarchies)
+#   STR_WELLNESS          — Toothbrushes / Scales / Massage
+#
+# All four share the same scoring spine: AVAILABILITY → SALES → BRAND_MATCH →
+# PRICE_TIER → COLOR_GROUP. They differ in their weights (STR_HAIRSTYLING
+# weights color higher because Hair Dryers/Curlers/Multistylers are
+# fashion-coordinated; STR_WELLNESS de-emphasises color because a body scale
+# in a different color doesn't feel mismatched). The multistyler-upsell
+# nudge fires only inside STR_HAIRSTYLING when the trigger itself is a
+# multi-function straightener.
+
+def _str_apply_base_score(pool, trigger_brand, trigger_tier, trigger_colors, notes,
+                          color_exact_weight=STR_S_COLOR_EXACT,
+                          color_partial_weight=STR_S_COLOR_PARTIAL):
+    """Apply the shared availability + sales + brand + price-tier + color scoring.
+    Returns the pool with a Final_Score column added. Mutates `notes`.
+    """
+    if pool.empty:
+        return pool
+
+    pool = pool.copy()
+    pool['Final_Score'] = 0.0
+
+    # ── Availability boost
+    if 'AVAILABILITY' in pool.columns:
+        avail_mask = pool['AVAILABILITY'] == 'Άμεσα Διαθέσιμο'
+        pool.loc[avail_mask, 'Final_Score'] += STR_S_AVAILABILITY
+        if avail_mask.any():
+            notes.append(f"  ✓ Availability: {avail_mask.sum()} in stock (+{STR_S_AVAILABILITY:,})")
+
+    # ── Base sales score (tiebreaker spine)
+    pool['Final_Score'] += pool['Sales_Tiebreaker'].fillna(0) * STR_S_SALES_FACTOR
+
+    # ── Brand-ecosystem boost (the strongest cross-sell signal)
+    if trigger_brand and 'Κατασκευαστής' in pool.columns:
+        same_brand = pool['Κατασκευαστής'].fillna('').astype(str).str.upper().str.strip() == trigger_brand
+        pool.loc[same_brand, 'Final_Score'] += STR_S_BRAND_MATCH
+        if same_brand.any():
+            notes.append(f"  ✓ Brand ecosystem ({trigger_brand}): {same_brand.sum()} (+{STR_S_BRAND_MATCH:,})")
+
+    # ── Price-tier proximity (same tier → boost, ≥2 away → penalty)
+    if 'LIST PRICE' in pool.columns:
+        prices = pool['LIST PRICE'].apply(parse_euro_price)
+        tiers = prices.apply(_str_price_tier)
+        diffs = (tiers - trigger_tier).abs()
+        same_tier = diffs == 0
+        near_tier = diffs == 1
+        far_tier = diffs >= 2
+        pool.loc[same_tier, 'Final_Score'] += STR_S_PRICE_SAME_TIER
+        pool.loc[near_tier, 'Final_Score'] += STR_S_PRICE_ONE_OFF
+        pool.loc[far_tier, 'Final_Score'] += STR_S_PRICE_TWO_OFF
+        if same_tier.any() or near_tier.any() or far_tier.any():
+            notes.append(f"  ✓ Price-tier match (trigger tier {trigger_tier}): "
+                         f"same={same_tier.sum()} (+{STR_S_PRICE_SAME_TIER:,}), "
+                         f"near={near_tier.sum()} (+{STR_S_PRICE_ONE_OFF:,}), "
+                         f"far={far_tier.sum()} ({STR_S_PRICE_TWO_OFF:+,})")
+
+    # ── Color-group match (aesthetic coordination)
+    if trigger_colors and 'Χρώμα' in pool.columns and color_exact_weight > 0:
+        pool_colors = pool['Χρώμα'].apply(_str_color_group)
+        # Exact = identical group set (e.g. {'PINK'} == {'PINK'})
+        exact_mask = pool_colors.apply(lambda g: g == trigger_colors and len(g) > 0)
+        # Partial = any token overlap but not full equality
+        partial_mask = pool_colors.apply(
+            lambda g: bool(g & trigger_colors) and g != trigger_colors
+        )
+        pool.loc[exact_mask, 'Final_Score'] += color_exact_weight
+        pool.loc[partial_mask, 'Final_Score'] += color_partial_weight
+        if exact_mask.any() or partial_mask.any():
+            trigger_color_label = '/'.join(sorted(trigger_colors)) or 'none'
+            notes.append(f"  ✓ Color match ({trigger_color_label}): "
+                         f"exact={exact_mask.sum()} (+{color_exact_weight:,}), "
+                         f"partial={partial_mask.sum()} (+{color_partial_weight:,})")
+
+    return pool
+
+
+def _str_build_hairstyling_pool(c_pool, trigger_brand, trigger_tier,
+                                 trigger_colors, is_multistyler_trigger,
+                                 role_label, notes):
+    """Score a hair-styling companion pool (Hair Dryers / Curlers / Multistylers).
+    Color matters MOST here — these are coordinated styling tools women buy
+    as a matching set. We also fire the multistyler-upsell nudge when the
+    trigger is a multi-function straightener AND we're scoring the
+    Πολυσυσκευή Styling slot.
+    """
+    if c_pool.empty:
+        return c_pool
+
+    pool = _str_apply_base_score(
+        c_pool, trigger_brand, trigger_tier, trigger_colors, notes,
+        color_exact_weight=STR_S_COLOR_EXACT,
+        color_partial_weight=STR_S_COLOR_PARTIAL,
+    )
+
+    # ── Multistyler-upsell nudge: only fires when scoring the MULTISTYLERS slot
+    # AND the trigger is already a multi-function straightener. The user has
+    # signalled they want versatility — push the premium multistylers higher
+    # so they see the pro-grade upgrade (Dyson Airwrap, BaByliss Big Hair, etc).
+    if is_multistyler_trigger and role_label == 'Πολυσυσκευή Styling' and 'LIST PRICE' in pool.columns:
+        prices = pool['LIST PRICE'].apply(parse_euro_price)
+        premium_mask = prices >= 200  # Multistylers €200+ are the pro tier
+        pool.loc[premium_mask, 'Final_Score'] += STR_S_MULTISTYLER_UPSELL
+        if premium_mask.any():
+            notes.append(f"  ✓ Multistyler upsell (trigger is multi-function): "
+                         f"{premium_mask.sum()} premium multistylers (+{STR_S_MULTISTYLER_UPSELL:,})")
+
+    return pool.sort_values('Final_Score', ascending=False)
+
+
+def _str_build_accessory_pool(c_pool, trigger_brand, trigger_tier,
+                               trigger_colors, notes):
+    """Score the Personal Care ACCESSORIES pool.
+    Color is irrelevant here (most accessories are utilitarian Inox/Πράσινο/
+    no-color) so we zero out the color weight. Brand match still matters
+    (DYSON brushes for DYSON straightener owners, PHILIPS brushes for PHILIPS).
+    """
+    if c_pool.empty:
+        return c_pool
+
+    pool = _str_apply_base_score(
+        c_pool, trigger_brand, trigger_tier, trigger_colors, notes,
+        color_exact_weight=0,
+        color_partial_weight=0,
+    )
+    return pool.sort_values('Final_Score', ascending=False)
+
+
+def _str_build_womens_care_pool(c_pool, trigger_brand, trigger_tier,
+                                  trigger_colors, notes):
+    """Score the women's-care companions (Epilators today; future hierarchies
+    can slot in here without changes).
+    Color matters less than hair-styling — epilators are bathroom-shelf items,
+    not part of the styling-set aesthetic — so we use the partial weight only.
+    """
+    if c_pool.empty:
+        return c_pool
+
+    pool = _str_apply_base_score(
+        c_pool, trigger_brand, trigger_tier, trigger_colors, notes,
+        color_exact_weight=STR_S_COLOR_PARTIAL,  # downgrade exact to partial
+        color_partial_weight=STR_S_COLOR_PARTIAL,
+    )
+    return pool.sort_values('Final_Score', ascending=False)
+
+
+def _str_build_wellness_pool(c_pool, trigger_brand, trigger_tier,
+                              trigger_colors, notes):
+    """Score the wellness companions (Toothbrushes / Scales / Massage).
+    These hierarchies are dominated by DIFFERENT brands (ORAL-B, BEURER,
+    THERABODY) — straightener brand-match rarely fires here. Falls back to
+    price-tier + sales. Color is muted: a body scale in a different color
+    from your straightener doesn't read as a mismatch.
+    """
+    if c_pool.empty:
+        return c_pool
+
+    pool = _str_apply_base_score(
+        c_pool, trigger_brand, trigger_tier, trigger_colors, notes,
+        color_exact_weight=0,
+        color_partial_weight=0,
+    )
+    return pool.sort_values('Final_Score', ascending=False)
+
+
+# ═══════════════════════════════════════════════════════════════
+# 🟢 STRAIGHTENERS ENGINE — Ισιωτικά Μαλλιών (Personal Care)
+# ═══════════════════════════════════════════════════════════════
+# Mirror of run_air_fryer_engine: pre-build & score every pool from
+# STRAIGHTENER_PRIORITY, then round-robin fill until STRAIGHTENER_SLOT_TARGET
+# (=10) slots filled or all pools exhausted.
+
+def run_straighteners_engine(trigger, df_sda, df_history):
+    """Build up to 10 cross-sell slots for a straightener trigger.
+
+    Round-robin loop through Hair Dryers → Curlers → Multistylers →
+    Accessories → Epilators → Toothbrushes → Body Scales → Massage.
+    Round 1 fills 8 slots (1 per pool). Hair Dryers and Curlers have
+    max_total=2 so they overflow into round 2 to fill slots 9-10 — keeping
+    the carousel hair-styling-led rather than wellness-padded.
+    """
+    diag = []
+    slot_notes = {}
+    all_recs = []
+
+    # ── Trigger attributes
+    tm = trigger['Material']
+    tt = str(trigger.get('Title', ''))
+    tb = str(trigger.get('Κατασκευαστής', '')).strip().upper()
+    tmodel = str(trigger.get('Μοντέλο', '')).strip()
+    tprice = parse_euro_price(trigger.get('LIST PRICE', 0))
+    ttier = _str_price_tier(tprice)
+    tcolor_raw = str(trigger.get('Χρώμα', '') or '').strip()
+    tcolors = _str_color_group(tcolor_raw)
+    is_multi = _str_is_multistyler_trigger(trigger)
+
+    diag.append(("0. Trigger", f"{tb} €{tprice:.0f}",
+                 f"Model={tmodel} | Tier={ttier} | Color={tcolor_raw} → {sorted(tcolors)} | Multistyler={is_multi}"))
+
+    if df_sda is None or df_sda.empty:
+        diag.append(("ERROR", 0, "SDA sheet is empty — engine cannot run"))
+        return pd.DataFrame(), diag, slot_notes, pd.DataFrame()
+
+    # ── Drop the trigger itself + any other straighteners (competitors)
+    c_sda = df_sda[df_sda['Material'] != tm].copy()
+    trigger_hiers = {h.upper().strip() for h in STRAIGHTENER_TRIGGER_HIERARCHIES}
+    b4 = len(c_sda)
+    c_sda = c_sda[~c_sda['Hierarchy'].fillna('').astype(str).str.upper().str.strip().isin(trigger_hiers)]
+    diag.append(("1. Excl straighteners", len(c_sda), f"Removed {b4 - len(c_sda)} competitor straighteners"))
+
+    # ── Sales tiebreaker prep
+    if 'Sum of Sales' in c_sda.columns:
+        c_sda['Sales_Tiebreaker'] = pd.to_numeric(c_sda['Sum of Sales'], errors='coerce').fillna(0)
+    else:
+        c_sda['Sales_Tiebreaker'] = 0
+
+    # ── Build a sorted pool per priority entry
+    pools = {}  # rank → (role_label, sorted_DataFrame, logic_key, max_round_1, max_total, notes)
+    for rank, role_label, hiers, logic_key, max_r1, max_total in STRAIGHTENER_PRIORITY:
+        notes = [f"=== Priority {rank}: {role_label} ({logic_key}) "
+                 f"| max_round_1={max_r1} | max_total={max_total if max_total else '∞'} ==="]
+
+        hier_upper = {h.upper().strip() for h in hiers}
+        base_pool = c_sda[c_sda['Hierarchy'].fillna('').astype(str).str.upper().str.strip().isin(hier_upper)].copy()
+        notes.append(f"  Base pool size: {len(base_pool)} (hierarchies={hiers})")
+
+        if base_pool.empty:
+            notes.append(f"  ⚠ Hierarchy not present in SDA data — slot will be filled from other pools")
+            pools[rank] = (role_label, pd.DataFrame(), logic_key, max_r1, max_total, notes)
+            continue
+
+        # ── Route to the right pool builder by logic_key
+        if logic_key == 'STR_HAIRSTYLING':
+            scored = _str_build_hairstyling_pool(
+                base_pool, tb, ttier, tcolors, is_multi, role_label, notes
+            )
+        elif logic_key == 'STR_PCARE_ACCESSORY':
+            scored = _str_build_accessory_pool(base_pool, tb, ttier, tcolors, notes)
+        elif logic_key == 'STR_WOMENS_CARE':
+            scored = _str_build_womens_care_pool(base_pool, tb, ttier, tcolors, notes)
+        elif logic_key == 'STR_WELLNESS':
+            scored = _str_build_wellness_pool(base_pool, tb, ttier, tcolors, notes)
+        else:
+            scored = base_pool.copy()
+            scored['Final_Score'] = scored['Sales_Tiebreaker']
+
+        pools[rank] = (role_label, scored, logic_key, max_r1, max_total, notes)
+        diag.append((f"Pool {rank} ({role_label})", len(scored), logic_key))
+
+    # ── LOOPING: round-robin fill until target hit or all pools exhausted
+    used_materials = {tm}
+    pool_cursors  = {rank: 0 for rank in pools}
+    pool_taken    = {rank: 0 for rank in pools}
+    slot_num = 0
+    round_idx = 0
+
+    while slot_num < STRAIGHTENER_SLOT_TARGET:
+        progress = False
+        round_idx += 1
+        for rank, (role_label, scored, logic_key, max_r1, max_total, notes) in pools.items():
+            if slot_num >= STRAIGHTENER_SLOT_TARGET:
+                break
+            if scored is None or scored.empty:
+                continue
+
+            # Hard cap: skip this pool if max_total already reached
+            if max_total is not None and pool_taken[rank] >= max_total:
+                continue
+
+            take_n = max_r1 if round_idx == 1 else 1
+            if max_total is not None:
+                take_n = min(take_n, max_total - pool_taken[rank])
+
+            cursor = pool_cursors[rank]
+            taken_this_pass = 0
+            while taken_this_pass < take_n and cursor < len(scored) \
+                  and slot_num < STRAIGHTENER_SLOT_TARGET:
+                row = scored.iloc[cursor]
+                cursor += 1
+                if row['Material'] in used_materials:
+                    continue
+
+                slot_num += 1
+                rc = row.copy()
+                rc['Assigned_Slot'] = slot_num
+                rc['Slot_Role'] = role_label
+                rc['Marketing_Copy'] = STRAIGHTENER_MARKETING_COPY.get(role_label, "Ιδανική επιλογή!")
+                rc['Item_Rank'] = round_idx
+                all_recs.append(rc)
+                used_materials.add(row['Material'])
+                taken_this_pass += 1
+                pool_taken[rank] += 1
+                progress = True
+
+                title_preview = str(row.get('Title', ''))[:70]
+                score_val = float(row.get('Final_Score', 0))
+                if slot_num not in slot_notes:
+                    slot_notes[slot_num] = []
+                slot_notes[slot_num].append(
+                    f"Round {round_idx} | Pool '{role_label}' | "
+                    f"Score: {score_val:,.0f} | {title_preview}"
+                )
+
+            pool_cursors[rank] = cursor
+
+        if not progress:
+            diag.append(("Loop", round_idx, "All pools exhausted or capped — stopping"))
+            break
+
+    # ── Pool diagnostics under slot 0
+    pool_diag_notes = []
+    for rank, (role_label, scored, logic_key, max_r1, max_total, notes) in pools.items():
+        pool_diag_notes.extend(notes)
+        cap_note = f" (capped at {max_total})" if max_total is not None else ""
+        pool_diag_notes.append(
+            f"  → consumed {pool_taken[rank]} / {len(scored) if scored is not None else 0} from this pool{cap_note}"
+        )
+        pool_diag_notes.append("")
+    slot_notes[0] = pool_diag_notes
+
+    diag.append(("TOTAL", len(all_recs),
+                 f"Filled {slot_num}/{STRAIGHTENER_SLOT_TARGET} slots in {round_idx} rounds"))
+
+    if all_recs:
+        recs_df = pd.DataFrame(all_recs)
+        recs_df['Draft_Score'] = recs_df['Assigned_Slot']
+        return recs_df, diag, slot_notes, recs_df
+    return pd.DataFrame(), diag, slot_notes, pd.DataFrame()
+
+
+# ═══════════════════════════════════════════════════════════════
 # 🟢 WASHING MACHINES HELPERS — Πλυντήρια Ρούχων (Μεγάλες Συσκευές)
 # ═══════════════════════════════════════════════════════════════
 # Five pool builders + one accessory subset filter. The engine follows the
@@ -15449,6 +16044,13 @@ elif active_cluster == "Air Fryers":
     # are wired up but will gracefully skip if their data files aren't loaded.
     recs, diag, slot_notes, full_candidates = run_air_fryer_engine(trigger, df_sda, df_mda, df_history)
     slot_diag = []
+elif active_cluster == "Straighteners":
+    # Ισιωτικά Μαλλιών + all hair-styling / women's-care / wellness companions
+    # live in the SDA sheet (Level 1 = Personal Care + Level 2 = SDA companions).
+    # No MDA crossover — straighteners are pure Personal Care.
+    # Brand-ecosystem × price-tier × color-aesthetic hybrid scoring.
+    recs, diag, slot_notes, full_candidates = run_straighteners_engine(trigger, df_sda, df_history)
+    slot_diag = []
 elif active_cluster == "Washing Machines":
     # Πλυντήρια Ρούχων + Στεγνωτήρια + Αξεσουάρ Πλυντηρίου-Στεγνωτηρίου
     # live in the MDA sheet; iron-side companions (Σίδερα, Συστήματα
@@ -15729,6 +16331,15 @@ with st.expander("⚙️ System Diagnostics"):
         attr_keys_to_show = ['Material','Title','Level 2','Hierarchy','Κατασκευαστής','Μοντέλο',
                               'Κατηγορία','Χωρητικότητα.1','Ισχύς ≡','Experts Rating ≡',
                               'Χρώμα','Δυνατότητες','LIST PRICE']
+    elif active_cluster == "Straighteners":
+        # Personal Care — surface the signals the engine actually uses: brand,
+        # color, device-type (multistyler detection), model, price + sales.
+        # The unstructured Δυνατότητες / Ειδικά χαρακτηριστικά columns are
+        # shown if non-empty but the engine doesn't read them.
+        attr_keys_to_show = ['Material','Title','Level 1','Level 2','Hierarchy',
+                              'Κατασκευαστής','Μοντέλο','Τύπος συσκευής','Χρώμα',
+                              'Η συσκευασία περιλαμβάνει','Experts Rating ≡',
+                              'Sum of Sales','LIST PRICE','AVAILABILITY']
     elif active_cluster == "Washing Machines":
         # MDA has no real spec columns filled for WMs — show what's there
         # plus the basic taxonomy. Title-parsed specs (kg, RPM, Wi-Fi, Slim)
