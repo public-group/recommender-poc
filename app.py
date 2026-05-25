@@ -102,7 +102,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v28.18 — Hair Dryers (Πιστολάκια Μαλλιών) — Personal Care: brand-ecosystem × price-tier × color × unisex household package (men's grooming included)
+        🟢 Engine v28.19 — UI fixes: distinct L2 icons per cluster + scoped per-tile selection highlighting (no more "click-everything" bug)
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -4496,94 +4496,113 @@ L1_CATEGORIES = [
 ]
 
 L2_CHILDREN = {
-    "Books":     [{"key": "Kids Books",  "label": "Παιδικά\nΒιβλία",
-                   "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 19.5A2.5 2.5 0 0 1 6.5 17H20'/%3E%3Cpath d='M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z'/%3E%3C/svg%3E"}],
+    "Books": [
+        {"key": "Kids Books", "label": "Παιδικά\nΒιβλία",
+         "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 19.5A2.5 2.5 0 0 1 6.5 17H20'/%3E%3Cpath d='M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z'/%3E%3C/svg%3E"},
+    ],
     "Telephony": [
-        {"key": "Smartphones", "label": "Smart-\nphones", "icon_svg": "..."},
-        {"key": "Tablets", "label": "Tablets", # <--- ΠΡΟΣΘΗΚΗ
-         "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='4' y='2' width='16' height='20' rx='2' ry='2'/%3E%3Cline x1='12' y1='18' x2='12.01' y2='18'/%3E%3C/svg%3E"},
-        {"key": "Wearables", "label": "Smart-\nwatches", 
-         "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M18 6L16 2H8L6 6M18 18l-2 4H8l-2-4'/%3E%3Ccircle cx='12' cy='12' r='7'/%3E%3Cpath d='M12 9v3l2 2'/%3E%3C/svg%3E"}
-    ],          
-    "IT":        [{"key": "Laptops",     "label": "Laptops",
-                   "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='2' y='4' width='20' height='12' rx='1' ry='1'/%3E%3Cline x1='6' y1='20' x2='18' y2='20'/%3E%3Cline x1='12' y1='16' x2='12' y2='20'/%3E%3C/svg%3E"},
-                  {"key": "Desktops",    "label": "Desktops",
-                   "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='4' y='3' width='16' height='14' rx='1.5'/%3E%3Cline x1='2' y1='20' x2='22' y2='20'/%3E%3Cpath d='M9 17l-1 3M15 17l1 3'/%3E%3C/svg%3E"},
-                  {"key": "Mouse",      "label": "Mouse",
-                   "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='6' y='3' width='12' height='18' rx='6'/%3E%3Cline x1='12' y1='7' x2='12' y2='11'/%3E%3C/svg%3E"},
-                  {"key": "Keyboard",   "label": "Keyboard",
-                   "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='2' y='6' width='20' height='12' rx='2'/%3E%3Cline x1='6' y1='10' x2='6.01' y2='10'/%3E%3Cline x1='10' y1='10' x2='10.01' y2='10'/%3E%3Cline x1='14' y1='10' x2='14.01' y2='10'/%3E%3Cline x1='18' y1='10' x2='18.01' y2='10'/%3E%3Cline x1='8' y1='14' x2='16' y2='14'/%3E%3C/svg%3E"},
-                  {"key": "Gaming Mouse", "label": "Gaming\nMouse",
-                   "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='6' y='3' width='12' height='18' rx='6'/%3E%3Cline x1='12' y1='7' x2='12' y2='11'/%3E%3Cpath d='M6 12h12'/%3E%3C/svg%3E"},
-                  {"key": "Gaming Keyboard", "label": "Gaming\nKeyboard",
-                   "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='2' y='6' width='20' height='12' rx='2'/%3E%3Cline x1='6' y1='10' x2='6.01' y2='10'/%3E%3Cline x1='10' y1='10' x2='10.01' y2='10'/%3E%3Cline x1='14' y1='10' x2='14.01' y2='10'/%3E%3Cline x1='18' y1='10' x2='18.01' y2='10'/%3E%3Cpath d='M6 12h12'/%3E%3Cline x1='8' y1='14' x2='16' y2='14'/%3E%3C/svg%3E"},
-                  {"key": "Monitors",     "label": "Οθόνες",
-                   "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='2' y='3' width='20' height='14' rx='2'/%3E%3Cline x1='8' y1='21' x2='16' y2='21'/%3E%3Cline x1='12' y1='17' x2='12' y2='21'/%3E%3C/svg%3E"},
-                  {"key": "Printers",     "label": "Εκτυπωτές",
-                   "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9V2h12v7'/%3E%3Crect x='6' y='14' width='12' height='8'/%3E%3Cpath d='M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2'/%3E%3C/svg%3E"},
-                  {"key": "Webcam",       "label": "Webcam",
-                   "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='10' r='7'/%3E%3Ccircle cx='12' cy='10' r='3'/%3E%3Cline x1='12' y1='17' x2='12' y2='21'/%3E%3Cline x1='8' y1='21' x2='16' y2='21'/%3E%3C/svg%3E"},
-                  {"key": "USB Hub",      "label": "USB Hub",
-                   "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='4' y='8' width='16' height='8' rx='2'/%3E%3Cline x1='8' y1='12' x2='8.01' y2='12'/%3E%3Cline x1='12' y1='12' x2='12.01' y2='12'/%3E%3Cline x1='16' y1='12' x2='16.01' y2='12'/%3E%3C/svg%3E"},
-                 ],
+        {"key": "Smartphones", "label": "Smart-\nphones",
+         "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='6' y='2' width='12' height='20' rx='2'/%3E%3Cline x1='12' y1='18' x2='12.01' y2='18'/%3E%3C/svg%3E"},
+        {"key": "Tablets", "label": "Tablets",
+         "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='4' y='2' width='16' height='20' rx='2'/%3E%3Cline x1='12' y1='18' x2='12.01' y2='18'/%3E%3C/svg%3E"},
+        {"key": "Wearables", "label": "Smart-\nwatches",
+         "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='6' y='6' width='12' height='12' rx='3'/%3E%3Cpath d='M9 6V3h6v3M9 18v3h6v-3'/%3E%3C/svg%3E"},
+    ],
+    "IT": [
+        {"key": "Laptops", "label": "Laptops",
+         "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='5' width='18' height='11' rx='1'/%3E%3Cpath d='M2 18h20l-1 2H3l-1-2z'/%3E%3C/svg%3E"},
+        {"key": "Desktops", "label": "Desktops",
+         "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='4' y='3' width='16' height='13' rx='1'/%3E%3Cline x1='9' y1='20' x2='15' y2='20'/%3E%3Cline x1='12' y1='16' x2='12' y2='20'/%3E%3C/svg%3E"},
+        {"key": "Mouse", "label": "Mouse",
+         "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='7' y='3' width='10' height='18' rx='5'/%3E%3Cline x1='12' y1='7' x2='12' y2='11'/%3E%3C/svg%3E"},
+        {"key": "Keyboard", "label": "Keyboard",
+         "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='2' y='7' width='20' height='11' rx='1.5'/%3E%3Cpath d='M6 11h.01M10 11h.01M14 11h.01M18 11h.01M6 15h12'/%3E%3C/svg%3E"},
+        {"key": "Gaming Mouse", "label": "Gaming\nMouse",
+         "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='7' y='3' width='10' height='18' rx='5'/%3E%3Cline x1='12' y1='7' x2='12' y2='11'/%3E%3Ccircle cx='12' cy='14' r='1' fill='%23ff5e00'/%3E%3C/svg%3E"},
+        {"key": "Gaming Keyboard", "label": "Gaming\nKeyboard",
+         "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='2' y='6' width='20' height='12' rx='1.5'/%3E%3Cpath d='M5 10h.01M9 10h.01M13 10h.01M17 10h.01M5 14h14'/%3E%3Ccircle cx='4' cy='10' r='0.5' fill='%23ff5e00'/%3E%3C/svg%3E"},
+        {"key": "Monitors", "label": "Οθόνες",
+         "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='2' y='3' width='20' height='14' rx='1'/%3E%3Cline x1='8' y1='21' x2='16' y2='21'/%3E%3Cline x1='12' y1='17' x2='12' y2='21'/%3E%3C/svg%3E"},
+        {"key": "Printers", "label": "Εκτυπωτές",
+         "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 6 2 18 2 18 9'/%3E%3Cpath d='M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2'/%3E%3Crect x='6' y='14' width='12' height='8'/%3E%3C/svg%3E"},
+        {"key": "Webcam", "label": "Webcam",
+         "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='10' r='6'/%3E%3Ccircle cx='12' cy='10' r='2'/%3E%3Cpath d='M5 22h14l-2-5H7l-2 5z'/%3E%3C/svg%3E"},
+        {"key": "USB Hub", "label": "USB Hub",
+         "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='9' width='18' height='6' rx='1'/%3E%3Cline x1='7' y1='12' x2='7.01' y2='12'/%3E%3Cline x1='11' y1='12' x2='11.01' y2='12'/%3E%3Cline x1='15' y1='12' x2='15.01' y2='12'/%3E%3Cline x1='19' y1='12' x2='19.01' y2='12'/%3E%3C/svg%3E"},
+    ],
     "Stationery": [
-                  {"key": "Pens",           "label": "Στυλό",        "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5'%3E%3Cpath d='M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z'/%3E%3C/svg%3E"},
-                  {"key": "Pencils",        "label": "Μολύβια",     "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5'%3E%3Cpath d='M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z'/%3E%3C/svg%3E"},
-                  {"key": "Markers",        "label": "Μαρκαδόροι",  "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5'%3E%3Cpath d='M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z'/%3E%3C/svg%3E"},
-                  {"key": "Sharpeners",     "label": "Ξύστρες",     "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5'%3E%3Cpath d='M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z'/%3E%3C/svg%3E"},
-                  {"key": "Erasers",        "label": "Γόμες",       "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5'%3E%3Cpath d='M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z'/%3E%3C/svg%3E"},
-                  {"key": "Correction",     "label": "Διορθωτικά",  "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5'%3E%3Cpath d='M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z'/%3E%3C/svg%3E"},
-                  {"key": "Pencil Cases",   "label": "Κασετίνες",   "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5'%3E%3Cpath d='M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z'/%3E%3C/svg%3E"},
-                  {"key": "Geometric Tools","label": "Γεωμετρικά",  "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5'%3E%3Cpath d='M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z'/%3E%3C/svg%3E"},
-                  {"key": "Stationery Sets","label": "Σετ\nΧαρτικών","icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5'%3E%3Cpath d='M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z'/%3E%3C/svg%3E"},
-                  {"key": "Paints",         "label": "Χρώματα",     "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5'%3E%3Cpath d='M18.37 2.63a2 2 0 0 1 3 3L14 13l-4 1 1-4 7.37-7.37z'/%3E%3Cpath d='M9 14.5a4 4 0 0 1-4 4H3v-2a4 4 0 0 1 4-4'/%3E%3C/svg%3E"},
-                  {"key": "Brushes",        "label": "Πινέλα",      "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5'%3E%3Cpath d='M18.37 2.63a2 2 0 0 1 3 3L14 13l-4 1 1-4 7.37-7.37z'/%3E%3Cpath d='M9 14.5a4 4 0 0 1-4 4H3v-2a4 4 0 0 1 4-4'/%3E%3C/svg%3E"},
-                  {"key": "Colored Pencils Art","label": "Ξυλομπογιές", "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5'%3E%3Cpath d='M18.37 2.63a2 2 0 0 1 3 3L14 13l-4 1 1-4 7.37-7.37z'/%3E%3Cpath d='M9 14.5a4 4 0 0 1-4 4H3v-2a4 4 0 0 1 4-4'/%3E%3C/svg%3E"},
-                  {"key": "Drawing Markers","label": "Μαρκαδόροι\nΖωγρ.", "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5'%3E%3Cpath d='M18.37 2.63a2 2 0 0 1 3 3L14 13l-4 1 1-4 7.37-7.37z'/%3E%3Cpath d='M9 14.5a4 4 0 0 1-4 4H3v-2a4 4 0 0 1 4-4'/%3E%3C/svg%3E"},
-                  {"key": "Art Paper",      "label": "Μπλοκ\nΧαρτιά",   "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5'%3E%3Cpath d='M18.37 2.63a2 2 0 0 1 3 3L14 13l-4 1 1-4 7.37-7.37z'/%3E%3Cpath d='M9 14.5a4 4 0 0 1-4 4H3v-2a4 4 0 0 1 4-4'/%3E%3C/svg%3E"},
-                  {"key": "Notebooks", "label": "Τετράδια", "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5'%3E%3Cpath d='M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z'/%3E%3C/svg%3E"},
-                  {"key": "",      "label": "Τετράδια",    "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5'%3E%3Cpath d='M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z'/%3E%3C/svg%3E"},
-                  {"key": "Notepads",       "label": "Σημειωμ.",    "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5'%3E%3Cpath d='M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z'/%3E%3C/svg%3E"},
-                 ],
+        {"key": "Pens", "label": "Στυλό",
+         "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z'/%3E%3C/svg%3E"},
+        {"key": "Pencils", "label": "Μολύβια",
+         "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 19l7-7 3 3-7 7-3-3z'/%3E%3Cpath d='M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z'/%3E%3Cpath d='M2 2l7.586 7.586'/%3E%3Ccircle cx='11' cy='11' r='2'/%3E%3C/svg%3E"},
+        {"key": "Markers", "label": "Μαρκαδόροι",
+         "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9 11H5a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h4'/%3E%3Cpath d='M9 2h10v15a2 2 0 0 1-2 2H11a2 2 0 0 1-2-2V2z'/%3E%3Cpath d='M9 7h10'/%3E%3C/svg%3E"},
+        {"key": "Sharpeners", "label": "Ξύστρες",
+         "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='8' width='18' height='10' rx='1.5'/%3E%3Ccircle cx='12' cy='13' r='2.5'/%3E%3Cline x1='12' y1='13' x2='12' y2='4'/%3E%3Cpolyline points='10 5 12 3 14 5'/%3E%3C/svg%3E"},
+        {"key": "Erasers", "label": "Γόμες",
+         "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 13L9 2H4a2 2 0 0 0-2 2v5l11 11h5a2 2 0 0 0 2-2v-5z'/%3E%3Cline x1='13' y1='6' x2='18' y2='11'/%3E%3Cline x1='6' y1='13' x2='11' y2='18'/%3E%3C/svg%3E"},
+        {"key": "Correction", "label": "Διορθωτικά",
+         "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9 3h6v4a3 3 0 0 1-3 3 3 3 0 0 1-3-3V3z'/%3E%3Cpath d='M10 10v9a2 2 0 0 0 2 2 2 2 0 0 0 2-2v-9'/%3E%3C/svg%3E"},
+        {"key": "Pencil Cases", "label": "Κασετίνες",
+         "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='6' width='18' height='13' rx='3'/%3E%3Cline x1='3' y1='10' x2='21' y2='10'/%3E%3Ccircle cx='17' cy='14' r='1'/%3E%3C/svg%3E"},
+        {"key": "Geometric Tools", "label": "Γεωμετρικά",
+         "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 21h18L12 4 3 21z'/%3E%3Cline x1='8' y1='15' x2='10' y2='15'/%3E%3Cline x1='14' y1='15' x2='16' y2='15'/%3E%3C/svg%3E"},
+        {"key": "Stationery Sets", "label": "Σετ\nΧαρτικών",
+         "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='5' y='8' width='14' height='13' rx='1.5'/%3E%3Cpath d='M9 8V5l3-2 3 2v3'/%3E%3Cline x1='8' y1='12' x2='8' y2='17'/%3E%3Cline x1='12' y1='12' x2='12' y2='17'/%3E%3Cline x1='16' y1='12' x2='16' y2='17'/%3E%3C/svg%3E"},
+        {"key": "Paints", "label": "Χρώματα",
+         "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M19 11h2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h2'/%3E%3Crect x='7' y='2' width='12' height='9' rx='1'/%3E%3Cline x1='10' y1='6' x2='16' y2='6'/%3E%3C/svg%3E"},
+        {"key": "Brushes", "label": "Πινέλα",
+         "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M18.37 2.63a2 2 0 0 1 3 3L14 13l-4 1 1-4 7.37-7.37z'/%3E%3Cpath d='M9 14.5a4 4 0 0 1-4 4H3v-2a4 4 0 0 1 4-4'/%3E%3C/svg%3E"},
+        {"key": "Colored Pencils Art", "label": "Ξυλομπογιές",
+         "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cline x1='8' y1='3' x2='8' y2='21'/%3E%3Cline x1='12' y1='3' x2='12' y2='21'/%3E%3Cline x1='16' y1='3' x2='16' y2='21'/%3E%3Cpolygon points='6 3 10 3 8 7'/%3E%3Cpolygon points='10 3 14 3 12 7'/%3E%3Cpolygon points='14 3 18 3 16 7'/%3E%3C/svg%3E"},
+        {"key": "Drawing Markers", "label": "Μαρκαδόροι\nΖωγρ.",
+         "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M14 3l5 5-9 9-5-5 9-9z'/%3E%3Cpath d='M2 22l3-7 4 4-7 3z'/%3E%3Cline x1='14' y1='3' x2='19' y2='8'/%3E%3C/svg%3E"},
+        {"key": "Art Paper", "label": "Μπλοκ\nΧαρτιά",
+         "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='4' y='3' width='16' height='18' rx='1'/%3E%3Cline x1='8' y1='8' x2='16' y2='8'/%3E%3Cline x1='8' y1='12' x2='16' y2='12'/%3E%3Cline x1='8' y1='16' x2='13' y2='16'/%3E%3C/svg%3E"},
+        {"key": "Notebooks", "label": "Τετράδια",
+         "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 4a2 2 0 0 1 2-2h12v20H6a2 2 0 0 1-2-2V4z'/%3E%3Ccircle cx='6' cy='6' r='0.5' fill='%23ff5e00'/%3E%3Ccircle cx='6' cy='10' r='0.5' fill='%23ff5e00'/%3E%3Ccircle cx='6' cy='14' r='0.5' fill='%23ff5e00'/%3E%3Ccircle cx='6' cy='18' r='0.5' fill='%23ff5e00'/%3E%3C/svg%3E"},
+        {"key": "Notepads", "label": "Σημειωμ.",
+         "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='4' y='4' width='16' height='18' rx='1'/%3E%3Cline x1='8' y1='2' x2='8' y2='6'/%3E%3Cline x1='12' y1='2' x2='12' y2='6'/%3E%3Cline x1='16' y1='2' x2='16' y2='6'/%3E%3Cline x1='8' y1='12' x2='16' y2='12'/%3E%3Cline x1='8' y1='16' x2='14' y2='16'/%3E%3C/svg%3E"},
+    ],
     "SDA": [
         {"key": "Robot Vacuums", "label": "Σκούπες\nΡομπότ",
          "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='9'/%3E%3Ccircle cx='12' cy='12' r='3'/%3E%3Cline x1='12' y1='3' x2='12' y2='5'/%3E%3Cline x1='12' y1='19' x2='12' y2='21'/%3E%3Cline x1='3' y1='12' x2='5' y2='12'/%3E%3Cline x1='19' y1='12' x2='21' y2='12'/%3E%3C/svg%3E"},
         {"key": "Traditional Vacuums", "label": "Ηλεκτρικές\nΣκούπες",
-         "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 19h14l-2-9H7l-2 9z'/%3E%3Cpath d='M12 10V5'/%3E%3Cpath d='M12 5h5'/%3E%3Ccircle cx='17' cy='5' r='1.5'/%3E%3C/svg%3E"},
+         "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 21h14l-2-10H7l-2 10z'/%3E%3Cpath d='M12 11V5'/%3E%3Cpath d='M12 5h5'/%3E%3Ccircle cx='17' cy='5' r='1.5'/%3E%3C/svg%3E"},
         {"key": "Stick Vacuums", "label": "Σκούπες\nStick",
-         "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M14 3l-2 4h4l-2-4z'/%3E%3Cpath d='M12 7v11'/%3E%3Cpath d='M8 18h8l-1 3H9l-1-3z'/%3E%3Ccircle cx='12' cy='4' r='1'/%3E%3C/svg%3E"},
+         "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M14 2l-2 5h4l-2-5z'/%3E%3Cpath d='M12 7v12'/%3E%3Cpath d='M8 19h8l-1 3H9l-1-3z'/%3E%3Ccircle cx='12' cy='4' r='0.8'/%3E%3C/svg%3E"},
         {"key": "Air Fryers", "label": "Φριτέζες",
-         "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 4h12a1 1 0 0 1 1 1v3H5V5a1 1 0 0 1 1-1z'/%3E%3Crect x='5' y='8' width='14' height='12' rx='2' ry='2'/%3E%3Ccircle cx='12' cy='14' r='3'/%3E%3Cline x1='8' y1='6' x2='8.01' y2='6'/%3E%3Cline x1='11' y1='6' x2='14' y2='6'/%3E%3C/svg%3E"}
+         "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 4h12a1 1 0 0 1 1 1v3H5V5a1 1 0 0 1 1-1z'/%3E%3Crect x='5' y='8' width='14' height='12' rx='2'/%3E%3Ccircle cx='12' cy='14' r='3'/%3E%3Cline x1='8' y1='6' x2='8.01' y2='6'/%3E%3Cline x1='11' y1='6' x2='14' y2='6'/%3E%3C/svg%3E"},
     ],
     "Climatism": [
         {"key": "AirUnits", "label": "Κλιματιστικά",
-         "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5'%3E%3Cpath d='M12 2v20M2 12h20M4.93 4.93l14.14 14.14M19.07 4.93L4.93 19.07'/%3E%3C/svg%3E"}
+         "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M2 9h20'/%3E%3Cpath d='M2 15h20'/%3E%3Cpath d='M6 4l-2 5 2 5-2 5'/%3E%3Cpath d='M18 4l-2 5 2 5-2 5'/%3E%3Cpath d='M12 4v16'/%3E%3C/svg%3E"},
     ],
     "Personal Care": [
         {"key": "Straighteners", "label": "Ισιωτικά\nΜαλλιών",
-         "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9 3h6v3a3 3 0 0 1-3 3 3 3 0 0 1-3-3z'/%3E%3Cpath d='M12 9v12'/%3E%3Cpath d='M10 21h4'/%3E%3C/svg%3E"},
+         "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='10' y='2' width='4' height='10' rx='0.5'/%3E%3Crect x='10' y='6' width='4' height='4' fill='%23ff5e00' fill-opacity='0.15'/%3E%3Cpath d='M12 12v9'/%3E%3Cpath d='M9 21h6'/%3E%3C/svg%3E"},
         {"key": "Hair Dryers", "label": "Πιστολάκια\nΜαλλιών",
-         "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 12a4 4 0 0 1 4-4h7l5-3v14l-5-3H7a4 4 0 0 1-4-4z'/%3E%3Cpath d='M11 16v4'/%3E%3Cpath d='M9 20h4'/%3E%3C/svg%3E"}
+         "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 11a3 3 0 0 1 3-3h7l5-3v12l-5-3H6a3 3 0 0 1-3-3z'/%3E%3Ccircle cx='9' cy='11' r='1.5'/%3E%3Cpath d='M11 16v4'/%3E%3Cpath d='M9 20h4'/%3E%3C/svg%3E"},
     ],
     "MDA": [
         {"key": "Washing Machines", "label": "Πλυντήρια\nΡούχων",
-         "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='4' y='2' width='16' height='20' rx='2' ry='2'/%3E%3Ccircle cx='12' cy='13' r='5'/%3E%3Ccircle cx='12' cy='13' r='2'/%3E%3Cline x1='8' y1='5' x2='8.01' y2='5'/%3E%3Cline x1='12' y1='5' x2='14' y2='5'/%3E%3C/svg%3E"},
+         "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='4' y='2' width='16' height='20' rx='2'/%3E%3Ccircle cx='12' cy='13' r='5'/%3E%3Ccircle cx='12' cy='13' r='2'/%3E%3Cline x1='8' y1='5' x2='8.01' y2='5'/%3E%3Cline x1='12' y1='5' x2='14' y2='5'/%3E%3C/svg%3E"},
         {"key": "Fridges", "label": "Ψυγειο-\nκαταψύκτες",
-         "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='5' y='2' width='14' height='20' rx='2' ry='2'/%3E%3Cline x1='5' y1='10' x2='19' y2='10'/%3E%3Cline x1='8' y1='6' x2='8.01' y2='6'/%3E%3Cline x1='8' y1='14' x2='8.01' y2='14'/%3E%3C/svg%3E"}
+         "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='5' y='2' width='14' height='20' rx='2'/%3E%3Cline x1='5' y1='10' x2='19' y2='10'/%3E%3Cline x1='8' y1='6' x2='8.01' y2='6'/%3E%3Cline x1='8' y1='14' x2='8.01' y2='14'/%3E%3C/svg%3E"},
     ],
     "TV": [
         {"key": "TVs", "label": "Τηλεοράσεις",
-            "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='2' y='7' width='20' height='15' rx='2' ry='2'/%3E%3Cpolyline points='17 2 12 7 7 2'/%3E%3C/svg%3E"},
+         "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='2' y='5' width='20' height='13' rx='1.5'/%3E%3Cline x1='8' y1='22' x2='16' y2='22'/%3E%3Cline x1='12' y1='18' x2='12' y2='22'/%3E%3C/svg%3E"},
         {"key": "Projectors", "label": "Projectors",
-            "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='4' y='6' width='16' height='12' rx='2' ry='2'/%3E%3Ccircle cx='12' cy='12' r='3'/%3E%3Cline x1='2' y1='12' x2='4' y2='12'/%3E%3Cline x1='20' y1='12' x2='22' y2='12'/%3E%3C/svg%3E"},
-        {"key": "Turntables", "label": "Πικάπ", 
-         "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3Ccircle cx='12' cy='12' r='2'/%3E%3Cpath d='M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83'/%3E%3C/svg%3E"}
+         "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='8' width='14' height='10' rx='1.5'/%3E%3Ccircle cx='10' cy='13' r='2.5'/%3E%3Cpath d='M17 11l4-2v8l-4-2'/%3E%3Cline x1='6' y1='22' x2='14' y2='22'/%3E%3C/svg%3E"},
+        {"key": "Turntables", "label": "Πικάπ",
+         "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3Ccircle cx='12' cy='12' r='2'/%3E%3Cline x1='17' y1='4' x2='14' y2='11'/%3E%3Ccircle cx='17' cy='4' r='1'/%3E%3C/svg%3E"},
     ],
     "Gaming": [
         {"key": "PS5 Console", "label": "PS5\nConsole",
-         "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='2' y='8' width='20' height='10' rx='5' ry='5'/%3E%3Cline x1='7' y1='13' x2='9' y2='13'/%3E%3Cline x1='8' y1='12' x2='8' y2='14'/%3E%3Ccircle cx='15.5' cy='12' r='0.8'/%3E%3Ccircle cx='17.5' cy='14' r='0.8'/%3E%3C/svg%3E"},
+         "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='4' y='3' width='16' height='18' rx='2'/%3E%3Cline x1='9' y1='3' x2='9' y2='21'/%3E%3Ccircle cx='15' cy='8' r='1.5'/%3E%3Ccircle cx='15' cy='14' r='1.5'/%3E%3C/svg%3E"},
         {"key": "Nintendo Switch 2", "label": "Switch 2",
-         "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='5' width='18' height='14' rx='2'/%3E%3Cline x1='9' y1='5' x2='9' y2='19'/%3E%3Cline x1='15' y1='5' x2='15' y2='19'/%3E%3Ccircle cx='6' cy='9' r='0.5'/%3E%3Ccircle cx='18' cy='15' r='0.5'/%3E%3C/svg%3E"},
+         "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='6' y='4' width='12' height='16' rx='1'/%3E%3Crect x='3' y='6' width='3' height='12' rx='1'/%3E%3Crect x='18' y='6' width='3' height='12' rx='1'/%3E%3Ccircle cx='4.5' cy='10' r='0.5'/%3E%3Ccircle cx='19.5' cy='14' r='0.5'/%3E%3C/svg%3E"},
     ],
 }
 
@@ -4688,16 +4707,63 @@ st.sidebar.markdown('''
 # ─────────────────────────────────────────────────────────────
 # LEVEL 1 VIEW — Show top-level category tiles
 # ─────────────────────────────────────────────────────────────
+# v28.19 architectural fix:
+#   • Each tile is wrapped in `st.container(key="l1tile_<safekey>")` which
+#     generates a `.st-key-l1tile_<safekey>` wrapper class on the DOM div.
+#     CSS targets that class directly — perfectly scoped per tile — instead
+#     of the buggy `nth-of-type(N)` global indexing which (a) shifted rows
+#     when other HorizontalBlocks appeared above the grid (Πίσω button,
+#     breadcrumb, divider) and (b) matched across nested HorizontalBlocks
+#     causing the "click one, highlight many" bug visible in the L2 view.
+#   • Active tile state uses `type="primary"` on st.button. CSS overrides
+#     the primary kind to render an orange-outline white-background pill
+#     — one tile only, no matter what else is rendered above or below it.
+
+def _tile_safe_key(k: str) -> str:
+    """CSS-safe variant of a tile's key for use in `.st-key-*` selectors.
+    Keep [a-zA-Z0-9_] only; everything else becomes '_'."""
+    import re as _re_local
+    return _re_local.sub(r'[^a-zA-Z0-9_]', '_', k or 'unknown')
+
+# Shared CSS — active-state styling (applies to BOTH L1 and L2 primary buttons).
+# Rendered once at the top so we don't duplicate it for L1 vs L2.
+st.sidebar.markdown("""
+<style>
+/* Active tile = primary button: orange outline, white bg, dark text */
+[data-testid="stSidebar"] button[kind="primary"],
+[data-testid="stSidebar"] button[kind="primary"]:focus:not(:active) {
+    border: 2px solid #ff5e00 !important;
+    background: white !important;
+    color: #111 !important;
+    box-shadow: 0 2px 8px rgba(255,94,0,0.20) !important;
+}
+[data-testid="stSidebar"] button[kind="primary"]:hover {
+    background: #fff7f0 !important;
+    color: #111 !important;
+    border-color: #ff5e00 !important;
+}
+/* Inactive tile = secondary button: subtle border, hover hints orange */
+[data-testid="stSidebar"] button[kind="secondary"] {
+    border: 1px solid #eaeaea !important;
+    background: white !important;
+}
+[data-testid="stSidebar"] button[kind="secondary"]:hover {
+    border-color: #ff5e00 !important;
+}
+</style>
+""", unsafe_allow_html=True)
+
+
 if st.session_state.nav_level == 1:
     st.sidebar.markdown('<p class="sidebar-section">Προϊόντα</p>', unsafe_allow_html=True)
 
-    # Dynamic CSS targeting exactly the correct row and column!
+    # Per-tile icon CSS — scoped by container key, no nth-of-type indexing.
     icon_css = "<style>\n"
-    for i, l1 in enumerate(L1_CATEGORIES):
-        row_idx = (i // 2) + 1  
-        col_idx = (i % 2) + 1   
+    for l1 in L1_CATEGORIES:
+        sk = _tile_safe_key(l1['key'])
         icon_css += f"""
-        [data-testid="stSidebar"] [data-testid="stHorizontalBlock"]:nth-of-type({row_idx}) > div:nth-child({col_idx}) button::before {{
+        .st-key-l1tile_{sk} button {{ position: relative; padding-top: 52px !important; padding-bottom: 12px !important; min-height: 92px !important; }}
+        .st-key-l1tile_{sk} button::before {{
             content: ''; display: block; width: 32px; height: 32px;
             background-image: url("data:image/svg+xml,{l1['icon_svg']}");
             background-size: contain; background-repeat: no-repeat; background-position: center;
@@ -4707,23 +4773,28 @@ if st.session_state.nav_level == 1:
     icon_css += "</style>"
     st.sidebar.markdown(icon_css, unsafe_allow_html=True)
 
-    # Render 2-column grid
+    # Render 2-column grid with per-tile container wrappers
     n_l1 = len(L1_CATEGORIES)
+    # At L1 view there's no L1 "selected" state (clicking an L1 navigates away),
+    # so all L1 buttons render as secondary by default.
     for row_start in range(0, n_l1, 2):
         row_items = L1_CATEGORIES[row_start:row_start + 2]
         cols = st.sidebar.columns(2)
         for col, l1 in zip(cols, row_items):
             with col:
-                if st.button(l1["label"], key=f"l1_btn_{l1['key']}", use_container_width=True):
-                    st.session_state.nav_level = 2
-                    st.session_state.selected_l1 = l1["key"]
-                    # Auto-select the first L2 child if there's only one
-                    children = L2_CHILDREN.get(l1["key"], [])
-                    if len(children) == 1:
-                        st.session_state.active_cluster = children[0]["key"]
-                    else:
-                        st.session_state.active_cluster = None
-                    st.rerun()
+                sk = _tile_safe_key(l1['key'])
+                with st.container(key=f"l1tile_{sk}"):
+                    if st.button(l1["label"], key=f"l1_btn_{l1['key']}",
+                                  type="secondary", use_container_width=True):
+                        st.session_state.nav_level = 2
+                        st.session_state.selected_l1 = l1["key"]
+                        # Auto-select the first L2 child if there's only one
+                        children = L2_CHILDREN.get(l1["key"], [])
+                        if len(children) == 1:
+                            st.session_state.active_cluster = children[0]["key"]
+                        else:
+                            st.session_state.active_cluster = None
+                        st.rerun()
 
     sel = None
     trigger = None
@@ -4747,39 +4818,42 @@ else:
 
     st.sidebar.markdown('<hr class="section-divider">', unsafe_allow_html=True)
 
-    # Exact row/col CSS targeting for L2
+    # Per-tile icon CSS — scoped by container key. ONE CSS rule per L2 child,
+    # targeting exactly that one tile via `.st-key-l2tile_<safekey>`. No more
+    # `nth-of-type` index leakage across rows.
     active_cluster = st.session_state.active_cluster
-    border_css = "<style>\n"
-    for i, child in enumerate(children):
-        row_idx = (i // 2) + 1
-        col_idx = (i % 2) + 1
-        border = "2px solid #ff5e00" if child["key"] == active_cluster else "1px solid #eaeaea"
-        
-        border_css += f"""
-        [data-testid="stSidebar"] [data-testid="stHorizontalBlock"]:nth-of-type({row_idx}) > div:nth-child({col_idx}) button {{
-            border: {border} !important;
-        }}
-        [data-testid="stSidebar"] [data-testid="stHorizontalBlock"]:nth-of-type({row_idx}) > div:nth-child({col_idx}) button::before {{
+    icon_css = "<style>\n"
+    for child in children:
+        sk = _tile_safe_key(child['key'])
+        icon_css += f"""
+        .st-key-l2tile_{sk} button {{ position: relative; padding-top: 52px !important; padding-bottom: 12px !important; min-height: 92px !important; }}
+        .st-key-l2tile_{sk} button::before {{
             content: ''; display: block; width: 32px; height: 32px;
             background-image: url("data:image/svg+xml,{child['icon_svg']}");
             background-size: contain; background-repeat: no-repeat; background-position: center;
             position: absolute; top: 14px; left: 50%; transform: translateX(-50%);
         }}
         """
-    border_css += "</style>"
-    st.sidebar.markdown(border_css, unsafe_allow_html=True)
+    icon_css += "</style>"
+    st.sidebar.markdown(icon_css, unsafe_allow_html=True)
 
-    # Render L2 tiles in pairs (Unbreakable version)
+    # Render L2 tiles in 2-column pairs with per-tile container wrappers.
+    # The active tile gets `type="primary"` → orange border via the shared
+    # CSS above. Inactive tiles get `type="secondary"` → grey border.
     n_l2 = len(children)
     for i, row_start in enumerate(range(0, n_l2, 2)):
         row_items = children[row_start:row_start + 2]
         cols = st.sidebar.columns(2)
         for j, (col, child) in enumerate(zip(cols, row_items)):
             with col:
-                btn_key = f"l2_btn_{child['key']}_{i}_{j}"
-                if st.button(child["label"], key=btn_key, use_container_width=True):
-                    st.session_state.active_cluster = child["key"]
-                    st.rerun()
+                sk = _tile_safe_key(child['key'])
+                with st.container(key=f"l2tile_{sk}"):
+                    btn_type = "primary" if child["key"] == active_cluster else "secondary"
+                    btn_key = f"l2_btn_{child['key']}_{i}_{j}"
+                    if st.button(child["label"], key=btn_key, type=btn_type,
+                                  use_container_width=True):
+                        st.session_state.active_cluster = child["key"]
+                        st.rerun()
 
     st.sidebar.markdown('<hr class="section-divider">', unsafe_allow_html=True)
 
