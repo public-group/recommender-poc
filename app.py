@@ -10754,22 +10754,32 @@ def run_washing_machine_engine(trigger, df_mda, df_sda, df_history):
 # 10 slots filled or all pools exhausted.
 
 def _fridge_build_panel_pool(c_pool, trigger_series, trigger_brand,
-                              trigger_color_group, notes):
+                              trigger_color, trigger_color_group, notes):
     """Score the Αξεσουάρ Ψυγείων pool restricted to door panels (Είδος = 'Πάνελ').
 
-    Logic stack (most important first):
-      1. Series match (BESPOKE/Vario) → +1,000,000
+    HARD BRAND LOCK — door panels are physically brand-specific because each
+    manufacturer uses a proprietary mounting mechanism. A BOSCH KSZ Vario
+    panel will NOT fit a SAMSUNG / LIEBHERR / HISENSE / LG / SMEG / MIELE
+    fridge (and vice versa). So step 1 is a hard filter by
+    Κατασκευαστής match; only after that does the rest of the scoring
+    fire. If the trigger brand has no panels in the catalog (e.g. MIELE,
+    LIEBHERR, HISENSE, LG, SMEG), the slot stays empty and the
+    care-pool overflow (max_total=2) fills the 10th slot instead.
+
+    Logic stack on the brand-filtered pool (most important first):
+      1. Series match (BESPOKE↔BESPOKE, Vario↔Vario) → +1,000,000
          The whole point of BESPOKE is panel-swap aesthetics; matched-series
          panels are the highest-cross-sell product in the catalog for that
          specific buyer.
       2. Series match + same color group → +400,000 extra
          A Μαύρο BESPOKE fridge buyer's #1 want is a Μαύρο or Γκρι panel
          (so they can swap to dark variants); a Λευκό buyer wants Λευκό/Μπεζ.
-      3. Wrong-series penalty: -500,000
-         A BOSCH KSZ Vario panel is physically incompatible with a SAMSUNG
-         BESPOKE fridge (and vice versa) — never recommend cross-series.
+      3. Wrong-series penalty (same brand, different series): -500,000
+         Defensive — currently all SAMSUNG panels in catalog ARE BESPOKE,
+         so this rarely fires, but it'd kick in if e.g. a SAMSUNG
+         "Family Hub" panel were added that doesn't fit BESPOKE fridges.
       4. Sales tiebreaker (panels typically have 0 sales — so this barely
-         matters; the series + color signals dominate).
+         matters; the brand + series + color signals dominate).
     """
     if c_pool.empty:
         return c_pool
@@ -10787,6 +10797,27 @@ def _fridge_build_panel_pool(c_pool, trigger_series, trigger_brand,
         notes.append("  ⚠ No 'Πάνελ' rows in Αξεσουάρ Ψυγείων — pool empty")
         return panels
 
+    # ── HARD BRAND-COMPATIBILITY FILTER ──
+    # Panels are physically brand-locked. Drop everything that isn't the
+    # trigger's exact brand. If trigger brand isn't represented among the
+    # panel manufacturers, the pool empties out and the slot is skipped.
+    tb_upper = (trigger_brand or '').upper().strip()
+    if not tb_upper:
+        notes.append("  ⚠ No trigger brand identified — panel slot stays empty (panels are brand-locked)")
+        return panels.iloc[0:0]
+
+    if 'Κατασκευαστής' not in panels.columns:
+        notes.append("  ⚠ 'Κατασκευαστής' column missing — cannot enforce brand-lock, returning empty pool")
+        return panels.iloc[0:0]
+
+    panel_brand = panels['Κατασκευαστής'].fillna('').astype(str).str.upper().str.strip()
+    before_n = len(panels)
+    panels = panels[panel_brand == tb_upper].copy()
+    notes.append(f"  ✓ Brand-compatibility filter: kept {len(panels)}/{before_n} '{tb_upper}'-branded panels (panels are brand-locked)")
+    if panels.empty:
+        notes.append(f"  ⚠ No '{tb_upper}' panels in catalog — slot stays empty; care-pool overflow will fill the 10th slot")
+        return panels
+
     pool = panels
     pool['Final_Score'] = 0.0
 
@@ -10797,7 +10828,7 @@ def _fridge_build_panel_pool(c_pool, trigger_series, trigger_brand,
     # ── Sales baseline (mostly zeros for panels — series boost dominates)
     pool['Final_Score'] += pool['Sales_Tiebreaker'].fillna(0) * FRIDGE_S_SALES_FACTOR
 
-    # ── Series detection on each candidate
+    # ── Series detection on each candidate (per-panel)
     cand_series = pool['Title'].fillna('').astype(str).apply(_fridge_detect_series)
     pool['_fridge_panel_series'] = cand_series
 
@@ -10816,27 +10847,41 @@ def _fridge_build_panel_pool(c_pool, trigger_series, trigger_brand,
             if same_group.any():
                 notes.append(f"  ✓ Series + color group ({trigger_color_group}): {same_group.sum()} panels (+{FRIDGE_S_SERIES_COLOR:,})")
 
-        # 3. Wrong-series penalty — cross-series panels are incompatible
+        # 3. Wrong-series penalty — same-brand panels of a different series
+        # (rarely fires today since all SAMSUNG panels are BESPOKE, but
+        # protects against catalog additions).
         wrong_series = (cand_series != '') & (cand_series != trigger_series)
         pool.loc[wrong_series, 'Final_Score'] += FRIDGE_S_WRONG_SERIES_PEN
         if wrong_series.any():
-            notes.append(f"  ✗ Wrong-series penalty: {wrong_series.sum()} cross-series panels ({FRIDGE_S_WRONG_SERIES_PEN:+,})")
+            notes.append(f"  ✗ Wrong-series penalty: {wrong_series.sum()} same-brand panels of different series ({FRIDGE_S_WRONG_SERIES_PEN:+,})")
     else:
-        # No series match for the trigger — panels are still possible but
-        # we don't reward them with the series boost. The slot will likely
-        # come up empty for non-BESPOKE/non-Vario fridges, which is OK —
-        # the round-robin engine will overfill other slots.
-        notes.append("  — Trigger has no detected series — panel slot may be empty for non-series fridges")
+        # No series detected on the trigger. Same-brand panels are still
+        # correct — and within the same brand, prefer color-matched panels
+        # so a Μαύρο BOSCH buyer sees the Black Matt KSZ2BVZ00 ahead of
+        # the Orange KSZ1BVO00. Uses the same boost scale as the kitchen
+        # package (exact +300k, group +150k).
+        notes.append("  — Trigger has no detected series — sorting same-brand panels by color match + availability + sales")
 
-        # Soft brand-match boost (BOSCH fridge might still want a BOSCH KSZ
-        # decorative panel if they have a Vario-compatible model, even if
-        # we can't detect it by title alone). Keep it modest.
-        if trigger_brand and 'Κατασκευαστής' in pool.columns:
-            cand_brand = pool['Κατασκευαστής'].fillna('').astype(str).str.upper().str.strip()
-            same_brand = cand_brand == trigger_brand.upper().strip()
-            pool.loc[same_brand, 'Final_Score'] += FRIDGE_S_BRAND_FAMILY  # modest boost
-            if same_brand.any():
-                notes.append(f"  ~ Same-brand panel ({trigger_brand}) [no-series fallback]: {same_brand.sum()} (+{FRIDGE_S_BRAND_FAMILY:,})")
+        if 'Χρώμα' in pool.columns:
+            cand_colors_raw = pool['Χρώμα'].fillna('').astype(str).str.strip()
+
+            # Exact color match — e.g. trigger Μαύρο → BOSCH KSZ2BVZ00 Black Matt
+            if trigger_color:
+                same_color = cand_colors_raw == trigger_color
+                pool.loc[same_color, 'Final_Score'] += FRIDGE_S_COLOR_EXACT
+                if same_color.any():
+                    notes.append(f"  ✓ Same-brand + exact color ({trigger_color}): {same_color.sum()} panels (+{FRIDGE_S_COLOR_EXACT:,})")
+            else:
+                same_color = pd.Series(False, index=pool.index)
+
+            # Color group match (e.g. trigger Μαύρο → also boost Ανθρακί/Γκρι panels)
+            if trigger_color_group:
+                cand_color_groups = cand_colors_raw.apply(_fridge_color_group)
+                # Don't double-count exact-color rows in the group boost
+                same_group = (cand_color_groups == trigger_color_group) & (~same_color)
+                pool.loc[same_group, 'Final_Score'] += FRIDGE_S_COLOR_GROUP
+                if same_group.any():
+                    notes.append(f"  ✓ Same-brand + color group ({trigger_color_group}): {same_group.sum()} panels (+{FRIDGE_S_COLOR_GROUP:,})")
 
     # ── Sort by score; engine filters out negative-scored rows during
     # round-robin (any wrong-series penalty pulls below zero, signalling
@@ -11180,7 +11225,7 @@ def run_fridge_engine(trigger, df_mda, df_history):
         # ── Score the pool based on its logic key
         if logic_key == 'FRIDGE_PANEL_SERIES':
             scored = _fridge_build_panel_pool(base_pool, tseries, tbrand,
-                                               tcolor_grp, notes)
+                                               tcolor, tcolor_grp, notes)
 
         elif logic_key == 'FRIDGE_CARE_UNIVERSAL':
             scored = _fridge_build_care_pool(base_pool, tbrand, notes)
