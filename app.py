@@ -102,7 +102,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v28.13 — Desktops (Basic / Gaming / Professional / Apple) — IT cluster
+        🟢 Engine v28.14 — Desktops (Basic / Gaming / Professional / Apple / AIO) — IT cluster
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -180,7 +180,10 @@ LAPTOP_MARKETING_COPY = {
 DESKTOP_L2_VALUES = {"Desktops"}
 
 # Visible in the sidebar selector. Same shape as LAPTOP test SKUs.
-DESKTOP_TEST_SKUS = {"1968395", "2096314", "2076321", "1995295"}
+# 1968395 = Apple Mac Mini (apple persona), 2096314 = Vengeance RTX (gaming),
+# 2076321 = GMKtec mini-PC (professional), 1995295 = Intra Ryzen (basic),
+# 1821257 = HP AIO 27" (aio persona), 2025605 = Lenovo ThinkCentre neo AIO (aio).
+DESKTOP_TEST_SKUS = {"1968395", "2096314", "2076321", "1995295", "1821257", "2025605"}
 
 # ─── BASIC / MAINSTREAM persona slot list (user-defined) ───
 DESKTOP_BASIC_SLOTS = [
@@ -253,6 +256,32 @@ DESKTOP_APPLE_SLOTS = [
     (10, 'Πολύπριζο Ασφαλείας',      ['SURGE PROTECTORS'],                                                         'DESKTOP_SURGE'),
 ]
 
+# ─── AIO (ALL-IN-ONE) persona slot list (3 user-defined + 7 Claude picks) ───
+# Catches HP / Lenovo / Dell / Asus AIOs (NOT iMac — iMac → Apple persona).
+# AIOs invert what's needed: screen + webcam + speakers + ethernet are all
+# built-in, so those slots are removed. The real pain points are:
+#   • Very limited USB ports (3-4 total) → USB Hub critical
+#   • Weak built-in speakers → external speakers upgrade
+#   • Shared-space use (kitchen / study room / living room) → headphones
+#   • Family backup needs → External SSD
+#   • Document workflow (home office) → Printer + Office Suite
+# User-defined: slots 1-3 (KB/Mouse set, Mousepad, Πολυμηχάνημα).
+# Claude additions (slots 4-10): Office, HDMI, USB Hub, External SSD,
+# PC Speakers, Bluetooth/Overhead headphones, Surge Protector.
+DESKTOP_AIO_SLOTS = [
+    (1,  'Πληκτρολόγιο/Mouse Σετ',   ['DESKTOP KEYBOARDS/MOUSE WIRELESS'],                                         'DESKTOP_KB_MOUSE_SET'),
+    (2,  'Mousepad',                 ['MOUSE PADS'],                                                               'DESKTOP_MOUSEPAD'),
+    (3,  'Πολυμηχάνημα',             ['MULTIFUCTION INKJET', 'MULTIFUNCTION INKJET', 'INKJET',
+                                      'MULTIFUCTION LASER A4 MONO', 'MULTIFUCTION LASER A4 COLOR'],                'DESKTOP_PRINTER'),
+    (4,  'Office Suite',             ['OFFICE SUITES'],                                                            'DESKTOP_OFFICE'),
+    (5,  'Καλώδιο HDMI',             ['HDMI'],                                                                     'DESKTOP_HDMI'),
+    (6,  'USB Hub',                  ['USB HUB DEVICES'],                                                          'DESKTOP_USB_HUB'),
+    (7,  'Εξωτερικός SSD',           ['EXTERNAL SSD USB', 'PORTABLE SSD', 'SSD EXTERNAL'],                         'DESKTOP_STORAGE_PRO'),
+    (8,  'Ηχεία PC',                 ['PC SPEAKERS 2.0'],                                                          'DESKTOP_SPEAKERS'),
+    (9,  'Ασύρματα Ακουστικά',       ['BLUETOOTH', 'OVERHEAD'],                                                    'DESKTOP_HEADPHONES_BT'),
+    (10, 'Πολύπριζο Ασφαλείας',      ['SURGE PROTECTORS'],                                                         'DESKTOP_SURGE'),
+]
+
 DESKTOP_MARKETING_COPY = {
     "Οθόνη":                    "Επέκτεινε το workspace σου.",
     "Gaming Monitor":           "Υψηλή απόκριση για competitive gaming.",
@@ -282,6 +311,8 @@ DESKTOP_MARKETING_COPY = {
     "UPS":                      "Battery backup — προστασία δεδομένων.",
     "Εξωτερικός SSD":           "Backup & portable αρχεία.",
     "AirPods":                  "Seamless Apple pairing & spatial audio.",
+    "Mousepad":                 "Επιφάνεια για ομαλή κίνηση.",
+    "Ασύρματα Ακουστικά":       "Quiet mode για κοινόχρηστους χώρους.",
 }
 
 # ═════════════════════════════════════════════════════════════
@@ -3420,31 +3451,51 @@ DESKTOP_PERSONA_NAMES = {
     'apple':        'Apple Desktop',
     'gaming':       'Gaming Desktop',
     'professional': 'Professional Desktop',
+    'aio':          'AIO (All-in-One)',
     'basic':        'Basic / Mainstream Desktop',
 }
 
 
 def get_desktop_persona(trigger):
     """
-    Routes a desktop trigger to one of: 'apple' / 'gaming' / 'professional' / 'basic'.
+    Routes a desktop trigger to one of:
+      'apple' / 'aio' / 'gaming' / 'professional' / 'basic'.
+
     Multi-layer because the Προτεινόμενη χρήση field is noisy in the IT sheet:
       • Apple Mac Mini SKU 1968395 is labeled "Gaming"
       • RTX 5060 Vengeance SKU 2096314 is labeled "Mainstream"
       • Some SKUs have duplicate rows with conflicting usage values
-    Order matters: Apple first, then strong title-based gaming signals, then
-    professional (so a GMKtec mini-PC labeled both "Επαγγελματική" & "Gaming"
-    routes to professional), then weak "gaming" usage fallback, then basic.
+      • AIOs are labeled across all usages (Gaming/Επαγγελματική/Basic) but
+        their STRUCTURAL constraints (built-in screen/cam/speakers, few USB
+        ports, shared-space use) dominate over usage persona — so all
+        non-Apple AIOs share the AIO slot list.
+
+    Order matters:
+      1. Apple FIRST — iMac is structurally an AIO but routes to Apple
+         because iMac buyers want Apple-ecosystem accessories (Magic KB,
+         AirPods). The 'imac' title keyword catches it before the AIO check.
+      2. AIO SECOND — Hierarchy = 'DESKTOP ALLINONE BRAND PC'. Catches all
+         remaining (HP / Lenovo / Dell / Asus) AIOs regardless of usage label.
+      3. Gaming/Professional/Basic — for towers and mini-PCs.
     """
     tb = str(trigger.get('Κατασκευαστής', '')).strip().upper()
     tt = str(trigger.get('Title', '')).lower()
     tusage = str(trigger.get('Προτεινόμενη χρήση', '')).lower()
+    thier = str(trigger.get('Hierarchy', '')).strip().upper()
 
-    # Layer 1: APPLE — brand match OR Apple product family in title
+    # Layer 1: APPLE — brand match OR Apple product family in title.
+    # iMac caught here even though it's structurally an AIO.
     if tb == 'APPLE' or any(kw in tt for kw in
         ['mac mini', 'imac', 'mac studio', 'mac pro', 'apple mac']):
         return 'apple'
 
-    # Layer 2: GAMING — strong title signal (discrete GPU / gaming SKU keyword)
+    # Layer 2: AIO — Hierarchy explicitly says All-in-One (excludes iMac
+    # which was caught above). All non-Apple AIOs use the generic AIO list.
+    if 'ALLINONE' in thier or 'ALL IN ONE' in thier or 'ALL-IN-ONE' in thier \
+       or 'all-in-one' in tt or 'all in one' in tt or 'allinone' in tt:
+        return 'aio'
+
+    # Layer 3: GAMING — strong title signal (discrete GPU / gaming SKU keyword)
     strong_gaming_title = [
         'rtx ', ' rtx', 'gtx ', ' gtx', 'radeon rx ', 'geforce',
         'vengeance', 'rog ', ' rog', 'predator', 'legion', 'alienware',
@@ -3453,7 +3504,7 @@ def get_desktop_persona(trigger):
     if any(kw in tt for kw in strong_gaming_title) or 'gaming' in tt:
         return 'gaming'
 
-    # Layer 3: PROFESSIONAL — workstation/business model names OR usage field
+    # Layer 4: PROFESSIONAL — workstation/business model names OR usage field
     pro_title_kw = [
         'workstation', 'precision', 'thinkstation', 'optiplex',
         'elitedesk', 'prodesk', 'thinkcentre', 'gmktec', 'mini pc',
@@ -3462,7 +3513,7 @@ def get_desktop_persona(trigger):
     if any(kw in tusage for kw in pro_usage_kw) or any(kw in tt for kw in pro_title_kw):
         return 'professional'
 
-    # Layer 4: GAMING (weak) — only Προτεινόμενη χρήση says gaming, no title clue
+    # Layer 5: GAMING (weak) — only Προτεινόμενη χρήση says gaming, no title clue
     if 'gaming' in tusage:
         return 'gaming'
 
@@ -3474,6 +3525,7 @@ def get_desktop_slot_list(persona):
     """Maps a persona to its slot list. Falls back to basic for unknown values."""
     return {
         'apple':        DESKTOP_APPLE_SLOTS,
+        'aio':          DESKTOP_AIO_SLOTS,
         'gaming':       DESKTOP_GAMING_SLOTS,
         'professional': DESKTOP_PROFESSIONAL_SLOTS,
         'basic':        DESKTOP_BASIC_SLOTS,
@@ -3539,6 +3591,8 @@ DESKTOP_LOGIC_TO_BUDGET = {
     'DESKTOP_UPS':            'UPS',
     'DESKTOP_STORAGE_PRO':    'STORAGE',
     'DESKTOP_APPLE_AUDIO':    'HEADSET',
+    'DESKTOP_MOUSEPAD':       'MOUSEPAD',
+    'DESKTOP_HEADPHONES_BT':  'HEADSET',
 }
 
 # Slots where being in-budget should be a hard preference (sweet-spot really matters)
