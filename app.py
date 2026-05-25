@@ -102,7 +102,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v28.12 — Washing Machines (Πλυντήρια Ρούχων) — Major Domestic Appliances cluster
+        🟢 Engine v28.13 — Desktops (Basic / Gaming / Professional / Apple) — IT cluster
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -156,6 +156,132 @@ LAPTOP_MARKETING_COPY = {
     "Οθόνη": "Περισσότερο workspace.",
     "Αποθήκευση": "Κράτα τα αρχεία σου ασφαλή.",
     "Headset / Office": "Ολοκλήρωσε το setup σου.",
+}
+
+# ═════════════════════════════════════════════════════════════
+# 🟢 DESKTOPS CONFIGURATION (Basic / Gaming / Professional / Apple)
+# ═════════════════════════════════════════════════════════════
+# Trigger source: IT sheet (Home file), Level 2 = "Desktops".
+# Hierarchies present today: BRAND PC (643), REFURBISHED DESKTOPS (91),
+# DESKTOP ALLINONE BRAND PC (77). Persona field (Προτεινόμενη χρήση) is noisy
+# — a Mac Mini row is labeled "Gaming", a RTX 5060 rig is labeled "Mainstream".
+# So persona detection is multi-layer (brand → title GPU keywords → usage
+# field → fallback) — see get_desktop_persona() in helpers.
+#
+# Recommendation depth — HYBRID (persona-routed slot lists + per-slot
+# sales × brand-ecosystem × tier-budget). The only DEEP spec filter is on
+# the Monitor slot (Χρήση column: Gaming / Business / Mainstream) since
+# wrong-class monitor is the most painful mismatch. Everything else relies
+# on persona-curated slot lists doing the relevance work.
+#
+# Pool: combined df_products + df_laptops + df_peripherals + df_desktops
+# — same pattern as Laptops, just adds the new IT sheet for the trigger.
+
+DESKTOP_L2_VALUES = {"Desktops"}
+
+# Visible in the sidebar selector. Same shape as LAPTOP test SKUs.
+DESKTOP_TEST_SKUS = {"1968395", "2096314", "2076321", "1995295"}
+
+# ─── BASIC / MAINSTREAM persona slot list (user-defined) ───
+DESKTOP_BASIC_SLOTS = [
+    (1,  'Οθόνη',                    ['21 "+ TFT MONITOR'],                                                        'DESKTOP_MONITOR_BASIC'),
+    (2,  'Πληκτρολόγιο/Mouse Σετ',   ['DESKTOP KEYBOARDS/MOUSE WIRELESS'],                                         'DESKTOP_KB_MOUSE_SET'),
+    (3,  'Πολυμηχάνημα',             ['MULTIFUCTION INKJET', 'MULTIFUNCTION INKJET', 'INKJET',
+                                      'MULTIFUCTION LASER A4 MONO', 'MULTIFUCTION LASER A4 COLOR'],                'DESKTOP_PRINTER'),
+    (4,  'Office Suite',             ['OFFICE SUITES'],                                                            'DESKTOP_OFFICE'),
+    (5,  'Καλώδιο HDMI',             ['HDMI'],                                                                     'DESKTOP_HDMI'),
+    (6,  'USB Hub',                  ['USB HUB DEVICES'],                                                          'DESKTOP_USB_HUB'),
+    (7,  'Ηχεία PC',                 ['PC SPEAKERS 2.0'],                                                          'DESKTOP_SPEAKERS'),
+    (8,  'Web Camera',               ['PC WEB CAMS'],                                                              'DESKTOP_WEBCAM'),
+    (9,  'Πολύπριζο Ασφαλείας',      ['SURGE PROTECTORS'],                                                         'DESKTOP_SURGE'),
+    (10, 'USB Ethernet Adapter',     ['Ethernet Cards USB Wireless', 'ETHERNET CARDS USB WIRELESS'],               'DESKTOP_ETHERNET_USB'),
+]
+
+# ─── GAMING persona slot list (user-defined) ───
+DESKTOP_GAMING_SLOTS = [
+    (1,  'Gaming Monitor',           ['21 "+ TFT MONITOR'],         'DESKTOP_MONITOR_GAMING'),
+    (2,  'Gaming Keyboard',          ['GAMING KEYBOARDS'],          'DESKTOP_GAMING_KB'),
+    (3,  'Gaming Mouse',             ['GAMING MOUSE'],              'DESKTOP_GAMING_MOUSE'),
+    (4,  'Web Camera',               ['PC WEB CAMS'],               'DESKTOP_WEBCAM'),
+    (5,  'Gaming Audio',             ['GAMING AUDIO'],              'DESKTOP_GAMING_AUDIO'),
+    (6,  'Mousepad Gaming',          ['GAMING MOUSE PADS'],         'DESKTOP_GAMING_PAD'),
+    (7,  'Καλώδιο Δικτύου',          ['NETWORK CABLES'],            'DESKTOP_NETWORK_CABLE'),
+    (8,  'Πολύπριζο Ασφαλείας',      ['SURGE PROTECTORS'],          'DESKTOP_SURGE'),
+    (9,  'Streaming Accessory',      ['STREAMING ACCESSORIES'],     'DESKTOP_STREAMING'),
+    (10, 'Gaming Chair',             ['GAMING CHAIRS'],             'DESKTOP_GAMING_CHAIR'),
+]
+
+# ─── PROFESSIONAL / BUSINESS persona slot list (Claude-designed) ───
+# Target: small business, home-office, accountants, consultants. A productive
+# 10-piece kit anchored on a Business-class monitor + premium wireless office
+# input + a real UPS (Line Interactive, not just surge) + backup storage +
+# a comms headset + the missing-printer slot for when MULTIFUCTION INKJET
+# data lands. Pro keyboards/mice prefer KEYBOARDS WIRELESS / MOUSE WIRELESS
+# over the basic combo-pack hierarchies (premium individual pieces).
+DESKTOP_PROFESSIONAL_SLOTS = [
+    (1,  'Επαγγελματική Οθόνη',      ['21 "+ TFT MONITOR'],                                                        'DESKTOP_MONITOR_PRO'),
+    (2,  'Πληκτρολόγιο Office',      ['KEYBOARDS WIRELESS', 'DESKTOP KEYBOARDS/MOUSE WIRELESS'],                   'DESKTOP_KB_PRO'),
+    (3,  'Ασύρματο Mouse',           ['MOUSE WIRELESS', 'DESKTOP KEYBOARDS/MOUSE WIRELESS'],                       'DESKTOP_MOUSE_PRO'),
+    (4,  'Πολυμηχάνημα',             ['MULTIFUCTION INKJET', 'MULTIFUNCTION INKJET', 'INKJET',
+                                      'MULTIFUCTION LASER A4 MONO', 'MULTIFUCTION LASER A4 COLOR',
+                                      'LASER A4 MONO', 'LASER A4 COLOR'],                                          'DESKTOP_PRINTER'),
+    (5,  'Office Suite',             ['OFFICE SUITES'],                                                            'DESKTOP_OFFICE'),
+    (6,  'Headset Επαγγελματικό',    ['PC HEADSET/MICROPHONE', 'OVERHEAD'],                                        'DESKTOP_HEADSET_PRO'),
+    (7,  'UPS',                      ['LINE INTERACTIVE'],                                                         'DESKTOP_UPS'),
+    (8,  'Εξωτερικός SSD',           ['EXTERNAL SSD USB', 'PORTABLE SSD', 'SSD EXTERNAL'],                         'DESKTOP_STORAGE_PRO'),
+    (9,  'USB Hub',                  ['USB HUB DEVICES'],                                                          'DESKTOP_USB_HUB'),
+    (10, 'Καλώδιο Δικτύου',          ['NETWORK CABLES'],                                                           'DESKTOP_NETWORK_CABLE'),
+]
+
+# ─── APPLE persona slot list (7 user-defined + 3 Claude picks) ───
+# User-defined: Monitor, USB Hub, Apple KB, Apple Mouse, Office, HDMI, Ext SSD.
+# Claude additions (slots 8-10):
+#   • AirPods (APPLE HEADPHONES) — Apple ecosystem audio
+#   • PC Web Cam — Mac mini & Mac Studio ship without a built-in camera,
+#     this is THE most-asked-for missing accessory
+#   • Surge Protector — protect a €700-€2500 Apple investment
+DESKTOP_APPLE_SLOTS = [
+    (1,  'Οθόνη',                    ['21 "+ TFT MONITOR'],                                                        'DESKTOP_MONITOR_APPLE'),
+    (2,  'USB-C Hub',                ['USB HUB DEVICES'],                                                          'DESKTOP_USB_HUB_APPLE'),
+    (3,  'Apple Magic Keyboard',     ['APPLE ORIGINAL WIRELESS KEYBOARD'],                                         'DESKTOP_APPLE_KB'),
+    (4,  'Apple Magic Mouse',        ['APPLE ORIGINAL WIRELESS MOUSE'],                                            'DESKTOP_APPLE_MOUSE'),
+    (5,  'Office Suite',             ['OFFICE SUITES'],                                                            'DESKTOP_OFFICE'),
+    (6,  'Καλώδιο HDMI',             ['HDMI'],                                                                     'DESKTOP_HDMI'),
+    (7,  'Εξωτερικός SSD',           ['EXTERNAL SSD USB', 'PORTABLE SSD', 'SSD EXTERNAL'],                         'DESKTOP_STORAGE_PRO'),
+    (8,  'AirPods',                  ['APPLE HEADPHONES', 'APPLE ORIGINAL HEADPHONES'],                            'DESKTOP_APPLE_AUDIO'),
+    (9,  'Web Camera',               ['PC WEB CAMS'],                                                              'DESKTOP_WEBCAM'),
+    (10, 'Πολύπριζο Ασφαλείας',      ['SURGE PROTECTORS'],                                                         'DESKTOP_SURGE'),
+]
+
+DESKTOP_MARKETING_COPY = {
+    "Οθόνη":                    "Επέκτεινε το workspace σου.",
+    "Gaming Monitor":           "Υψηλή απόκριση για competitive gaming.",
+    "Επαγγελματική Οθόνη":      "Color accuracy & άνεση για όλη μέρα.",
+    "Πληκτρολόγιο/Mouse Σετ":   "Σετ έτοιμο για άμεση χρήση.",
+    "Πληκτρολόγιο Office":      "Άνετο πληκτρολόγιο για ολοήμερη χρήση.",
+    "Gaming Keyboard":          "Mechanical switches & RGB φωτισμός.",
+    "Apple Magic Keyboard":     "Original Apple — άψογο pairing.",
+    "Gaming Mouse":             "Ακρίβεια & ταχύτητα για gaming.",
+    "Apple Magic Mouse":        "Multi-touch surface — Apple ecosystem.",
+    "Ασύρματο Mouse":           "Καθαρό setup, χωρίς καλώδια.",
+    "Πολυμηχάνημα":             "Print, scan, copy — όλα σε ένα.",
+    "Office Suite":             "Word, Excel, PowerPoint έτοιμα.",
+    "Καλώδιο HDMI":             "High-bandwidth HDMI για 4K image quality.",
+    "USB Hub":                  "Επέκταση θυρών για όλα τα peripherals.",
+    "USB-C Hub":                "USB-C / Thunderbolt expansion για Mac.",
+    "Ηχεία PC":                 "Καθαρός ήχος για media & calls.",
+    "Web Camera":               "HD video για meetings & streaming.",
+    "Πολύπριζο Ασφαλείας":      "Προστατεύει το setup από spikes.",
+    "USB Ethernet Adapter":     "Σταθερό ενσύρματο δίκτυο.",
+    "Gaming Audio":             "Surround sound για immersive gameplay.",
+    "Mousepad Gaming":          "Μεγάλο pad για ακρίβεια κίνησης.",
+    "Καλώδιο Δικτύου":          "Cat 6+ — full gigabit speed.",
+    "Streaming Accessory":      "Έτοιμος για streaming & content creation.",
+    "Gaming Chair":             "Ergonomic seating για μεγάλες sessions.",
+    "Headset Επαγγελματικό":    "Crystal-clear ήχος για επαγγελματικές κλήσεις.",
+    "UPS":                      "Battery backup — προστασία δεδομένων.",
+    "Εξωτερικός SSD":           "Backup & portable αρχεία.",
+    "AirPods":                  "Seamless Apple pairing & spatial audio.",
 }
 
 # ═════════════════════════════════════════════════════════════
@@ -3286,6 +3412,146 @@ def filter_or_penalize(pool, keep_mask, label, penalty=150000):
     return pool, f"⚠ {label}: would empty pool → penalised {int((~keep_mask).sum())} items (-{penalty//1000}k)"
 
 
+# ═════════════════════════════════════════════════════════════
+# 🟢 DESKTOPS HELPERS
+# ═════════════════════════════════════════════════════════════
+
+DESKTOP_PERSONA_NAMES = {
+    'apple':        'Apple Desktop',
+    'gaming':       'Gaming Desktop',
+    'professional': 'Professional Desktop',
+    'basic':        'Basic / Mainstream Desktop',
+}
+
+
+def get_desktop_persona(trigger):
+    """
+    Routes a desktop trigger to one of: 'apple' / 'gaming' / 'professional' / 'basic'.
+    Multi-layer because the Προτεινόμενη χρήση field is noisy in the IT sheet:
+      • Apple Mac Mini SKU 1968395 is labeled "Gaming"
+      • RTX 5060 Vengeance SKU 2096314 is labeled "Mainstream"
+      • Some SKUs have duplicate rows with conflicting usage values
+    Order matters: Apple first, then strong title-based gaming signals, then
+    professional (so a GMKtec mini-PC labeled both "Επαγγελματική" & "Gaming"
+    routes to professional), then weak "gaming" usage fallback, then basic.
+    """
+    tb = str(trigger.get('Κατασκευαστής', '')).strip().upper()
+    tt = str(trigger.get('Title', '')).lower()
+    tusage = str(trigger.get('Προτεινόμενη χρήση', '')).lower()
+
+    # Layer 1: APPLE — brand match OR Apple product family in title
+    if tb == 'APPLE' or any(kw in tt for kw in
+        ['mac mini', 'imac', 'mac studio', 'mac pro', 'apple mac']):
+        return 'apple'
+
+    # Layer 2: GAMING — strong title signal (discrete GPU / gaming SKU keyword)
+    strong_gaming_title = [
+        'rtx ', ' rtx', 'gtx ', ' gtx', 'radeon rx ', 'geforce',
+        'vengeance', 'rog ', ' rog', 'predator', 'legion', 'alienware',
+        ' omen ', 'aorus', 'msi gaming',
+    ]
+    if any(kw in tt for kw in strong_gaming_title) or 'gaming' in tt:
+        return 'gaming'
+
+    # Layer 3: PROFESSIONAL — workstation/business model names OR usage field
+    pro_title_kw = [
+        'workstation', 'precision', 'thinkstation', 'optiplex',
+        'elitedesk', 'prodesk', 'thinkcentre', 'gmktec', 'mini pc',
+    ]
+    pro_usage_kw = ['επαγγελματικ', 'business', 'professional']
+    if any(kw in tusage for kw in pro_usage_kw) or any(kw in tt for kw in pro_title_kw):
+        return 'professional'
+
+    # Layer 4: GAMING (weak) — only Προτεινόμενη χρήση says gaming, no title clue
+    if 'gaming' in tusage:
+        return 'gaming'
+
+    # Default: basic / mainstream
+    return 'basic'
+
+
+def get_desktop_slot_list(persona):
+    """Maps a persona to its slot list. Falls back to basic for unknown values."""
+    return {
+        'apple':        DESKTOP_APPLE_SLOTS,
+        'gaming':       DESKTOP_GAMING_SLOTS,
+        'professional': DESKTOP_PROFESSIONAL_SLOTS,
+        'basic':        DESKTOP_BASIC_SLOTS,
+    }.get(persona, DESKTOP_BASIC_SLOTS)
+
+
+# ─── Desktop tier & per-slot accessory budget ───
+# Desktops sit in the same price space as laptops, so reuse get_laptop_tier.
+# But desktop accessories scale differently than laptop accessories:
+#   • Monitor is heavier (it's the PRIMARY display, no built-in fallback)
+#   • Printer/UPS/Speakers/Webcam don't exist on the laptop table at all
+#   • Surge/cable are flat-rate "consumables" — don't scale with desktop €
+def get_desktop_tier(price):
+    return get_laptop_tier(price)
+
+DESKTOP_ACCESSORY_BUDGET_TABLE = {
+    'MONITOR':   {1: (80, 130),   2: (140, 230),  3: (280, 450),  4: (550, 900)},
+    'KEYBOARD':  ACCESSORY_BUDGET_TABLE['KEYBOARD'],
+    'MOUSE':     ACCESSORY_BUDGET_TABLE['MOUSE'],
+    'HEADSET':   ACCESSORY_BUDGET_TABLE['HEADSET'],
+    'MOUSEPAD':  ACCESSORY_BUDGET_TABLE['MOUSEPAD'],
+    'PRINTER':   {1: (60, 130),   2: (100, 200),  3: (150, 350),  4: (200, 500)},
+    'UPS':       {1: (40, 90),    2: (60, 150),   3: (100, 250),  4: (150, 400)},
+    'HUB':       {1: (10, 25),    2: (15, 40),    3: (25, 70),    4: (35, 100)},
+    'SPEAKER':   {1: (15, 40),    2: (25, 70),    3: (50, 150),   4: (80, 250)},
+    'WEBCAM':    {1: (20, 50),    2: (35, 90),    3: (60, 150),   4: (90, 250)},
+    'SURGE':     {1: (8, 25),     2: (10, 30),    3: (15, 40),    4: (20, 50)},
+    'CABLE':     {1: (4, 15),     2: (5, 18),     3: (8, 25),     4: (10, 30)},
+    'STORAGE':   {1: (30, 80),    2: (60, 140),   3: (100, 220),  4: (150, 350)},
+    'CHAIR':     {1: (80, 180),   2: (150, 300),  3: (250, 500),  4: (400, 900)},
+    'OFFICE_SW': {1: (40, 100),   2: (60, 150),   3: (80, 200),   4: (100, 300)},
+    'ETHERNET':  {1: (8, 25),     2: (10, 30),    3: (15, 40),    4: (20, 50)},
+    'STREAMING': {1: (20, 60),    2: (40, 100),   3: (70, 200),   4: (100, 350)},
+}
+
+DESKTOP_LOGIC_TO_BUDGET = {
+    'DESKTOP_MONITOR_BASIC':  'MONITOR',
+    'DESKTOP_MONITOR_GAMING': 'MONITOR',
+    'DESKTOP_MONITOR_PRO':    'MONITOR',
+    'DESKTOP_MONITOR_APPLE':  'MONITOR',
+    'DESKTOP_KB_MOUSE_SET':   'KEYBOARD',
+    'DESKTOP_KB_PRO':         'KEYBOARD',
+    'DESKTOP_GAMING_KB':      'KEYBOARD',
+    'DESKTOP_APPLE_KB':       'KEYBOARD',
+    'DESKTOP_MOUSE_PRO':      'MOUSE',
+    'DESKTOP_GAMING_MOUSE':   'MOUSE',
+    'DESKTOP_APPLE_MOUSE':    'MOUSE',
+    'DESKTOP_PRINTER':        'PRINTER',
+    'DESKTOP_OFFICE':         'OFFICE_SW',
+    'DESKTOP_HDMI':           'CABLE',
+    'DESKTOP_USB_HUB':        'HUB',
+    'DESKTOP_USB_HUB_APPLE':  'HUB',
+    'DESKTOP_SPEAKERS':       'SPEAKER',
+    'DESKTOP_WEBCAM':         'WEBCAM',
+    'DESKTOP_SURGE':          'SURGE',
+    'DESKTOP_ETHERNET_USB':   'ETHERNET',
+    'DESKTOP_GAMING_AUDIO':   'HEADSET',
+    'DESKTOP_GAMING_PAD':     'MOUSEPAD',
+    'DESKTOP_NETWORK_CABLE':  'CABLE',
+    'DESKTOP_STREAMING':      'STREAMING',
+    'DESKTOP_GAMING_CHAIR':   'CHAIR',
+    'DESKTOP_HEADSET_PRO':    'HEADSET',
+    'DESKTOP_UPS':            'UPS',
+    'DESKTOP_STORAGE_PRO':    'STORAGE',
+    'DESKTOP_APPLE_AUDIO':    'HEADSET',
+}
+
+# Slots where being in-budget should be a hard preference (sweet-spot really matters)
+# vs slots where price doesn't drive choice (cables, ethernet adapters — buy cheap).
+DESKTOP_BUDGET_SOFT_SLOTS = {'CABLE', 'SURGE', 'ETHERNET'}
+
+def get_desktop_accessory_budget(logic_key, tier):
+    bucket = DESKTOP_LOGIC_TO_BUDGET.get(logic_key)
+    if bucket is None:
+        return (0.0, 999999.0)
+    return DESKTOP_ACCESSORY_BUDGET_TABLE.get(bucket, {}).get(tier, (0.0, 999999.0))
+
+
 # ─────────────────────────────────────────────────────────────
 # DATA
 # ─────────────────────────────────────────────────────────────
@@ -3365,6 +3631,10 @@ def load_all_data():
     # Fryers engine specifically for the Φούρνοι Μικροκυμάτων (Microwaves)
     # companion slot, since microwaves live in MDA/Cooking not SDA.
     dmda = _load('MDA')
+    # ── IT sheet (Home file): Desktops only — BRAND PC / REFURBISHED /
+    # ALLINONE. Persona field (Προτεινόμενη χρήση) is noisy so the engine
+    # does its own detection. Used by the Desktops engine.
+    ddt  = _load('IT')
     
     if not dp.empty:
         parts = [dp[c].fillna('').astype(str).str.strip() for c in COMPAT_COLS if c in dp.columns]
@@ -3381,11 +3651,11 @@ def load_all_data():
     if not db.empty and CC not in db.columns:
         db[CC] = ''
     
-    return dp, dm, dh, ds, db, dl, dv, dper, dstat, dair, dfloor, dgaming, dsda, dmda, available_sheets
+    return dp, dm, dh, ds, db, dl, dv, dper, dstat, dair, dfloor, dgaming, dsda, dmda, ddt, available_sheets
 
 try:
 
-    df_products, df_music, df_history, df_slots, df_books, df_laptops, df_vacuums, df_peripherals, df_stationery, df_air, df_floor, df_gaming, df_sda, df_mda, sheets_loaded = load_all_data()
+    df_products, df_music, df_history, df_slots, df_books, df_laptops, df_vacuums, df_peripherals, df_stationery, df_air, df_floor, df_gaming, df_sda, df_mda, df_desktops, sheets_loaded = load_all_data()
     compat_cols_found = [c for c in COMPAT_COLS if c in df_products.columns]
 except Exception as e:
     st.error(f"🚨 Error loading data: {e}")
@@ -3478,6 +3748,8 @@ L2_CHILDREN = {
     ],          
     "IT":        [{"key": "Laptops",     "label": "Laptops",
                    "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='2' y='4' width='20' height='12' rx='1' ry='1'/%3E%3Cline x1='6' y1='20' x2='18' y2='20'/%3E%3Cline x1='12' y1='16' x2='12' y2='20'/%3E%3C/svg%3E"},
+                  {"key": "Desktops",    "label": "Desktops",
+                   "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='4' y='3' width='16' height='14' rx='1.5'/%3E%3Cline x1='2' y1='20' x2='22' y2='20'/%3E%3Cpath d='M9 17l-1 3M15 17l1 3'/%3E%3C/svg%3E"},
                   {"key": "Mouse",      "label": "Mouse",
                    "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='6' y='3' width='12' height='18' rx='6'/%3E%3Cline x1='12' y1='7' x2='12' y2='11'/%3E%3C/svg%3E"},
                   {"key": "Keyboard",   "label": "Keyboard",
@@ -3824,6 +4096,23 @@ else:
                 st.sidebar.markdown('<p class="sidebar-section">Επιλέξτε Laptop</p>', unsafe_allow_html=True)
                 sel = st.sidebar.selectbox("", laptops['Title'].unique(), label_visibility="collapsed", key="lt_sel")
                 trigger = laptops[laptops['Title']==sel].iloc[0] if sel else None
+    
+    elif active_cluster == "Desktops":
+        if df_desktops.empty:
+            st.sidebar.warning("Sheet 'IT' (Desktops) is empty or missing.")
+        else:
+            desktops = df_desktops[(df_desktops['Level 1']=='IT') & (df_desktops['Level 2'].isin(DESKTOP_L2_VALUES))]
+            if desktops.empty:
+                # Fallback: pick up rows by Hierarchy keyword if Level 2 is missing
+                desktops = df_desktops[df_desktops['Hierarchy'].fillna('').astype(str).str.upper().str.contains('DESKTOP|BRAND PC|ALLINONE', regex=True, na=False)]
+            if not desktops.empty:
+                desktops = desktops[desktops['Material'].astype(str).str.strip().str.replace(r'\.0$', '', regex=True).isin(DESKTOP_TEST_SKUS)]
+            if desktops.empty:
+                st.sidebar.warning("Δεν βρέθηκαν test Desktops.")
+            else:
+                st.sidebar.markdown('<p class="sidebar-section">Επιλέξτε Desktop</p>', unsafe_allow_html=True)
+                sel = st.sidebar.selectbox("", desktops['Title'].unique(), label_visibility="collapsed", key="dt_sel")
+                trigger = desktops[desktops['Title']==sel].iloc[0] if sel else None
     
     elif active_cluster == "TVs":
         if df_products.empty: st.stop()
@@ -8075,6 +8364,220 @@ def run_climatism_engine(trigger, df_air, df_products, df_history):
             slot_notes[slot_num] = notes
 
     return pd.DataFrame(all_recs), diag, slot_notes, pd.DataFrame(all_recs)
+
+
+# ═════════════════════════════════════════════════════════════
+# 🟢 DESKTOPS ENGINE — Basic / Gaming / Professional / Apple
+# ═════════════════════════════════════════════════════════════
+# Persona-routed hybrid engine: persona detection picks the slot list,
+# then per slot we score on brand-ecosystem + availability + tier-budget
+# sweet-spot + sales tiebreaker, with monitor-specific Χρήση spec filter
+# and forced Apple originals on the Apple-KB/Mouse/AirPods slots.
+#
+# Pattern mirrors run_laptops_engine() to keep the codebase consistent.
+
+def run_desktops_engine(trigger, df_products, df_history):
+    diag = []
+    slot_notes = {}
+    all_recs = []
+
+    tm = trigger['Material']
+    tt = str(trigger.get('Title', ''))
+    tb = str(trigger.get('Κατασκευαστής', '')).strip().upper()
+    tprice = parse_euro_price(trigger.get('LIST PRICE', 0))
+    tusage = str(trigger.get('Προτεινόμενη χρήση', ''))
+    tos = str(trigger.get('Λειτουργικό σύστημα', ''))
+
+    # 1. Persona routing — picks slot list (the BIG signal for desktops)
+    persona = get_desktop_persona(trigger)
+    persona_label = DESKTOP_PERSONA_NAMES[persona]
+    slot_list = get_desktop_slot_list(persona)
+    is_apple_persona = (persona == 'apple')
+    is_gaming_persona = (persona == 'gaming')
+    is_pro_persona   = (persona == 'professional')
+
+    # 2. Tier (reuse laptop brackets)
+    desktop_tier = get_desktop_tier(tprice)
+    tier_names = {1: "Budget/Entry", 2: "Mid-Range", 3: "High-End/Pro", 4: "Extreme"}
+    tier_label = tier_names.get(desktop_tier, "Sub-Entry")
+
+    diag.append((
+        "0. Trigger",
+        f"Brand={tb}, €{tprice:.0f}, persona={persona_label}",
+        f"Tier {desktop_tier} ({tier_label}), OS={tos[:40]}, Usage={tusage[:30]}"
+    ))
+
+    # 3. Build candidate pool — strip desktops + laptops + smartphones + appliances
+    c = df_products[df_products['Material'] != tm].copy()
+
+    b4 = len(c)
+    c = c[~((c['Level 1'] == 'IT') & (c['Level 2'].isin(DESKTOP_L2_VALUES | LAPTOP_L2_VALUES)))]
+    diag.append(("1. Excl desktops/laptops", len(c), f"Removed {b4 - len(c)}"))
+
+    b4 = len(c)
+    c = c[~((c['Level 2'] == 'Mobiles') & (c['Hierarchy'] == 'Smartphones'))]
+    diag.append(("1b. Excl phones", len(c), f"Removed {b4 - len(c)}"))
+
+    # Apple-ban for non-Apple personas (mirror laptops): AirPods / Magic Mouse
+    # / Apple chargers shouldn't appear on a Windows desktop. Apple-persona
+    # gets the FULL Apple catalog so the Magic KB/Mouse slots have stock.
+    if not is_apple_persona:
+        b4 = len(c)
+        c = c[c['Κατασκευαστής'].fillna('').astype(str).str.strip().str.upper() != 'APPLE']
+        diag.append(("1c. Apple ban", len(c), f"Removed {b4 - len(c)} Apple items (non-Apple persona)"))
+
+    # Stock filter (same pattern as laptops — skip if <10% have stock)
+    if 'CW Stock Units' in c.columns:
+        stv = pd.to_numeric(c['CW Stock Units'], errors='coerce').fillna(0)
+        pct = (stv > 0).sum() / len(c) if len(c) > 0 else 0
+        if pct >= 0.10:
+            c = c[stv > 0]
+            diag.append(("2. Stock filter", len(c), f"Applied ({pct:.0%})"))
+        else:
+            diag.append(("2. Stock filter", len(c), f"⚠ SKIPPED ({pct:.0%})"))
+    else:
+        diag.append(("2. Stock filter", len(c), "⚠ SKIPPED (no col)"))
+
+    # Macro wall — no appliances on a desktop setup
+    b4 = len(c)
+    if 'Level 1' in c.columns:
+        c = c[~c['Level 1'].isin(APPL_CATS)]
+    diag.append(("3. Macro wall", len(c), f"Removed {b4 - len(c)}"))
+
+    # Sales tiebreaker
+    if 'Sum of Sales' in c.columns:
+        c['Sales_Tiebreaker'] = pd.to_numeric(c['Sum of Sales'], errors='coerce').fillna(0)
+    else:
+        c['Sales_Tiebreaker'] = 0
+
+    # 4. Iterate persona-specific slots
+    used_materials = {tm}
+    used_hierarchies_count = {}
+
+    for slot_num, role, hierarchies, logic_key in slot_list:
+        notes = [
+            f"Persona: {persona}",
+            f"Logic: {logic_key}",
+            f"Target: {hierarchies}",
+        ]
+
+        # Per-slot pool (case-sensitive exact match on Hierarchy, just like laptops)
+        pool = c[c['Hierarchy'].fillna('').astype(str).str.strip().isin(hierarchies)].copy()
+        # Dedupe by Material — combined sheets often repeat the same SKU across files
+        pool = pool.drop_duplicates(subset='Material', keep='first')
+        pool = pool[~pool['Material'].isin(used_materials)]
+        notes.append(f"Pool size: {len(pool)}")
+
+        if pool.empty:
+            notes.append("❌ Empty pool (hierarchy may not be in data yet)")
+            slot_notes[slot_num] = notes
+            diag.append((f"Slot {slot_num} ({role})", 0, "Empty"))
+            continue
+
+        # Price column
+        pool['_p'] = pool['LIST PRICE'].apply(parse_euro_price)
+
+        # ─── Initialise score and apply boosts ───
+        pool['Final_Score'] = 0.0
+
+        # Brand-ecosystem (same Κατασκευαστής as the desktop)
+        if tb:
+            same_brand = pool['Κατασκευαστής'].fillna('').astype(str).str.strip().str.upper() == tb
+            pool.loc[same_brand, 'Final_Score'] += 400_000
+            n_same = int(same_brand.sum())
+            if n_same > 0:
+                notes.append(f"Brand boost ({tb}): {n_same} items +400k")
+
+        # Availability boost
+        if 'AVAILABILITY' in pool.columns:
+            avail = pool['AVAILABILITY'].fillna('').astype(str).str.contains('Άμεσα', na=False)
+            pool.loc[avail, 'Final_Score'] += 100_000
+
+        # Tier-budget sweet-spot
+        bmin, bmax = get_desktop_accessory_budget(logic_key, desktop_tier)
+        bucket = DESKTOP_LOGIC_TO_BUDGET.get(logic_key)
+        in_range = (pool['_p'] >= bmin) & (pool['_p'] <= bmax)
+        boost = 80_000 if bucket in DESKTOP_BUDGET_SOFT_SLOTS else 200_000
+        pool.loc[in_range, 'Final_Score'] += boost
+        notes.append(f"Budget €{bmin:.0f}-€{bmax:.0f}: {int(in_range.sum())} in range (+{boost//1000}k)")
+
+        # ─── Monitor persona-specific Χρήση filter (the one deep spec match) ───
+        if logic_key in ('DESKTOP_MONITOR_BASIC', 'DESKTOP_MONITOR_GAMING',
+                          'DESKTOP_MONITOR_PRO', 'DESKTOP_MONITOR_APPLE'):
+            if 'Χρήση' in pool.columns:
+                use_str = pool['Χρήση'].fillna('').astype(str).str.lower()
+                if logic_key == 'DESKTOP_MONITOR_GAMING':
+                    mask = use_str.str.contains('gaming', na=False)
+                    pool, fnote = filter_or_penalize(pool, mask, "Monitor: Χρήση=Gaming")
+                    notes.append(fnote)
+                elif logic_key == 'DESKTOP_MONITOR_BASIC':
+                    mask = use_str.str.contains('mainstream|business', regex=True, na=False)
+                    pool, fnote = filter_or_penalize(pool, mask, "Monitor: Χρήση=Mainstream/Business")
+                    notes.append(fnote)
+                elif logic_key == 'DESKTOP_MONITOR_PRO':
+                    mask = use_str.str.contains('business', na=False)
+                    pool, fnote = filter_or_penalize(pool, mask, "Monitor: Χρήση=Business")
+                    notes.append(fnote)
+                elif logic_key == 'DESKTOP_MONITOR_APPLE':
+                    # Apple users tend toward color-accurate / premium displays;
+                    # filter to Business/Mainstream (avoid gaming-only) and boost hi-res.
+                    mask = use_str.str.contains('business|mainstream', regex=True, na=False)
+                    pool, fnote = filter_or_penalize(pool, mask, "Monitor: Χρήση=Business/Mainstream (Apple)")
+                    notes.append(fnote)
+                    if 'Ανάλυση Οθόνης' in pool.columns:
+                        res_str = pool['Ανάλυση Οθόνης'].fillna('').astype(str).str.lower()
+                        hi_res = res_str.str.contains('4κ|5κ|quad', regex=True, na=False)
+                        pool.loc[hi_res, 'Final_Score'] += 150_000
+                        notes.append(f"Hi-res (QHD/4K/5K) Apple boost: {int(hi_res.sum())} items +150k")
+
+        # ─── Force Apple originals on Apple persona Apple-branded slots ───
+        if is_apple_persona and logic_key in ('DESKTOP_APPLE_KB', 'DESKTOP_APPLE_MOUSE', 'DESKTOP_APPLE_AUDIO'):
+            apple_mask = pool['Κατασκευαστής'].fillna('').astype(str).str.strip().str.upper() == 'APPLE'
+            pool, fnote = filter_or_penalize(pool, apple_mask, "Apple-only", penalty=1_000_000)
+            notes.append(fnote)
+
+        # ─── Gaming-persona reinforcement: same brand-house bias for peripherals ───
+        # On a gaming rig we lightly prefer mainstream gaming peripheral brands
+        # (Logitech / Razer / Corsair / SteelSeries / HyperX) when same-brand
+        # doesn't apply (most gaming desktops are CORSAIR / MSI / generic).
+        if is_gaming_persona and logic_key in ('DESKTOP_GAMING_KB', 'DESKTOP_GAMING_MOUSE',
+                                                'DESKTOP_GAMING_AUDIO', 'DESKTOP_GAMING_PAD'):
+            gaming_brands = {'LOGITECH', 'RAZER', 'CORSAIR', 'STEELSERIES', 'HYPERX',
+                             'COOLER MASTER', 'ROCCAT', 'ASUS', 'MSI'}
+            gb_mask = pool['Κατασκευαστής'].fillna('').astype(str).str.strip().str.upper().isin(gaming_brands)
+            pool.loc[gb_mask, 'Final_Score'] += 50_000
+
+        # Sales tiebreaker — modest weight so it never overrides ecosystem
+        pool['Final_Score'] += pool['Sales_Tiebreaker'] * 0.5
+
+        # Sort and pick top
+        pool = pool.sort_values(['Final_Score', 'Sales_Tiebreaker'], ascending=[False, False])
+        if pool.empty:
+            notes.append("❌ Empty after scoring")
+            slot_notes[slot_num] = notes
+            diag.append((f"Slot {slot_num} ({role})", 0, "Empty"))
+            continue
+
+        chosen = pool.iloc[0]
+        rc = chosen.copy()
+        rc['Assigned_Slot'] = slot_num
+        rc['Slot_Role'] = role
+        rc['Marketing_Copy'] = DESKTOP_MARKETING_COPY.get(role, "Ιδανική επιλογή.")
+        rc['Item_Rank'] = 1
+        all_recs.append(rc)
+        used_materials.add(chosen['Material'])
+        used_hierarchies_count[chosen['Hierarchy']] = used_hierarchies_count.get(chosen['Hierarchy'], 0) + 1
+        notes.append(f"✅ {str(chosen.get('Title',''))[:60]} — €{chosen['_p']:.0f}, score={chosen['Final_Score']:.0f}")
+        slot_notes[slot_num] = notes
+        diag.append((f"Slot {slot_num} ({role})", 1, f"Score: {chosen['Final_Score']:.0f}, €{chosen['_p']:.0f}"))
+
+    diag.append(("TOTAL", len(all_recs), f"out of {len(slot_list)} (persona: {persona_label})"))
+
+    if all_recs:
+        recs_df = pd.DataFrame(all_recs)
+        recs_df['Draft_Score'] = recs_df['Assigned_Slot']
+        return recs_df, diag, slot_notes, recs_df
+    return pd.DataFrame(), diag, slot_notes, pd.DataFrame()
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -13922,6 +14425,17 @@ elif active_cluster == "Laptops":
     combined_pool = pd.concat([df_products, df_laptops], ignore_index=True)
     recs, diag, slot_notes, full_candidates = run_laptops_engine(trigger, combined_pool, df_history)
     slot_diag = []
+elif active_cluster == "Desktops":
+    # Pool the whole IT/peripherals/accessory universe so persona-specific slot lists
+    # find what they need: Products (HDMI, SURGE, Apple Mouse), Laptops (gaming items,
+    # monitors, office), Peripherals (Apple KB, web cams, hubs), IT/Desktops (the trigger
+    # itself is excluded inside the engine via tm).
+    combined_pool = pd.concat(
+        [df_products, df_laptops, df_peripherals, df_desktops],
+        ignore_index=True
+    )
+    recs, diag, slot_notes, full_candidates = run_desktops_engine(trigger, combined_pool, df_history)
+    slot_diag = []
 elif active_cluster == "Robot Vacuums":
     # Robot vacuums + all companions/accessories live in the same Floor sheet
     recs, diag, slot_notes, full_candidates = run_robot_vacuums_engine(trigger, df_floor, df_history)
@@ -14202,6 +14716,10 @@ with st.expander("⚙️ System Diagnostics"):
         attr_keys_to_show = ['Material','Title','Level 2','Hierarchy','Σειρά βιβλίου','Ηλικία','Εξώφυλλο','Brand','LIST PRICE']
     elif active_cluster == "Laptops":
         attr_keys_to_show = ['Material','Title','Level 1','Level 2','Hierarchy','Κατασκευαστής','Μοντέλο','Προτεινόμενη χρήση','Μέγεθος οθόνης','Θύρες','LIST PRICE']
+    elif active_cluster == "Desktops":
+        attr_keys_to_show = ['Material','Title','Level 1','Level 2','Hierarchy','Κατασκευαστής',
+                              'Προτεινόμενη χρήση','Λειτουργικό σύστημα','Wi-Fi','Θύρες',
+                              'Sum of Sales','LIST PRICE','AVAILABILITY']
     elif active_cluster == "Tablets":
         attr_keys_to_show = ['Material','Title','Level 2','Κατασκευαστής','Μοντέλο','Experts Rating','Λειτουργικό σύστημα','LIST PRICE']
     elif active_cluster == "Air Fryers":
