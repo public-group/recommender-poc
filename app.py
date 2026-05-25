@@ -102,7 +102,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v28.14 — Desktops (Basic / Gaming / Professional / Apple / AIO) — IT cluster
+        🟢 Engine v28.15 — Desktops (Basic / Gaming / Pro / Apple / iMac / AIO) — IT cluster
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -182,8 +182,9 @@ DESKTOP_L2_VALUES = {"Desktops"}
 # Visible in the sidebar selector. Same shape as LAPTOP test SKUs.
 # 1968395 = Apple Mac Mini (apple persona), 2096314 = Vengeance RTX (gaming),
 # 2076321 = GMKtec mini-PC (professional), 1995295 = Intra Ryzen (basic),
-# 1821257 = HP AIO 27" (aio persona), 2025605 = Lenovo ThinkCentre neo AIO (aio).
-DESKTOP_TEST_SKUS = {"1968395", "2096314", "2076321", "1995295", "1821257", "2025605"}
+# 1821257 = HP AIO 27" (aio persona), 2025605 = Lenovo ThinkCentre neo AIO (aio),
+# 1968374 = Apple iMac 24" 4.5K M4 (imac persona — top-selling iMac).
+DESKTOP_TEST_SKUS = {"1968395", "2096314", "2076321", "1995295", "1821257", "2025605", "1968374"}
 
 # ─── BASIC / MAINSTREAM persona slot list (user-defined) ───
 DESKTOP_BASIC_SLOTS = [
@@ -253,6 +254,37 @@ DESKTOP_APPLE_SLOTS = [
     (7,  'Εξωτερικός SSD',           ['EXTERNAL SSD USB', 'PORTABLE SSD', 'SSD EXTERNAL'],                         'DESKTOP_STORAGE_PRO'),
     (8,  'AirPods',                  ['APPLE HEADPHONES', 'APPLE ORIGINAL HEADPHONES'],                            'DESKTOP_APPLE_AUDIO'),
     (9,  'Web Camera',               ['PC WEB CAMS'],                                                              'DESKTOP_WEBCAM'),
+    (10, 'Πολύπριζο Ασφαλείας',      ['SURGE PROTECTORS'],                                                         'DESKTOP_SURGE'),
+]
+
+# ─── iMAC (Apple AIO) persona slot list — hybrid of Apple + AIO ───
+# iMac is structurally an AIO (built-in 4.5K Retina screen, 1080p webcam,
+# decent stereo speakers) but its buyer wants Apple-ecosystem accessories
+# (Magic KB, Magic Mouse/Trackpad, AirPods, Time Machine SSD) — NOT generic
+# Logitech sets like a non-Apple AIO would get.
+#
+# So we:
+#   • KEEP from Apple persona: Magic KB, Magic Mouse, USB-C Hub, Office,
+#     HDMI (for 2nd display extend), External SSD, AirPods, Surge.
+#   • DROP from Apple persona: Monitor (built-in 4.5K Retina) and
+#     Web Camera (built-in 1080p) — wasted slots on an iMac.
+#   • ADD from AIO persona to fill the 2 freed slots: Mousepad and
+#     Multifunction Inkjet (printer for family/home office use).
+#
+# Note: APPLE ORIGINAL WIRELESS MOUSE hierarchy in the data includes both
+# Magic Mouse and Magic Trackpad — so slot 2 already covers both pointing
+# device options without needing a separate Trackpad slot.
+DESKTOP_IMAC_SLOTS = [
+    (1,  'Apple Magic Keyboard',     ['APPLE ORIGINAL WIRELESS KEYBOARD'],                                         'DESKTOP_APPLE_KB'),
+    (2,  'Apple Magic Mouse',        ['APPLE ORIGINAL WIRELESS MOUSE'],                                            'DESKTOP_APPLE_MOUSE'),
+    (3,  'Mousepad',                 ['MOUSE PADS'],                                                               'DESKTOP_MOUSEPAD'),
+    (4,  'Πολυμηχάνημα',             ['MULTIFUCTION INKJET', 'MULTIFUNCTION INKJET', 'INKJET',
+                                      'MULTIFUCTION LASER A4 MONO', 'MULTIFUCTION LASER A4 COLOR'],                'DESKTOP_PRINTER'),
+    (5,  'Office Suite',             ['OFFICE SUITES'],                                                            'DESKTOP_OFFICE'),
+    (6,  'USB-C Hub',                ['USB HUB DEVICES'],                                                          'DESKTOP_USB_HUB_APPLE'),
+    (7,  'Καλώδιο HDMI',             ['HDMI'],                                                                     'DESKTOP_HDMI'),
+    (8,  'Εξωτερικός SSD',           ['EXTERNAL SSD USB', 'PORTABLE SSD', 'SSD EXTERNAL'],                         'DESKTOP_STORAGE_PRO'),
+    (9,  'AirPods',                  ['APPLE HEADPHONES', 'APPLE ORIGINAL HEADPHONES'],                            'DESKTOP_APPLE_AUDIO'),
     (10, 'Πολύπριζο Ασφαλείας',      ['SURGE PROTECTORS'],                                                         'DESKTOP_SURGE'),
 ]
 
@@ -3449,6 +3481,7 @@ def filter_or_penalize(pool, keep_mask, label, penalty=150000):
 
 DESKTOP_PERSONA_NAMES = {
     'apple':        'Apple Desktop',
+    'imac':         'Apple iMac',
     'gaming':       'Gaming Desktop',
     'professional': 'Professional Desktop',
     'aio':          'AIO (All-in-One)',
@@ -3459,43 +3492,49 @@ DESKTOP_PERSONA_NAMES = {
 def get_desktop_persona(trigger):
     """
     Routes a desktop trigger to one of:
-      'apple' / 'aio' / 'gaming' / 'professional' / 'basic'.
+      'imac' / 'apple' / 'aio' / 'gaming' / 'professional' / 'basic'.
 
     Multi-layer because the Προτεινόμενη χρήση field is noisy in the IT sheet:
       • Apple Mac Mini SKU 1968395 is labeled "Gaming"
       • RTX 5060 Vengeance SKU 2096314 is labeled "Mainstream"
       • Some SKUs have duplicate rows with conflicting usage values
       • AIOs are labeled across all usages (Gaming/Επαγγελματική/Basic) but
-        their STRUCTURAL constraints (built-in screen/cam/speakers, few USB
-        ports, shared-space use) dominate over usage persona — so all
-        non-Apple AIOs share the AIO slot list.
+        their STRUCTURAL constraints dominate over usage persona.
 
     Order matters:
-      1. Apple FIRST — iMac is structurally an AIO but routes to Apple
-         because iMac buyers want Apple-ecosystem accessories (Magic KB,
-         AirPods). The 'imac' title keyword catches it before the AIO check.
-      2. AIO SECOND — Hierarchy = 'DESKTOP ALLINONE BRAND PC'. Catches all
-         remaining (HP / Lenovo / Dell / Asus) AIOs regardless of usage label.
-      3. Gaming/Professional/Basic — for towers and mini-PCs.
+      1. iMac FIRST — structurally an AIO (built-in screen + webcam +
+         speakers) but Apple-ecosystem buyer. Gets a hybrid slot list
+         (Apple accessories minus monitor/webcam, plus AIO mousepad+printer).
+         Caught via 'imac' title keyword OR (brand=APPLE AND ALLINONE hier).
+      2. Apple SECOND — Mac Mini, Mac Studio, Mac Pro (NOT iMac, caught above).
+         Standard Apple desktop slot list with monitor + webcam slots.
+      3. AIO — non-Apple AIO (HP / Lenovo / Dell / Asus).
+      4. Gaming/Professional/Basic — towers and mini-PCs.
     """
     tb = str(trigger.get('Κατασκευαστής', '')).strip().upper()
     tt = str(trigger.get('Title', '')).lower()
     tusage = str(trigger.get('Προτεινόμενη χρήση', '')).lower()
     thier = str(trigger.get('Hierarchy', '')).strip().upper()
 
-    # Layer 1: APPLE — brand match OR Apple product family in title.
-    # iMac caught here even though it's structurally an AIO.
+    is_allinone_hier = ('ALLINONE' in thier or 'ALL IN ONE' in thier or 'ALL-IN-ONE' in thier)
+    is_allinone_title = ('all-in-one' in tt or 'all in one' in tt or 'allinone' in tt)
+
+    # Layer 1: iMAC — Apple AIO. Title keyword OR (Apple brand + AIO hierarchy).
+    # We use both signals so a mislabeled hierarchy still routes correctly.
+    if 'imac' in tt or (tb == 'APPLE' and is_allinone_hier):
+        return 'imac'
+
+    # Layer 2: APPLE (non-iMac) — Mac Mini, Mac Studio, Mac Pro, or any Apple
+    # brand desktop not caught as iMac above.
     if tb == 'APPLE' or any(kw in tt for kw in
-        ['mac mini', 'imac', 'mac studio', 'mac pro', 'apple mac']):
+        ['mac mini', 'mac studio', 'mac pro', 'apple mac']):
         return 'apple'
 
-    # Layer 2: AIO — Hierarchy explicitly says All-in-One (excludes iMac
-    # which was caught above). All non-Apple AIOs use the generic AIO list.
-    if 'ALLINONE' in thier or 'ALL IN ONE' in thier or 'ALL-IN-ONE' in thier \
-       or 'all-in-one' in tt or 'all in one' in tt or 'allinone' in tt:
+    # Layer 3: AIO — non-Apple AIO. Hierarchy says All-in-One.
+    if is_allinone_hier or is_allinone_title:
         return 'aio'
 
-    # Layer 3: GAMING — strong title signal (discrete GPU / gaming SKU keyword)
+    # Layer 4: GAMING — strong title signal (discrete GPU / gaming SKU keyword)
     strong_gaming_title = [
         'rtx ', ' rtx', 'gtx ', ' gtx', 'radeon rx ', 'geforce',
         'vengeance', 'rog ', ' rog', 'predator', 'legion', 'alienware',
@@ -3504,7 +3543,7 @@ def get_desktop_persona(trigger):
     if any(kw in tt for kw in strong_gaming_title) or 'gaming' in tt:
         return 'gaming'
 
-    # Layer 4: PROFESSIONAL — workstation/business model names OR usage field
+    # Layer 5: PROFESSIONAL — workstation/business model names OR usage field
     pro_title_kw = [
         'workstation', 'precision', 'thinkstation', 'optiplex',
         'elitedesk', 'prodesk', 'thinkcentre', 'gmktec', 'mini pc',
@@ -3513,7 +3552,7 @@ def get_desktop_persona(trigger):
     if any(kw in tusage for kw in pro_usage_kw) or any(kw in tt for kw in pro_title_kw):
         return 'professional'
 
-    # Layer 5: GAMING (weak) — only Προτεινόμενη χρήση says gaming, no title clue
+    # Layer 6: GAMING (weak) — only Προτεινόμενη χρήση says gaming, no title clue
     if 'gaming' in tusage:
         return 'gaming'
 
@@ -3524,6 +3563,7 @@ def get_desktop_persona(trigger):
 def get_desktop_slot_list(persona):
     """Maps a persona to its slot list. Falls back to basic for unknown values."""
     return {
+        'imac':         DESKTOP_IMAC_SLOTS,
         'apple':        DESKTOP_APPLE_SLOTS,
         'aio':          DESKTOP_AIO_SLOTS,
         'gaming':       DESKTOP_GAMING_SLOTS,
@@ -8446,7 +8486,7 @@ def run_desktops_engine(trigger, df_products, df_history):
     persona = get_desktop_persona(trigger)
     persona_label = DESKTOP_PERSONA_NAMES[persona]
     slot_list = get_desktop_slot_list(persona)
-    is_apple_persona = (persona == 'apple')
+    is_apple_persona = persona in ('apple', 'imac')  # both get Apple-ecosystem treatment
     is_gaming_persona = (persona == 'gaming')
     is_pro_persona   = (persona == 'professional')
 
