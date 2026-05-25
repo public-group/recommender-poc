@@ -102,7 +102,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v28.15 — Desktops (Basic / Gaming / Pro / Apple / iMac / AIO) — IT cluster
+        🟢 Engine v28.16 — Refrigerators (Ψυγειοκαταψύκτες) — series-aware (SAMSUNG BESPOKE) + color-matched kitchen package
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -1769,6 +1769,285 @@ WM_S_WIFI_MATCH         =    40_000  # Trigger has Wi-Fi → boost Wi-Fi dryers
 WM_S_UNIVERSAL_ACC      =   180_000  # ROLLER/MELICONI etc. — universal-fit accessory
 WM_S_BRAND_DISCOUNT     =  -300_000  # Candidate has wrong-brand SKU code (stacking kits — incompatible)
 WM_S_SALES_FACTOR       =       0.4  # Sales tiebreaker weight (lower than vacuums — WMs sell less per SKU)
+
+
+# ═════════════════════════════════════════════════════════════
+# 🟢 REFRIGERATORS CONFIGURATION (Ψυγειοκαταψύκτες — Μεγάλες Συσκευές)
+# ═════════════════════════════════════════════════════════════
+# Trigger detection: products in MDA sheet with Hierarchy = "Ψυγειοκαταψύκτες".
+#
+# Recommendation depth — FULL SPEC-BASED (multi-spec, deepest of any MDA category):
+#   • Unlike Πλυντήρια Ρούχων where the MDA sheet had NO real spec columns
+#     and we leaned on Title parsing, every refrigerator row has 100%-filled
+#     Κατασκευαστής, Χρώμα, Συνολική καθαρή χωρητικότητα, Πλάτος, Σύστημα ψύξης,
+#     Συνδεσιμότητα, Συμβατό με εφαρμογή, Ενεργειακή κλάση. Title-parsing
+#     would be redundant — we trust the columns.
+#   • The fridge world has a KILLER series-aware cross-sell: SAMSUNG BESPOKE.
+#     The whole point of BESPOKE is that the door panels are user-swappable
+#     decorative glass. So when a BESPOKE buyer lands on a recommendation
+#     carousel, the most natural thing to see is MORE BESPOKE PANELS in
+#     complementary colors — this is the only category where suggesting
+#     multiple variants of the SAME accessory in different colors is the
+#     correct UX. We give the panel slot max_total=3 to enable that.
+#   • Color matching matters more here than in any other appliance because
+#     kitchens are designed visually as a coordinated set. A Μαύρο fridge
+#     buyer wants Μαύρο hood, Μαύρο microwave, Μαύρο oven. The Χρώμα column
+#     in the kitchen-package hierarchies (Φούρνοι Άνω Πάγκου, Απορροφητήρες,
+#     Φούρνοι Μικροκυμάτων) is well-populated and exact-match-capable.
+#   • Cross-purchase data from real history backs this up overwhelmingly:
+#     of customers who bought a fridge, 252 also bought from "Cooking"
+#     (ovens/hobs/hoods/microwaves), 152 from "Washing" (dishwashers/
+#     washing machines), 34 from MDA Accessories. Cooking package is the
+#     #1 cross-sell category, by 2x over the next contender.
+#   • Brand families matter: BSH Group (BOSCH/PITSOS/SIEMENS/NEFF) all
+#     share aesthetic + technology; a BOSCH fridge buyer is highly likely
+#     to accept a NEFF or PITSOS oven. Same for Haier family
+#     (HAIER/CANDY/HOOVER) and Whirlpool family (WHIRLPOOL/HOTPOINT/INDESIT).
+#     We give a "neighbor brand" boost smaller than an exact-brand match.
+
+FRIDGE_TRIGGER_HIERARCHIES = {
+    "Ψυγειοκαταψύκτες", "ΨΥΓΕΙΟΚΑΤΑΨΥΚΤΕΣ", "Ψυγειοκαταψύκτης",
+}
+
+# Test SKUs — 7 representative fridges covering the full spectrum of
+# scenarios the engine must handle. Empty set = show all 91 fridges.
+#   • BESPOKE Μαύρο: triggers the SAMSUNG BESPOKE panel logic + black color
+#   • Top BLACK seller (BOSCH): tests color match without series
+#   • Mainstream BOSCH Inox: baseline kitchen-package brand match
+#   • SMEG retro: premium niche, no kitchen-brand match, falls back to price
+#   • LIEBHERR: premium brand that makes ONLY fridges → cross-brand fallback
+#   • HISENSE budget BLACK: budget tier color match
+#   • LG Ανθρακί premium: tests ThinQ ecosystem candidate (LG ovens/microwaves)
+FRIDGE_TEST_SKUS = {
+    "1874455",  # SAMSUNG BESPOKE RB38C6B2E22 €729 Μαύρο — BESPOKE panel hero
+    "1727180",  # BOSCH KGN49LBCF €1149 Μαύρο — top-seller BLACK BOSCH
+    "1525379",  # BOSCH KGN49XIEA €899 Inox — mainstream BOSCH (kitchen pkg)
+    "2095227",  # SMEG FAB38LCR6 €3046 Μπεζ — premium retro
+    "1928296",  # LIEBHERR CNsda 5723 €1499 Inox — premium niche brand
+    "1937688",  # HISENSE RB390N4GBE €549 Μαύρο — budget black
+    "2073017",  # LG GBBW726CEV €1099 Ανθρακί — premium LG (ThinQ)
+}
+
+# Slot layout — 10 slots, 2 accessory slots up front (per spec request) then
+# 7 kitchen-package slots in descending order of real cross-purchase frequency
+# from the History sheet (Cooking=252 > Washing=152 > etc.), then 1 alternative
+# kitchen path as the 10th slot.
+#
+# Round-1 sum = 1 (panel) + 1 (care) + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 = 10
+# → all slots get one item in round 1. The panel slot's max_total=3 lets
+# round 2 / 3 backfill more BESPOKE panels for the BESPOKE buyer (this is
+# the one case where multiple instances of the same role are desirable —
+# panels are color-swap accessories, not duplicate recommendations).
+#
+# (priority, role_label, [hierarchies], logic_key, max_in_round_1, max_total)
+FRIDGE_PRIORITY = [
+    (1,  'Πάνελ Πόρτας',
+        ['Αξεσουάρ Ψυγείων'],
+        'FRIDGE_PANEL_SERIES',     1, 3),  # max_total=3 → up to 3 BESPOKE panels for BESPOKE buyers
+    (2,  'Φροντίδα Ψυγείου',
+        ['Αξεσουάρ Ψυγείων'],
+        'FRIDGE_CARE_UNIVERSAL',   1, 2),  # cleaning supplies + filter
+    (3,  'Φούρνος Εντοιχιζόμενος',
+        ['Φούρνοι Άνω Πάγκου'],
+        'FRIDGE_KITCHEN_COLORED',  1, 1),  # #1 cross-purchase (71 buys in History)
+    (4,  'Πλυντήριο Πιάτων',
+        ['Πλυντήρια Πιάτων', 'Εντοιχιζόμενα Πλυντήρια Πιάτων'],
+        'FRIDGE_KITCHEN_PARSED',   1, 1),  # brand parsed from title (Κατασκευαστής empty)
+    (5,  'Εστία',
+        ['Εστίες Επαγωγικές', 'Εστίες Κεραμικές'],
+        'FRIDGE_KITCHEN_BASIC',    1, 1),  # mostly Μαύρο anyway, no color boost
+    (6,  'Απορροφητήρας',
+        ['Απορροφητήρες Καμινάδες - τζάκια', 'Απορροφητήρες Συρόμενοι'],
+        'FRIDGE_KITCHEN_COLORED',  1, 1),  # Inox vs Μαύρο vs Λευκό matters
+    (7,  'Φούρνος Μικροκυμάτων',
+        ['Φούρνοι Μικροκυμάτων'],
+        'FRIDGE_KITCHEN_COLORED',  1, 1),  # countertop, color visible
+    (8,  'Πλυντήριο Ρούχων',
+        ['Πλυντήρια Ρούχων'],
+        'FRIDGE_KITCHEN_PARSED',   1, 1),  # household upgrade pattern
+    (9,  'Στεγνωτήριο',
+        ['Στεγνωτήρια'],
+        'FRIDGE_KITCHEN_PARSED',   1, 1),  # tied to washing machine purchase
+    (10, 'Κουζίνα Ηλεκτρική',
+        ['Κουζίνες Ηλεκτρικές'],
+        'FRIDGE_KITCHEN_COLORED',  1, 1),  # alternative to oven+hob combo
+]
+
+FRIDGE_SLOT_TARGET = 10
+
+FRIDGE_MARKETING_COPY = {
+    "Πάνελ Πόρτας":          "Άλλαξε όψη στο ψυγείο σου — εναλλασσόμενα διακοσμητικά πάνελ.",
+    "Φροντίδα Ψυγείου":      "Καθαρό ψυγείο, καθαρές γεύσεις — επαγγελματική φροντίδα.",
+    "Φούρνος Εντοιχιζόμενος": "Ολοκλήρωσε την κουζίνα σου με σύγχρονο εντοιχιζόμενο φούρνο.",
+    "Πλυντήριο Πιάτων":      "Λιγότερος χρόνος στο νεροχύτη — περισσότερος χρόνος για σένα.",
+    "Εστία":                 "Κεραμική ή επαγωγική — η τέλεια εστία για την κουζίνα σου.",
+    "Απορροφητήρας":         "Καθαρός αέρας, χωρίς οσμές — η κουζίνα σου, καθαρή.",
+    "Φούρνος Μικροκυμάτων":  "Γρήγορη ζέσταμα και ξεπάγωμα — απαραίτητο στην κουζίνα.",
+    "Πλυντήριο Ρούχων":      "Αναβάθμισε ολόκληρο το σπίτι — ίδια ποιότητα κατασκευής.",
+    "Στεγνωτήριο":           "Στέγνωμα στο σπίτι — όλη τη χρονιά, χωρίς αναμονή.",
+    "Κουζίνα Ηλεκτρική":     "Όλα-σε-ένα: φούρνος + εστία σε ένα ενιαίο σχέδιο.",
+}
+
+# Brand families — exact-brand match is strongest, but neighbor brands within
+# the same parent group get a softer boost. This is critical for the Greek
+# market where BSH (BOSCH/PITSOS/SIEMENS/NEFF) and Haier (HAIER/CANDY)
+# cross-sell well within the family aesthetic.
+FRIDGE_BRAND_FAMILIES = {
+    'BSH':       {'BOSCH', 'PITSOS', 'SIEMENS', 'NEFF', 'GAGGENAU'},
+    'HAIER':     {'HAIER', 'CANDY', 'HOOVER'},
+    'WHIRLPOOL': {'WHIRLPOOL', 'HOTPOINT', 'INDESIT', 'IGNIS'},
+    'ELECTROLUX':{'ELECTROLUX', 'AEG', 'ZANUSSI'},
+    'LG':        {'LG'},
+    'SAMSUNG':   {'SAMSUNG'},
+    'MIELE':     {'MIELE'},
+    'LIEBHERR':  {'LIEBHERR'},
+    'HISENSE':   {'HISENSE', 'GORENJE'},
+    'SMEG':      {'SMEG'},
+}
+
+def _fridge_brand_family(brand: str) -> str:
+    """Return the family key (e.g. 'BSH') for a given brand, or '' if none."""
+    if not brand:
+        return ''
+    b = str(brand).upper().strip()
+    for fam_key, members in FRIDGE_BRAND_FAMILIES.items():
+        if b in members:
+            return fam_key
+    return ''
+
+# ── Series detection: SAMSUNG BESPOKE is the only series in the dataset
+# with matching color-swap accessories (RA-B23E... codes). The detection
+# is intentionally simple — title substring — because the BESPOKE brand
+# name appears literally in both the fridge title and panel titles.
+# Future series (e.g. BOSCH Vario, when those fridges arrive in inventory)
+# would be added here following the same pattern.
+FRIDGE_KNOWN_SERIES = {
+    'BESPOKE': {
+        'trigger_keywords':   ('BESPOKE', 'bespoke'),
+        'accessory_keywords': ('BESPOKE', 'bespoke', 'RA-B23', 'RAB23'),
+    },
+    # BOSCH Vario series — KSZ1*/KSZ2* accessory codes. No Vario fridges
+    # currently in our dataset, but the detection is wired up for the day
+    # they're added. Without a fridge match, this entry never triggers.
+    'VARIO': {
+        'trigger_keywords':   ('Vario', 'VARIO', 'vario'),
+        'accessory_keywords': ('KSZ1', 'KSZ2', 'Vario', 'VARIO', 'vario'),
+    },
+}
+
+def _fridge_detect_series(title: str) -> str:
+    """Detect which known series a title belongs to. Returns '' if none."""
+    if not title:
+        return ''
+    t = str(title)
+    for series_key, cfg in FRIDGE_KNOWN_SERIES.items():
+        for kw in cfg['trigger_keywords']:
+            if kw in t:
+                return series_key
+    return ''
+
+# ── Color matching: normalize colors so "Inox" and "Ασημί" both signal
+# "metallic" (most kitchen appliances are sold as either Μαύρο/Inox/Λευκό
+# regardless of the exact label the manufacturer chose).
+FRIDGE_COLOR_GROUPS = {
+    'DARK':     {'Μαύρο', 'Ανθρακί', 'Γκρι', 'Γραφίτης'},
+    'METALLIC': {'Inox', 'Ασημί', 'Brushed Steel', 'Metal Look', 'Stainless'},
+    'LIGHT':    {'Λευκό', 'Μπεζ', 'Pearl White', 'Ivory', 'Vanilla'},
+    'WARM':     {'Κόκκινο', 'Πορτοκαλί', 'Κίτρινο', 'Ροζ', 'Μπορντό'},
+    'COOL':     {'Μπλε', 'Πράσινο', 'Μωβ', 'Navy'},
+}
+
+def _fridge_color_group(color: str) -> str:
+    """Map a Χρώμα value to its color group. Returns '' if unknown."""
+    if not color:
+        return ''
+    c = str(color).strip()
+    for grp, members in FRIDGE_COLOR_GROUPS.items():
+        if c in members:
+            return grp
+    # Fallback: substring check (e.g. "Ασημί Μεταλλικό" → METALLIC)
+    for grp, members in FRIDGE_COLOR_GROUPS.items():
+        for m in members:
+            if m in c:
+                return grp
+    return ''
+
+# Capacity tiers for fridges (full unit, not the freezer compartment).
+# Range observed: 253 Lt (compact) → 631 Lt (XXL French door).
+# Pairing isn't critical for cross-sells (a fridge doesn't "pair" with an
+# oven by capacity) — capacity tier is used only as a price-tier sanity
+# check (very small fridge ↔ budget tier, XXL ↔ premium tier).
+def _fridge_capacity_tier(lt) -> int:
+    """Returns 0=small(≤300L), 1=mid(301-400L), 2=large(401-500L), 3=xl(>500L), -1=unknown."""
+    if lt is None or lt <= 0:
+        return -1
+    if lt <= 300:  return 0
+    if lt <= 400:  return 1
+    if lt <= 500:  return 2
+    return 3
+
+def _fridge_parse_capacity(val) -> float:
+    """Parse capacity from strings like '438 Lt' or '305 Lt' or numeric."""
+    if val is None:
+        return 0.0
+    s = str(val).strip()
+    m = re.search(r'(\d{2,4})', s)
+    if m:
+        try:
+            return float(m.group(1))
+        except ValueError:
+            return 0.0
+    return 0.0
+
+# Price tiers for fridges (calibrated to the 2026 Greek market range).
+# Observed: €329 (CANDY budget) → €3046 (SMEG retro premium).
+# Median €699 → tier boundary at ~700.
+def _fridge_price_tier(price: float) -> int:
+    """Returns 0=Budget(<€500), 1=Mainstream(€500-799), 2=Premium(€800-1199), 3=Luxury(≥€1200)."""
+    if price < 500:   return 0
+    if price < 800:   return 1
+    if price < 1200:  return 2
+    return 3
+
+# ── Brand-from-title parser (for Πλυντήρια/Στεγνωτήρια where the
+# Κατασκευαστής column is empty — title is the only signal). Reuses the
+# same approach as the washing machine engine but kept local for clarity.
+def _fridge_parse_brand_from_title(title: str) -> str:
+    """Extract the first all-caps token from a title (manufacturer name)."""
+    if not title:
+        return ''
+    t = str(title).strip()
+    tokens = t.split()
+    if not tokens:
+        return ''
+    first = tokens[0].upper()
+    # Filter out non-brand starter tokens (numbers, sizes, generic words)
+    if first.isdigit() or len(first) < 2:
+        # Try the second token
+        if len(tokens) > 1:
+            return tokens[1].upper()
+        return ''
+    return first
+
+# Scoring constants for the Refrigerators engine. Calibrated so:
+#   • A series match (BESPOKE) always outranks pure color match
+#   • Exact brand match always outranks neighbor-brand match
+#   • Color match never overrides brand for kitchen-package slots
+#   • Sales is a soft tiebreaker — fridges sell less per SKU than vacuums
+FRIDGE_S_AVAILABILITY      =    100_000  # In-stock boost
+FRIDGE_S_SERIES_MATCH      =  1_000_000  # Trigger series == candidate series (BESPOKE↔BESPOKE)
+FRIDGE_S_SERIES_COLOR      =    400_000  # Series match + same color group (e.g. dark BESPOKE for dark fridge)
+FRIDGE_S_BRAND_EXACT       =    600_000  # Trigger brand == candidate brand
+FRIDGE_S_BRAND_FAMILY      =    250_000  # Trigger family == candidate family (BOSCH↔PITSOS within BSH)
+FRIDGE_S_COLOR_EXACT       =    300_000  # Exact Χρώμα string match
+FRIDGE_S_COLOR_GROUP       =    150_000  # Same color group (Μαύρο/Ανθρακί both DARK)
+FRIDGE_S_PRICE_SAME_TIER   =    200_000  # Same price tier (budget pairs with budget, premium with premium)
+FRIDGE_S_PRICE_NEAR_TIER   =     70_000  # ±1 price tier
+FRIDGE_S_WIFI_MATCH        =     50_000  # Trigger has Wi-Fi → boost Wi-Fi candidates
+FRIDGE_S_UNIVERSAL_CARE    =    400_000  # BOSCH cleaning supplies / SCANPART filter — work for any fridge
+FRIDGE_S_WRONG_SERIES_PEN  =   -500_000  # KSZ Vario panel offered to a non-Vario fridge — physical mismatch
+FRIDGE_S_SALES_FACTOR      =        0.3  # Sales tiebreaker (fridges have low per-SKU sales)
+
 
 
 # ═════════════════════════════════════════════════════════════
@@ -3896,7 +4175,9 @@ L2_CHILDREN = {
     ],
     "MDA": [
         {"key": "Washing Machines", "label": "Πλυντήρια\nΡούχων",
-         "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='4' y='2' width='16' height='20' rx='2' ry='2'/%3E%3Ccircle cx='12' cy='13' r='5'/%3E%3Ccircle cx='12' cy='13' r='2'/%3E%3Cline x1='8' y1='5' x2='8.01' y2='5'/%3E%3Cline x1='12' y1='5' x2='14' y2='5'/%3E%3C/svg%3E"}
+         "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='4' y='2' width='16' height='20' rx='2' ry='2'/%3E%3Ccircle cx='12' cy='13' r='5'/%3E%3Ccircle cx='12' cy='13' r='2'/%3E%3Cline x1='8' y1='5' x2='8.01' y2='5'/%3E%3Cline x1='12' y1='5' x2='14' y2='5'/%3E%3C/svg%3E"},
+        {"key": "Fridges", "label": "Ψυγειο-\nκαταψύκτες",
+         "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='5' y='2' width='14' height='20' rx='2' ry='2'/%3E%3Cline x1='5' y1='10' x2='19' y2='10'/%3E%3Cline x1='8' y1='6' x2='8.01' y2='6'/%3E%3Cline x1='8' y1='14' x2='8.01' y2='14'/%3E%3C/svg%3E"}
     ],
     "TV": [
         {"key": "TVs", "label": "Τηλεοράσεις",
@@ -4431,6 +4712,30 @@ else:
                 st.sidebar.markdown('<p class="sidebar-section">Επιλέξτε Πλυντήριο</p>', unsafe_allow_html=True)
                 sel = st.sidebar.selectbox("", washers['Title'].unique(), label_visibility="collapsed", key="wm_sel")
                 trigger = washers[washers['Title']==sel].iloc[0] if sel else None
+
+    elif active_cluster == "Fridges":
+        # Trigger pool: Ψυγειοκαταψύκτες from the MDA sheet.
+        # If FRIDGE_TEST_SKUS is non-empty, restrict to those 7 demo SKUs
+        # (BESPOKE, black BOSCH, mainstream Inox, premium SMEG retro,
+        # premium LIEBHERR, budget black HISENSE, premium LG ThinQ).
+        if df_mda is None or df_mda.empty:
+            st.sidebar.warning("Sheet 'MDA' is empty or missing.")
+        else:
+            hier_upper = df_mda['Hierarchy'].fillna('').astype(str).str.upper().str.strip()
+            trigger_hiers_upper = {h.upper().strip() for h in FRIDGE_TRIGGER_HIERARCHIES}
+            fridges = df_mda[hier_upper.isin(trigger_hiers_upper)].copy()
+
+            # 🧪 Optional test-list filter (leave FRIDGE_TEST_SKUS empty to show all 91)
+            if FRIDGE_TEST_SKUS:
+                mat_clean = fridges['Material'].astype(str).str.strip().str.replace(r'\.0$', '', regex=True)
+                fridges = fridges[mat_clean.isin(FRIDGE_TEST_SKUS)]
+
+            if fridges.empty:
+                st.sidebar.warning("Δεν βρέθηκαν Ψυγειοκαταψύκτες στο sheet MDA.")
+            else:
+                st.sidebar.markdown('<p class="sidebar-section">Επιλέξτε Ψυγειοκαταψύκτη</p>', unsafe_allow_html=True)
+                sel = st.sidebar.selectbox("", fridges['Title'].unique(), label_visibility="collapsed", key="fridge_sel")
+                trigger = fridges[fridges['Title']==sel].iloc[0] if sel else None
 
     elif active_cluster in ("Mouse", "Keyboard", "Gaming Mouse", "Gaming Keyboard"):
         if df_peripherals.empty:
@@ -10439,6 +10744,557 @@ def run_washing_machine_engine(trigger, df_mda, df_sda, df_history):
     return pd.DataFrame(), diag, slot_notes, pd.DataFrame()
 
 
+# ═══════════════════════════════════════════════════════════════
+# 🟢 REFRIGERATORS HELPERS — Ψυγειοκαταψύκτες (Μεγάλες Συσκευές)
+# ═══════════════════════════════════════════════════════════════
+# Four pool builders: panel-series, universal care, kitchen-package
+# (colored variant) and kitchen-package (parsed-brand variant). The
+# engine itself follows the same round-robin pattern as Washing Machines
+# / Air Fryers / Vacuums — pre-build & score every pool, then loop until
+# 10 slots filled or all pools exhausted.
+
+def _fridge_build_panel_pool(c_pool, trigger_series, trigger_brand,
+                              trigger_color_group, notes):
+    """Score the Αξεσουάρ Ψυγείων pool restricted to door panels (Είδος = 'Πάνελ').
+
+    Logic stack (most important first):
+      1. Series match (BESPOKE/Vario) → +1,000,000
+         The whole point of BESPOKE is panel-swap aesthetics; matched-series
+         panels are the highest-cross-sell product in the catalog for that
+         specific buyer.
+      2. Series match + same color group → +400,000 extra
+         A Μαύρο BESPOKE fridge buyer's #1 want is a Μαύρο or Γκρι panel
+         (so they can swap to dark variants); a Λευκό buyer wants Λευκό/Μπεζ.
+      3. Wrong-series penalty: -500,000
+         A BOSCH KSZ Vario panel is physically incompatible with a SAMSUNG
+         BESPOKE fridge (and vice versa) — never recommend cross-series.
+      4. Sales tiebreaker (panels typically have 0 sales — so this barely
+         matters; the series + color signals dominate).
+    """
+    if c_pool.empty:
+        return c_pool
+
+    # Restrict to Είδος = 'Πάνελ' (drop cleaning/filter/shelf rows here —
+    # those belong to the care pool, not the panel pool).
+    if 'Είδος' in c_pool.columns:
+        eidos_lower = c_pool['Είδος'].fillna('').astype(str).str.lower()
+        panels = c_pool[eidos_lower.str.contains('πάνελ', regex=False, na=False)].copy()
+    else:
+        notes.append("  ⚠ 'Είδος' column missing — panel pool will be empty")
+        return c_pool.iloc[0:0]
+
+    if panels.empty:
+        notes.append("  ⚠ No 'Πάνελ' rows in Αξεσουάρ Ψυγείων — pool empty")
+        return panels
+
+    pool = panels
+    pool['Final_Score'] = 0.0
+
+    # ── Availability boost
+    if 'AVAILABILITY' in pool.columns:
+        pool.loc[pool['AVAILABILITY'] == 'Άμεσα Διαθέσιμο', 'Final_Score'] += FRIDGE_S_AVAILABILITY
+
+    # ── Sales baseline (mostly zeros for panels — series boost dominates)
+    pool['Final_Score'] += pool['Sales_Tiebreaker'].fillna(0) * FRIDGE_S_SALES_FACTOR
+
+    # ── Series detection on each candidate
+    cand_series = pool['Title'].fillna('').astype(str).apply(_fridge_detect_series)
+    pool['_fridge_panel_series'] = cand_series
+
+    # 1+2. Series match boost (+ color modifier)
+    if trigger_series:
+        same_series = cand_series == trigger_series
+        pool.loc[same_series, 'Final_Score'] += FRIDGE_S_SERIES_MATCH
+        if same_series.any():
+            notes.append(f"  ✓ Series match ({trigger_series}): {same_series.sum()} panels (+{FRIDGE_S_SERIES_MATCH:,})")
+
+        # Color group match within series — boosts Μαύρο/Γκρι panels for a Μαύρο fridge
+        if trigger_color_group:
+            cand_colors = pool['Χρώμα'].fillna('').astype(str).apply(_fridge_color_group)
+            same_group = same_series & (cand_colors == trigger_color_group)
+            pool.loc[same_group, 'Final_Score'] += FRIDGE_S_SERIES_COLOR
+            if same_group.any():
+                notes.append(f"  ✓ Series + color group ({trigger_color_group}): {same_group.sum()} panels (+{FRIDGE_S_SERIES_COLOR:,})")
+
+        # 3. Wrong-series penalty — cross-series panels are incompatible
+        wrong_series = (cand_series != '') & (cand_series != trigger_series)
+        pool.loc[wrong_series, 'Final_Score'] += FRIDGE_S_WRONG_SERIES_PEN
+        if wrong_series.any():
+            notes.append(f"  ✗ Wrong-series penalty: {wrong_series.sum()} cross-series panels ({FRIDGE_S_WRONG_SERIES_PEN:+,})")
+    else:
+        # No series match for the trigger — panels are still possible but
+        # we don't reward them with the series boost. The slot will likely
+        # come up empty for non-BESPOKE/non-Vario fridges, which is OK —
+        # the round-robin engine will overfill other slots.
+        notes.append("  — Trigger has no detected series — panel slot may be empty for non-series fridges")
+
+        # Soft brand-match boost (BOSCH fridge might still want a BOSCH KSZ
+        # decorative panel if they have a Vario-compatible model, even if
+        # we can't detect it by title alone). Keep it modest.
+        if trigger_brand and 'Κατασκευαστής' in pool.columns:
+            cand_brand = pool['Κατασκευαστής'].fillna('').astype(str).str.upper().str.strip()
+            same_brand = cand_brand == trigger_brand.upper().strip()
+            pool.loc[same_brand, 'Final_Score'] += FRIDGE_S_BRAND_FAMILY  # modest boost
+            if same_brand.any():
+                notes.append(f"  ~ Same-brand panel ({trigger_brand}) [no-series fallback]: {same_brand.sum()} (+{FRIDGE_S_BRAND_FAMILY:,})")
+
+    # ── Sort by score; engine filters out negative-scored rows during
+    # round-robin (any wrong-series penalty pulls below zero, signalling
+    # "do not show").
+    return pool.sort_values('Final_Score', ascending=False)
+
+
+def _fridge_build_care_pool(c_pool, trigger_brand, notes):
+    """Score the universal-care pool: cleaning supplies + water filter +
+    shelves. These items work for any fridge regardless of brand or color.
+
+    Logic:
+      • Universal-care brands (BOSCH cleaning, SCANPART filter) → big boost
+        — these are designed to work on any stainless or any fridge
+      • Same-brand bonus for specialty parts (AEG shelf for AEG buyer,
+        MIELE wine set for MIELE buyer)
+      • Sales matters more here than in the panel pool (cleaning supplies
+        actually have sales — 91 units for the fridge-specific cleaner)
+    """
+    if c_pool.empty:
+        return c_pool
+
+    # Restrict to non-Πάνελ rows (Είδος ∈ {Καθαριστικά, Φίλτρα, Αξεσουάρ-Εξαρτήματα})
+    # AND require Είδος to be populated — this filters out promo-bundle rows
+    # that occasionally land in Αξεσουάρ Ψυγείων with empty Είδος (e.g.
+    # LAURA ASHLEY LA-STCR2 toaster sold as a gift-with-fridge).
+    if 'Είδος' in c_pool.columns:
+        eidos_raw = c_pool['Είδος'].fillna('').astype(str).str.strip()
+        eidos_lower = eidos_raw.str.lower()
+        valid_eidos = (eidos_raw != '') & (eidos_lower != 'nan')
+        care = c_pool[valid_eidos & ~eidos_lower.str.contains('πάνελ', regex=False, na=False)].copy()
+    else:
+        care = c_pool.copy()
+
+    if care.empty:
+        notes.append("  ⚠ No non-panel rows in Αξεσουάρ Ψυγείων — care pool empty")
+        return care
+
+    pool = care
+    pool['Final_Score'] = 0.0
+
+    if 'AVAILABILITY' in pool.columns:
+        pool.loc[pool['AVAILABILITY'] == 'Άμεσα Διαθέσιμο', 'Final_Score'] += FRIDGE_S_AVAILABILITY
+
+    pool['Final_Score'] += pool['Sales_Tiebreaker'].fillna(0) * FRIDGE_S_SALES_FACTOR
+
+    # Universal-care brand boost — these are the only accessories in our
+    # catalog that genuinely "fit anything". BOSCH cleaning supplies work
+    # on any stainless steel; SCANPART filter is a universal-fit water filter.
+    universal_brands = {'BOSCH', 'SCANPART'}  # eidos restricts to cleaning/filter
+    if 'Κατασκευαστής' in pool.columns and 'Είδος' in pool.columns:
+        cand_brand = pool['Κατασκευαστής'].fillna('').astype(str).str.upper().str.strip()
+        eidos = pool['Είδος'].fillna('').astype(str).str.lower()
+
+        # Cleaning supplies (Καθαριστικά) + Filter (Φίλτρα) from universal brands
+        is_universal = cand_brand.isin(universal_brands) & (
+            eidos.str.contains('καθαριστικ', regex=False, na=False) |
+            eidos.str.contains('φίλτρα',     regex=False, na=False)
+        )
+        pool.loc[is_universal, 'Final_Score'] += FRIDGE_S_UNIVERSAL_CARE
+        if is_universal.any():
+            notes.append(f"  ✓ Universal care ({list(universal_brands)}): {is_universal.sum()} items (+{FRIDGE_S_UNIVERSAL_CARE:,})")
+
+        # Same-brand specialty parts (AEG shelf for AEG fridge owner)
+        if trigger_brand:
+            same_brand = cand_brand == trigger_brand.upper().strip()
+            # Avoid double-counting the universal-care rows
+            same_brand_specialty = same_brand & ~is_universal
+            pool.loc[same_brand_specialty, 'Final_Score'] += FRIDGE_S_BRAND_EXACT
+            if same_brand_specialty.any():
+                notes.append(f"  ✓ Same-brand specialty parts ({trigger_brand}): {same_brand_specialty.sum()} (+{FRIDGE_S_BRAND_EXACT:,})")
+
+    return pool.sort_values('Final_Score', ascending=False)
+
+
+def _fridge_build_kitchen_pool_colored(c_pool, trigger_brand, trigger_family,
+                                        trigger_color, trigger_color_group,
+                                        trigger_tier, trigger_specs, notes):
+    """Kitchen-package pool with full multi-spec scoring. Used for hierarchies
+    where Κατασκευαστής AND Χρώμα are populated (Φούρνοι Άνω Πάγκου,
+    Απορροφητήρες, Φούρνοι Μικροκυμάτων, Κουζίνες Ηλεκτρικές).
+
+    Full signal stack:
+      • Brand exact match → +600,000
+      • Brand family match (BSH: BOSCH↔PITSOS↔SIEMENS↔NEFF) → +250,000
+      • Color exact match → +300,000
+      • Color group match (DARK: Μαύρο↔Ανθρακί↔Γκρι) → +150,000
+      • Price tier same → +200,000, ±1 → +70,000
+      • Wi-Fi mirror → +50,000 if trigger has Wi-Fi
+      • Sales tiebreaker
+    """
+    if c_pool.empty:
+        return c_pool
+
+    pool = c_pool.copy()
+    pool['Final_Score'] = 0.0
+
+    if 'AVAILABILITY' in pool.columns:
+        pool.loc[pool['AVAILABILITY'] == 'Άμεσα Διαθέσιμο', 'Final_Score'] += FRIDGE_S_AVAILABILITY
+
+    pool['Final_Score'] += pool['Sales_Tiebreaker'].fillna(0) * FRIDGE_S_SALES_FACTOR
+
+    # ── Brand match (exact + family)
+    if 'Κατασκευαστής' in pool.columns and trigger_brand:
+        cand_brand = pool['Κατασκευαστής'].fillna('').astype(str).str.upper().str.strip()
+        tb = trigger_brand.upper().strip()
+        same_brand = cand_brand == tb
+        pool.loc[same_brand, 'Final_Score'] += FRIDGE_S_BRAND_EXACT
+        if same_brand.any():
+            notes.append(f"  ✓ Brand exact ({tb}): {same_brand.sum()} (+{FRIDGE_S_BRAND_EXACT:,})")
+
+        # Family match (BOSCH ↔ PITSOS within BSH)
+        if trigger_family:
+            family_members = FRIDGE_BRAND_FAMILIES.get(trigger_family, set())
+            in_family = cand_brand.isin(family_members) & (~same_brand)
+            pool.loc[in_family, 'Final_Score'] += FRIDGE_S_BRAND_FAMILY
+            if in_family.any():
+                notes.append(f"  ✓ Brand family ({trigger_family}: {sorted(family_members)}): "
+                             f"{in_family.sum()} neighbor-brand items (+{FRIDGE_S_BRAND_FAMILY:,})")
+
+    # ── Color match (exact + group)
+    if 'Χρώμα' in pool.columns and trigger_color:
+        cand_color = pool['Χρώμα'].fillna('').astype(str).str.strip()
+        same_color = cand_color == trigger_color
+        pool.loc[same_color, 'Final_Score'] += FRIDGE_S_COLOR_EXACT
+        if same_color.any():
+            notes.append(f"  ✓ Color exact ({trigger_color}): {same_color.sum()} (+{FRIDGE_S_COLOR_EXACT:,})")
+
+        if trigger_color_group:
+            cand_group = cand_color.apply(_fridge_color_group)
+            same_group = (cand_group == trigger_color_group) & (~same_color)
+            pool.loc[same_group, 'Final_Score'] += FRIDGE_S_COLOR_GROUP
+            if same_group.any():
+                notes.append(f"  ✓ Color group ({trigger_color_group}): {same_group.sum()} (+{FRIDGE_S_COLOR_GROUP:,})")
+
+    # ── Price tier proximity
+    if 'LIST PRICE' in pool.columns:
+        prices = pool['LIST PRICE'].apply(parse_euro_price)
+        tiers = prices.apply(_fridge_price_tier)
+        same_p = tiers == trigger_tier
+        near_p = (tiers - trigger_tier).abs() == 1
+        pool.loc[same_p, 'Final_Score'] += FRIDGE_S_PRICE_SAME_TIER
+        pool.loc[near_p, 'Final_Score'] += FRIDGE_S_PRICE_NEAR_TIER
+        if same_p.any() or near_p.any():
+            notes.append(f"  ✓ Price tier (trigger {trigger_tier}): "
+                         f"same={same_p.sum()}, near={near_p.sum()}")
+
+    # ── Wi-Fi mirror — premium fridges with Wi-Fi often paired with Wi-Fi ovens
+    if trigger_specs.get('wifi') and 'Συνδεσιμότητα' in pool.columns:
+        cand_wifi = pool['Συνδεσιμότητα'].fillna('').astype(str).str.lower().str.contains('wi-fi|wifi', regex=True, na=False)
+        pool.loc[cand_wifi, 'Final_Score'] += FRIDGE_S_WIFI_MATCH
+        if cand_wifi.any():
+            notes.append(f"  ✓ Wi-Fi mirror (trigger has Wi-Fi): {cand_wifi.sum()} Wi-Fi candidates (+{FRIDGE_S_WIFI_MATCH:,})")
+
+    notes.append(f"  Pool size after scoring: {len(pool)}")
+    return pool.sort_values('Final_Score', ascending=False)
+
+
+def _fridge_build_kitchen_pool_basic(c_pool, trigger_brand, trigger_family,
+                                      trigger_tier, notes):
+    """Kitchen-package pool for hierarchies where color barely varies
+    (Εστίες — 95%+ are Μαύρο, so color match is meaningless). Uses brand +
+    family + price-tier scoring only.
+    """
+    if c_pool.empty:
+        return c_pool
+
+    pool = c_pool.copy()
+    pool['Final_Score'] = 0.0
+
+    if 'AVAILABILITY' in pool.columns:
+        pool.loc[pool['AVAILABILITY'] == 'Άμεσα Διαθέσιμο', 'Final_Score'] += FRIDGE_S_AVAILABILITY
+
+    pool['Final_Score'] += pool['Sales_Tiebreaker'].fillna(0) * FRIDGE_S_SALES_FACTOR
+
+    if 'Κατασκευαστής' in pool.columns and trigger_brand:
+        cand_brand = pool['Κατασκευαστής'].fillna('').astype(str).str.upper().str.strip()
+        tb = trigger_brand.upper().strip()
+        same_brand = cand_brand == tb
+        pool.loc[same_brand, 'Final_Score'] += FRIDGE_S_BRAND_EXACT
+        if same_brand.any():
+            notes.append(f"  ✓ Brand exact ({tb}): {same_brand.sum()} (+{FRIDGE_S_BRAND_EXACT:,})")
+
+        if trigger_family:
+            family_members = FRIDGE_BRAND_FAMILIES.get(trigger_family, set())
+            in_family = cand_brand.isin(family_members) & (~same_brand)
+            pool.loc[in_family, 'Final_Score'] += FRIDGE_S_BRAND_FAMILY
+            if in_family.any():
+                notes.append(f"  ✓ Brand family ({trigger_family}): {in_family.sum()} (+{FRIDGE_S_BRAND_FAMILY:,})")
+
+    if 'LIST PRICE' in pool.columns:
+        prices = pool['LIST PRICE'].apply(parse_euro_price)
+        tiers = prices.apply(_fridge_price_tier)
+        same_p = tiers == trigger_tier
+        near_p = (tiers - trigger_tier).abs() == 1
+        pool.loc[same_p, 'Final_Score'] += FRIDGE_S_PRICE_SAME_TIER
+        pool.loc[near_p, 'Final_Score'] += FRIDGE_S_PRICE_NEAR_TIER
+        if same_p.any() or near_p.any():
+            notes.append(f"  ✓ Price tier (trigger {trigger_tier}): "
+                         f"same={same_p.sum()}, near={near_p.sum()}")
+
+    return pool.sort_values('Final_Score', ascending=False)
+
+
+def _fridge_build_kitchen_pool_parsed_brand(c_pool, trigger_brand, trigger_family,
+                                             trigger_tier, notes):
+    """Kitchen-package pool for hierarchies where Κατασκευαστής column is
+    empty in the MDA sheet (Πλυντήρια Πιάτων, Πλυντήρια Ρούχων,
+    Στεγνωτήρια — all have data quality issues on the brand column).
+    Brand is parsed from the Title's first token instead.
+    """
+    if c_pool.empty:
+        return c_pool
+
+    pool = c_pool.copy()
+    pool['Final_Score'] = 0.0
+
+    if 'AVAILABILITY' in pool.columns:
+        pool.loc[pool['AVAILABILITY'] == 'Άμεσα Διαθέσιμο', 'Final_Score'] += FRIDGE_S_AVAILABILITY
+
+    pool['Final_Score'] += pool['Sales_Tiebreaker'].fillna(0) * FRIDGE_S_SALES_FACTOR
+
+    # Parse brand from title for every candidate
+    cand_brand = pool['Title'].fillna('').astype(str).apply(_fridge_parse_brand_from_title)
+    pool['_fridge_cand_brand_parsed'] = cand_brand
+
+    if trigger_brand:
+        tb = trigger_brand.upper().strip()
+        same_brand = cand_brand == tb
+        pool.loc[same_brand, 'Final_Score'] += FRIDGE_S_BRAND_EXACT
+        if same_brand.any():
+            notes.append(f"  ✓ Brand exact (parsed from title, {tb}): {same_brand.sum()} (+{FRIDGE_S_BRAND_EXACT:,})")
+
+        if trigger_family:
+            family_members = FRIDGE_BRAND_FAMILIES.get(trigger_family, set())
+            in_family = cand_brand.isin(family_members) & (~same_brand)
+            pool.loc[in_family, 'Final_Score'] += FRIDGE_S_BRAND_FAMILY
+            if in_family.any():
+                notes.append(f"  ✓ Brand family (parsed, {trigger_family}): {in_family.sum()} (+{FRIDGE_S_BRAND_FAMILY:,})")
+
+    if 'LIST PRICE' in pool.columns:
+        prices = pool['LIST PRICE'].apply(parse_euro_price)
+        tiers = prices.apply(_fridge_price_tier)
+        same_p = tiers == trigger_tier
+        near_p = (tiers - trigger_tier).abs() == 1
+        pool.loc[same_p, 'Final_Score'] += FRIDGE_S_PRICE_SAME_TIER
+        pool.loc[near_p, 'Final_Score'] += FRIDGE_S_PRICE_NEAR_TIER
+        if same_p.any() or near_p.any():
+            notes.append(f"  ✓ Price tier (trigger {trigger_tier}): "
+                         f"same={same_p.sum()}, near={near_p.sum()}")
+
+    return pool.sort_values('Final_Score', ascending=False)
+
+
+# ═══════════════════════════════════════════════════════════════
+# 🟢 REFRIGERATORS ENGINE — Ψυγειοκαταψύκτες (Μεγάλες Συσκευές)
+# ═══════════════════════════════════════════════════════════════
+
+def run_fridge_engine(trigger, df_mda, df_history):
+    """Build up to 10 cross-sell slots for a refrigerator trigger.
+
+    Single sheet only (MDA). Pools span 8 hierarchies inside MDA:
+      • Αξεσουάρ Ψυγείων (split into Πάνελ vs care/cleaning/filter)
+      • Φούρνοι Άνω Πάγκου, Πλυντήρια Πιάτων, Εντοιχιζόμενα Πλυντήρια Πιάτων
+      • Εστίες Επαγωγικές, Εστίες Κεραμικές
+      • Απορροφητήρες Καμινάδες - τζάκια, Απορροφητήρες Συρόμενοι
+      • Φούρνοι Μικροκυμάτων, Πλυντήρια Ρούχων, Στεγνωτήρια, Κουζίνες Ηλεκτρικές
+
+    Round 1 fills every slot once; the panel slot's max_total=3 lets round 2+3
+    backfill more BESPOKE panels for a BESPOKE-series buyer (the one case
+    where multiple instances of the same role is the correct UX).
+    """
+    diag = []
+    slot_notes = {}
+    all_recs = []
+
+    # ── Trigger attributes — pulled from spec columns (no title parsing
+    # needed here; the spec data is rich).
+    tm     = trigger['Material']
+    tt     = str(trigger.get('Title', ''))
+    tbrand = str(trigger.get('Κατασκευαστής', '') or '').upper().strip()
+    tcolor = str(trigger.get('Χρώμα', '') or '').strip()
+    tprice = parse_euro_price(trigger.get('LIST PRICE', 0))
+    ttier  = _fridge_price_tier(tprice)
+    tfam   = _fridge_brand_family(tbrand)
+    tseries = _fridge_detect_series(tt)
+    tcolor_grp = _fridge_color_group(tcolor)
+    tcap = _fridge_parse_capacity(trigger.get('Συνολική καθαρή χωρητικότητα', '')
+                                   or trigger.get('Χωρητικότητα', ''))
+    twifi = ('Wi-Fi' in str(trigger.get('Συνδεσιμότητα', '') or '')) or \
+            ('WiFi'  in str(trigger.get('Συνδεσιμότητα', '') or ''))
+    tspecs = {'wifi': twifi, 'capacity_lt': tcap}
+
+    diag.append(("0. Trigger",
+                 f"{tbrand} €{tprice:.0f}",
+                 f"color={tcolor} | color_group={tcolor_grp} | "
+                 f"family={tfam} | series={tseries or '—'} | "
+                 f"cap={tcap:.0f}Lt | wifi={twifi} | price_tier={ttier}"))
+
+    if df_mda is None or df_mda.empty:
+        diag.append(("ERROR", 0, "MDA sheet is empty — engine cannot run"))
+        return pd.DataFrame(), diag, slot_notes, pd.DataFrame()
+
+    # ── Drop the trigger itself + competing fridges (would be cannibalistic).
+    # Note: Πλυντήρια - Στεγνωτήρια (washer-dryer combos) live in MDA but
+    # they're a valid cross-sell for fridge buyers, so don't exclude them.
+    c_mda = df_mda[df_mda['Material'] != tm].copy()
+    trigger_hiers_norm = {h.upper().strip() for h in FRIDGE_TRIGGER_HIERARCHIES}
+    # Also exclude Ψυγεία (single-door fridges) and Καταψύκτες if they ever
+    # appear — they're alternative purchases, not companions.
+    competitor_hiers = trigger_hiers_norm | {
+        'ΨΥΓΕΙΑ', 'ΚΑΤΑΨΥΚΤΕΣ', 'ΨΥΓΕΙΑ NIDIDE', 'SIDE BY SIDE'
+    }
+    b4 = len(c_mda)
+    hier_upper = c_mda['Hierarchy'].fillna('').astype(str).str.upper().str.strip()
+    c_mda = c_mda[~hier_upper.isin(competitor_hiers)]
+    diag.append(("1. Excl competitors", len(c_mda),
+                 f"Removed {b4 - len(c_mda)} other fridges/single-door units"))
+
+    # ── Sales-tiebreaker prep
+    if 'Sum of Sales' in c_mda.columns:
+        c_mda['Sales_Tiebreaker'] = pd.to_numeric(c_mda['Sum of Sales'], errors='coerce').fillna(0)
+    else:
+        c_mda['Sales_Tiebreaker'] = 0
+
+    # ── Build a sorted pool per priority entry
+    pools = {}
+    for rank, role_label, hiers, logic_key, max_r1, max_total in FRIDGE_PRIORITY:
+        notes = [f"=== Priority {rank}: {role_label} ({logic_key}) "
+                 f"| max_round_1={max_r1} | max_total={max_total if max_total else '∞'} ==="]
+
+        hier_upper_set = {h.upper().strip() for h in hiers}
+        base_pool = c_mda[c_mda['Hierarchy'].fillna('').astype(str).str.upper().str.strip().isin(hier_upper_set)].copy()
+        notes.append(f"  Base pool size: {len(base_pool)} (hierarchies={hiers})")
+
+        if base_pool.empty:
+            notes.append(f"  ⚠ Hierarchy not present in data — slot will be filled from other pools")
+            pools[rank] = (role_label, pd.DataFrame(), logic_key, max_r1, max_total, notes)
+            continue
+
+        # ── Score the pool based on its logic key
+        if logic_key == 'FRIDGE_PANEL_SERIES':
+            scored = _fridge_build_panel_pool(base_pool, tseries, tbrand,
+                                               tcolor_grp, notes)
+
+        elif logic_key == 'FRIDGE_CARE_UNIVERSAL':
+            scored = _fridge_build_care_pool(base_pool, tbrand, notes)
+
+        elif logic_key == 'FRIDGE_KITCHEN_COLORED':
+            scored = _fridge_build_kitchen_pool_colored(
+                base_pool, tbrand, tfam, tcolor, tcolor_grp,
+                ttier, tspecs, notes
+            )
+
+        elif logic_key == 'FRIDGE_KITCHEN_BASIC':
+            scored = _fridge_build_kitchen_pool_basic(
+                base_pool, tbrand, tfam, ttier, notes
+            )
+
+        elif logic_key == 'FRIDGE_KITCHEN_PARSED':
+            scored = _fridge_build_kitchen_pool_parsed_brand(
+                base_pool, tbrand, tfam, ttier, notes
+            )
+
+        else:
+            # Unknown logic key — fall back to pure sales (safety net)
+            scored = base_pool.copy()
+            scored['Final_Score'] = scored['Sales_Tiebreaker']
+            notes.append(f"  ⚠ Unknown logic key '{logic_key}' — falling back to pure sales")
+
+        pools[rank] = (role_label, scored, logic_key, max_r1, max_total, notes)
+        diag.append((f"Pool {rank} ({role_label})",
+                     len(scored) if scored is not None else 0, logic_key))
+
+    # ── LOOPING: round-robin fill until target hit or all pools exhausted.
+    # IMPORTANT: rows with Final_Score < 0 are skipped (wrong-series penalty
+    # zone — we never want to show a Vario panel to a BESPOKE buyer).
+    used_materials = {tm}
+    pool_cursors  = {rank: 0 for rank in pools}
+    pool_taken    = {rank: 0 for rank in pools}
+    slot_num = 0
+    round_idx = 0
+
+    while slot_num < FRIDGE_SLOT_TARGET:
+        progress = False
+        round_idx += 1
+        for rank, (role_label, scored, logic_key, max_r1, max_total, notes) in pools.items():
+            if slot_num >= FRIDGE_SLOT_TARGET:
+                break
+            if scored is None or scored.empty:
+                continue
+            if max_total is not None and pool_taken[rank] >= max_total:
+                continue
+
+            take_n = max_r1 if round_idx == 1 else 1
+            if max_total is not None:
+                take_n = min(take_n, max_total - pool_taken[rank])
+
+            cursor = pool_cursors[rank]
+            taken_this_pass = 0
+            while taken_this_pass < take_n and cursor < len(scored) \
+                  and slot_num < FRIDGE_SLOT_TARGET:
+                row = scored.iloc[cursor]
+                cursor += 1
+                if row['Material'] in used_materials:
+                    continue
+                # Skip rows with negative scores (wrong-series penalty zone)
+                if float(row.get('Final_Score', 0)) < 0:
+                    continue
+                slot_num += 1
+                rc = row.copy()
+                rc['Assigned_Slot'] = slot_num
+                rc['Slot_Role'] = role_label
+                rc['Marketing_Copy'] = FRIDGE_MARKETING_COPY.get(role_label, "Ιδανική επιλογή!")
+                rc['Item_Rank'] = round_idx
+                all_recs.append(rc)
+                used_materials.add(row['Material'])
+                taken_this_pass += 1
+                pool_taken[rank] += 1
+                progress = True
+
+                title_preview = str(row.get('Title', ''))[:70]
+                score_val = float(row.get('Final_Score', 0))
+                if slot_num not in slot_notes:
+                    slot_notes[slot_num] = []
+                slot_notes[slot_num].append(
+                    f"Round {round_idx} | Pool '{role_label}' | "
+                    f"Score: {score_val:,.0f} | {title_preview}"
+                )
+
+            pool_cursors[rank] = cursor
+
+        if not progress:
+            diag.append(("Loop", round_idx, "All pools exhausted or capped — stopping"))
+            break
+
+    # ── Pool diagnostics under slot 0
+    pool_diag_notes = []
+    for rank, (role_label, scored, logic_key, max_r1, max_total, notes) in pools.items():
+        pool_diag_notes.extend(notes)
+        cap_note = f" (capped at {max_total})" if max_total is not None else ""
+        pool_diag_notes.append(
+            f"  → consumed {pool_taken[rank]} / {len(scored) if scored is not None else 0} from this pool{cap_note}"
+        )
+        pool_diag_notes.append("")
+    slot_notes[0] = pool_diag_notes
+
+    diag.append(("TOTAL", len(all_recs),
+                 f"Filled {slot_num}/{FRIDGE_SLOT_TARGET} slots in {round_idx} rounds"))
+
+    if all_recs:
+        recs_df = pd.DataFrame(all_recs)
+        recs_df['Draft_Score'] = recs_df['Assigned_Slot']
+        return recs_df, diag, slot_notes, recs_df
+    return pd.DataFrame(), diag, slot_notes, pd.DataFrame()
+
+
+
 # ═════════════════════════════════════════════════════════════
 # 🟢 PERIPHERALS ENGINE — All IT Peripheral Clusters
 # Config-driven: each cluster is a dict of slot definitions
@@ -14554,6 +15410,14 @@ elif active_cluster == "Washing Machines":
     # Σιδερώματος, Σιδερώστρες, Συστήματα Ατμού) live in the SDA sheet.
     recs, diag, slot_notes, full_candidates = run_washing_machine_engine(trigger, df_mda, df_sda, df_history)
     slot_diag = []
+elif active_cluster == "Fridges":
+    # Ψυγειοκαταψύκτες + every kitchen-package hierarchy lives in the MDA
+    # sheet. No need to load SDA — the History data showed Small Kitchen
+    # Appliances was only 16 purchases vs Cooking 252 (Cooking dominates).
+    # Series-aware (SAMSUNG BESPOKE detection) + color-matched + brand-family
+    # boosts (BSH: BOSCH↔PITSOS↔SIEMENS↔NEFF).
+    recs, diag, slot_notes, full_candidates = run_fridge_engine(trigger, df_mda, df_history)
+    slot_diag = []
 elif active_cluster == "TVs":
     recs, diag, slot_notes, full_candidates = run_tv_engine(trigger, df_products, df_history)
     slot_diag = []
@@ -14826,6 +15690,15 @@ with st.expander("⚙️ System Diagnostics"):
         # appear in the diagnostics panel under "0. Trigger".
         attr_keys_to_show = ['Material','Title','Level 1','Level 2','Hierarchy',
                               'Sum of Sales','LIST PRICE','AVAILABILITY']
+    elif active_cluster == "Fridges":
+        # Fridges have rich, 100%-filled spec data — surface the signals
+        # that drive the engine: brand, color, capacity, cooling system,
+        # Wi-Fi, app compatibility, price. Series detection (BESPOKE) is
+        # title-based and appears in diagnostics under "0. Trigger".
+        attr_keys_to_show = ['Material','Title','Level 1','Level 2','Hierarchy',
+                              'Κατασκευαστής','Χρώμα','Συνολική καθαρή χωρητικότητα',
+                              'Σύστημα ψύξης','Συνδεσιμότητα','Συμβατό με εφαρμογή',
+                              'Ενεργειακή κλάση ≡','Sum of Sales','LIST PRICE','AVAILABILITY']
     else:
         attr_keys_to_show = ['Material','Title','Level 2','Hierarchy','Κατασκευαστής','Μοντέλο','LIST PRICE']
         
