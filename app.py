@@ -102,7 +102,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v28.20 — Curlers & Brushes (Ψαλίδια & Βούρτσες Μαλλιών) — Personal Care: brand × price-tier × color × DEVICE SUBTYPE (curl iron vs hot brush)
+        🟢 Engine v28.23 — 3 impulse-buy accessories at slots 5-7 across ALL hair-care engines (Straighteners, Hair Dryers, Curlers): hair scrunchie + 2 personal care gift items from Stationery sheet
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -1614,20 +1614,26 @@ STRAIGHTENER_PRIORITY = [
     (3, 'Πολυσυσκευή Styling',
         ['MULTISTYLERS'],
         'STR_HAIRSTYLING', 1, 1),
-    (4, 'Αξεσουάρ Περιποίησης',
-        ['ACCESSORIES'],
-        'STR_PCARE_ACCESSORY', 1, 1),
-    (5, 'Συσκευή Αποτρίχωσης',
+    (4, 'Συσκευή Αποτρίχωσης',
         ['EPILATORS'],
         'STR_WOMENS_CARE', 1, 1),
-    (6, 'Ηλεκτρική Οδοντόβουρτσα',
-        ['ELECTRIC TOOTHBRUSHES', 'ΗΛΕΚΤΡΙΚΕΣ ΟΔΟΝΤΟΒΟΥΡΤΣΕΣ'],
-        'STR_WELLNESS', 1, 1),
+    # v28.23 — Slots 5-7: 3 impulse-buy accessory slots from Stationery sheet.
+    # Slot 5 = FASHION ACCESSORIES (1 SKU, typically Legami scrunchie).
+    # Slots 6-7 = PERSONAL CARE Stationery (max_r1=2, fills slots 6 AND 7
+    # in single round-1 visit with hair towel + eye mask top sellers).
+    # Replaced: ACCESSORIES (SDA Personal Care Accessories, cross-purchase 18)
+    # and MASSAGE DEVICES (cross-purchase 16). Both lowest-value slots.
+    (5, 'Αξεσουάρ Μαλλιών',
+        ['FASHION ACCESSORIES'],
+        'STR_IMPULSE_ACCESSORY', 1, 1),                     # ← NEW v28.23
+    (6, 'Δώρα Περιποίησης',
+        ['PERSONAL CARE'],   # df_stationery 'PERSONAL CARE', NOT SDA 'Personal Care' L1
+        'STR_IMPULSE_ACCESSORY', 2, 2),                     # ← max_r1=2: fills slots 6 AND 7
     (7, 'Ζυγαριά Σώματος',
         ['BODY SCALES'],
         'STR_WELLNESS', 1, 1),
-    (8, 'Συσκευή Μασάζ',
-        ['MASSAGE DEVICES'],
+    (8, 'Ηλεκτρική Οδοντόβουρτσα',
+        ['ELECTRIC TOOTHBRUSHES', 'ΗΛΕΚΤΡΙΚΕΣ ΟΔΟΝΤΟΒΟΥΡΤΣΕΣ'],
         'STR_WELLNESS', 1, 1),
 ]
 
@@ -1637,10 +1643,13 @@ STRAIGHTENER_MARKETING_COPY = {
     "Πιστολάκι Μαλλιών":         "Ολοκλήρωσε το hair-styling set σου — ξήρανση και styling στο σπίτι.",
     "Ψαλίδι Μπούκλας / Βούρτσα": "Βούρτσα ή ψαλίδι — η εναλλακτική επιλογή για κυματιστά μαλλιά.",
     "Πολυσυσκευή Styling":       "Όλα-σε-ένα styling — ίσιωμα, μπούκλες και όγκος.",
-    "Αξεσουάρ Περιποίησης":      "Αξεσουάρ που προστατεύουν τα μαλλιά από τη θερμότητα.",
     "Συσκευή Αποτρίχωσης":       "Ολοκληρωμένη φροντίδα ομορφιάς — επαγγελματικό αποτέλεσμα στο σπίτι.",
-    "Ηλεκτρική Οδοντόβουρτσα":   "Λευκό χαμόγελο, καθαριότητα επιπέδου οδοντιάτρου.",
+    "Αξεσουάρ Μαλλιών":          "Λαστιχάκια, κορδέλες και βούρτσες — ολοκληρώστε το styling σας.",   # NEW v28.23
+    "Δώρα Περιποίησης":          "Μάσκες ματιών, πετσέτες και σετ περιποίησης — pamper yourself.",  # NEW v28.23
     "Ζυγαριά Σώματος":           "Παρακολούθησε την πρόοδό σου — υγεία και ευεξία.",
+    "Ηλεκτρική Οδοντόβουρτσα":   "Λευκό χαμόγελο, καθαριότητα επιπέδου οδοντιάτρου.",
+    # ── Retained but unused after v28.23 — kept for forward compat
+    "Αξεσουάρ Περιποίησης":      "Αξεσουάρ που προστατεύουν τα μαλλιά από τη θερμότητα.",
     "Συσκευή Μασάζ":             "Χαλάρωσε τους μυς σου — wellness εμπειρία στο σπίτι.",
 }
 
@@ -1841,27 +1850,29 @@ HAIR_DRYER_PRIORITY = [
     (2, 'Ψαλίδι Μπούκλας / Βούρτσα',
         ['CURLERS & BRUSHES'],
         'HD_HAIRSTYLING', 1, 1),
-    (3, 'Σετ Περιποίησης Ανδρικής',
-        ['GROOMING SET'],
-        'HD_MENS_GROOMING', 1, 1),
-    (4, 'Ζυγαριά Σώματος',
-        ['BODY SCALES'],
-        'HD_WELLNESS', 1, 1),
-    (5, 'Ξυριστική Μηχανή',
-        ['SHAVING MACHINES'],
-        'HD_MENS_GROOMING', 1, 1),
-    (6, 'Ηλεκτρική Οδοντόβουρτσα',
-        ['ELECTRIC TOOTHBRUSHES', 'ΗΛΕΚΤΡΙΚΕΣ ΟΔΟΝΤΟΒΟΥΡΤΣΕΣ'],
-        'HD_WELLNESS', 1, 1),
-    (7, 'Πολυσυσκευή Styling',
+    (3, 'Πολυσυσκευή Styling',
         ['MULTISTYLERS'],
         'HD_HAIRSTYLING', 1, 1),
-    (8, 'Trimmer Γενιού / Σώματος',
-        ['TRIMMERS'],
+    (4, 'Σετ Περιποίησης Ανδρικής',
+        ['GROOMING SET'],
         'HD_MENS_GROOMING', 1, 1),
-    (9, 'Συσκευή Αποτρίχωσης',
-        ['EPILATORS'],
-        'HD_WOMENS_CARE', 1, 1),
+    # v28.23 — Slots 5-7: 3 impulse-buy accessory slots from Stationery sheet.
+    # Replaced TRIMMERS (function-dupe with GROOMING SET, cross-purchase 204),
+    # SHAVING MACHINES (same audience as GROOMING SET, cross-purchase 241),
+    # and EPILATORS (weakest brand overlap 3/9, cross-purchase 198).
+    # GROOMING SET preserved as the universal #4 cross-purchase 373.
+    (5, 'Αξεσουάρ Μαλλιών',
+        ['FASHION ACCESSORIES'],
+        'HD_IMPULSE_ACCESSORY', 1, 1),                      # ← NEW v28.23
+    (6, 'Δώρα Περιποίησης',
+        ['PERSONAL CARE'],   # df_stationery 'PERSONAL CARE', NOT SDA 'Personal Care' L1
+        'HD_IMPULSE_ACCESSORY', 2, 2),                      # ← max_r1=2: fills slots 6 AND 7
+    (7, 'Ζυγαριά Σώματος',
+        ['BODY SCALES'],
+        'HD_WELLNESS', 1, 1),
+    (8, 'Ηλεκτρική Οδοντόβουρτσα',
+        ['ELECTRIC TOOTHBRUSHES', 'ΗΛΕΚΤΡΙΚΕΣ ΟΔΟΝΤΟΒΟΥΡΤΣΕΣ'],
+        'HD_WELLNESS', 1, 1),
 ]
 
 HAIR_DRYER_SLOT_TARGET = 10
@@ -1869,11 +1880,14 @@ HAIR_DRYER_SLOT_TARGET = 10
 HAIR_DRYER_MARKETING_COPY = {
     "Ισιωτικό Μαλλιών":          "Ολοκληρώστε το hair-styling set σας — ίσιωμα μετά το στέγνωμα.",
     "Ψαλίδι Μπούκλας / Βούρτσα": "Βούρτσα ή ψαλίδι — για ζωηρά styling και κυματιστά μαλλιά.",
-    "Σετ Περιποίησης Ανδρικής":  "Πλήρες σετ ανδρικής φροντίδας — όλα-σε-ένα.",
-    "Ζυγαριά Σώματος":           "Παρακολούθησε την πρόοδό σου — υγεία και ευεξία.",
-    "Ξυριστική Μηχανή":          "Καθαρό, άνετο ξύρισμα κάθε μέρα.",
-    "Ηλεκτρική Οδοντόβουρτσα":   "Λευκό χαμόγελο, καθαριότητα επιπέδου οδοντιάτρου.",
     "Πολυσυσκευή Styling":       "Όλα-σε-ένα styling — ίσιωμα, μπούκλες και όγκος.",
+    "Σετ Περιποίησης Ανδρικής":  "Πλήρες σετ ανδρικής φροντίδας — όλα-σε-ένα.",
+    "Αξεσουάρ Μαλλιών":          "Λαστιχάκια, κορδέλες και βούρτσες — ολοκληρώστε το styling σας.",   # NEW v28.23
+    "Δώρα Περιποίησης":          "Μάσκες ματιών, πετσέτες και σετ περιποίησης — pamper yourself.",  # NEW v28.23
+    "Ζυγαριά Σώματος":           "Παρακολούθησε την πρόοδό σου — υγεία και ευεξία.",
+    "Ηλεκτρική Οδοντόβουρτσα":   "Λευκό χαμόγελο, καθαριότητα επιπέδου οδοντιάτρου.",
+    # ── Retained but unused after v28.23 — kept for forward compat
+    "Ξυριστική Μηχανή":          "Καθαρό, άνετο ξύρισμα κάθε μέρα.",
     "Trimmer Γενιού / Σώματος":  "Ακριβές κούρεμα γενιού — επαγγελματικό φινίρισμα.",
     "Συσκευή Αποτρίχωσης":       "Ολοκληρωμένη φροντίδα ομορφιάς — επαγγελματικό αποτέλεσμα στο σπίτι.",
 }
@@ -1996,28 +2010,35 @@ CURLER_TEST_SKUS = {
 }
 
 # (priority_rank, role_label, hierarchies, logic_key, max_in_round_1, max_total)
+# v28.23 — 3 impulse-accessory slots at positions 5-7. FASHION at slot 5
+# (1 slot from a 20-SKU pool), then PERSONAL CARE Stationery's max_r1=2
+# fills slots 6 AND 7 consecutively in the same round-1 visit. Dropped
+# MASSAGE DEVICES to free room (lowest cross-purchase 16). HD now also
+# gets reduced from max_total=2 → 1 since the styling-overflow budget
+# is consumed by STR's round-2 slot only.
 CURLER_PRIORITY = [
     (1, 'Ισιωτικό Μαλλιών',
         ['STRAIGHTENERS'],
         'CB_HAIRSTYLING', 1, 2),
     (2, 'Πιστολάκι Μαλλιών',
         ['HAIR DRYERS'],
-        'CB_HAIRSTYLING', 1, 2),
+        'CB_HAIRSTYLING', 1, 1),                            # ↓ was 2 in v28.22
     (3, 'Πολυσυσκευή Styling',
         ['MULTISTYLERS'],
-        'CB_HAIRSTYLING', 1, 1),  # subtype-biased — see _cb_build_hairstyling_pool
-    (4, 'Σετ Περιποίησης Ανδρικής',
-        ['GROOMING SET'],
-        'CB_MENS_GROOMING', 1, 1),
-    (5, 'Ζυγαριά Σώματος',
-        ['BODY SCALES'],
-        'CB_WELLNESS', 1, 1),
-    (6, 'Ξυριστική Μηχανή',
-        ['SHAVING MACHINES'],
-        'CB_MENS_GROOMING', 1, 1),
-    (7, 'Συσκευή Αποτρίχωσης',
+        'CB_HAIRSTYLING', 1, 1),
+    (4, 'Συσκευή Αποτρίχωσης',
         ['EPILATORS'],
         'CB_WOMENS_CARE', 1, 1),
+    (5, 'Αξεσουάρ Μαλλιών',
+        ['FASHION ACCESSORIES'],
+        'CB_IMPULSE_ACCESSORY', 1, 1),
+    (6, 'Δώρα Περιποίησης',
+        ['PERSONAL CARE'],   # NB: 'PERSONAL CARE' hierarchy in df_stationery,
+                              # NOT 'Personal Care' L1 in df_sda
+        'CB_IMPULSE_ACCESSORY', 2, 2),                      # ← max_r1=2: fills slots 6 AND 7
+    (7, 'Ζυγαριά Σώματος',
+        ['BODY SCALES'],
+        'CB_WELLNESS', 1, 1),
     (8, 'Ηλεκτρική Οδοντόβουρτσα',
         ['ELECTRIC TOOTHBRUSHES', 'ΗΛΕΚΤΡΙΚΕΣ ΟΔΟΝΤΟΒΟΥΡΤΣΕΣ'],
         'CB_WELLNESS', 1, 1),
@@ -2029,11 +2050,16 @@ CURLER_MARKETING_COPY = {
     "Ισιωτικό Μαλλιών":          "Από κυματιστά σε ίσια — η εναλλακτική επιλογή του styling σας.",
     "Πιστολάκι Μαλλιών":         "Στεγνώστε γρήγορα πριν τη χρήση — βασικό εργαλείο για κάθε styling.",
     "Πολυσυσκευή Styling":       "Όλα-σε-ένα styling — η εξέλιξη της επιλογής σας.",
-    "Σετ Περιποίησης Ανδρικής":  "Πλήρες σετ ανδρικής φροντίδας — όλα-σε-ένα.",
-    "Ζυγαριά Σώματος":           "Παρακολούθησε την πρόοδό σου — υγεία και ευεξία.",
-    "Ξυριστική Μηχανή":          "Καθαρό, άνετο ξύρισμα κάθε μέρα.",
     "Συσκευή Αποτρίχωσης":       "Ολοκληρωμένη φροντίδα ομορφιάς — επαγγελματικό αποτέλεσμα στο σπίτι.",
+    "Ζυγαριά Σώματος":           "Παρακολούθησε την πρόοδό σου — υγεία και ευεξία.",
+    "Αξεσουάρ Μαλλιών":          "Λαστιχάκια, κορδέλες και βούρτσες — ολοκληρώστε το styling σας.",   # NEW v28.22
+    "Δώρα Περιποίησης":          "Μάσκες ματιών, πετσέτες και σετ περιποίησης — pamper yourself.",  # NEW v28.22
     "Ηλεκτρική Οδοντόβουρτσα":   "Λευκό χαμόγελο, καθαριότητα επιπέδου οδοντιάτρου.",
+    "Συσκευή Μασάζ":             "Χαλάρωσε τους μυς σου — wellness εμπειρία στο σπίτι.",
+    # ── Retained but unused after v28.21 — kept for forward compatibility if
+    # the men's-grooming pools are ever re-activated for a different trigger.
+    "Σετ Περιποίησης Ανδρικής":  "Πλήρες σετ ανδρικής φροντίδας — όλα-σε-ένα.",
+    "Ξυριστική Μηχανή":          "Καθαρό, άνετο ξύρισμα κάθε μέρα.",
 }
 
 # ── Curler-specific helpers ─────────────────────────────────────
@@ -2097,6 +2123,50 @@ def _cb_title_subtype_family(title: str) -> str:
     return ''
 
 
+def _cb_is_male_coded(title: str) -> bool:
+    """Return True if the product title contains UNAMBIGUOUS male-coded keywords.
+    Used to deprioritize male products in the EPILATORS pool when the trigger
+    is a women's-leaning category (e.g. curlers).
+
+    Deliberately CONSERVATIVE — we'd rather let an ambiguous unisex product
+    through than blacklist legitimate women's products. Specifically:
+      • "body hair trimmer" / "body trimmer" alone are NOT flagged — BRAUN's
+        women's "Body Hair Trimmer" line (e.g. BHT250 "Delicates") uses
+        exactly that phrasing.
+      • "trimmer" / "shaver" alone are NOT flagged — face/body trimmers for
+        women use these words too.
+      • "bodygroomer" IS flagged — that compound is overwhelmingly male.
+      • Greek "ανδρικ" / "ανδρών" / "γενιού" / "γενεί" IS flagged — these are
+        unambiguous Greek male signals (men's / beard).
+
+    Returns True if any of the unambiguous male keywords appear in title.
+    """
+    if not title or pd.isna(title):
+        return False
+    t = str(title).lower()
+    # Word-boundary-aware patterns. We pad t with spaces so " men " / " men's"
+    # match at start/end without false-positives on "women" or "regimen".
+    padded = f" {t} "
+    male_keywords_word = [
+        ' men ', " men's", ' mens ',     # English men / men's
+        ' beard ', 'beard ',              # English beard (start/middle)
+    ]
+    male_keywords_substring = [
+        'bodygroomer', 'body groomer', 'bodygroom',  # always male
+        'ανδρικ', 'ανδρών',                          # Greek "men's" / "of men"
+        'άνδρες', 'άντρες', 'άνδρα', 'άντρα',        # men plural/singular noun forms
+        'άνδρας', 'άντρας',                           # men singular nominative
+        'γενιού', 'γενεί', 'γένι',                    # Greek "beard" forms
+    ]
+    for kw in male_keywords_word:
+        if kw in padded:
+            return True
+    for kw in male_keywords_substring:
+        if kw in t:
+            return True
+    return False
+
+
 # Scoring constants — mirror HD_S_* shape. The new constant is CB_S_SUBTYPE_BIAS.
 CB_S_AVAILABILITY    = 100_000   # In-stock boost
 CB_S_BRAND_MATCH     = 500_000   # Same Κατασκευαστής as trigger (column-derived)
@@ -2107,6 +2177,12 @@ CB_S_PRICE_TWO_OFF   = -150_000  # Companion ≥2 tiers away — penalty
 CB_S_COLOR_EXACT     =  60_000   # Color-group exact match
 CB_S_COLOR_PARTIAL   =  20_000   # Color-group token overlap
 CB_S_SUBTYPE_BIAS    =  50_000   # NEW — multistyler matches trigger subtype family
+CB_S_MALE_PENALTY    = -300_000  # v28.21 — soft penalty for male-coded titles in
+                                  # women's-care pools (EPILATORS). Strong enough
+                                  # to demote a brand-matched male product below
+                                  # a non-brand-matched female product, but not
+                                  # large enough to blacklist (if the entire pool
+                                  # is somehow male, the male product still shows).
 CB_S_SALES_FACTOR    =       0.5 # Sales tiebreaker weight
 
 
@@ -11016,6 +11092,91 @@ def run_air_fryer_engine(trigger, df_sda, df_mda, df_history):
 
 
 # ═══════════════════════════════════════════════════════════════
+# 🟢 SHARED HAIR-CARE IMPULSE HELPER — used by STR / HD / CB engines
+# ═══════════════════════════════════════════════════════════════
+# v28.23 — Defined at the top of STR HELPERS (the first engine in file
+# order) so all subsequent hair-care engines can call this single shared
+# function. Replaces the per-engine duplication that would otherwise be
+# required (previously defined as _cb_build_impulse_accessory_pool in
+# the CB helpers section in v28.22).
+#
+# Why a shared helper: FASHION ACCESSORIES + PERSONAL CARE Stationery
+# impulse-buy pools have the SAME scoring logic regardless of which hair
+# tool triggered them — the trigger's price/brand never matches the gift
+# brands (Legami / Ban.Do / Hallmark), the price tiers are always 2-3
+# steps below the trigger, and the scoring reduces to sales + availability
+# + a soft color hint. The trigger-specific arguments (brand, price tier)
+# are accepted for signature uniformity with the other pool builders but
+# intentionally ignored inside.
+
+# Shared scoring constants for the Personal Care impulse-buy pool.
+# Calibrated to be slightly above the wellness floor so impulse items
+# surface ahead of generic wellness when both are present.
+PC_IMPULSE_S_AVAILABILITY = 100_000
+PC_IMPULSE_S_COLOR_HINT   =  20_000  # Soft partial-color hint, no exact bonus
+PC_IMPULSE_S_SALES_FACTOR =       0.5
+
+
+def _pc_build_impulse_accessory_pool(c_pool, trigger_brand, trigger_tier,
+                                      trigger_colors, role_label, notes):
+    """v28.23 — FASHION ACCESSORIES + PERSONAL CARE (Stationery sheet) pool.
+    Shared by Straighteners / Hair Dryers / Curlers engines.
+
+    These are gift / lifestyle impulse-buys in the €1-25 range — scrunchies,
+    headbands, eye masks, hair towels. Top sellers are by brands like Legami,
+    Ban.Do, Hallmark which have ZERO overlap with appliance brands.
+
+    Scoring shape — intentionally DIFFERENT from the standard pool builders:
+      • Availability: standard boost (+PC_IMPULSE_S_AVAILABILITY)
+      • Sales: standard tiebreaker (×PC_IMPULSE_S_SALES_FACTOR) — primary signal
+      • Brand-match: SKIPPED entirely. Gift brands never match appliance
+        brands; we don't want to imply Legami ≈ PHILIPS as same-brand pairing.
+      • Price-tier proximity: SKIPPED. A €7 scrunchie is always 2-3 tiers
+        below the €50 hair tool trigger — the normal penalty would knock
+        these out entirely, defeating the impulse-buy purpose.
+      • Color match: kept ONLY as soft partial hint (+PC_IMPULSE_S_COLOR_HINT).
+        Pool contains many color-themed items (PINK scrunchies, BLACK eye
+        masks) — light coordination boost without dominating sales signal.
+
+    Net effect: ranking is essentially sales-driven with color as a
+    tiebreaker. Top scrunchie (650 sales), top headband (~370 sales), and
+    top hair towel (~1550 sales) will surface naturally for any hair-care
+    trigger that includes this pool.
+
+    Signature matches the other CB_* / HD_* / STR_* pool builders for
+    uniformity (trigger_brand, trigger_tier accepted but ignored inside).
+    """
+    if c_pool.empty:
+        return c_pool
+
+    pool = c_pool.copy()
+    pool['Final_Score'] = 0.0
+
+    # ── Availability boost
+    if 'AVAILABILITY' in pool.columns:
+        avail_mask = pool['AVAILABILITY'] == 'Άμεσα Διαθέσιμο'
+        pool.loc[avail_mask, 'Final_Score'] += PC_IMPULSE_S_AVAILABILITY
+        if avail_mask.any():
+            notes.append(f"  ✓ Availability: {avail_mask.sum()} in stock (+{PC_IMPULSE_S_AVAILABILITY:,})")
+
+    # ── Base sales score — primary signal since no brand/price boost
+    pool['Final_Score'] += pool['Sales_Tiebreaker'].fillna(0) * PC_IMPULSE_S_SALES_FACTOR
+
+    # ── Color partial-match only (soft hint, no exact-match bonus)
+    if trigger_colors and 'Χρώμα' in pool.columns:
+        pool_colors = pool['Χρώμα'].apply(_str_color_group)
+        any_match_mask = pool_colors.apply(lambda g: bool(g & trigger_colors))
+        pool.loc[any_match_mask, 'Final_Score'] += PC_IMPULSE_S_COLOR_HINT
+        if any_match_mask.any():
+            trigger_color_label = '/'.join(sorted(trigger_colors)) or 'none'
+            notes.append(f"  ✓ Color hint ({trigger_color_label}): "
+                         f"{any_match_mask.sum()} matched (+{PC_IMPULSE_S_COLOR_HINT:,})")
+
+    notes.append(f"  (Impulse-buy pool: brand-match + price-tier scoring intentionally disabled)")
+    return pool.sort_values('Final_Score', ascending=False)
+
+
+# ═══════════════════════════════════════════════════════════════
 # 🟢 STRAIGHTENERS HELPERS — Ισιωτικά Μαλλιών (Personal Care)
 # ═══════════════════════════════════════════════════════════════
 # Four pool builders, one per logic_key in STRAIGHTENER_PRIORITY:
@@ -11193,14 +11354,17 @@ def _str_build_wellness_pool(c_pool, trigger_brand, trigger_tier,
 # STRAIGHTENER_PRIORITY, then round-robin fill until STRAIGHTENER_SLOT_TARGET
 # (=10) slots filled or all pools exhausted.
 
-def run_straighteners_engine(trigger, df_sda, df_history):
+def run_straighteners_engine(trigger, df_sda, df_history, df_stationery=None):
     """Build up to 10 cross-sell slots for a straightener trigger.
 
-    Round-robin loop through Hair Dryers → Curlers → Multistylers →
-    Accessories → Epilators → Toothbrushes → Body Scales → Massage.
-    Round 1 fills 8 slots (1 per pool). Hair Dryers and Curlers have
-    max_total=2 so they overflow into round 2 to fill slots 9-10 — keeping
-    the carousel hair-styling-led rather than wellness-padded.
+    Round-robin loop through Hair Dryers ×2 → Curlers ×2 → Multistylers →
+    Epilator → Fashion Accessories → Personal Care Gifts ×2 → Scale →
+    Toothbrush. Round 1 fills 9 slots (PERSONAL CARE takes 2 via max_r1=2).
+    Round 2 fills slot 10 from HD overflow (max_total=2 priority-1).
+
+    v28.23 — added df_stationery kwarg so the FASHION ACCESSORIES + PERSONAL
+    CARE Stationery impulse-buy pools (slots 5-7) can fill from the
+    Stationery sheet. None default keeps backward compat.
     """
     diag = []
     slot_notes = {}
@@ -11237,6 +11401,24 @@ def run_straighteners_engine(trigger, df_sda, df_history):
     else:
         c_sda['Sales_Tiebreaker'] = 0
 
+    # ── v28.23 — Concatenate Stationery sheet for the impulse pools (slots 5-7).
+    # Same pattern as run_curlers_engine. Stationery has Hierarchy/Material/
+    # Title/Sales/Price/Availability/Κατασκευαστής but no Χρώμα column at
+    # top level — we stub one so the color helper doesn't blow up.
+    if df_stationery is not None and not df_stationery.empty:
+        stat = df_stationery[df_stationery['Material'] != tm].copy()
+        if 'Sum of Sales' in stat.columns:
+            stat['Sales_Tiebreaker'] = pd.to_numeric(stat['Sum of Sales'], errors='coerce').fillna(0)
+        else:
+            stat['Sales_Tiebreaker'] = 0
+        if 'Χρώμα' not in stat.columns:
+            stat['Χρώμα'] = ''
+        c_combined = pd.concat([c_sda, stat], ignore_index=True, sort=False)
+        diag.append(("1b. + Stationery", len(c_combined), f"Added {len(stat)} stationery rows for impulse-buy pools"))
+    else:
+        c_combined = c_sda
+        diag.append(("1b. Stationery", 0, "No Stationery sheet provided — impulse pools will be empty"))
+
     # ── Build a sorted pool per priority entry
     pools = {}  # rank → (role_label, sorted_DataFrame, logic_key, max_round_1, max_total, notes)
     for rank, role_label, hiers, logic_key, max_r1, max_total in STRAIGHTENER_PRIORITY:
@@ -11244,11 +11426,11 @@ def run_straighteners_engine(trigger, df_sda, df_history):
                  f"| max_round_1={max_r1} | max_total={max_total if max_total else '∞'} ==="]
 
         hier_upper = {h.upper().strip() for h in hiers}
-        base_pool = c_sda[c_sda['Hierarchy'].fillna('').astype(str).str.upper().str.strip().isin(hier_upper)].copy()
+        base_pool = c_combined[c_combined['Hierarchy'].fillna('').astype(str).str.upper().str.strip().isin(hier_upper)].copy()
         notes.append(f"  Base pool size: {len(base_pool)} (hierarchies={hiers})")
 
         if base_pool.empty:
-            notes.append(f"  ⚠ Hierarchy not present in SDA data — slot will be filled from other pools")
+            notes.append(f"  ⚠ Hierarchy not present in data — slot will be filled from other pools")
             pools[rank] = (role_label, pd.DataFrame(), logic_key, max_r1, max_total, notes)
             continue
 
@@ -11261,6 +11443,10 @@ def run_straighteners_engine(trigger, df_sda, df_history):
             scored = _str_build_accessory_pool(base_pool, tb, ttier, tcolors, notes)
         elif logic_key == 'STR_WOMENS_CARE':
             scored = _str_build_womens_care_pool(base_pool, tb, ttier, tcolors, notes)
+        elif logic_key == 'STR_IMPULSE_ACCESSORY':                       # ← NEW v28.23
+            scored = _pc_build_impulse_accessory_pool(
+                base_pool, tb, ttier, tcolors, role_label, notes
+            )
         elif logic_key == 'STR_WELLNESS':
             scored = _str_build_wellness_pool(base_pool, tb, ttier, tcolors, notes)
         else:
@@ -11530,13 +11716,29 @@ def _hd_build_wellness_pool(c_pool, trigger_brand, trigger_tier,
 # Round 1 fills 9 slots (one per pool). Round 2 overflows from the
 # STRAIGHTENERS pool (max_total=2) to fill slot 10.
 
-def run_hair_dryers_engine(trigger, df_sda, df_history):
+def run_hair_dryers_engine(trigger, df_sda, df_history, df_stationery=None):
     """Build up to 10 cross-sell slots for a hair-dryer trigger.
 
-    Slot composition is balanced for the household-shared, mixed-gender
-    customer base: 5 women's-leaning (Straighteners×2, Curlers, Multistylers,
-    Epilators) + 3 men's-leaning (Grooming Set, Shaving Machine, Trimmer)
-    + 2 universal (Body Scale, Electric Toothbrush).
+    v28.23 slot composition (10 slots / 8 pools):
+      1. STR ×2  (max_total=2 — #1 cross-purchase 1399)
+      2. CURLERS (hair-styling)
+      3. MULTISTYLERS (hair-styling, 100% brand overlap)
+      4. GROOMING SET (universal men's grooming, #4 cross-purchase 373)
+      5. FASHION ACCESSORIES (impulse)         ← NEW v28.23
+      6-7. PERSONAL CARE Stationery ×2 (impulse — max_r1=2 fills both slots)
+      8. BODY SCALES (wellness)
+      9. ELECTRIC TOOTHBRUSH (wellness)
+      10. STR round 2 overflow
+
+    Dropped from prior plan: TRIMMERS (dupe with GROOMING SET, cp 204),
+    SHAVING MACHINES (same audience as GROOMING SET, cp 241), EPILATORS
+    (weakest brand overlap 3/9, cp 198). Replaced by the 3 impulse slots.
+
+    df_stationery (v28.23) — Stationery sheet from Recommendations
+    GitHub.xlsx — contains FASHION ACCESSORIES (hair scrunchies/bands)
+    and PERSONAL CARE (hair towels / eye masks) gift hierarchies routed
+    through the HD_IMPULSE_ACCESSORY logic_key. None default keeps the
+    impulse pools empty (and skipped) for backward compatibility.
     """
     diag = []
     slot_notes = {}
@@ -11572,6 +11774,21 @@ def run_hair_dryers_engine(trigger, df_sda, df_history):
     else:
         c_sda['Sales_Tiebreaker'] = 0
 
+    # ── v28.23 — Concatenate Stationery sheet for the impulse pools (slots 5-7)
+    if df_stationery is not None and not df_stationery.empty:
+        stat = df_stationery[df_stationery['Material'] != tm].copy()
+        if 'Sum of Sales' in stat.columns:
+            stat['Sales_Tiebreaker'] = pd.to_numeric(stat['Sum of Sales'], errors='coerce').fillna(0)
+        else:
+            stat['Sales_Tiebreaker'] = 0
+        if 'Χρώμα' not in stat.columns:
+            stat['Χρώμα'] = ''
+        c_combined = pd.concat([c_sda, stat], ignore_index=True, sort=False)
+        diag.append(("1b. + Stationery", len(c_combined), f"Added {len(stat)} stationery rows for impulse-buy pools"))
+    else:
+        c_combined = c_sda
+        diag.append(("1b. Stationery", 0, "No Stationery sheet provided — impulse pools will be empty"))
+
     # ── Build a sorted pool per priority entry
     pools = {}  # rank → (role_label, sorted_DataFrame, logic_key, max_round_1, max_total, notes)
     for rank, role_label, hiers, logic_key, max_r1, max_total in HAIR_DRYER_PRIORITY:
@@ -11579,11 +11796,11 @@ def run_hair_dryers_engine(trigger, df_sda, df_history):
                  f"| max_round_1={max_r1} | max_total={max_total if max_total else '∞'} ==="]
 
         hier_upper = {h.upper().strip() for h in hiers}
-        base_pool = c_sda[c_sda['Hierarchy'].fillna('').astype(str).str.upper().str.strip().isin(hier_upper)].copy()
+        base_pool = c_combined[c_combined['Hierarchy'].fillna('').astype(str).str.upper().str.strip().isin(hier_upper)].copy()
         notes.append(f"  Base pool size: {len(base_pool)} (hierarchies={hiers})")
 
         if base_pool.empty:
-            notes.append(f"  ⚠ Hierarchy not present in SDA data — slot will be filled from other pools")
+            notes.append(f"  ⚠ Hierarchy not present in data — slot will be filled from other pools")
             pools[rank] = (role_label, pd.DataFrame(), logic_key, max_r1, max_total, notes)
             continue
 
@@ -11594,6 +11811,10 @@ def run_hair_dryers_engine(trigger, df_sda, df_history):
             )
         elif logic_key == 'HD_MENS_GROOMING':
             scored = _hd_build_mens_grooming_pool(
+                base_pool, tb, ttier, tcolors, role_label, notes
+            )
+        elif logic_key == 'HD_IMPULSE_ACCESSORY':                       # ← NEW v28.23
+            scored = _pc_build_impulse_accessory_pool(
                 base_pool, tb, ttier, tcolors, role_label, notes
             )
         elif logic_key == 'HD_WELLNESS':
@@ -11843,7 +12064,15 @@ def _cb_build_mens_grooming_pool(c_pool, trigger_brand, trigger_tier,
 def _cb_build_womens_care_pool(c_pool, trigger_brand, trigger_tier,
                                 trigger_colors, role_label, notes):
     """EPILATORS pool. Column brand populated. Color match downgraded —
-    epilators are bathroom-shelf items not part of styling-set aesthetic."""
+    epilators are bathroom-shelf items not part of styling-set aesthetic.
+
+    v28.21 — Soft male-keyword penalty (CB_S_MALE_PENALTY = -300_000) applied
+    to titles flagged by _cb_is_male_coded. Demotes male-marketed products
+    (e.g. PHILIPS bodygroomers occasionally classified under EPILATORS) below
+    legitimate women's products in the recommendation, without hard-filtering
+    them out. Conservative — won't flag "body hair trimmer" or BRAUN BHT250
+    style products that are actually women's. See _cb_is_male_coded docstring.
+    """
     if c_pool.empty:
         return c_pool
     pool = _cb_apply_base_score(
@@ -11851,6 +12080,15 @@ def _cb_build_womens_care_pool(c_pool, trigger_brand, trigger_tier,
         color_exact_weight=CB_S_COLOR_PARTIAL,
         color_partial_weight=CB_S_COLOR_PARTIAL,
     )
+
+    # ── Male-keyword penalty (women's-care pool only)
+    if 'Title' in pool.columns:
+        male_mask = pool['Title'].apply(_cb_is_male_coded)
+        if male_mask.any():
+            pool.loc[male_mask, 'Final_Score'] += CB_S_MALE_PENALTY
+            notes.append(f"  ⚠ Male-coded title penalty: {male_mask.sum()} product(s) "
+                         f"flagged & demoted ({CB_S_MALE_PENALTY:+,})")
+
     return pool.sort_values('Final_Score', ascending=False)
 
 
@@ -11868,6 +12106,13 @@ def _cb_build_wellness_pool(c_pool, trigger_brand, trigger_tier,
     return pool.sort_values('Final_Score', ascending=False)
 
 
+# v28.23 — _cb_build_impulse_accessory_pool was renamed to
+# _pc_build_impulse_accessory_pool and relocated to the top of the
+# STRAIGHTENERS HELPERS section above, where it's defined once and used by
+# all three hair-care engines (STR, HD, CB). The CB engine still routes its
+# CB_IMPULSE_ACCESSORY logic_key to the shared helper.
+
+
 # ═══════════════════════════════════════════════════════════════
 # 🟢 CURLERS & BRUSHES ENGINE — Ψαλίδια & Βούρτσες (Personal Care)
 # ═══════════════════════════════════════════════════════════════
@@ -11876,12 +12121,20 @@ def _cb_build_wellness_pool(c_pool, trigger_brand, trigger_tier,
 # Adds device-subtype detection on the trigger row, passed only into the
 # hairstyling pool builder (where the multistyler-slot bias fires).
 
-def run_curlers_engine(trigger, df_sda, df_history):
+def run_curlers_engine(trigger, df_sda, df_history, df_stationery=None):
     """Build up to 10 cross-sell slots for a curler/brush trigger.
 
-    Slot composition: 5 styling-set slots (Straighteners×2, Hair Dryers×2,
-    Multistyler) + 2 men's grooming (Grooming Set, Shaving Machine) +
-    Epilator + 2 wellness (Body Scale, Toothbrush).
+    Slot composition (v28.22): 5 styling-set slots (Straighteners×2, Hair
+    Dryers×2, Multistyler ×1) + Epilator + Body Scale + Fashion Accessories
+    + Personal Care Stationery gifts + Toothbrush + Massage. Round 1 fills
+    9 slots, Round 2 takes 1 overflow from STR priority 1 → slot 10.
+
+    df_stationery (v28.22) is the Stationery sheet from Recommendations
+    GitHub.xlsx — contains the FASHION ACCESSORIES (hair scrunchies/bands)
+    and PERSONAL CARE (hair towels / eye masks) gift hierarchies routed
+    through the CB_IMPULSE_ACCESSORY logic_key. Passed as a kwarg with
+    None default so callers that don't have the stationery sheet still
+    work (the impulse pools will simply be empty and skipped).
     """
     diag = []
     slot_notes = {}
@@ -11921,6 +12174,29 @@ def run_curlers_engine(trigger, df_sda, df_history):
     else:
         c_sda['Sales_Tiebreaker'] = 0
 
+    # ── v28.22 — Concatenate the Stationery sheet for the impulse-accessory pools.
+    # Stationery has 'Hierarchy', 'Material', 'Title', 'Sum of Sales', 'LIST PRICE',
+    # 'AVAILABILITY', 'Κατασκευαστής' — same column names the engine needs.
+    # It does NOT have 'Χρώμα' as a top-level column (it has product-type-specific
+    # color columns like 'Χρώμα Γραφής' for pens). We add a stub 'Χρώμα' column
+    # so the color-group helper doesn't blow up; partial color match in this pool
+    # simply won't fire.
+    if df_stationery is not None and not df_stationery.empty:
+        stat = df_stationery[df_stationery['Material'] != tm].copy()
+        if 'Sum of Sales' in stat.columns:
+            stat['Sales_Tiebreaker'] = pd.to_numeric(stat['Sum of Sales'], errors='coerce').fillna(0)
+        else:
+            stat['Sales_Tiebreaker'] = 0
+        if 'Χρώμα' not in stat.columns:
+            stat['Χρώμα'] = ''
+        # Concatenate — c_sda + stat. The pool filtering by Hierarchy will pick the
+        # right rows for each pool regardless of which sheet they came from.
+        c_combined = pd.concat([c_sda, stat], ignore_index=True, sort=False)
+        diag.append(("1b. + Stationery", len(c_combined), f"Added {len(stat)} stationery rows for impulse-buy pools"))
+    else:
+        c_combined = c_sda
+        diag.append(("1b. Stationery", 0, "No Stationery sheet provided — impulse pools will be empty"))
+
     # ── Build a sorted pool per priority entry
     pools = {}
     for rank, role_label, hiers, logic_key, max_r1, max_total in CURLER_PRIORITY:
@@ -11928,11 +12204,11 @@ def run_curlers_engine(trigger, df_sda, df_history):
                  f"| max_round_1={max_r1} | max_total={max_total if max_total else '∞'} ==="]
 
         hier_upper = {h.upper().strip() for h in hiers}
-        base_pool = c_sda[c_sda['Hierarchy'].fillna('').astype(str).str.upper().str.strip().isin(hier_upper)].copy()
+        base_pool = c_combined[c_combined['Hierarchy'].fillna('').astype(str).str.upper().str.strip().isin(hier_upper)].copy()
         notes.append(f"  Base pool size: {len(base_pool)} (hierarchies={hiers})")
 
         if base_pool.empty:
-            notes.append(f"  ⚠ Hierarchy not present in SDA data — slot will be filled from other pools")
+            notes.append(f"  ⚠ Hierarchy not present in data — slot will be filled from other pools")
             pools[rank] = (role_label, pd.DataFrame(), logic_key, max_r1, max_total, notes)
             continue
 
@@ -11950,6 +12226,10 @@ def run_curlers_engine(trigger, df_sda, df_history):
             )
         elif logic_key == 'CB_WOMENS_CARE':
             scored = _cb_build_womens_care_pool(
+                base_pool, tb, ttier, tcolors, role_label, notes
+            )
+        elif logic_key == 'CB_IMPULSE_ACCESSORY':                       # ← NEW v28.22
+            scored = _pc_build_impulse_accessory_pool(                  # ← renamed v28.23
                 base_pool, tb, ttier, tcolors, role_label, notes
             )
         else:
@@ -17214,16 +17494,21 @@ elif active_cluster == "Straighteners":
     # live in the SDA sheet (Level 1 = Personal Care + Level 2 = SDA companions).
     # No MDA crossover — straighteners are pure Personal Care.
     # Brand-ecosystem × price-tier × color-aesthetic hybrid scoring.
-    recs, diag, slot_notes, full_candidates = run_straighteners_engine(trigger, df_sda, df_history)
+    # v28.23 — also passes df_stationery for the impulse slots 5-7
+    # (FASHION ACCESSORIES + PERSONAL CARE Stationery hair towels/eye masks).
+    recs, diag, slot_notes, full_candidates = run_straighteners_engine(
+        trigger, df_sda, df_history, df_stationery=df_stationery
+    )
     slot_diag = []
 elif active_cluster == "Hair Dryers":
     # Πιστολάκια Μαλλιών — Personal Care, unisex household-shared device.
-    # Slot mix includes BOTH women's hair-styling (Straighteners, Curlers,
-    # Multistylers, Epilators) and men's grooming (Grooming Set, Shaving
-    # Machines, Trimmers) + universal wellness (Body Scale, Toothbrush).
-    # Men's-grooming brand-match runs off title-parsed brands since their
-    # Κατασκευαστής column is empty.
-    recs, diag, slot_notes, full_candidates = run_hair_dryers_engine(trigger, df_sda, df_history)
+    # v28.23 slot mix: hair-styling complements (STR×2, CURLERS, MULTI) +
+    # universal men's grooming (GROOMING SET) + 3 impulse accessories at
+    # slots 5-7 + wellness (SCALE, TOOTHBRUSH). Men's-grooming brand-match
+    # runs off title-parsed brands since their Κατασκευαστής column is empty.
+    recs, diag, slot_notes, full_candidates = run_hair_dryers_engine(
+        trigger, df_sda, df_history, df_stationery=df_stationery
+    )
     slot_diag = []
 elif active_cluster == "Curlers":
     # Ψαλίδια & Βούρτσες — Personal Care. Heterogeneous hierarchy (curling
@@ -17232,7 +17517,11 @@ elif active_cluster == "Curlers":
     # (brush-trigger → brush-leaning multistylers like Dyson Airwrap/Shark
     # FlexStyle; iron-trigger → curl-leaning multistylers with wand/wave/
     # κυματιστά in the title).
-    recs, diag, slot_notes, full_candidates = run_curlers_engine(trigger, df_sda, df_history)
+    # v28.22 — also passes df_stationery so the FASHION ACCESSORIES + PERSONAL
+    # CARE (Stationery sheet) impulse-buy pools can fill slots 6-7.
+    recs, diag, slot_notes, full_candidates = run_curlers_engine(
+        trigger, df_sda, df_history, df_stationery=df_stationery
+    )
     slot_diag = []
 elif active_cluster == "Washing Machines":
     # Πλυντήρια Ρούχων + Στεγνωτήρια + Αξεσουάρ Πλυντηρίου-Στεγνωτηρίου
