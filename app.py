@@ -102,7 +102,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v28.32.1 — Align with Home/Spare sheet (hotfix: moved PRINTER_HIERARCHIES + PRINTER_BRANDS_PATTERN to early CONFIG section to fix NameError at module-top execution — Streamlit runs scripts top-to-bottom and the trigger handlers at line ~6100 ran before the late definitions at line ~15000). Printer triggers and pool now read from the Spare sheet (Home file) where the actual products live (549 printer SKUs across 9 hierarchies, 2933 cartridge SKUs vs 1313 in Peripherals). Fixes hierarchy alignment: INKJET A4, MULTIFUCTION INKJET typo, PHOTO PRINTERS now properly registered. Title-based brand extraction (HP/Canon/Epson/Brother/Samsung/Xerox/Lexmark/Ricoh/Olivetti/Kyocera/Pantum/OKI/Xiaomi/Polaroid/Kodak +6 others, 100% coverage on 481 catalog SKUs).
+        🟢 Engine v28.32.2 — Self-diagnosing printer triggers — when "Δεν βρέθηκαν εκτυπωτές" fires, the sidebar warning now shows: (a) which sheets actually loaded, (b) which data source was tried (Spare vs Fallback), (c) the expected PRINTER_HIERARCHIES values, (d) the actual printer-like Hierarchy values present in the pool (first 20). Makes it trivial to spot data-vs-code drift (typos, new hierarchies, missing Home workbook, wrong working directory). Shared helper `_resolve_printer_pool_with_diag` ensures both "Printers" and "Office Printers" render identical diagnostics. No data/logic changes — just observability.
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -179,6 +179,90 @@ PRINTER_BRANDS_PATTERN = (
     r'RICOH|OLIVETTI|KYOCERA|PANTUM|OKI|DELL|FUJITSU|TOSHIBA|SHARP|'
     r'KONICA|PHILIPS|XIAOMI|POLAROID|KODAK)\b'
 )
+
+
+def _resolve_printer_pool_with_diag(df_spare, df_products, df_peripherals, sheets_loaded):
+    """
+    Returns (printers_df, diagnostic_msg).
+
+    Tries data sources in order — Spare (Home file) first, then a
+    Products+Peripherals concat fallback. On empty result, builds a
+    diagnostic string with enough info to tell whether the issue is a
+    missing Home workbook, a missing Spare sheet, a hierarchy-name
+    mismatch, or a wrong working directory. The diagnostic is shown
+    via st.sidebar.warning, so users see it inside the app instead of
+    having to dig through Streamlit Cloud logs.
+
+    Shared by both the "Printers" and "Office Printers" trigger handlers
+    so they always render identical diagnostics.
+    """
+    import pandas as pd
+
+    # ── Step 1: pick a source dataframe ──
+    pool = pd.DataFrame()
+    source_used = None
+    if df_spare is not None and not df_spare.empty:
+        pool = df_spare
+        source_used = f"Spare ({len(df_spare):,} rows)"
+    elif df_peripherals is not None and not df_peripherals.empty:
+        pool = pd.concat([df_products, df_peripherals], ignore_index=True)
+        source_used = f"Fallback: Products + Peripherals ({len(pool):,} rows)"
+    elif df_products is not None and not df_products.empty:
+        pool = df_products
+        source_used = f"Fallback: Products only ({len(pool):,} rows)"
+
+    if pool.empty or 'Hierarchy' not in pool.columns:
+        sheets_str = ", ".join(sheets_loaded) if sheets_loaded else "(none)"
+        msg = (
+            "❌ Δεν βρέθηκαν εκτυπωτές — **το pool ήταν άδειο**.\n\n"
+            f"**Sheets που φορτώθηκαν**: {sheets_str}\n\n"
+            "Βεβαιωθείτε ότι το αρχείο `Recommendations GitHub Home.xlsx` "
+            "είναι committed στο repo δίπλα στο `Recommendations GitHub.xlsx`. "
+            "Οι εκτυπωτές ζουν στο sheet `Spare` του Home workbook."
+        )
+        return pool.head(0), msg
+
+    # ── Step 2: filter by PRINTER_HIERARCHIES ──
+    hier_upper = pool['Hierarchy'].fillna('').astype(str).str.upper().str.strip()
+    printers = pool[hier_upper.isin(PRINTER_HIERARCHIES)].copy()
+
+    # ── Step 3: fallback to Level 2 if hierarchy filter is empty ──
+    if printers.empty and 'Level 2' in pool.columns:
+        l2_lower = pool['Level 2'].fillna('').astype(str).str.strip().str.lower()
+        printers = pool[l2_lower.isin(['printers', 'εκτυπωτές'])].copy()
+
+    # ── Step 4: build diagnostic on empty result ──
+    if printers.empty:
+        # Show what hierarchies the pool actually has that look printer-ish,
+        # so we can immediately see if there's a naming mismatch (typo,
+        # extra spaces, different capitalization, new hierarchy etc).
+        sample_hiers = sorted([
+            h for h in pool['Hierarchy'].dropna().astype(str).str.upper().str.strip().unique()
+            if any(kw in h for kw in ['INKJET', 'LASER', 'PRINT', 'COPIER', 'MULTI', 'FAX', 'PHOTO PRINT'])
+        ])[:20]
+        sheets_str = ", ".join(sheets_loaded) if sheets_loaded else "(none)"
+        expected = ", ".join(sorted(PRINTER_HIERARCHIES))
+        if sample_hiers:
+            present = "\n".join(f"  • `{h}`" for h in sample_hiers)
+            msg = (
+                f"❌ Δεν βρέθηκαν εκτυπωτές — **το source `{source_used}` δεν "
+                f"περιείχε καμία από τις αναμενόμενες ιεραρχίες**.\n\n"
+                f"**Αναμένονται** (από `PRINTER_HIERARCHIES`):\n  {expected}\n\n"
+                f"**Υπάρχουν στα data** (printer-like hierarchies στο pool):\n{present}\n\n"
+                f"Πιθανώς υπάρχει αναντιστοιχία (π.χ. νέα ιεραρχία, typo, "
+                f"trailing space). Ενημερώστε το `PRINTER_HIERARCHIES` set."
+            )
+        else:
+            msg = (
+                f"❌ Δεν βρέθηκαν εκτυπωτές — **το source `{source_used}` δεν "
+                f"περιέχει printer-like ιεραρχίες**.\n\n"
+                f"**Sheets που φορτώθηκαν**: {sheets_str}\n\n"
+                f"Συνήθως αυτό σημαίνει ότι λείπει το `Recommendations GitHub "
+                f"Home.xlsx` ή ότι το `Spare` sheet δεν έχει φορτώσει σωστά."
+            )
+        return printers, msg
+
+    return printers, ""  # success — no diagnostic needed
 
 
 # ═════════════════════════════════════════════════════════════
@@ -6100,19 +6184,15 @@ else:
                 trigger = monitors[monitors['Title']==sel].iloc[0] if sel else None
 
     elif active_cluster == "Printers":
-        # v28.32 — printers live in the Spare sheet (Home file). Fall back to
-        # Products+Peripherals only if Spare is unavailable (e.g. dev without
-        # the Home workbook). Uses the module-level PRINTER_HIERARCHIES
-        # registry instead of an inline set.
-        if df_spare is not None and not df_spare.empty:
-            combined = df_spare
-        else:
-            combined = pd.concat([df_products, df_peripherals], ignore_index=True) if not df_peripherals.empty else df_products
-        printers = combined[combined['Hierarchy'].fillna('').astype(str).str.upper().str.strip().isin(PRINTER_HIERARCHIES)].copy()
+        # v28.32.2 — Self-diagnosing trigger. Shows the user exactly what went
+        # wrong when the dropdown comes back empty: which sheets loaded,
+        # whether Spare was found, how many rows it has, and which Hierarchy
+        # values are actually present (so we can spot data-vs-code drift).
+        printers, _printers_diag = _resolve_printer_pool_with_diag(
+            df_spare, df_products, df_peripherals, sheets_loaded
+        )
         if printers.empty:
-            printers = combined[combined['Level 2'].fillna('').str.strip().str.lower().isin(['printers', 'εκτυπωτές'])].copy()
-        if printers.empty:
-            st.sidebar.warning("Δεν βρέθηκαν εκτυπωτές.")
+            st.sidebar.warning(_printers_diag)
         else:
             st.sidebar.markdown('<p class="sidebar-section">Επιλέξτε Εκτυπωτή</p>', unsafe_allow_html=True)
             sel = st.sidebar.selectbox("", printers['Title'].unique(), label_visibility="collapsed", key="print_sel")
@@ -6122,16 +6202,11 @@ else:
         # Same trigger detection as "Printers" — any printer in the catalog
         # is a valid anchor for the office bundle. Inkjet/laser/color/mono is
         # detected inside the engine; the user just picks the printer.
-        # v28.32 — uses Spare (Home file) as primary source.
-        if df_spare is not None and not df_spare.empty:
-            combined = df_spare
-        else:
-            combined = pd.concat([df_products, df_peripherals], ignore_index=True) if not df_peripherals.empty else df_products
-        printers = combined[combined['Hierarchy'].fillna('').astype(str).str.upper().str.strip().isin(PRINTER_HIERARCHIES)].copy()
+        printers, _printers_diag = _resolve_printer_pool_with_diag(
+            df_spare, df_products, df_peripherals, sheets_loaded
+        )
         if printers.empty:
-            printers = combined[combined['Level 2'].fillna('').str.strip().str.lower().isin(['printers', 'εκτυπωτές'])].copy()
-        if printers.empty:
-            st.sidebar.warning("Δεν βρέθηκαν εκτυπωτές.")
+            st.sidebar.warning(_printers_diag)
         else:
             st.sidebar.markdown('<p class="sidebar-section">Επιλέξτε Εκτυπωτή (Office Bundle)</p>', unsafe_allow_html=True)
             sel = st.sidebar.selectbox("", printers['Title'].unique(), label_visibility="collapsed", key="office_print_sel")
