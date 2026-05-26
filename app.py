@@ -102,7 +102,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v28.24 — Multistylers (Πολυσυσκευές Styling) — premium-skewed Personal Care hero: brand × price-tier × color × 3 impulse slots at 5-7 (DYSON Airwrap class)
+        🟢 Engine v28.25 — Multistylers anti-overlap philosophy: HD/STR/Curlers demoted to single back-slots (8-10); non-overlapping complements (Epilator, Scale, Toothbrush, Massage) lead at 1-4; impulse @ 5-7 unchanged
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -2241,49 +2241,80 @@ MULTISTYLER_TEST_SKUS = {
 }
 
 # (priority_rank, role_label, hierarchies, logic_key, max_in_round_1, max_total)
-# v28.24 — Following the Curlers v28.23 pattern with 3 impulse-buy slots
-# at positions 5-7. HD gets max_total=2 (it's #1 cross-purchase 110 AND
-# has perfect brand overlap with multistylers). STR also gets max_total=2
-# (#2 cross-purchase 93). CURLERS at max_total=1 (cross-purchase 36).
+# v28.25 — ANTI-OVERLAP PHILOSOPHY rewrite.
+#
+# The cross-purchase data shows ~51% of multistyler co-purchases are with
+# functionally OVERLAPPING tools (HD 110 + STR 93 + CURLERS 36). The
+# straightforward read (v28.24) treated these as the top recommendations.
+# The philosophical counter-argument: if someone just spent €549 on an
+# all-in-one device, surfacing what it already does is suboptimal
+# regardless of what the historical co-purchase data shows. The carousel
+# should lead with COMPLEMENTS (things the multistyler can't do) and
+# treat the dedicated tools as a back-of-carousel fallback for the
+# minority of buyers who explicitly want both (performance gap,
+# multi-person households, travel use).
+#
+# v28.25 implementation:
+#   • HD max_total: 2 → 1, moved from rank 1 → rank 7 (slot 8)
+#   • STR max_total: 2 → 1, moved from rank 2 → rank 8 (slot 9)
+#   • CURLERS moved from rank 3 → rank 9 (slot 10)
+#   • Non-overlapping complements (EPIL/SCALE/TOOTH/MASSAGE) take slots 1-4
+#   • Impulse pools at slots 5-7 unchanged (UX consistency with other
+#     hair engines — same layout, just different content above/below)
+#   • Added MASSAGE DEVICES — universal wellness, no overlap with
+#     multistyler. Not in the user-provided cross-purchase data but a
+#     defensible non-overlapping complement consistent with other engines.
+#
+# Round 1 fills all 10 slots in priority order (PC's max_r1=2 fills slots
+# 6 AND 7 in single visit). No round-2 overflow needed since all pools
+# have max_total=1 except PC.
 MULTISTYLER_PRIORITY = [
-    (1, 'Πιστολάκι Μαλλιών',
-        ['HAIR DRYERS'],
-        'MS_HAIRSTYLING', 1, 2),
-    (2, 'Ισιωτικό Μαλλιών',
-        ['STRAIGHTENERS'],
-        'MS_HAIRSTYLING', 1, 2),
-    (3, 'Ψαλίδι Μπούκλας / Βούρτσα',
-        ['CURLERS & BRUSHES'],
-        'MS_HAIRSTYLING', 1, 1),
-    (4, 'Συσκευή Αποτρίχωσης',
+    # ── Non-overlapping complements (slots 1-4) ──
+    (1, 'Συσκευή Αποτρίχωσης',
         ['EPILATORS'],
         'MS_WOMENS_CARE', 1, 1),
-    # Slots 5-7: 3 impulse-buy accessory slots from Stationery sheet.
+    (2, 'Ζυγαριά Σώματος',
+        ['BODY SCALES'],
+        'MS_WELLNESS', 1, 1),
+    (3, 'Ηλεκτρική Οδοντόβουρτσα',
+        ['ELECTRIC TOOTHBRUSHES', 'ΗΛΕΚΤΡΙΚΕΣ ΟΔΟΝΤΟΒΟΥΡΤΣΕΣ'],
+        'MS_WELLNESS', 1, 1),
+    (4, 'Συσκευή Μασάζ',
+        ['MASSAGE DEVICES'],
+        'MS_WELLNESS', 1, 1),
+    # ── Impulse-buy accessories (slots 5-7) ──
     (5, 'Αξεσουάρ Μαλλιών',
         ['FASHION ACCESSORIES'],
         'MS_IMPULSE_ACCESSORY', 1, 1),
     (6, 'Δώρα Περιποίησης',
         ['PERSONAL CARE'],   # df_stationery 'PERSONAL CARE', NOT SDA L1
         'MS_IMPULSE_ACCESSORY', 2, 2),                      # ← max_r1=2: fills slots 6 AND 7
-    (7, 'Ζυγαριά Σώματος',
-        ['BODY SCALES'],
-        'MS_WELLNESS', 1, 1),
-    (8, 'Ηλεκτρική Οδοντόβουρτσα',
-        ['ELECTRIC TOOTHBRUSHES', 'ΗΛΕΚΤΡΙΚΕΣ ΟΔΟΝΤΟΒΟΥΡΤΣΕΣ'],
-        'MS_WELLNESS', 1, 1),
+    # ── Overlapping dedicated tools (slots 8-10) — back-of-carousel fallback ──
+    (7, 'Πιστολάκι Μαλλιών',
+        ['HAIR DRYERS'],
+        'MS_HAIRSTYLING', 1, 1),                            # ↓ max_total 2 → 1 (v28.24 → v28.25)
+    (8, 'Ισιωτικό Μαλλιών',
+        ['STRAIGHTENERS'],
+        'MS_HAIRSTYLING', 1, 1),                            # ↓ max_total 2 → 1
+    (9, 'Ψαλίδι Μπούκλας / Βούρτσα',
+        ['CURLERS & BRUSHES'],
+        'MS_HAIRSTYLING', 1, 1),                            # moved from rank 3 → rank 9
 ]
 
 MULTISTYLER_SLOT_TARGET = 10
 
 MULTISTYLER_MARKETING_COPY = {
-    "Πιστολάκι Μαλλιών":         "Γρήγορη ξήρανση πριν το styling — ολοκληρώστε το σετ σας.",
-    "Ισιωτικό Μαλλιών":          "Αφιερωμένο ίσιωμα — η εναλλακτική επιλογή για κάθε look.",
-    "Ψαλίδι Μπούκλας / Βούρτσα": "Ψαλίδια και βούρτσες — εξειδικευμένα styling εργαλεία.",
+    # v28.25 — Order reflects new anti-overlap slot priority:
+    # complements first, impulse middle, overlapping tools last.
     "Συσκευή Αποτρίχωσης":       "Ολοκληρωμένη φροντίδα ομορφιάς — επαγγελματικό αποτέλεσμα στο σπίτι.",
-    "Αξεσουάρ Μαλλιών":          "Λαστιχάκια, κορδέλες και βούρτσες — ολοκληρώστε το styling σας.",
-    "Δώρα Περιποίησης":          "Μάσκες ματιών, πετσέτες και σετ περιποίησης — pamper yourself.",
     "Ζυγαριά Σώματος":           "Παρακολούθησε την πρόοδό σου — υγεία και ευεξία.",
     "Ηλεκτρική Οδοντόβουρτσα":   "Λευκό χαμόγελο, καθαριότητα επιπέδου οδοντιάτρου.",
+    "Συσκευή Μασάζ":             "Χαλάρωσε τους μυς σου — wellness εμπειρία στο σπίτι.",   # NEW v28.25
+    "Αξεσουάρ Μαλλιών":          "Λαστιχάκια, κορδέλες και βούρτσες — ολοκληρώστε το styling σας.",
+    "Δώρα Περιποίησης":          "Μάσκες ματιών, πετσέτες και σετ περιποίησης — pamper yourself.",
+    "Πιστολάκι Μαλλιών":         "Για όταν θέλετε αφιερωμένη ταχύτητα στεγνώματος.",
+    "Ισιωτικό Μαλλιών":          "Αφιερωμένο ίσιωμα — για γρήγορο touch-up.",
+    "Ψαλίδι Μπούκλας / Βούρτσα": "Ψαλίδια και βούρτσες — εξειδικευμένα styling εργαλεία.",
 }
 
 # Brand-ecosystem hints — dominant multistyler brands. DYSON is the
