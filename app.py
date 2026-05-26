@@ -102,7 +102,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v28.32 — Align with Home/Spare sheet — printer triggers and pool now read from the Spare sheet (Home file) where the actual products live (549 printer SKUs across 9 hierarchies, 2933 cartridge SKUs vs 1313 in Peripherals). Fixes 3 alignment bugs: (a) hierarchy name `INKJET` was never matched in data — real name is `INKJET A4`, (b) `MULTIFUNCTION INKJET` typo blocked all 205 MFP inkjets — actual spelling is `MULTIFUCTION INKJET`, (c) `PHOTO PRINTERS` (41 SKUs) wasn't included — now routes to Inkjet Home persona. Adds title-based brand extraction (HP/Canon/Epson/Brother/Samsung/Xerox/Lexmark/Ricoh/Olivetti/Kyocera/Pantum/OKI) since Spare printer rows have empty Κατασκευαστής.
+        🟢 Engine v28.32.1 — Align with Home/Spare sheet (hotfix: moved PRINTER_HIERARCHIES + PRINTER_BRANDS_PATTERN to early CONFIG section to fix NameError at module-top execution — Streamlit runs scripts top-to-bottom and the trigger handlers at line ~6100 ran before the late definitions at line ~15000). Printer triggers and pool now read from the Spare sheet (Home file) where the actual products live (549 printer SKUs across 9 hierarchies, 2933 cartridge SKUs vs 1313 in Peripherals). Fixes hierarchy alignment: INKJET A4, MULTIFUCTION INKJET typo, PHOTO PRINTERS now properly registered. Title-based brand extraction (HP/Canon/Epson/Brother/Samsung/Xerox/Lexmark/Ricoh/Olivetti/Kyocera/Pantum/OKI/Xiaomi/Polaroid/Kodak +6 others, 100% coverage on 481 catalog SKUs).
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -125,6 +125,61 @@ APPL_CATS = {"MDA", "SDA", "Air Condition", "Personal Care"}
 COMPAT_COLS = ["Συμβατό με", "Συμβατή συσκευή"]
 CC = "_Compatible"
 ANDROID_OEMS = {"SAMSUNG", "XIAOMI", "HUAWEI", "MOTOROLA", "HONOR", "POCO", "REALME", "ONEPLUS", "NOTHING", "OPPO", "VIVO", "TCL", "NOKIA", "ASUS", "GOOGLE"}
+
+# ── Printer registry (v28.32) ────────────────────────────────────────────────
+# Defined early in CONFIG (not next to the slot lists) because the trigger
+# handlers reference these constants at module-top execution time. Streamlit
+# runs the script top-to-bottom on every interaction, so anything declared
+# down at line ~15000 (with the slot configs) isn't visible to the sidebar
+# trigger blocks at line ~6000 — hence "NameError: PRINTER_HIERARCHIES not
+# defined". Keep these here.
+#
+# Single source of truth for which Hierarchy values count as "a printer" for
+# trigger selection. Aligned with what's actually in the Spare sheet (Home
+# file):
+#   • INKJET A4              → Inkjet Home (regular single-function inkjet)
+#   • PHOTO PRINTERS         → Inkjet Home (photo-focused inkjets, same persona)
+#   • MULTIFUCTION INKJET    → Inkjet MFP (note: data uses typo "MULTIFUCTION")
+#   • LASER A4 MONO          → Mono Laser
+#   • LASER A4 COLOR         → Color Laser
+#   • MULTIFUCTION LASER A4 MONO   → Mono Laser MFP
+#   • MULTIFUCTION LASER A4 COLOR  → Color Laser MFP
+#   • MULTIFUCTION LASER A3 MONO   → Mono Laser MFP (A3 size, same persona)
+#   • MULTIFUCTION LASER A3 COLOR  → Color Laser MFP (A3 size, same persona)
+#
+# Deliberately excluded (no native persona — need their own slot lists if
+# we want to support them later):
+#   • THERMAL PRINTERS (54) — thermal paper, not ink/toner cartridges
+#   • PLOTTER (10)          — large-format, uses PLOTTER PAPERS not A4
+#   • DOT MATRIX A4 (2)     — uses RIBBONS CATRIDGES, not ink/toner
+#   • COPIERS A3 (2)        — large office copiers, niche
+PRINTER_HIERARCHIES = {
+    # Inkjet → routes to Inkjet Home (single-function) or Inkjet MFP
+    'INKJET A4',
+    'PHOTO PRINTERS',
+    'MULTIFUCTION INKJET',
+    # Laser → routes to Mono/Color × Single/MFP via existing detection
+    'LASER A4 MONO',
+    'LASER A4 COLOR',
+    'MULTIFUCTION LASER A4 MONO',
+    'MULTIFUCTION LASER A4 COLOR',
+    'MULTIFUCTION LASER A3 MONO',
+    'MULTIFUCTION LASER A3 COLOR',
+}
+
+# Brand extraction pattern for printer triggers (v28.32). Printer rows in
+# the Spare sheet have empty Κατασκευαστής, so the engine falls back to
+# parsing the brand out of the title. Order matters loosely — longer/more
+# specific names should appear before substrings (e.g. "HEWLETT-PACKARD"
+# before "HP"). Regex uses word boundaries to avoid false positives like
+# matching "HP" inside "PHILIPS". Validated 100% coverage on the 481
+# printer SKUs across the 9 registered hierarchies.
+PRINTER_BRANDS_PATTERN = (
+    r'\b(HEWLETT[- ]?PACKARD|HP|CANON|EPSON|BROTHER|SAMSUNG|XEROX|LEXMARK|'
+    r'RICOH|OLIVETTI|KYOCERA|PANTUM|OKI|DELL|FUJITSU|TOSHIBA|SHARP|'
+    r'KONICA|PHILIPS|XIAOMI|POLAROID|KODAK)\b'
+)
+
 
 # ═════════════════════════════════════════════════════════════
 # 🟢 LAPTOPS CONFIGURATION (Mainstream / Road Warrior)
@@ -15085,62 +15140,7 @@ STATIONERY_CLUSTER_SLOTS = {
 }
 
 # ── Printer sub-personas (Inkjet vs Laser) ──
-# ── Printer hierarchy registry (v28.32) ──────────────────────────────────────
-# Single source of truth for which Hierarchy values count as "a printer" for
-# trigger selection. Aligned with what's actually in the Spare sheet (Home
-# file) as of 2026-01:
-#
-#   • INKJET A4              → Inkjet Home (regular single-function inkjet)
-#   • PHOTO PRINTERS         → Inkjet Home (photo-focused inkjets, same persona)
-#   • MULTIFUCTION INKJET    → Inkjet MFP (note: data uses typo "MULTIFUCTION")
-#   • LASER A4 MONO          → Mono Laser
-#   • LASER A4 COLOR         → Color Laser
-#   • MULTIFUCTION LASER A4 MONO   → Mono Laser MFP
-#   • MULTIFUCTION LASER A4 COLOR  → Color Laser MFP
-#   • MULTIFUCTION LASER A3 MONO   → Mono Laser MFP (A3 size, same persona)
-#   • MULTIFUCTION LASER A3 COLOR  → Color Laser MFP (A3 size, same persona)
-#
-# Deliberately excluded (no native persona — need their own slot lists if
-# we want to support them later):
-#   • THERMAL PRINTERS (54) — thermal paper, not ink/toner cartridges
-#   • PLOTTER (10)          — large-format, uses PLOTTER PAPERS not A4
-#   • DOT MATRIX A4 (2)     — uses RIBBONS CATRIDGES, not ink/toner
-#   • COPIERS A3 (2)        — large office copiers, niche
-#
-# Removed (were in old set but not present in actual data, dead entries):
-#   • INKJET (plain, no A4 suffix)
-#   • MULTIFUNCTION INKJET (correct spelling — actual data uses MULTIFUCTION)
-#   • LASER (plain)
-#   • MULTIFUCTION LASER (plain)
-#   • LASER A3 MONO / LASER A3 COLOR (single-function A3 lasers — none in data)
-#   • FAX LASER
-PRINTER_HIERARCHIES = {
-    # Inkjet → routes to Inkjet Home (single-function) or Inkjet MFP
-    'INKJET A4',
-    'PHOTO PRINTERS',
-    'MULTIFUCTION INKJET',
-    # Laser → routes to Mono/Color × Single/MFP via existing detection
-    'LASER A4 MONO',
-    'LASER A4 COLOR',
-    'MULTIFUCTION LASER A4 MONO',
-    'MULTIFUCTION LASER A4 COLOR',
-    'MULTIFUCTION LASER A3 MONO',
-    'MULTIFUCTION LASER A3 COLOR',
-}
-
-# Brand extraction pattern for printer triggers (v28.32). Printer rows in
-# the Spare sheet have empty Κατασκευαστής, so the engine falls back to
-# parsing the brand out of the title. Order matters loosely — longer/more
-# specific names should appear before substrings (e.g. "HEWLETT-PACKARD"
-# before "HP"). Regex uses word boundaries to avoid false positives like
-# matching "HP" inside "PHILIPS".
-PRINTER_BRANDS_PATTERN = (
-    r'\b(HEWLETT[- ]?PACKARD|HP|CANON|EPSON|BROTHER|SAMSUNG|XEROX|LEXMARK|'
-    r'RICOH|OLIVETTI|KYOCERA|PANTUM|OKI|DELL|FUJITSU|TOSHIBA|SHARP|'
-    r'KONICA|PHILIPS|XIAOMI|POLAROID|KODAK)\b'
-)
-
-
+# ── Inkjet Printers (v28.30 refresh) ─────────────────────────────────────────
 # Replaces the legacy 10-slot PRINTER_INKJET_SLOTS, which had three bugs:
 #   1. Ink slots 1-4 used identical flags → no color awareness → engine
 #      could return 4 black-ink bestsellers instead of K/C/M/Y.
