@@ -102,7 +102,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v28.25 — Multistylers anti-overlap philosophy: HD/STR/Curlers demoted to single back-slots (8-10); non-overlapping complements (Epilator, Scale, Toothbrush, Massage) lead at 1-4; impulse @ 5-7 unchanged
+        🟢 Engine v28.27 — Impulse slots 5-7 now scale with trigger price: budget triggers keep €5-10 top sellers, premium triggers (€500+) surface €13-25 aspirational gifts (Simple Pleasure body-care boxes, Mad Beauty travel sets)
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -2338,7 +2338,59 @@ MS_S_PRICE_ONE_OFF   =  80_000   # ±1 tier
 MS_S_PRICE_TWO_OFF   = -150_000  # ≥2 tiers away — penalty
 MS_S_COLOR_EXACT     =  60_000   # Color-group exact match
 MS_S_COLOR_PARTIAL   =  20_000   # Color-group token overlap
+MS_S_PROXIMITY_MAX   =  50_000   # v28.26 — max continuous price-proximity bonus
+                                  # Smaller than tier-matching (250k) so it
+                                  # tie-breaks rather than overrides; large
+                                  # enough to differentiate when all items
+                                  # are in same tier-distance bucket.
 MS_S_SALES_FACTOR    =       0.5 # Sales tiebreaker weight
+
+
+# Granular price tier function — multistyler-specific.
+#
+# v28.26 — Replaces the shared _str_price_tier (4 buckets) with an 8-bucket
+# version. The 4-bucket version groups everything >€250 into a single "Pro"
+# tier — which works fine for Straighteners/HD/Curlers (their catalogs are
+# mostly €15-€250) but creates a real problem for Multistylers where the
+# trigger price ranges €30-€749 and companion massagers go up to €1500+.
+#
+# Concrete example before the fix:
+#   • Trigger: DYSON Airwrap HS08 €549 → tier 3 (old system)
+#   • Companion: THERABODY RECOVERYAIR PRO €1398 → tier 3 (old system)
+#   • diff = 0 → SAME TIER → +250k boost
+#   • Result: €1398 massager treated as a perfect price match for €549
+#     trigger. Surfaces at top of MASSAGE slot. User perceives this as
+#     "way too expensive".
+#
+# With 8 buckets the same case becomes:
+#   • Trigger €549 → tier 5 (Pro)
+#   • THERABODY €1398 → tier 7 (Luxury)
+#   • diff = 2 → FAR TIER → -150k penalty (net -400k swing)
+#   • Result: other massagers in €400-600 range now beat THERABODY.
+#
+# Similarly REMINGTON Curler €159 was 1 tier away in old system (got +80k
+# near-tier boost) but is now 2 tiers away from a €549 trigger → far tier
+# penalty. Other curlers in €250-500 range surface instead (if any exist).
+#
+# The boundaries reflect actual multistyler/companion price distributions —
+# more resolution in the premium range (€250-900) where DYSON sits, less
+# granularity at the budget end where most catalog items cluster anyway.
+def _ms_price_tier(price: float) -> int:
+    """Returns 0-7 price tier for the multistyler engine.
+       0=<€30, 1=€30-80, 2=€80-150, 3=€150-250,
+       4=€250-400, 5=€400-600, 6=€600-900, 7=>€900."""
+    try:
+        p = float(price) if price is not None else 0.0
+    except (ValueError, TypeError):
+        return 0
+    if p < 30:   return 0  # Trinket
+    if p < 80:   return 1  # Entry
+    if p < 150:  return 2  # Mainstream
+    if p < 250:  return 3  # Premium-low
+    if p < 400:  return 4  # Premium
+    if p < 600:  return 5  # Pro (DYSON HS08 class)
+    if p < 900:  return 6  # Ultra (DYSON HS09 class)
+    return 7                # Luxury
 
 
 # ═════════════════════════════════════════════════════════════
@@ -11296,32 +11348,100 @@ PC_IMPULSE_S_AVAILABILITY = 100_000
 PC_IMPULSE_S_COLOR_HINT   =  20_000  # Soft partial-color hint, no exact bonus
 PC_IMPULSE_S_SALES_FACTOR =       0.5
 
+# v28.27 — Premium-trigger signal weights. The default impulse pool ranking
+# is sales-driven, which surfaces €5-10 top sellers (Legami scrunchies/
+# hair towels/eye masks) regardless of trigger price. For a €549 DYSON
+# Airwrap buyer, an €8 scrunchie feels stingy — the catalog has higher-
+# quality gift items in the €13-25 range (Simple Pleasure body-care
+# boxes at €17 with 1000 sales, Mad Beauty Harry Potter sets at €13-20)
+# that better match a premium buyer's expectations.
+#
+# Magnitudes calibrated so:
+#   • Sales tiebreaker (~500-750 per top item) is preserved as ranking
+#     signal among items in the SAME price band
+#   • PEAK bonus (+100k) elevates premium-band items above current top
+#     sellers when the trigger is premium
+#   • EDGE bonus (+30k) gives a partial nudge to items just outside the
+#     peak range
+#   • TRINKET penalty (-30k) demotes sub-€5 items for premium triggers
+PC_IMPULSE_S_PREMIUM_PEAK    = 100_000
+PC_IMPULSE_S_PREMIUM_EDGE    =  30_000
+PC_IMPULSE_S_PREMIUM_PENALTY = -30_000
+
+
+def _pc_impulse_price_signal(item_price: float, trigger_price: float) -> int:
+    """v28.27 — Trigger-price-aware bonus for impulse items.
+
+    Behavior tiers (chosen to match the 4 hair-engine trigger price profiles):
+      • Budget trigger <€150  → returns 0. Current sales-driven behavior.
+        Surfaces Legami €8 scrunchies for an IZZY €100 multistyler.
+      • Mid trigger €150-300  → prefers €8-15 items (top: Hand Care €14).
+        Surfaces Legami €10 hair towels for a BELLISSIMA €249 trigger.
+      • Premium trigger €300-500 → prefers €10-20 items.
+        Includes peak items like €17 Simple Pleasure Body Care.
+      • Hero trigger ≥€500    → prefers €13-25 items.
+        Pushes €17-20 gift boxes to top for DYSON Airwrap €549/€699.
+
+    The premium signal complements (not replaces) the sales/availability
+    scoring. Within each price band, sales remains the tiebreaker.
+    """
+    if item_price <= 0 or trigger_price <= 0:
+        return 0
+
+    # Budget triggers: no premium signal applied, keep sales-driven ranking
+    if trigger_price < 150:
+        return 0
+
+    # Mid triggers (€150-€300): prefer €8-15
+    if trigger_price < 300:
+        if   8 <= item_price <= 15:                                 return PC_IMPULSE_S_PREMIUM_PEAK
+        if   5 <= item_price <  8 or 15 < item_price <= 22:         return PC_IMPULSE_S_PREMIUM_EDGE
+        if item_price > 25 or item_price < 3:                       return PC_IMPULSE_S_PREMIUM_PENALTY
+        return 0
+
+    # Premium triggers (€300-€500): prefer €10-20
+    if trigger_price < 500:
+        if  10 <= item_price <= 20:                                 return PC_IMPULSE_S_PREMIUM_PEAK
+        if   7 <= item_price < 10 or 20 < item_price <= 28:         return PC_IMPULSE_S_PREMIUM_EDGE
+        if item_price > 32 or item_price < 4:                       return PC_IMPULSE_S_PREMIUM_PENALTY
+        return 0
+
+    # Hero triggers (€500+): prefer €13-25
+    if  13 <= item_price <= 25:                                     return PC_IMPULSE_S_PREMIUM_PEAK
+    if   8 <= item_price < 13 or 25 < item_price <= 32:             return PC_IMPULSE_S_PREMIUM_EDGE
+    if item_price > 35 or item_price < 6:                           return PC_IMPULSE_S_PREMIUM_PENALTY
+    return 0
+
 
 def _pc_build_impulse_accessory_pool(c_pool, trigger_brand, trigger_tier,
-                                      trigger_colors, role_label, notes):
+                                      trigger_colors, role_label, notes,
+                                      trigger_price=0.0):
     """v28.23 — FASHION ACCESSORIES + PERSONAL CARE (Stationery sheet) pool.
-    Shared by Straighteners / Hair Dryers / Curlers engines.
+    Shared by Straighteners / Hair Dryers / Curlers / Multistylers engines.
 
     These are gift / lifestyle impulse-buys in the €1-25 range — scrunchies,
-    headbands, eye masks, hair towels. Top sellers are by brands like Legami,
-    Ban.Do, Hallmark which have ZERO overlap with appliance brands.
+    headbands, eye masks, hair towels, gift sets. Top sellers are by brands
+    like Legami, Ban.Do, Mad Beauty which have ZERO overlap with appliance
+    brands.
 
     Scoring shape — intentionally DIFFERENT from the standard pool builders:
       • Availability: standard boost (+PC_IMPULSE_S_AVAILABILITY)
       • Sales: standard tiebreaker (×PC_IMPULSE_S_SALES_FACTOR) — primary signal
       • Brand-match: SKIPPED entirely. Gift brands never match appliance
         brands; we don't want to imply Legami ≈ PHILIPS as same-brand pairing.
-      • Price-tier proximity: SKIPPED. A €7 scrunchie is always 2-3 tiers
-        below the €50 hair tool trigger — the normal penalty would knock
-        these out entirely, defeating the impulse-buy purpose.
+      • Price-tier proximity: SKIPPED (the standard tier system). A €7
+        scrunchie is always 2-3 tiers below a €50 hair tool trigger — the
+        normal penalty would knock these out entirely, defeating the
+        impulse-buy purpose.
       • Color match: kept ONLY as soft partial hint (+PC_IMPULSE_S_COLOR_HINT).
-        Pool contains many color-themed items (PINK scrunchies, BLACK eye
-        masks) — light coordination boost without dominating sales signal.
+      • v28.27 — NEW: trigger-price-aware premium signal. For premium and
+        hero triggers, elevates €10-25 items so DYSON Airwrap buyers see
+        aspirational gifts (€17 Simple Pleasure Body Care, €20 Harry Potter
+        sets) instead of €8 scrunchies. Budget triggers unaffected.
 
-    Net effect: ranking is essentially sales-driven with color as a
-    tiebreaker. Top scrunchie (650 sales), top headband (~370 sales), and
-    top hair towel (~1550 sales) will surface naturally for any hair-care
-    trigger that includes this pool.
+    Net effect: ranking is sales-driven for budget triggers, sales-plus-
+    price-band-aware for premium triggers. The shared helper is called by
+    all 4 hair engines; trigger_price=0 (default) reverts to v28.23 behavior.
 
     Signature matches the other CB_* / HD_* / STR_* pool builders for
     uniformity (trigger_brand, trigger_tier accepted but ignored inside).
@@ -11352,7 +11472,29 @@ def _pc_build_impulse_accessory_pool(c_pool, trigger_brand, trigger_tier,
             notes.append(f"  ✓ Color hint ({trigger_color_label}): "
                          f"{any_match_mask.sum()} matched (+{PC_IMPULSE_S_COLOR_HINT:,})")
 
-    notes.append(f"  (Impulse-buy pool: brand-match + price-tier scoring intentionally disabled)")
+    # ── v28.27 — Trigger-price-aware premium signal
+    if trigger_price > 0 and 'LIST PRICE' in pool.columns:
+        prices = pool['LIST PRICE'].apply(parse_euro_price)
+        premium_scores = prices.apply(lambda p: _pc_impulse_price_signal(p, trigger_price))
+        pool['Final_Score'] += premium_scores
+        peak_count = (premium_scores == PC_IMPULSE_S_PREMIUM_PEAK).sum()
+        edge_count = (premium_scores == PC_IMPULSE_S_PREMIUM_EDGE).sum()
+        pen_count  = (premium_scores == PC_IMPULSE_S_PREMIUM_PENALTY).sum()
+        # Identify the active tier label for diagnostic clarity
+        if trigger_price < 150:
+            tier_lbl = "budget (<€150, no premium signal)"
+        elif trigger_price < 300:
+            tier_lbl = "mid (€150-300, prefer €8-15)"
+        elif trigger_price < 500:
+            tier_lbl = "premium (€300-500, prefer €10-20)"
+        else:
+            tier_lbl = "hero (€500+, prefer €13-25)"
+        notes.append(f"  ✓ v28.27 Premium price signal (trigger €{trigger_price:.0f} → {tier_lbl}): "
+                     f"peak={peak_count} (+{PC_IMPULSE_S_PREMIUM_PEAK:,}), "
+                     f"edge={edge_count} (+{PC_IMPULSE_S_PREMIUM_EDGE:,}), "
+                     f"penalty={pen_count} ({PC_IMPULSE_S_PREMIUM_PENALTY:+,})")
+
+    notes.append(f"  (Impulse-buy pool: brand-match + standard price-tier scoring intentionally disabled)")
     return pool.sort_values('Final_Score', ascending=False)
 
 
@@ -11625,7 +11767,8 @@ def run_straighteners_engine(trigger, df_sda, df_history, df_stationery=None):
             scored = _str_build_womens_care_pool(base_pool, tb, ttier, tcolors, notes)
         elif logic_key == 'STR_IMPULSE_ACCESSORY':                       # ← NEW v28.23
             scored = _pc_build_impulse_accessory_pool(
-                base_pool, tb, ttier, tcolors, role_label, notes
+                base_pool, tb, ttier, tcolors, role_label, notes,
+                trigger_price=tprice,
             )
         elif logic_key == 'STR_WELLNESS':
             scored = _str_build_wellness_pool(base_pool, tb, ttier, tcolors, notes)
@@ -11995,7 +12138,8 @@ def run_hair_dryers_engine(trigger, df_sda, df_history, df_stationery=None):
             )
         elif logic_key == 'HD_IMPULSE_ACCESSORY':                       # ← NEW v28.23
             scored = _pc_build_impulse_accessory_pool(
-                base_pool, tb, ttier, tcolors, role_label, notes
+                base_pool, tb, ttier, tcolors, role_label, notes,
+                trigger_price=tprice,
             )
         elif logic_key == 'HD_WELLNESS':
             scored = _hd_build_wellness_pool(
@@ -12410,7 +12554,8 @@ def run_curlers_engine(trigger, df_sda, df_history, df_stationery=None):
             )
         elif logic_key == 'CB_IMPULSE_ACCESSORY':                       # ← NEW v28.22
             scored = _pc_build_impulse_accessory_pool(                  # ← renamed v28.23
-                base_pool, tb, ttier, tcolors, role_label, notes
+                base_pool, tb, ttier, tcolors, role_label, notes,
+                trigger_price=tprice,                                    # ← v28.27
             )
         else:
             scored = base_pool.copy()
@@ -12514,11 +12659,13 @@ def run_curlers_engine(trigger, df_sda, df_history, df_stationery=None):
 # all have populated Κατασκευαστής, so title-parsing won't fire often.
 
 def _ms_apply_base_score(pool, trigger_brand, trigger_tier, trigger_colors, notes,
+                         trigger_price=0.0,
                          color_exact_weight=MS_S_COLOR_EXACT,
                          color_partial_weight=MS_S_COLOR_PARTIAL):
     """Shared scoring spine for the multistylers engine — availability +
-    sales + brand-match + price-tier + color. Mirrors _cb_apply_base_score
-    1:1 with MS_S_* constants to keep engines self-contained.
+    sales + brand-match + price-tier + color + (v28.26) price-proximity.
+    Mirrors _cb_apply_base_score with MS_S_* constants. trigger_price
+    needed for the continuous proximity bonus added in v28.26.
     """
     if pool.empty:
         return pool
@@ -12554,9 +12701,13 @@ def _ms_apply_base_score(pool, trigger_brand, trigger_tier, trigger_colors, note
     # ── Price-tier proximity (critical for multistylers — €549 DYSON
     # buyer must not see €15 IZZY epilators). Penalty is strong enough
     # to push 2+ tier-away items below brand-match candidates.
+    # v28.26 — Uses the granular 8-bucket _ms_price_tier instead of the
+    # shared 4-bucket _str_price_tier. Avoids the case where everything
+    # >€250 was a single open-ended bucket and a €1398 massager looked
+    # like a "same-tier" match for a €549 trigger.
     if 'LIST PRICE' in pool.columns:
         prices = pool['LIST PRICE'].apply(parse_euro_price)
-        tiers = prices.apply(_str_price_tier)
+        tiers = prices.apply(_ms_price_tier)
         diffs = (tiers - trigger_tier).abs()
         same_tier = diffs == 0
         near_tier = diffs == 1
@@ -12565,10 +12716,43 @@ def _ms_apply_base_score(pool, trigger_brand, trigger_tier, trigger_colors, note
         pool.loc[near_tier, 'Final_Score'] += MS_S_PRICE_ONE_OFF
         pool.loc[far_tier,  'Final_Score'] += MS_S_PRICE_TWO_OFF
         if same_tier.any() or near_tier.any() or far_tier.any():
-            notes.append(f"  ✓ Price-tier match (trigger tier {trigger_tier}): "
+            notes.append(f"  ✓ Price-tier match (trigger tier {trigger_tier}, 8-bucket): "
                          f"same={same_tier.sum()} (+{MS_S_PRICE_SAME_TIER:,}), "
                          f"near={near_tier.sum()} (+{MS_S_PRICE_ONE_OFF:,}), "
                          f"far={far_tier.sum()} ({MS_S_PRICE_TWO_OFF:+,})")
+
+        # ── v28.26 — Continuous price-proximity bonus (Gaussian).
+        # The 8-tier system handles the coarse "expensive vs cheap" question,
+        # but when an ENTIRE pool falls into one tier-distance bucket (e.g.
+        # the CURLERS catalog tops out at €199, so for a €549 trigger ALL
+        # curlers are "far tier" with the same -150k penalty), tier scoring
+        # alone can't pick the best of bad options — sales tiebreaker wins
+        # by default, surfacing high-volume budget items (BABYLISS Bouncy
+        # Curles €59) instead of the catalog's most-price-appropriate option
+        # (REMINGTON AIRV €159 or BELLISSIMA STEAM ELIXIR €138).
+        #
+        # Solution: a smooth Gaussian-shaped bonus peaking at exact-match
+        # price, decaying with log-distance. Max +MS_S_PROXIMITY_MAX at
+        # ratio=1.0, decays to near zero past 4x or 0.25x trigger price.
+        # Small enough to NOT override brand-match (+500k) or same-tier
+        # (+250k), but large enough to break ties when those don't
+        # differentiate (e.g. all-far-tier pools).
+        if trigger_price > 0:
+            import math as _math
+            def _ms_proximity_bonus(p):
+                if p is None or p <= 0:
+                    return 0
+                try:
+                    log_dist = abs(_math.log(p / trigger_price))
+                    return int(MS_S_PROXIMITY_MAX * _math.exp(-(log_dist ** 2) / 1.0))
+                except (ValueError, ZeroDivisionError):
+                    return 0
+            proximity_scores = prices.apply(_ms_proximity_bonus)
+            pool['Final_Score'] += proximity_scores
+            max_prox = proximity_scores.max() if not proximity_scores.empty else 0
+            min_prox = proximity_scores.min() if not proximity_scores.empty else 0
+            notes.append(f"  ✓ Price-proximity bonus (trigger €{trigger_price:.0f}, Gaussian): "
+                         f"range +{min_prox:,} to +{max_prox:,} of max +{MS_S_PROXIMITY_MAX:,}")
 
     # ── Color-group match (only fires when caller asks for it)
     if trigger_colors and 'Χρώμα' in pool.columns and color_exact_weight > 0:
@@ -12587,7 +12771,8 @@ def _ms_apply_base_score(pool, trigger_brand, trigger_tier, trigger_colors, note
 
 
 def _ms_build_hairstyling_pool(c_pool, trigger_brand, trigger_tier,
-                                trigger_colors, role_label, notes):
+                                trigger_colors, role_label, notes,
+                                trigger_price=0.0):
     """STR / HD / CURLERS pool. Column-brand populated 100% in all three.
     Color matters most — coordinated styling-set aesthetic (women buying
     a Dyson Airwrap in Strawberry Bronze may want a matching Dyson
@@ -12596,6 +12781,7 @@ def _ms_build_hairstyling_pool(c_pool, trigger_brand, trigger_tier,
         return c_pool
     pool = _ms_apply_base_score(
         c_pool, trigger_brand, trigger_tier, trigger_colors, notes,
+        trigger_price=trigger_price,
         color_exact_weight=MS_S_COLOR_EXACT,
         color_partial_weight=MS_S_COLOR_PARTIAL,
     )
@@ -12603,7 +12789,8 @@ def _ms_build_hairstyling_pool(c_pool, trigger_brand, trigger_tier,
 
 
 def _ms_build_womens_care_pool(c_pool, trigger_brand, trigger_tier,
-                                trigger_colors, role_label, notes):
+                                trigger_colors, role_label, notes,
+                                trigger_price=0.0):
     """EPILATORS pool. Brand overlap is weak (1/9), so sales + price-tier
     do most of the work. Color downgraded to soft partial — epilators
     aren't part of the styling-set aesthetic.
@@ -12615,6 +12802,7 @@ def _ms_build_womens_care_pool(c_pool, trigger_brand, trigger_tier,
         return c_pool
     pool = _ms_apply_base_score(
         c_pool, trigger_brand, trigger_tier, trigger_colors, notes,
+        trigger_price=trigger_price,
         color_exact_weight=MS_S_COLOR_PARTIAL,
         color_partial_weight=MS_S_COLOR_PARTIAL,
     )
@@ -12631,7 +12819,8 @@ def _ms_build_womens_care_pool(c_pool, trigger_brand, trigger_tier,
 
 
 def _ms_build_wellness_pool(c_pool, trigger_brand, trigger_tier,
-                             trigger_colors, role_label, notes):
+                             trigger_colors, role_label, notes,
+                             trigger_price=0.0):
     """BODY SCALES / ELECTRIC TOOTHBRUSHES pool. Near-zero brand overlap
     with multistyler brands (1/23 and 0/8 respectively) — pure sales +
     price-tier scoring. Color disabled (wellness items are utilitarian)."""
@@ -12639,6 +12828,7 @@ def _ms_build_wellness_pool(c_pool, trigger_brand, trigger_tier,
         return c_pool
     pool = _ms_apply_base_score(
         c_pool, trigger_brand, trigger_tier, trigger_colors, notes,
+        trigger_price=trigger_price,
         color_exact_weight=0, color_partial_weight=0,
     )
     return pool.sort_values('Final_Score', ascending=False)
@@ -12684,12 +12874,12 @@ def run_multistylers_engine(trigger, df_sda, df_history, df_stationery=None):
     tb = str(trigger.get('Κατασκευαστής', '')).strip().upper()
     tmodel = str(trigger.get('Μοντέλο', '')).strip()
     tprice = parse_euro_price(trigger.get('LIST PRICE', 0))
-    ttier = _str_price_tier(tprice)
+    ttier = _ms_price_tier(tprice)                              # v28.26 — 8-bucket
     tcolor_raw = str(trigger.get('Χρώμα', '') or '').strip()
     tcolors = _str_color_group(tcolor_raw)
 
     diag.append(("0. Trigger", f"{tb} €{tprice:.0f}",
-                 f"Model={tmodel} | Tier={ttier} | Color={tcolor_raw} → {sorted(tcolors)}"))
+                 f"Model={tmodel} | Tier={ttier}/7 (8-bucket) | Color={tcolor_raw} → {sorted(tcolors)}"))
 
     if df_sda is None or df_sda.empty:
         diag.append(("ERROR", 0, "SDA sheet is empty — engine cannot run"))
@@ -12740,19 +12930,23 @@ def run_multistylers_engine(trigger, df_sda, df_history, df_stationery=None):
 
         if logic_key == 'MS_HAIRSTYLING':
             scored = _ms_build_hairstyling_pool(
-                base_pool, tb, ttier, tcolors, role_label, notes
+                base_pool, tb, ttier, tcolors, role_label, notes,
+                trigger_price=tprice,
             )
         elif logic_key == 'MS_WOMENS_CARE':
             scored = _ms_build_womens_care_pool(
-                base_pool, tb, ttier, tcolors, role_label, notes
+                base_pool, tb, ttier, tcolors, role_label, notes,
+                trigger_price=tprice,
             )
         elif logic_key == 'MS_WELLNESS':
             scored = _ms_build_wellness_pool(
-                base_pool, tb, ttier, tcolors, role_label, notes
+                base_pool, tb, ttier, tcolors, role_label, notes,
+                trigger_price=tprice,
             )
         elif logic_key == 'MS_IMPULSE_ACCESSORY':
             scored = _pc_build_impulse_accessory_pool(
-                base_pool, tb, ttier, tcolors, role_label, notes
+                base_pool, tb, ttier, tcolors, role_label, notes,
+                trigger_price=tprice,                                    # ← v28.27
             )
         else:
             scored = base_pool.copy()
