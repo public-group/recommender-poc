@@ -102,7 +102,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v28.29 — Office Printers (Εκτυπωτές Γραφείου) — new 13-slot office-bundle persona on top of the existing Inkjet/Laser routes: 4 cartridge slots auto-fill K/C/M/Y by Χρώμα + OEM model match, paired with copier paper + USB cable + USB flash + surge protector + 5 stationery essentials (pens, transfer folders, highlighters, staplers, sleeves). Hybrid sales × spec scoring.
+        🟢 Engine v28.32 — Align with Home/Spare sheet — printer triggers and pool now read from the Spare sheet (Home file) where the actual products live (549 printer SKUs across 9 hierarchies, 2933 cartridge SKUs vs 1313 in Peripherals). Fixes 3 alignment bugs: (a) hierarchy name `INKJET` was never matched in data — real name is `INKJET A4`, (b) `MULTIFUNCTION INKJET` typo blocked all 205 MFP inkjets — actual spelling is `MULTIFUCTION INKJET`, (c) `PHOTO PRINTERS` (41 SKUs) wasn't included — now routes to Inkjet Home persona. Adds title-based brand extraction (HP/Canon/Epson/Brother/Samsung/Xerox/Lexmark/Ricoh/Olivetti/Kyocera/Pantum/OKI) since Spare printer rows have empty Κατασκευαστής.
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -4989,6 +4989,21 @@ def load_all_data():
     # ALLINONE. Persona field (Προτεινόμενη χρήση) is noisy so the engine
     # does its own detection. Used by the Desktops engine.
     ddt  = _load('IT')
+    # ── Spare sheet (Home file, v28.32): the canonical source for printer
+    # products and printer ecosystem accessories. Contains:
+    #   • 549 printer SKUs across 9 active hierarchies (MULTIFUCTION INKJET,
+    #     INKJET A4, PHOTO PRINTERS, LASER A4 MONO/COLOR, all MULTIFUCTION
+    #     LASER variants for A4 and A3)
+    #   • 2933 cartridge SKUs (1759 INK + 1074 TONER + 134 COMPATIBLE TONERS
+    #     + 83 COMPATIBLE INK CARTRIDGES — 2.3× more than Peripherals)
+    #   • Paper (COPIERS PAPER, INKJET PAPER, SPECIAL PAPERS), drums,
+    #     printheads, ribbons, fusers, calculators, laminators, shredders,
+    #     and PRINTER ACCESSORIES (93 SKUs)
+    # The Printers and Office Printers clusters now use Spare as the primary
+    # data source, combined with Peripherals/Stationery/Products for slots
+    # that reference hierarchies not in Spare (USB CABLES, SURGE PROTECTORS,
+    # photo frames, office stationery).
+    dspare = _load('Spare')
     
     if not dp.empty:
         parts = [dp[c].fillna('').astype(str).str.strip() for c in COMPAT_COLS if c in dp.columns]
@@ -5005,11 +5020,11 @@ def load_all_data():
     if not db.empty and CC not in db.columns:
         db[CC] = ''
     
-    return dp, dm, dh, ds, db, dl, dv, dper, dstat, dair, dfloor, dgaming, dsda, dmda, ddt, available_sheets
+    return dp, dm, dh, ds, db, dl, dv, dper, dstat, dair, dfloor, dgaming, dsda, dmda, ddt, dspare, available_sheets
 
 try:
 
-    df_products, df_music, df_history, df_slots, df_books, df_laptops, df_vacuums, df_peripherals, df_stationery, df_air, df_floor, df_gaming, df_sda, df_mda, df_desktops, sheets_loaded = load_all_data()
+    df_products, df_music, df_history, df_slots, df_books, df_laptops, df_vacuums, df_peripherals, df_stationery, df_air, df_floor, df_gaming, df_sda, df_mda, df_desktops, df_spare, sheets_loaded = load_all_data()
     compat_cols_found = [c for c in COMPAT_COLS if c in df_products.columns]
 except Exception as e:
     st.error(f"🚨 Error loading data: {e}")
@@ -6030,12 +6045,15 @@ else:
                 trigger = monitors[monitors['Title']==sel].iloc[0] if sel else None
 
     elif active_cluster == "Printers":
-        combined = pd.concat([df_products, df_peripherals], ignore_index=True) if not df_peripherals.empty else df_products
-        printer_hiers = {'INKJET', 'MULTIFUNCTION INKJET', 'MULTIFUCTION LASER', 'LASER', 'LASER A4 MONO',
-                         'LASER A4 COLOR', 'LASER A3 MONO', 'LASER A3 COLOR', 'FAX LASER',
-                         'MULTIFUCTION LASER A4 COLOR', 'MULTIFUCTION LASER A4 MONO',
-                         'MULTIFUCTION LASER A3 COLOR', 'MULTIFUCTION LASER A3 MONO'}
-        printers = combined[combined['Hierarchy'].fillna('').astype(str).str.upper().str.strip().isin(printer_hiers)].copy()
+        # v28.32 — printers live in the Spare sheet (Home file). Fall back to
+        # Products+Peripherals only if Spare is unavailable (e.g. dev without
+        # the Home workbook). Uses the module-level PRINTER_HIERARCHIES
+        # registry instead of an inline set.
+        if df_spare is not None and not df_spare.empty:
+            combined = df_spare
+        else:
+            combined = pd.concat([df_products, df_peripherals], ignore_index=True) if not df_peripherals.empty else df_products
+        printers = combined[combined['Hierarchy'].fillna('').astype(str).str.upper().str.strip().isin(PRINTER_HIERARCHIES)].copy()
         if printers.empty:
             printers = combined[combined['Level 2'].fillna('').str.strip().str.lower().isin(['printers', 'εκτυπωτές'])].copy()
         if printers.empty:
@@ -6049,12 +6067,12 @@ else:
         # Same trigger detection as "Printers" — any printer in the catalog
         # is a valid anchor for the office bundle. Inkjet/laser/color/mono is
         # detected inside the engine; the user just picks the printer.
-        combined = pd.concat([df_products, df_peripherals], ignore_index=True) if not df_peripherals.empty else df_products
-        printer_hiers = {'INKJET', 'MULTIFUNCTION INKJET', 'MULTIFUCTION LASER', 'LASER', 'LASER A4 MONO',
-                         'LASER A4 COLOR', 'LASER A3 MONO', 'LASER A3 COLOR', 'FAX LASER',
-                         'MULTIFUCTION LASER A4 COLOR', 'MULTIFUCTION LASER A4 MONO',
-                         'MULTIFUCTION LASER A3 COLOR', 'MULTIFUCTION LASER A3 MONO'}
-        printers = combined[combined['Hierarchy'].fillna('').astype(str).str.upper().str.strip().isin(printer_hiers)].copy()
+        # v28.32 — uses Spare (Home file) as primary source.
+        if df_spare is not None and not df_spare.empty:
+            combined = df_spare
+        else:
+            combined = pd.concat([df_products, df_peripherals], ignore_index=True) if not df_peripherals.empty else df_products
+        printers = combined[combined['Hierarchy'].fillna('').astype(str).str.upper().str.strip().isin(PRINTER_HIERARCHIES)].copy()
         if printers.empty:
             printers = combined[combined['Level 2'].fillna('').str.strip().str.lower().isin(['printers', 'εκτυπωτές'])].copy()
         if printers.empty:
@@ -15067,31 +15085,272 @@ STATIONERY_CLUSTER_SLOTS = {
 }
 
 # ── Printer sub-personas (Inkjet vs Laser) ──
-PRINTER_INKJET_SLOTS = [
-    ("Ink Cartridge 1",     ['INK CATRIDGES', 'COMPATIBLE INK CARTRIDGES'], {'ink_model_match': True, 'brand_match': True}),
-    ("Ink Cartridge 2",     ['INK CATRIDGES', 'COMPATIBLE INK CARTRIDGES'], {'ink_model_match': True, 'brand_match': True}),
-    ("Ink Cartridge 3",     ['INK CATRIDGES', 'COMPATIBLE INK CARTRIDGES'], {'ink_model_match': True, 'brand_match': True}),
-    ("Ink Cartridge 4",     ['INK CATRIDGES', 'COMPATIBLE INK CARTRIDGES'], {'ink_model_match': True, 'brand_match': True}),
-    ("A4 Paper",            ['INKJET PAPER', 'COPIERS PAPER'],{'paper_weight_max': 90}),
-    ("Photo Paper",         ['SPECIAL PAPERS'],               {'paper_weight_min': 150, 'title_boost': ['Gloss', 'Matte', 'Photo']}),
-    ("USB Printer Cable",   ['USB CABLES'],                   {'title_boost': ['USB-B', 'Printer', 'Type-B']}),
-    ("Surge Protector",     ['LINE INTERACTIVE'],                          {}),
-    ("Cleaning",            ['CLEANING PRODUCTS'],            {}),
-    ("Cleaning 2",          ['CLEANING PRODUCTS'],            {}),
+# ── Printer hierarchy registry (v28.32) ──────────────────────────────────────
+# Single source of truth for which Hierarchy values count as "a printer" for
+# trigger selection. Aligned with what's actually in the Spare sheet (Home
+# file) as of 2026-01:
+#
+#   • INKJET A4              → Inkjet Home (regular single-function inkjet)
+#   • PHOTO PRINTERS         → Inkjet Home (photo-focused inkjets, same persona)
+#   • MULTIFUCTION INKJET    → Inkjet MFP (note: data uses typo "MULTIFUCTION")
+#   • LASER A4 MONO          → Mono Laser
+#   • LASER A4 COLOR         → Color Laser
+#   • MULTIFUCTION LASER A4 MONO   → Mono Laser MFP
+#   • MULTIFUCTION LASER A4 COLOR  → Color Laser MFP
+#   • MULTIFUCTION LASER A3 MONO   → Mono Laser MFP (A3 size, same persona)
+#   • MULTIFUCTION LASER A3 COLOR  → Color Laser MFP (A3 size, same persona)
+#
+# Deliberately excluded (no native persona — need their own slot lists if
+# we want to support them later):
+#   • THERMAL PRINTERS (54) — thermal paper, not ink/toner cartridges
+#   • PLOTTER (10)          — large-format, uses PLOTTER PAPERS not A4
+#   • DOT MATRIX A4 (2)     — uses RIBBONS CATRIDGES, not ink/toner
+#   • COPIERS A3 (2)        — large office copiers, niche
+#
+# Removed (were in old set but not present in actual data, dead entries):
+#   • INKJET (plain, no A4 suffix)
+#   • MULTIFUNCTION INKJET (correct spelling — actual data uses MULTIFUCTION)
+#   • LASER (plain)
+#   • MULTIFUCTION LASER (plain)
+#   • LASER A3 MONO / LASER A3 COLOR (single-function A3 lasers — none in data)
+#   • FAX LASER
+PRINTER_HIERARCHIES = {
+    # Inkjet → routes to Inkjet Home (single-function) or Inkjet MFP
+    'INKJET A4',
+    'PHOTO PRINTERS',
+    'MULTIFUCTION INKJET',
+    # Laser → routes to Mono/Color × Single/MFP via existing detection
+    'LASER A4 MONO',
+    'LASER A4 COLOR',
+    'MULTIFUCTION LASER A4 MONO',
+    'MULTIFUCTION LASER A4 COLOR',
+    'MULTIFUCTION LASER A3 MONO',
+    'MULTIFUCTION LASER A3 COLOR',
+}
+
+# Brand extraction pattern for printer triggers (v28.32). Printer rows in
+# the Spare sheet have empty Κατασκευαστής, so the engine falls back to
+# parsing the brand out of the title. Order matters loosely — longer/more
+# specific names should appear before substrings (e.g. "HEWLETT-PACKARD"
+# before "HP"). Regex uses word boundaries to avoid false positives like
+# matching "HP" inside "PHILIPS".
+PRINTER_BRANDS_PATTERN = (
+    r'\b(HEWLETT[- ]?PACKARD|HP|CANON|EPSON|BROTHER|SAMSUNG|XEROX|LEXMARK|'
+    r'RICOH|OLIVETTI|KYOCERA|PANTUM|OKI|DELL|FUJITSU|TOSHIBA|SHARP|'
+    r'KONICA|PHILIPS|XIAOMI|POLAROID|KODAK)\b'
+)
+
+
+# Replaces the legacy 10-slot PRINTER_INKJET_SLOTS, which had three bugs:
+#   1. Ink slots 1-4 used identical flags → no color awareness → engine
+#      could return 4 black-ink bestsellers instead of K/C/M/Y.
+#   2. "Surge Protector" pointed at 'LINE INTERACTIVE' which is actually the
+#      UPS hierarchy. Surge protectors are now in Office Printers (correctly
+#      using SURGE PROTECTORS) so we drop them here entirely — they're an
+#      office concern, not a photo-printer concern.
+#   3. Two consecutive "Cleaning" slots (Cleaning + Cleaning 2) returned the
+#      same bestsellers twice. Consolidated to one slot with title_include
+#      filtering for actual printer-cleaning products.
+#
+# We also split by MFP detection. The trigger handler still accepts both
+# 'INKJET' and 'MULTIFUNCTION INKJET' — the difference is which slot list
+# fires after selection:
+#   • PRINTER_INKJET_HOME_SLOTS — regular INKJET → photo-first persona
+#       (gloss + matte photo paper, photo frame/album for displaying prints)
+#   • PRINTER_INKJET_MFP_SLOTS  — MULTIFUNCTION INKJET → home-office persona
+#       (heavier A4 emphasis, USB flash disk for scan-to-USB, single photo
+#        paper slot since scanning, not just photo printing, is the use case)
+#
+# Differentiation vs Office Printers (v28.29):
+#   • Office Printers = business bundle (pens, folders, highlighters, staplers,
+#     sleeves, surge protector). Office Printers does NOT include photo paper
+#     or photo frames.
+#   • Inkjet Home/MFP = home/photo bundle (photo paper variants, photo frame
+#     for display). Inkjet does NOT include office stationery.
+#   Buyers should pick the cluster that matches what they actually want to
+#   print: business documents vs family photos.
+
+PRINTER_INKJET_HOME_SLOTS = [
+    # Color-aware ink slots (cartridge_color hard-filters by Χρώμα column)
+    ("Black Ink",           ['INK CATRIDGES', 'COMPATIBLE INK CARTRIDGES'],
+                            {'cartridge_color': 'BLACK',   'ink_model_match': True, 'brand_match': True}),
+    ("Cyan Ink",            ['INK CATRIDGES', 'COMPATIBLE INK CARTRIDGES'],
+                            {'cartridge_color': 'CYAN',    'ink_model_match': True, 'brand_match': True}),
+    ("Magenta Ink",         ['INK CATRIDGES', 'COMPATIBLE INK CARTRIDGES'],
+                            {'cartridge_color': 'MAGENTA', 'ink_model_match': True, 'brand_match': True}),
+    ("Yellow Ink",          ['INK CATRIDGES', 'COMPATIBLE INK CARTRIDGES'],
+                            {'cartridge_color': 'YELLOW',  'ink_model_match': True, 'brand_match': True}),
+    # Photo paper — two variants because gloss vs matte is a meaningful choice
+    # for photo printers. title_hide ensures the two slots return different
+    # products (gloss slot can't pick a matte paper, and vice versa).
+    ("Glossy Photo Paper",  ['SPECIAL PAPERS', 'INKJET PAPER'],
+                            {'paper_weight_min': 150,
+                             'title_boost': ['Gloss', 'Glossy', 'Photo', '10x15', '13x18', 'Premium', 'Γυαλιστερό'],
+                             'title_hide':  ['Matte', 'Ματ']}),
+    ("Matte Photo Paper",   ['SPECIAL PAPERS', 'INKJET PAPER'],
+                            {'paper_weight_min': 150,
+                             'title_boost': ['Matte', 'Ματ', 'Photo Matt'],
+                             'title_hide':  ['Gloss', 'Glossy', 'Γυαλιστερό']}),
+    # Light A4 for occasional document printing (paper_weight_max = 90)
+    ("A4 Plain Paper",      ['INKJET PAPER', 'COPIERS PAPER'],
+                            {'paper_weight_max': 90, 'title_boost': ['A4', '80g', '500']}),
+    # USB-A to USB-B printer cable
+    ("USB Printer Cable",   ['USB CABLES'],
+                            {'title_boost': ['USB-B', 'Type-B', 'Printer', 'Εκτυπωτή', '1.5m', '1.8m', '2m'],
+                             'title_hide':  ['HDMI', 'DisplayPort', 'Lightning', 'Micro USB', 'USB-C to USB-C']}),
+    # Display the photo prints — Stationery hierarchy (requires combined pool)
+    ("Photo Frame / Album", ['ΚΟΡΝΙΖΕΣ - ALBUM'],                {}),
+    # Cleaning — single slot with title_include to filter to actual cleaning
+    # products (spray, compressed air, microfiber, wipes — not generic items)
+    ("Cleaning",            ['CLEANING PRODUCTS'],
+                            {'title_include': ['Σπρέι', 'Spray', 'Αέρας', 'Compressed', 'Wipes', 'Microfiber', 'Μικροϊνών']}),
 ]
 
-PRINTER_LASER_SLOTS = [
-    ("Toner",               ['TONER CATRIDGES', 'COMPATIBLE TONERS'], {'toner_model_match': True, 'brand_match': True}),
+PRINTER_INKJET_MFP_SLOTS = [
+    # Same color-aware ink slots
+    ("Black Ink",           ['INK CATRIDGES', 'COMPATIBLE INK CARTRIDGES'],
+                            {'cartridge_color': 'BLACK',   'ink_model_match': True, 'brand_match': True}),
+    ("Cyan Ink",            ['INK CATRIDGES', 'COMPATIBLE INK CARTRIDGES'],
+                            {'cartridge_color': 'CYAN',    'ink_model_match': True, 'brand_match': True}),
+    ("Magenta Ink",         ['INK CATRIDGES', 'COMPATIBLE INK CARTRIDGES'],
+                            {'cartridge_color': 'MAGENTA', 'ink_model_match': True, 'brand_match': True}),
+    ("Yellow Ink",          ['INK CATRIDGES', 'COMPATIBLE INK CARTRIDGES'],
+                            {'cartridge_color': 'YELLOW',  'ink_model_match': True, 'brand_match': True}),
+    # MFP buyers print MORE documents (scan+print combo), so A4 comes BEFORE
+    # photo paper in slot order, and we keep only one photo-paper slot.
+    ("A4 Plain Paper",      ['INKJET PAPER', 'COPIERS PAPER'],
+                            {'paper_weight_max': 90, 'title_boost': ['A4', '80g', '500']}),
+    ("Glossy Photo Paper",  ['SPECIAL PAPERS', 'INKJET PAPER'],
+                            {'paper_weight_min': 150,
+                             'title_boost': ['Gloss', 'Glossy', 'Photo', '10x15', '13x18'],
+                             'title_hide':  ['Matte', 'Ματ']}),
+    # USB-A to USB-B printer cable
+    ("USB Printer Cable",   ['USB CABLES'],
+                            {'title_boost': ['USB-B', 'Type-B', 'Printer', 'Εκτυπωτή', '1.5m', '1.8m', '2m'],
+                             'title_hide':  ['HDMI', 'DisplayPort', 'Lightning', 'Micro USB', 'USB-C to USB-C']}),
+    # MFP-specific: USB flash for scan-to-USB workflow (the differentiator)
+    ("USB Flash (Scan)",    ['USB FLASH DISK'],
+                            {'title_boost': ['32GB', '64GB', '128GB', 'USB 3']}),
+    ("Photo Frame / Album", ['ΚΟΡΝΙΖΕΣ - ALBUM'],                {}),
+    ("Cleaning",            ['CLEANING PRODUCTS'],
+                            {'title_include': ['Σπρέι', 'Spray', 'Αέρας', 'Compressed', 'Wipes', 'Microfiber', 'Μικροϊνών']}),
+]
+
+# Backward-compat alias — code that still references PRINTER_INKJET_SLOTS
+# (none should after this refactor, but defensive) gets the HOME variant.
+PRINTER_INKJET_SLOTS = PRINTER_INKJET_HOME_SLOTS
+
+# ── Laser Printers (v28.31 refresh) ──────────────────────────────────────────
+# Replaces the legacy single-toner-slot PRINTER_LASER_SLOTS. The legacy list
+# had one "Toner" slot which is correct for mono lasers but leaves color-laser
+# buyers with only the black-toner bestseller as a suggestion — the other
+# three toners they actually need (C/M/Y) never surface. Same symptom as the
+# inkjet bug we fixed in v28.30, opposite cause (too few slots instead of too
+# many color-blind ones).
+#
+# Two axes, four variants:
+#
+#                     │  Single-function (LASER, FAX LASER)   │  MFP (MULTIFUCTION LASER …)
+#   ─────────────────┼───────────────────────────────────────┼─────────────────────────────
+#   Mono   (… MONO)  │  PRINTER_LASER_MONO_SLOTS  (1 toner)  │  PRINTER_LASER_MONO_MFP_SLOTS
+#   Color  (… COLOR) │  PRINTER_LASER_COLOR_SLOTS (4 toners) │  PRINTER_LASER_COLOR_MFP_SLOTS
+#
+# Plain LASER / MULTIFUCTION LASER (no mono/color specifier) default to MONO
+# since most plain-named laser SKUs in the catalog are mono workhorses; the
+# more specific COLOR hierarchies always trigger the color path.
+#
+# MFP variants swap a low-priority business slot for "USB Flash (Scan)" —
+# scan-to-USB is the defining MFP workflow and the natural co-purchase.
+# We drop:
+#   • MONO MFP: drops Calculator (least essential of the 10)
+#   • COLOR MFP: starts from COLOR (already 6 business slots, no Calculator/
+#                 Laminator/A3) and drops Shredder to make room
+# Cleaning + UPS are kept in every variant — toner is messy, laser printers
+# are power-sensitive.
+#
+# Color awareness uses the same cartridge_color flag added in v28.29. Toners
+# have the same Χρώμα column populated for 556/556 rows with values like
+# Μαύρο / Κυανό / Ματζέντα / Κίτρινο (plus English fallbacks Black / Cyan /
+# Magenta / Yellow). toner_model_match is on every cartridge slot so OEM
+# compatibility wins over generic bestsellers.
+
+PRINTER_LASER_MONO_SLOTS = [
+    ("Black Toner",         ['TONER CATRIDGES', 'COMPATIBLE TONERS'],
+                            {'cartridge_color': 'BLACK', 'toner_model_match': True, 'brand_match': True}),
     ("Drum Unit",           ['DRUMS CATRIDGES'],              {'brand_match': True}),
     ("A4 Paper",            ['LASER PAPERS', 'COPIERS PAPER'],{}),
     ("Network Cable",       ['NETWORK CABLES'],               {'title_boost': ['Cat6', 'Cat 6']}),
     ("Shredder",            ['ΚΑΤΑΣΤΡΟΦΕΙΣ ΕΓΓΡΑΦΩΝ'],        {}),
-    ("UPS",                 ['ΜΠΑΤΑΡΙΕΣ UPS'],                          {'ups_min_va': 1000}),
+    ("UPS",                 ['ΜΠΑΤΑΡΙΕΣ UPS'],                {'ups_min_va': 1000}),
     ("Laminator",           ['ΠΛΑΣΤΙΚΟΠΟΙΗΤΕΣ'],              {}),
     ("A3 Paper",            ['LASER PAPERS', 'COPIERS PAPER'],{'title_boost': ['A3']}),
-    ("Cleaning",            ['CLEANING PRODUCTS'],            {}),
+    ("Cleaning",            ['CLEANING PRODUCTS'],
+                            {'title_include': ['Σπρέι', 'Spray', 'Αέρας', 'Compressed', 'Wipes', 'Microfiber', 'Μικροϊνών']}),
     ("Calculator",          ['CALCULATORS'],                  {}),
 ]
+
+PRINTER_LASER_MONO_MFP_SLOTS = [
+    # Same as MONO except the last slot — Calculator out, USB Flash in for
+    # scan-to-USB workflow.
+    ("Black Toner",         ['TONER CATRIDGES', 'COMPATIBLE TONERS'],
+                            {'cartridge_color': 'BLACK', 'toner_model_match': True, 'brand_match': True}),
+    ("Drum Unit",           ['DRUMS CATRIDGES'],              {'brand_match': True}),
+    ("A4 Paper",            ['LASER PAPERS', 'COPIERS PAPER'],{}),
+    ("Network Cable",       ['NETWORK CABLES'],               {'title_boost': ['Cat6', 'Cat 6']}),
+    ("Shredder",            ['ΚΑΤΑΣΤΡΟΦΕΙΣ ΕΓΓΡΑΦΩΝ'],        {}),
+    ("UPS",                 ['ΜΠΑΤΑΡΙΕΣ UPS'],                {'ups_min_va': 1000}),
+    ("Laminator",           ['ΠΛΑΣΤΙΚΟΠΟΙΗΤΕΣ'],              {}),
+    ("A3 Paper",            ['LASER PAPERS', 'COPIERS PAPER'],{'title_boost': ['A3']}),
+    ("Cleaning",            ['CLEANING PRODUCTS'],
+                            {'title_include': ['Σπρέι', 'Spray', 'Αέρας', 'Compressed', 'Wipes', 'Microfiber', 'Μικροϊνών']}),
+    ("USB Flash (Scan)",    ['USB FLASH DISK'],               {'title_boost': ['32GB', '64GB', '128GB', 'USB 3']}),
+]
+
+PRINTER_LASER_COLOR_SLOTS = [
+    # 4 color-aware toner slots solve the "color-laser buyer sees only the
+    # black bestseller" friction. Each cartridge_color hard-filters by Χρώμα
+    # so slot N can only return color N.
+    ("Black Toner",         ['TONER CATRIDGES', 'COMPATIBLE TONERS'],
+                            {'cartridge_color': 'BLACK',   'toner_model_match': True, 'brand_match': True}),
+    ("Cyan Toner",          ['TONER CATRIDGES', 'COMPATIBLE TONERS'],
+                            {'cartridge_color': 'CYAN',    'toner_model_match': True, 'brand_match': True}),
+    ("Magenta Toner",       ['TONER CATRIDGES', 'COMPATIBLE TONERS'],
+                            {'cartridge_color': 'MAGENTA', 'toner_model_match': True, 'brand_match': True}),
+    ("Yellow Toner",        ['TONER CATRIDGES', 'COMPATIBLE TONERS'],
+                            {'cartridge_color': 'YELLOW',  'toner_model_match': True, 'brand_match': True}),
+    # 6 business slots (Laminator / A3 / Calculator dropped to make room for
+    # the 3 extra toner slots vs the mono variant).
+    ("Drum Unit",           ['DRUMS CATRIDGES'],              {'brand_match': True}),
+    ("A4 Paper",            ['LASER PAPERS', 'COPIERS PAPER'],{}),
+    ("Network Cable",       ['NETWORK CABLES'],               {'title_boost': ['Cat6', 'Cat 6']}),
+    ("Shredder",            ['ΚΑΤΑΣΤΡΟΦΕΙΣ ΕΓΓΡΑΦΩΝ'],        {}),
+    ("UPS",                 ['ΜΠΑΤΑΡΙΕΣ UPS'],                {'ups_min_va': 1000}),
+    ("Cleaning",            ['CLEANING PRODUCTS'],
+                            {'title_include': ['Σπρέι', 'Spray', 'Αέρας', 'Compressed', 'Wipes', 'Microfiber', 'Μικροϊνών']}),
+]
+
+PRINTER_LASER_COLOR_MFP_SLOTS = [
+    # Same 4 color-aware toners as COLOR. Drop Shredder (least essential of
+    # the remaining 6 business slots) to free a position for USB Flash (Scan).
+    ("Black Toner",         ['TONER CATRIDGES', 'COMPATIBLE TONERS'],
+                            {'cartridge_color': 'BLACK',   'toner_model_match': True, 'brand_match': True}),
+    ("Cyan Toner",          ['TONER CATRIDGES', 'COMPATIBLE TONERS'],
+                            {'cartridge_color': 'CYAN',    'toner_model_match': True, 'brand_match': True}),
+    ("Magenta Toner",       ['TONER CATRIDGES', 'COMPATIBLE TONERS'],
+                            {'cartridge_color': 'MAGENTA', 'toner_model_match': True, 'brand_match': True}),
+    ("Yellow Toner",        ['TONER CATRIDGES', 'COMPATIBLE TONERS'],
+                            {'cartridge_color': 'YELLOW',  'toner_model_match': True, 'brand_match': True}),
+    ("Drum Unit",           ['DRUMS CATRIDGES'],              {'brand_match': True}),
+    ("A4 Paper",            ['LASER PAPERS', 'COPIERS PAPER'],{}),
+    ("Network Cable",       ['NETWORK CABLES'],               {'title_boost': ['Cat6', 'Cat 6']}),
+    ("UPS",                 ['ΜΠΑΤΑΡΙΕΣ UPS'],                {'ups_min_va': 1000}),
+    ("Cleaning",            ['CLEANING PRODUCTS'],
+                            {'title_include': ['Σπρέι', 'Spray', 'Αέρας', 'Compressed', 'Wipes', 'Microfiber', 'Μικροϊνών']}),
+    ("USB Flash (Scan)",    ['USB FLASH DISK'],               {'title_boost': ['32GB', '64GB', '128GB', 'USB 3']}),
+]
+
+# Backward-compat alias — defaults to the safest variant (Mono).
+PRINTER_LASER_SLOTS = PRINTER_LASER_MONO_SLOTS
 
 # ── Office Printers (v28.29) ────────────────────────────────────────────────
 # Goal: a complete "ξεκίνα το γραφείο σου" bundle around any printer (inkjet
@@ -15367,6 +15626,19 @@ def run_peripherals_engine(trigger, df_products, df_history, cluster_key):
     _tt_lower = tt.lower()
     tb = str(trigger.get('Κατασκευαστής', '')).strip().upper()
     thier = str(trigger.get('Hierarchy', '')).strip().upper()
+
+    # v28.32 — title-based brand fallback for printer triggers.
+    # Printer rows in the Spare sheet (Home file) have empty Κατασκευαστής,
+    # so brand_match would never fire on the cartridge/accessory slots,
+    # leaving same-brand consumables stranded behind sales-rank generics.
+    # We only run the fallback when the trigger is actually a printer AND
+    # the brand is empty — keeps non-printer clusters' behavior identical.
+    if (not tb or tb in ('NAN', 'N/A')) and thier in PRINTER_HIERARCHIES:
+        _brand_match = re.search(PRINTER_BRANDS_PATTERN, tt.upper())
+        if _brand_match:
+            tb = _brand_match.group(1).upper().replace('HEWLETT-PACKARD', 'HP').replace('HEWLETT PACKARD', 'HP')
+            diag.append(("0. Brand from Title", tb, f"Title='{tt[:60]}…' (Κατασκευαστής was empty)"))
+
     tprice = parse_euro_price(trigger.get('LIST PRICE', 0))
     tcolor = str(trigger.get('Χρώμα Γραφής', trigger.get('Χρώμα', ''))).strip()
 
@@ -15512,11 +15784,39 @@ def run_peripherals_engine(trigger, df_products, df_history, cluster_key):
         diag.append(("0b. Monitor Ports", port_info, f"Res={tres}"))
     elif cluster_key == "Printers":
         if is_laser:
-            slots = PRINTER_LASER_SLOTS
-            persona = "Laser"
+            # v28.31 — Laser splits into 4 variants by hierarchy:
+            #   COLOR + MFP  → PRINTER_LASER_COLOR_MFP_SLOTS
+            #   COLOR only   → PRINTER_LASER_COLOR_SLOTS
+            #   MFP only     → PRINTER_LASER_MONO_MFP_SLOTS
+            #   plain/mono   → PRINTER_LASER_MONO_SLOTS
+            # 'MULTIFUCTION' (typo) is the registered spelling in printer_hiers;
+            # we also accept the correct 'MULTIFUNCTION' defensively.
+            is_color_laser = 'COLOR' in thier or 'ΕΓΧΡΩΜ' in thier
+            is_mfp_laser   = 'MULTIFUCTION' in thier or 'MULTIFUNCTION' in thier
+            if is_color_laser and is_mfp_laser:
+                slots = PRINTER_LASER_COLOR_MFP_SLOTS
+                persona = "Color Laser MFP"
+            elif is_color_laser:
+                slots = PRINTER_LASER_COLOR_SLOTS
+                persona = "Color Laser"
+            elif is_mfp_laser:
+                slots = PRINTER_LASER_MONO_MFP_SLOTS
+                persona = "Mono Laser MFP"
+            else:
+                slots = PRINTER_LASER_MONO_SLOTS
+                persona = "Mono Laser"
         else:
-            slots = PRINTER_INKJET_SLOTS
-            persona = "Inkjet"
+            # Inkjet split (v28.30): MFP vs regular single-function.
+            # Hierarchy 'MULTIFUNCTION INKJET' (or the legacy typo
+            # 'MULTIFUCTION INKJET' if it ever appears) → MFP slots.
+            # Anything else inkjet → HOME slots.
+            is_mfp_inkjet = ('MULTIFUNCTION' in thier) or ('MULTIFUCTION' in thier and not is_laser)
+            if is_mfp_inkjet:
+                slots = PRINTER_INKJET_MFP_SLOTS
+                persona = "Multifunction Inkjet"
+            else:
+                slots = PRINTER_INKJET_HOME_SLOTS
+                persona = "Inkjet (Photo/Home)"
         diag.append(("0. Printer Persona", persona, f"Hierarchy='{thier}'"))
     elif cluster_key == "Office Printers":
         # Unified office bundle — same 13 slots for inkjet and laser printers,
@@ -18966,18 +19266,31 @@ elif active_cluster in STATIONERY_CLUSTERS:
         PERIPHERAL_CLUSTER_SLOTS[active_cluster] = stat_slots
     recs, diag, slot_notes, full_candidates = run_peripherals_engine(trigger, combined_stat_books, df_history, active_cluster)
     slot_diag = []
-elif active_cluster in ("Monitors", "Printers", "Webcam", "USB Hub"):
+elif active_cluster == "Printers":
+    # v28.32 — pool combines Spare (Home file: cartridges, paper, drums,
+    # cleaning, etc.) + Peripherals (USB cables, USB hubs not in Spare) +
+    # Stationery (ΚΟΡΝΙΖΕΣ - ALBUM photo frame slot in inkjet HOME persona).
+    # Each slot's hierarchy filter narrows the pool, so extra rows from
+    # unrelated hierarchies are harmless. Spare-first ordering means the
+    # 2933-cartridge catalog in Spare wins over Peripherals' 1313.
+    _frames = [f for f in [df_spare, df_peripherals, df_stationery] if f is not None and not f.empty]
+    _printer_pool = pd.concat(_frames, ignore_index=True) if _frames else df_peripherals
+    recs, diag, slot_notes, full_candidates = run_peripherals_engine(trigger, _printer_pool, df_history, active_cluster)
+    slot_diag = []
+elif active_cluster in ("Monitors", "Webcam", "USB Hub"):
     recs, diag, slot_notes, full_candidates = run_peripherals_engine(trigger, df_peripherals, df_history, active_cluster)
     slot_diag = []
 elif active_cluster == "Office Printers":
-    # The office bundle pulls from THREE sheets:
-    #   • Peripherals — inks, toners, copy paper, USB cables, USB flash disks
+    # The office bundle pulls from FOUR sheets (v28.32):
+    #   • Spare      — cartridges (K/C/M/Y inks AND toners), copy paper,
+    #                   PRINTER ACCESSORIES, cleaning
+    #   • Peripherals — USB cables, USB flash disks (not in Spare)
     #   • Stationery — pens, folders, highlighters, staplers, sleeves
-    #   • Products   — surge protectors (SURGE PROTECTORS hierarchy lives here,
-    #                   not in Peripherals; the legacy PRINTER_INKJET_SLOTS
-    #                   used 'LINE INTERACTIVE' which is actually UPS — bug)
-    # We concat them once here so a single pool is passed into the engine.
-    _frames = [f for f in [df_peripherals, df_stationery, df_products] if f is not None and not f.empty]
+    #   • Products   — surge protectors (SURGE PROTECTORS hierarchy lives
+    #                   here, not in Peripherals or Spare; the legacy
+    #                   PRINTER_INKJET_SLOTS used 'LINE INTERACTIVE' which
+    #                   is actually UPS — bug fixed in v28.29)
+    _frames = [f for f in [df_spare, df_peripherals, df_stationery, df_products] if f is not None and not f.empty]
     _office_pool = pd.concat(_frames, ignore_index=True) if _frames else df_peripherals
     recs, diag, slot_notes, full_candidates = run_peripherals_engine(trigger, _office_pool, df_history, active_cluster)
     slot_diag = []
