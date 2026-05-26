@@ -102,7 +102,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v28.28 — Electric Brushes (Ηλεκτρικές Βούρτσες) — 5th hair-care engine: tiny but distinct hierarchy (6 unique SKUs, €19-204), strongest brand overlap with Hair Dryers (4/27), same women's-hair-styling template with 3 impulse @ 5-7
+        🟢 Engine v28.29 — Office Printers (Εκτυπωτές Γραφείου) — new 13-slot office-bundle persona on top of the existing Inkjet/Laser routes: 4 cartridge slots auto-fill K/C/M/Y by Χρώμα + OEM model match, paired with copier paper + USB cable + USB flash + surge protector + 5 stationery essentials (pens, transfer folders, highlighters, staplers, sleeves). Hybrid sales × spec scoring.
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -5126,6 +5126,8 @@ L2_CHILDREN = {
          "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='2' y='3' width='20' height='14' rx='1'/%3E%3Cline x1='8' y1='21' x2='16' y2='21'/%3E%3Cline x1='12' y1='17' x2='12' y2='21'/%3E%3C/svg%3E"},
         {"key": "Printers", "label": "Εκτυπωτές",
          "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 6 2 18 2 18 9'/%3E%3Cpath d='M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2'/%3E%3Crect x='6' y='14' width='12' height='8'/%3E%3C/svg%3E"},
+        {"key": "Office Printers", "label": "Εκτυπωτές\nΓραφείου",
+         "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 6 2 18 2 18 9'/%3E%3Cpath d='M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2'/%3E%3Crect x='6' y='14' width='12' height='8'/%3E%3Ccircle cx='9' cy='17' r='0.8' fill='%23ff5e00'/%3E%3Ccircle cx='12' cy='17' r='0.8' fill='%23ff5e00'/%3E%3Ccircle cx='15' cy='17' r='0.8' fill='%23ff5e00'/%3E%3C/svg%3E"},
         {"key": "Webcam", "label": "Webcam",
          "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='10' r='6'/%3E%3Ccircle cx='12' cy='10' r='2'/%3E%3Cpath d='M5 22h14l-2-5H7l-2 5z'/%3E%3C/svg%3E"},
         {"key": "USB Hub", "label": "USB Hub",
@@ -6041,6 +6043,25 @@ else:
         else:
             st.sidebar.markdown('<p class="sidebar-section">Επιλέξτε Εκτυπωτή</p>', unsafe_allow_html=True)
             sel = st.sidebar.selectbox("", printers['Title'].unique(), label_visibility="collapsed", key="print_sel")
+            trigger = printers[printers['Title']==sel].iloc[0] if sel else None
+
+    elif active_cluster == "Office Printers":
+        # Same trigger detection as "Printers" — any printer in the catalog
+        # is a valid anchor for the office bundle. Inkjet/laser/color/mono is
+        # detected inside the engine; the user just picks the printer.
+        combined = pd.concat([df_products, df_peripherals], ignore_index=True) if not df_peripherals.empty else df_products
+        printer_hiers = {'INKJET', 'MULTIFUNCTION INKJET', 'MULTIFUCTION LASER', 'LASER', 'LASER A4 MONO',
+                         'LASER A4 COLOR', 'LASER A3 MONO', 'LASER A3 COLOR', 'FAX LASER',
+                         'MULTIFUCTION LASER A4 COLOR', 'MULTIFUCTION LASER A4 MONO',
+                         'MULTIFUCTION LASER A3 COLOR', 'MULTIFUCTION LASER A3 MONO'}
+        printers = combined[combined['Hierarchy'].fillna('').astype(str).str.upper().str.strip().isin(printer_hiers)].copy()
+        if printers.empty:
+            printers = combined[combined['Level 2'].fillna('').str.strip().str.lower().isin(['printers', 'εκτυπωτές'])].copy()
+        if printers.empty:
+            st.sidebar.warning("Δεν βρέθηκαν εκτυπωτές.")
+        else:
+            st.sidebar.markdown('<p class="sidebar-section">Επιλέξτε Εκτυπωτή (Office Bundle)</p>', unsafe_allow_html=True)
+            sel = st.sidebar.selectbox("", printers['Title'].unique(), label_visibility="collapsed", key="office_print_sel")
             trigger = printers[printers['Title']==sel].iloc[0] if sel else None
 
     elif active_cluster == "Webcam":
@@ -14624,6 +14645,7 @@ PERIPHERAL_TRIGGERS = {
 #   ups_min_va: int — minimum UPS VA
 #   ink_model_match: bool — match ink cartridge to printer
 #   toner_model_match: bool — match toner to printer
+#   cartridge_color: str — 'BLACK' | 'CYAN' | 'MAGENTA' | 'YELLOW' — hard-filter cartridge pool by Χρώμα column (v28.29)
 #   paper_weight_max/paper_weight_min: int — paper weight filter
 #   resolution_match: bool — match webcam to monitor resolution
 #   usb_version_match: bool — match USB speed
@@ -15071,6 +15093,70 @@ PRINTER_LASER_SLOTS = [
     ("Calculator",          ['CALCULATORS'],                  {}),
 ]
 
+# ── Office Printers (v28.29) ────────────────────────────────────────────────
+# Goal: a complete "ξεκίνα το γραφείο σου" bundle around any printer (inkjet
+# or laser, color or mono). 13 slots: 4 consumable cartridges (K/C/M/Y) +
+# the office staples buyers actually re-order with their printer.
+#
+# Slot strategy (decided after looking at the data):
+#   • Cartridges 1-4 → HYBRID (sales × specs). Pure sales would rank the
+#     best-selling Black HP cartridge for any printer regardless of model
+#     compatibility, which is the worst possible suggestion. So we:
+#       - hard-filter the pool by Χρώμα column (cartridge_color) — clean
+#         and reliable (1313/1313 rows have it populated with values like
+#         "Μαύρο", "Κυανό", "Ματζέντα", "Κίτρινο")
+#       - heavily boost OEM model match (ink_model_match / toner_model_match)
+#         using the printer's Αναλώσιμο υλικό against cartridge Μοντέλο /
+#         Συμβατό μοντέλο columns (+200k)
+#       - boost same-brand (brand_match, +80k) — HP printer → HP ink wins
+#         over generic compatibles unless sales overwhelmingly dominate
+#       - within the surviving (correct-color, correct-model, same-brand)
+#         pool, sales rank decides. For inkjet/laser hybrid we list BOTH
+#         ink and toner hierarchies; the OEM model match will naturally
+#         steer laser printers to toners and inkjets to inks.
+#   • Slot 1 (Black) — universal; every printer has black consumable.
+#   • Slots 2-4 (CMY) — pool may be empty for mono printers; that's fine,
+#     the engine just renders an empty slot (no false fills).
+#   • Copy Paper → SALES-only within COPIERS PAPER hierarchy (commodity).
+#     COPIERS PAPER products are nearly interchangeable; A4 80g is the
+#     default. Light A4/80g title boost just to break ties.
+#   • USB Cable → SALES + light spec (USB-B / Type-B / Printer keywords)
+#     because printer cables are a specific USB-A-to-USB-B variant most
+#     people don't know to ask for. Hide HDMI/DisplayPort/Lightning.
+#   • USB Flash Disk → SALES only. Sweet-spot 32-128GB capacity gets a
+#     soft boost (matches typical office "save scan to USB" use case).
+#   • Surge Protector → SALES with light boost for multi-outlet ones
+#     (Πολύπριζο with 4-6 θέσεων is the office norm). Uses SURGE PROTECTORS
+#     hierarchy from the Products sheet (NOT 'LINE INTERACTIVE' which is
+#     actually UPS — that was a bug in the legacy PRINTER_INKJET_SLOTS).
+#   • Stationery (slots 9-13) → pure SALES within each hierarchy. These
+#     are commodity items where the bestseller is genuinely what people
+#     want; spec matching adds no signal.
+PRINTER_OFFICE_SLOTS = [
+    # ── Consumables (4 cartridge slots, hard-filtered by Χρώμα) ──
+    ("Black Cartridge",     ['INK CATRIDGES', 'COMPATIBLE INK CARTRIDGES', 'TONER CATRIDGES', 'COMPATIBLE TONERS'],
+                            {'cartridge_color': 'BLACK', 'ink_model_match': True, 'toner_model_match': True, 'brand_match': True}),
+    ("Cyan Cartridge",      ['INK CATRIDGES', 'COMPATIBLE INK CARTRIDGES', 'TONER CATRIDGES', 'COMPATIBLE TONERS'],
+                            {'cartridge_color': 'CYAN',  'ink_model_match': True, 'toner_model_match': True, 'brand_match': True}),
+    ("Magenta Cartridge",   ['INK CATRIDGES', 'COMPATIBLE INK CARTRIDGES', 'TONER CATRIDGES', 'COMPATIBLE TONERS'],
+                            {'cartridge_color': 'MAGENTA','ink_model_match': True, 'toner_model_match': True, 'brand_match': True}),
+    ("Yellow Cartridge",    ['INK CATRIDGES', 'COMPATIBLE INK CARTRIDGES', 'TONER CATRIDGES', 'COMPATIBLE TONERS'],
+                            {'cartridge_color': 'YELLOW','ink_model_match': True, 'toner_model_match': True, 'brand_match': True}),
+    # ── Print supplies ──
+    ("Copy Paper",          ['COPIERS PAPER'],                {'title_boost': ['A4', '80g', '80gr', '500']}),
+    # ── Connectivity & power ──
+    ("USB Cable",           ['USB CABLES'],                   {'title_boost': ['USB-B', 'Type-B', 'Printer', 'Εκτυπωτή', '1.5m', '1.8m', '2m'],
+                                                              'title_hide':  ['HDMI', 'DisplayPort', 'Lightning', 'Micro USB', 'USB-C to USB-C']}),
+    ("USB Flash Disk",      ['USB FLASH DISK'],               {'title_boost': ['32GB', '64GB', '128GB', 'USB 3']}),
+    ("Surge Protector",     ['SURGE PROTECTORS'],             {'title_boost': ['6 Θέσεων', '5 Θέσεων', '4 Θέσεων', 'USB', 'Πολύπριζο']}),
+    # ── Office stationery essentials (sales-only) ──
+    ("Ballpoint Pens",      ['ΣΤΥΛΟ ΔΙΑΡΚΕΙΑΣ'],              {}),
+    ("Transfer Folders",    ['ΦΑΚΕΛΟΙ ΜΕΤΑΦΟΡΑΣ'],            {}),
+    ("Highlighters",        ['ΜΑΡΚΑΔΟΡΟΙ ΥΠΟΓΡΑΜΜΙΣΗΣ'],      {}),
+    ("Staplers",            ['ΣΥΡΡΑΠΤΙΚΑ'],                   {}),
+    ("Plastic Sleeves",     ['ΘΗΚΕΣ-ΖΕΛΑΤΙΝΕΣ'],              {}),
+]
+
 # ── Webcam ──
 # Reorder: Microphone is the highest-value co-purchase for a webcam → slot 1.
 # TRIPODS hierarchy removed from Webcam Mount — DSLR tripods aren't webcam clips.
@@ -15125,6 +15211,7 @@ PERIPHERAL_CLUSTER_SLOTS = {
     "Gaming Keyboard":  GAMING_KEYBOARD_SLOTS,
     "Monitors":         None,  # Detected dynamically from Χρήση
     "Printers":         None,  # Detected dynamically from Hierarchy
+    "Office Printers":  PRINTER_OFFICE_SLOTS,  # v28.29 — unified office bundle
     "Webcam":           WEBCAM_SLOTS,
     "USB Hub":          USB_HUB_SLOTS,
 }
@@ -15431,6 +15518,21 @@ def run_peripherals_engine(trigger, df_products, df_history, cluster_key):
             slots = PRINTER_INKJET_SLOTS
             persona = "Inkjet"
         diag.append(("0. Printer Persona", persona, f"Hierarchy='{thier}'"))
+    elif cluster_key == "Office Printers":
+        # Unified office bundle — same 13 slots for inkjet and laser printers,
+        # mono and color. Slot 1 (Black) is universal; slots 2-4 (C/M/Y) will
+        # auto-empty for mono printers via the cartridge_color hard filter
+        # finding zero matching items. ink_model_match + toner_model_match
+        # are both on, so the engine works for either consumable type.
+        slots = PRINTER_OFFICE_SLOTS
+        _is_color_printer = 'COLOR' in thier or 'ΕΓΧΡΩΜ' in thier
+        _is_mono_printer  = 'MONO' in thier or 'MONOCHROME' in thier
+        if is_laser and _is_color_printer:    persona = "Office (Color Laser)"
+        elif is_laser and _is_mono_printer:   persona = "Office (Mono Laser)"
+        elif is_laser:                        persona = "Office (Laser)"
+        elif _is_mono_printer:                persona = "Office (Mono Inkjet)"
+        else:                                 persona = "Office (Inkjet)"
+        diag.append(("0. Office Printer Persona", persona, f"Hierarchy='{thier}', Αναλώσιμο='{tink[:50]}'"))
     elif cluster_key == "Webcam":
         # Webcam sub-cluster: gaming brands → gaming-variant slot list (gaming audio, streaming, RGB).
         _gaming_webcam_brands = {'RAZER', 'LOGITECH G', 'CORSAIR', 'HYPERX', 'ASUS ROG', 'ROCCAT', 'ELGATO'}
@@ -16488,6 +16590,33 @@ def run_peripherals_engine(trigger, df_products, df_history, cluster_key):
                             )
                             pool.loc[m, 'Final_Score'] += 200000
                 notes.append(f"Consumable match: '{tink[:40]}'")
+
+        # ── Cartridge color match (Office Printers — v28.29) ──
+        # Hard-filters the cartridge pool by the Χρώμα column so the
+        # "Cyan slot" can never return a Black/Magenta/Yellow product.
+        # Synonyms cover the Greek/English variants present in the data
+        # (Μαύρο/Black, Κυανό/Cyan/Γαλάζιο, Ματζέντα/Magenta, Κίτρινο/Yellow).
+        # Multi-color combo packs (Πολλαπλό) are excluded from single-color
+        # slots — slot 1 (Black) deliberately also rejects them to avoid
+        # showing a 4-color combo when the buyer needs only black.
+        if flags.get('cartridge_color') and 'Χρώμα' in pool.columns:
+            _color_synonyms = {
+                'BLACK':   {'ΜΑΥΡΟ', 'BLACK', 'BK', 'BLK'},
+                'CYAN':    {'ΚΥΑΝΟ', 'CYAN', 'ΓΑΛΑΖΙΟ'},
+                'MAGENTA': {'ΜΑΤΖΕΝΤΑ', 'MAGENTA', 'MAGENDA'},
+                'YELLOW':  {'ΚΙΤΡΙΝΟ', 'YELLOW', 'ΚΟΚΚΙΝΟ-ΚΙΤΡΙΝΟ'},
+            }
+            wanted = flags['cartridge_color'].upper()
+            allowed = _color_synonyms.get(wanted, {wanted})
+            col_vals = pool['Χρώμα'].fillna('').astype(str).str.strip().str.upper()
+            m = col_vals.isin(allowed)
+            if m.any():
+                b4 = len(pool)
+                pool = pool[m]
+                notes.append(f"Cartridge color [{wanted}]: {b4} → {len(pool)} rows")
+            else:
+                notes.append(f"⚠ No {wanted} cartridges available — slot will be empty")
+                pool = pool.head(0)
 
         # ── Paper weight filters ──
         if flags.get('paper_weight_max') and 'Βάρος' in pool.columns:
@@ -18839,6 +18968,18 @@ elif active_cluster in STATIONERY_CLUSTERS:
     slot_diag = []
 elif active_cluster in ("Monitors", "Printers", "Webcam", "USB Hub"):
     recs, diag, slot_notes, full_candidates = run_peripherals_engine(trigger, df_peripherals, df_history, active_cluster)
+    slot_diag = []
+elif active_cluster == "Office Printers":
+    # The office bundle pulls from THREE sheets:
+    #   • Peripherals — inks, toners, copy paper, USB cables, USB flash disks
+    #   • Stationery — pens, folders, highlighters, staplers, sleeves
+    #   • Products   — surge protectors (SURGE PROTECTORS hierarchy lives here,
+    #                   not in Peripherals; the legacy PRINTER_INKJET_SLOTS
+    #                   used 'LINE INTERACTIVE' which is actually UPS — bug)
+    # We concat them once here so a single pool is passed into the engine.
+    _frames = [f for f in [df_peripherals, df_stationery, df_products] if f is not None and not f.empty]
+    _office_pool = pd.concat(_frames, ignore_index=True) if _frames else df_peripherals
+    recs, diag, slot_notes, full_candidates = run_peripherals_engine(trigger, _office_pool, df_history, active_cluster)
     slot_diag = []
 else:
     df_all_for_books = pd.concat([df_books, df_products], ignore_index=True)
