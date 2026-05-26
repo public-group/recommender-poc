@@ -102,7 +102,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v28.19 — UI fixes: distinct L2 icons per cluster + scoped per-tile selection highlighting (no more "click-everything" bug)
+        🟢 Engine v28.20 — Curlers & Brushes (Ψαλίδια & Βούρτσες Μαλλιών) — Personal Care: brand × price-tier × color × DEVICE SUBTYPE (curl iron vs hot brush)
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -1911,6 +1911,203 @@ HD_S_PRICE_TWO_OFF   = -150_000  # Companion ≥2 tiers away — penalize
 HD_S_COLOR_EXACT     =  60_000   # Color-group exact match
 HD_S_COLOR_PARTIAL   =  20_000   # Color-group token overlap
 HD_S_SALES_FACTOR    =       0.5 # Sales tiebreaker weight
+
+
+# ═════════════════════════════════════════════════════════════
+# 🟢 CURLERS & BRUSHES CONFIGURATION (Ψαλίδια & Βούρτσες Μαλλιών — Personal Care)
+# ═════════════════════════════════════════════════════════════
+# Trigger detection: products in SDA sheet with Hierarchy = "CURLERS & BRUSHES"
+# (Level 1 = Personal Care, Level 2 = Women's Care).
+#
+# Recommendation depth — HYBRID with a NEW SIGNAL (sales × brand × price-tier
+# × color × DEVICE SUBTYPE). This is the first Personal Care engine where the
+# trigger category is functionally HETEROGENEOUS: 56 unique products split
+# across two genuinely different device types within the same hierarchy:
+#
+#   • "Συσκευή για μπούκλες" (curling iron / wand) — 46 SKUs.
+#     Intent: creating defined curls/waves. Buyer mindset: hair-styling craft.
+#   • "Ηλεκτρική Βούρτσα" (electric / hot-air brush) — 30 SKUs.
+#     Intent: simultaneous drying + volumizing during brushing. Buyer mindset:
+#     fast morning routine, smooth blowout volume.
+#
+# A REVLON One-Step Volumizer brush buyer and a BaByliss Bouncy Curls iron
+# buyer have different downstream-styling intent. Treating them identically
+# would mean an "Ηλεκτρική Βούρτσα" trigger gets a curling-iron MULTISTYLER
+# recommendation (or vice versa), which reads as a category mismatch.
+#
+# SUBTYPE-BIAS DESIGN (light, not a hard filter):
+#   • Subtype detection: parse Τύπος συσκευής field on the trigger row.
+#   • Subtype boost (+50_000) fires ONLY on the MULTISTYLERS slot, biasing
+#     toward multistylers that match the trigger's primary intent:
+#       - Trigger is hot-air brush → bias toward Dyson Airwrap / Shark
+#         FlexStyle / multistylers with "βούρτσα" in their description
+#       - Trigger is curling iron → bias toward multistylers with
+#         "μπούκλες" / "κυματιστά" / "wand" in description
+#   • Light boost (50k) ≪ brand-match (500k) — subtype is a tiebreaker
+#     within the multistyler pool, not an override of brand-ecosystem.
+#   • Why ONLY on multistylers? Subtype is the discriminator between
+#     "this product alternative" choices — and multistylers ARE the
+#     alternatives. Straighteners and hair dryers don't have an analogous
+#     subtype axis (no "brush-version" of a straightener) so subtype
+#     wouldn't add signal there. Body scales / shaving machines are
+#     subtype-irrelevant.
+#
+# Brand overlap audit (Curler brands vs each pool):
+#   STRAIGHTENERS       10/14 (71%)  ★★★  → max_total=2
+#   HAIR DRYERS         15/27 (56%)  ★★★  → max_total=2 (#2 cross-purchase 418)
+#   MULTISTYLERS         6/8 (75%)   ★★★  + subtype boost
+#   ΚΟΥΡΕΥΤΙΚΕΣ          9/12 (75%)  ★★   ← excluded (function-dup with TRIMMERS)
+#   TRIMMERS             5/8 (63%)   ★★   ← excluded (cross-purchase only 58,
+#                                              Grooming Set already covers male)
+#   GROOMING SET         5/8 (63%)   ★★
+#   SHAVING MACHINES     4/9 (44%)   ★★
+#   EPILATORS            4/9 (44%)   ★★
+#   ELECTRIC TOOTHBRUSHES 1/8 (13%)  ★    universal wellness
+#   BODY SCALES          3/23 (13%)  ★    #4 cross-purchase 90 → included
+#   ACCESSORIES          2/10 (20%)  —    ← excluded (cross-purchase only 12)
+#   MASSAGE DEVICES      3/11 (27%)  —    ← excluded (cross-purchase only 16)
+#   ELEC TOOTHBRUSH ACCS  1/3        —    ← excluded
+#
+# Slot plan (10 slots / 8 hierarchies). Round 1 = 8 slots. Round 2 fills
+# slots 9-10 from the max_total=2 STRAIGHTENERS and HAIR DRYERS pools.
+
+CURLER_TRIGGER_HIERARCHIES = {
+    "CURLERS & BRUSHES", "Curlers & Brushes", "curlers & brushes",
+    "CURLERS", "Curlers",
+    "ΨΑΛΙΔΙΑ ΜΑΛΛΙΩΝ", "Ψαλίδια Μαλλιών", "Ψαλίδι Μαλλιών",
+    "ΒΟΥΡΤΣΕΣ ΜΑΛΛΙΩΝ", "Βούρτσες Μαλλιών", "Ηλεκτρική Βούρτσα",
+}
+
+# Test SKUs — 6 representative curlers covering the full spectrum:
+#   • #1 seller REVLON hot-air brush (volumizer subtype)
+#   • #3 seller REVLON curling wand (curl-iron subtype)
+#   • BABYLISS Bouncy Curls (most popular dedicated curl iron, PINK aesthetic)
+#   • PHILIPS Air Styler (mid-range hot-air brush)
+#   • SHARK SmoothStyle (premium, multi-subtype "Ηλεκτρική βούρτσα;Συσκευή")
+#   • REMINGTON Big Curl (mainstream curl iron)
+# Empty set = show all 56 unique materials.
+CURLER_TEST_SKUS = {
+    "1693407",  # REVLON RVDR5222E Salon One-Step Volumizer €50 — #1 seller, hot-air brush
+    "1799944",  # REVLON Wave Master RVIR3056UKE €45 — #3 seller, curling wand
+    "1525546",  # BABYLISS Bouncy Curles C451E €59 Ροζ — top curl iron, PINK
+    "1728126",  # PHILIPS Air Styler BHA530/00 €70 — mid-range hot-air brush
+    "1936841",  # SHARK HT202EU SmoothStyle €129 — premium, multi-subtype
+    "1484369",  # REMINGTON CI5538 Pro Big Curl Tong €50 — mainstream curl iron
+}
+
+# (priority_rank, role_label, hierarchies, logic_key, max_in_round_1, max_total)
+CURLER_PRIORITY = [
+    (1, 'Ισιωτικό Μαλλιών',
+        ['STRAIGHTENERS'],
+        'CB_HAIRSTYLING', 1, 2),
+    (2, 'Πιστολάκι Μαλλιών',
+        ['HAIR DRYERS'],
+        'CB_HAIRSTYLING', 1, 2),
+    (3, 'Πολυσυσκευή Styling',
+        ['MULTISTYLERS'],
+        'CB_HAIRSTYLING', 1, 1),  # subtype-biased — see _cb_build_hairstyling_pool
+    (4, 'Σετ Περιποίησης Ανδρικής',
+        ['GROOMING SET'],
+        'CB_MENS_GROOMING', 1, 1),
+    (5, 'Ζυγαριά Σώματος',
+        ['BODY SCALES'],
+        'CB_WELLNESS', 1, 1),
+    (6, 'Ξυριστική Μηχανή',
+        ['SHAVING MACHINES'],
+        'CB_MENS_GROOMING', 1, 1),
+    (7, 'Συσκευή Αποτρίχωσης',
+        ['EPILATORS'],
+        'CB_WOMENS_CARE', 1, 1),
+    (8, 'Ηλεκτρική Οδοντόβουρτσα',
+        ['ELECTRIC TOOTHBRUSHES', 'ΗΛΕΚΤΡΙΚΕΣ ΟΔΟΝΤΟΒΟΥΡΤΣΕΣ'],
+        'CB_WELLNESS', 1, 1),
+]
+
+CURLER_SLOT_TARGET = 10
+
+CURLER_MARKETING_COPY = {
+    "Ισιωτικό Μαλλιών":          "Από κυματιστά σε ίσια — η εναλλακτική επιλογή του styling σας.",
+    "Πιστολάκι Μαλλιών":         "Στεγνώστε γρήγορα πριν τη χρήση — βασικό εργαλείο για κάθε styling.",
+    "Πολυσυσκευή Styling":       "Όλα-σε-ένα styling — η εξέλιξη της επιλογής σας.",
+    "Σετ Περιποίησης Ανδρικής":  "Πλήρες σετ ανδρικής φροντίδας — όλα-σε-ένα.",
+    "Ζυγαριά Σώματος":           "Παρακολούθησε την πρόοδό σου — υγεία και ευεξία.",
+    "Ξυριστική Μηχανή":          "Καθαρό, άνετο ξύρισμα κάθε μέρα.",
+    "Συσκευή Αποτρίχωσης":       "Ολοκληρωμένη φροντίδα ομορφιάς — επαγγελματικό αποτέλεσμα στο σπίτι.",
+    "Ηλεκτρική Οδοντόβουρτσα":   "Λευκό χαμόγελο, καθαριότητα επιπέδου οδοντιάτρου.",
+}
+
+# ── Curler-specific helpers ─────────────────────────────────────
+
+def _cb_subtype_family(type_field: str) -> str:
+    """Classify Τύπος συσκευής into one of three families used by the
+    subtype-bias in the MULTISTYLERS slot:
+       'BRUSH'     — Ηλεκτρική Βούρτσα (hot-air brush / volumizer)
+       'CURL'      — Συσκευή για μπούκλες / Ψαλίδι / Πρέσα / wand
+       'MULTI'     — combo devices (the semicolon-joined types)
+       ''          — unrecognised / missing
+    Returns the family code; callers compare trigger family vs pool family
+    for the multistyler boost.
+    """
+    if not type_field or pd.isna(type_field):
+        return ''
+    t = str(type_field).strip().lower()
+    if not t or t == '—':
+        return ''
+
+    has_brush = 'βούρτσ' in t  # Ηλεκτρική Βούρτσα / Ηλεκτρική βούρτσα
+    has_curl = ('μπούκλ' in t or 'ψαλίδι' in t or 'ψαλλίδι' in t
+                or 'κυματιστ' in t or 'πρέσα' in t or 'wand' in t)
+    has_multi = 'multistyler' in t or 'πολυ' in t
+
+    # Combo (semicolon) → MULTI
+    if has_brush and has_curl:
+        return 'MULTI'
+    if has_multi:
+        return 'MULTI'
+    if has_brush:
+        return 'BRUSH'
+    if has_curl:
+        return 'CURL'
+    return ''
+
+
+def _cb_title_subtype_family(title: str) -> str:
+    """Same family classifier but operating on the product TITLE (used for
+    MULTISTYLERS pool rows whose Τύπος συσκευής is always 'Multistyler' —
+    not informative — so we read the title's descriptive Greek terms instead.
+    """
+    if not title or pd.isna(title):
+        return ''
+    t = str(title).lower()
+    # Brush-leaning multistylers — include the model-name clues that real-world
+    # listings actually use. Dyson Airwrap variants sometimes drop "airwrap"
+    # from the title and ship with "STRAIGHT+ WAVY" or "COANDA" branding.
+    has_brush = ('βούρτσ' in t or 'airwrap' in t or 'volumizer' in t
+                 or 'flexstyle' in t or 'hairstyler' in t or 'air styler' in t
+                 or 'coanda' in t or 'straight+ wavy' in t or 'straight+wavy' in t
+                 or 'speedstyle' in t or 'iq style' in t)
+    has_curl = ('μπούκλ' in t or 'curl' in t or 'wand' in t
+                or 'κυματιστ' in t or 'wave' in t or 'ψαλίδι' in t)
+    if has_brush and has_curl:
+        return 'MULTI'
+    if has_brush:
+        return 'BRUSH'
+    if has_curl:
+        return 'CURL'
+    return ''
+
+
+# Scoring constants — mirror HD_S_* shape. The new constant is CB_S_SUBTYPE_BIAS.
+CB_S_AVAILABILITY    = 100_000   # In-stock boost
+CB_S_BRAND_MATCH     = 500_000   # Same Κατασκευαστής as trigger (column-derived)
+CB_S_BRAND_PARSED    = 400_000   # Title-parsed brand match (male-grooming pools)
+CB_S_PRICE_SAME_TIER = 250_000   # Companion in same price tier
+CB_S_PRICE_ONE_OFF   =  80_000   # Companion ±1 price tier
+CB_S_PRICE_TWO_OFF   = -150_000  # Companion ≥2 tiers away — penalty
+CB_S_COLOR_EXACT     =  60_000   # Color-group exact match
+CB_S_COLOR_PARTIAL   =  20_000   # Color-group token overlap
+CB_S_SUBTYPE_BIAS    =  50_000   # NEW — multistyler matches trigger subtype family
+CB_S_SALES_FACTOR    =       0.5 # Sales tiebreaker weight
 
 
 # ═════════════════════════════════════════════════════════════
@@ -4583,6 +4780,8 @@ L2_CHILDREN = {
          "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='10' y='2' width='4' height='10' rx='0.5'/%3E%3Crect x='10' y='6' width='4' height='4' fill='%23ff5e00' fill-opacity='0.15'/%3E%3Cpath d='M12 12v9'/%3E%3Cpath d='M9 21h6'/%3E%3C/svg%3E"},
         {"key": "Hair Dryers", "label": "Πιστολάκια\nΜαλλιών",
          "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 11a3 3 0 0 1 3-3h7l5-3v12l-5-3H6a3 3 0 0 1-3-3z'/%3E%3Ccircle cx='9' cy='11' r='1.5'/%3E%3Cpath d='M11 16v4'/%3E%3Cpath d='M9 20h4'/%3E%3C/svg%3E"},
+        {"key": "Curlers", "label": "Ψαλίδια\n& Βούρτσες",
+         "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 4l-1 4 3 1 1-4z'/%3E%3Cpath d='M7 9l-3 11'/%3E%3Cpath d='M16 6c-2 2-2 5 0 7s5 2 7 0'/%3E%3Ccircle cx='19' cy='13' r='1' fill='%23ff5e00'/%3E%3C/svg%3E"},
     ],
     "MDA": [
         {"key": "Washing Machines", "label": "Πλυντήρια\nΡούχων",
@@ -5203,6 +5402,30 @@ else:
                 st.sidebar.markdown('<p class="sidebar-section">Επιλέξτε Πιστολάκι Μαλλιών</p>', unsafe_allow_html=True)
                 sel = st.sidebar.selectbox("", hair_dryers['Title'].unique(), label_visibility="collapsed", key="hair_dryer_sel")
                 trigger = hair_dryers[hair_dryers['Title']==sel].iloc[0] if sel else None
+
+    elif active_cluster == "Curlers":
+        # Trigger pool: CURLERS & BRUSHES (Ψαλίδια / Συσκευές για μπούκλες /
+        # Ηλεκτρικές Βούρτσες) from the SDA sheet, Level 1 = Personal Care,
+        # Level 2 = Women's Care. Heterogeneous hierarchy — see
+        # CURLER_PRIORITY config docstring for subtype-bias discussion.
+        if df_sda is None or df_sda.empty:
+            st.sidebar.warning("Sheet 'SDA' is empty or missing.")
+        else:
+            hier_upper = df_sda['Hierarchy'].fillna('').astype(str).str.upper().str.strip()
+            trigger_hiers_upper = {h.upper().strip() for h in CURLER_TRIGGER_HIERARCHIES}
+            curlers = df_sda[hier_upper.isin(trigger_hiers_upper)].copy()
+
+            # 🧪 Optional test-list filter (leave CURLER_TEST_SKUS empty to show all 56 unique)
+            if CURLER_TEST_SKUS:
+                mat_clean = curlers['Material'].astype(str).str.strip().str.replace(r'\.0$', '', regex=True)
+                curlers = curlers[mat_clean.isin(CURLER_TEST_SKUS)]
+
+            if curlers.empty:
+                st.sidebar.warning("Δεν βρέθηκαν Ψαλίδια ή Βούρτσες στο sheet SDA.")
+            else:
+                st.sidebar.markdown('<p class="sidebar-section">Επιλέξτε Ψαλίδι ή Βούρτσα</p>', unsafe_allow_html=True)
+                sel = st.sidebar.selectbox("", curlers['Title'].unique(), label_visibility="collapsed", key="curler_sel")
+                trigger = curlers[curlers['Title']==sel].iloc[0] if sel else None
 
     elif active_cluster == "Washing Machines":
         # Trigger pool: Πλυντήρια Ρούχων from the MDA sheet.
@@ -11468,6 +11691,354 @@ def run_hair_dryers_engine(trigger, df_sda, df_history):
 
 
 # ═══════════════════════════════════════════════════════════════
+# 🟢 CURLERS & BRUSHES HELPERS — Ψαλίδια & Βούρτσες (Personal Care)
+# ═══════════════════════════════════════════════════════════════
+# Four pool builders, one per logic_key in CURLER_PRIORITY:
+#   CB_HAIRSTYLING   — Straighteners / Hair Dryers / Multistylers
+#                       (column brand; color matters most; SUBTYPE BIAS on multistylers)
+#   CB_MENS_GROOMING — Grooming Set / Shaving Machines
+#                       (parse brand from title; color match disabled)
+#   CB_WOMENS_CARE   — Epilators
+#                       (column brand; soft color hint)
+#   CB_WELLNESS      — Body Scales / Electric Toothbrushes
+#                       (column brand; color disabled)
+#
+# All four share _cb_apply_base_score. The hairstyling pool ADDITIONALLY
+# applies a multistyler subtype bias when role_label == 'Πολυσυσκευή Styling'.
+
+def _cb_apply_base_score(pool, trigger_brand, trigger_tier, trigger_colors, notes,
+                         color_exact_weight=CB_S_COLOR_EXACT,
+                         color_partial_weight=CB_S_COLOR_PARTIAL):
+    """Shared scoring spine for the curlers engine. Mirrors _hd_apply_base_score
+    1:1 (avoiding cross-engine coupling) so future tuning of one category
+    doesn't accidentally shift another. Brand resolution reuses the shared
+    _hd_resolve_brand_series helper from v28.18 (column → title-parse fallback).
+    """
+    if pool.empty:
+        return pool
+
+    pool = pool.copy()
+    pool['Final_Score'] = 0.0
+
+    # ── Availability boost
+    if 'AVAILABILITY' in pool.columns:
+        avail_mask = pool['AVAILABILITY'] == 'Άμεσα Διαθέσιμο'
+        pool.loc[avail_mask, 'Final_Score'] += CB_S_AVAILABILITY
+        if avail_mask.any():
+            notes.append(f"  ✓ Availability: {avail_mask.sum()} in stock (+{CB_S_AVAILABILITY:,})")
+
+    # ── Base sales score (tiebreaker spine)
+    pool['Final_Score'] += pool['Sales_Tiebreaker'].fillna(0) * CB_S_SALES_FACTOR
+
+    # ── Brand-ecosystem boost (column-derived OR title-parsed)
+    if trigger_brand:
+        brand_resolved, was_parsed_mask = _hd_resolve_brand_series(pool)
+        same_brand = brand_resolved == trigger_brand
+        col_match_mask    = same_brand & ~was_parsed_mask
+        parsed_match_mask = same_brand & was_parsed_mask
+        pool.loc[col_match_mask,    'Final_Score'] += CB_S_BRAND_MATCH
+        pool.loc[parsed_match_mask, 'Final_Score'] += CB_S_BRAND_PARSED
+        if col_match_mask.any():
+            notes.append(f"  ✓ Brand ecosystem ({trigger_brand}, column): "
+                         f"{col_match_mask.sum()} (+{CB_S_BRAND_MATCH:,})")
+        if parsed_match_mask.any():
+            notes.append(f"  ✓ Brand ecosystem ({trigger_brand}, title-parsed): "
+                         f"{parsed_match_mask.sum()} (+{CB_S_BRAND_PARSED:,})")
+
+    # ── Price-tier proximity
+    if 'LIST PRICE' in pool.columns:
+        prices = pool['LIST PRICE'].apply(parse_euro_price)
+        tiers = prices.apply(_str_price_tier)
+        diffs = (tiers - trigger_tier).abs()
+        same_tier = diffs == 0
+        near_tier = diffs == 1
+        far_tier = diffs >= 2
+        pool.loc[same_tier, 'Final_Score'] += CB_S_PRICE_SAME_TIER
+        pool.loc[near_tier, 'Final_Score'] += CB_S_PRICE_ONE_OFF
+        pool.loc[far_tier,  'Final_Score'] += CB_S_PRICE_TWO_OFF
+        if same_tier.any() or near_tier.any() or far_tier.any():
+            notes.append(f"  ✓ Price-tier match (trigger tier {trigger_tier}): "
+                         f"same={same_tier.sum()} (+{CB_S_PRICE_SAME_TIER:,}), "
+                         f"near={near_tier.sum()} (+{CB_S_PRICE_ONE_OFF:,}), "
+                         f"far={far_tier.sum()} ({CB_S_PRICE_TWO_OFF:+,})")
+
+    # ── Color-group match
+    if trigger_colors and 'Χρώμα' in pool.columns and color_exact_weight > 0:
+        pool_colors = pool['Χρώμα'].apply(_str_color_group)
+        exact_mask   = pool_colors.apply(lambda g: g == trigger_colors and len(g) > 0)
+        partial_mask = pool_colors.apply(lambda g: bool(g & trigger_colors) and g != trigger_colors)
+        pool.loc[exact_mask,   'Final_Score'] += color_exact_weight
+        pool.loc[partial_mask, 'Final_Score'] += color_partial_weight
+        if exact_mask.any() or partial_mask.any():
+            trigger_color_label = '/'.join(sorted(trigger_colors)) or 'none'
+            notes.append(f"  ✓ Color match ({trigger_color_label}): "
+                         f"exact={exact_mask.sum()} (+{color_exact_weight:,}), "
+                         f"partial={partial_mask.sum()} (+{color_partial_weight:,})")
+
+    return pool
+
+
+def _cb_build_hairstyling_pool(c_pool, trigger_brand, trigger_tier,
+                                trigger_colors, trigger_subtype_family,
+                                role_label, notes):
+    """STR / HD / MULTISTYLERS pool. Column-brand 100% populated, color
+    matters most. NEW: subtype-bias on the MULTISTYLERS slot only — see
+    config block docstring above for rationale.
+    """
+    if c_pool.empty:
+        return c_pool
+
+    pool = _cb_apply_base_score(
+        c_pool, trigger_brand, trigger_tier, trigger_colors, notes,
+        color_exact_weight=CB_S_COLOR_EXACT,
+        color_partial_weight=CB_S_COLOR_PARTIAL,
+    )
+
+    # ── SUBTYPE BIAS (multistyler slot only)
+    # If the trigger is a hot-air brush, push brush-leaning multistylers up.
+    # If the trigger is a curling iron, push curl-leaning multistylers up.
+    # Combo "MULTI" triggers match both families with a half-boost.
+    if (role_label == 'Πολυσυσκευή Styling'
+            and trigger_subtype_family
+            and 'Title' in pool.columns):
+        pool_families = pool['Title'].apply(_cb_title_subtype_family)
+        # Also fall back to Τύπος συσκευής for the few multistylers with
+        # explicit descriptive subtypes in the column.
+        if 'Τύπος συσκευής' in pool.columns:
+            type_families = pool['Τύπος συσκευής'].apply(_cb_subtype_family)
+            # If title classifier returned '' but column has a family, use it
+            empty_mask = pool_families == ''
+            pool_families.loc[empty_mask] = type_families.loc[empty_mask]
+
+        if trigger_subtype_family == 'MULTI':
+            # Combo trigger — gentle boost to anything brush-or-curl-leaning
+            match_mask = pool_families.isin(['BRUSH', 'CURL', 'MULTI'])
+            pool.loc[match_mask, 'Final_Score'] += CB_S_SUBTYPE_BIAS // 2
+        else:
+            # Match same family OR multi (combo multistylers fit either trigger)
+            match_mask = pool_families.isin([trigger_subtype_family, 'MULTI'])
+            pool.loc[match_mask, 'Final_Score'] += CB_S_SUBTYPE_BIAS
+
+        if match_mask.any():
+            notes.append(f"  ✓ Multistyler subtype-bias (trigger family={trigger_subtype_family}): "
+                         f"{match_mask.sum()} matched (+{CB_S_SUBTYPE_BIAS:,})")
+
+    return pool.sort_values('Final_Score', ascending=False)
+
+
+def _cb_build_mens_grooming_pool(c_pool, trigger_brand, trigger_tier,
+                                  trigger_colors, role_label, notes):
+    """Grooming Set / Shaving Machines pool. Κατασκευαστής empty → brand
+    resolved via title-parse. Color match disabled (male grooming skews
+    Μαύρο/Ασημί and doesn't coordinate with women's curlers)."""
+    if c_pool.empty:
+        return c_pool
+    pool = _cb_apply_base_score(
+        c_pool, trigger_brand, trigger_tier, trigger_colors, notes,
+        color_exact_weight=0, color_partial_weight=0,
+    )
+    return pool.sort_values('Final_Score', ascending=False)
+
+
+def _cb_build_womens_care_pool(c_pool, trigger_brand, trigger_tier,
+                                trigger_colors, role_label, notes):
+    """EPILATORS pool. Column brand populated. Color match downgraded —
+    epilators are bathroom-shelf items not part of styling-set aesthetic."""
+    if c_pool.empty:
+        return c_pool
+    pool = _cb_apply_base_score(
+        c_pool, trigger_brand, trigger_tier, trigger_colors, notes,
+        color_exact_weight=CB_S_COLOR_PARTIAL,
+        color_partial_weight=CB_S_COLOR_PARTIAL,
+    )
+    return pool.sort_values('Final_Score', ascending=False)
+
+
+def _cb_build_wellness_pool(c_pool, trigger_brand, trigger_tier,
+                             trigger_colors, role_label, notes):
+    """BODY SCALES / ELECTRIC TOOTHBRUSHES pool. Brand overlap with curlers
+    is weak (Scales 13%, Toothbrushes 13%) so sales + price-tier do most of
+    the work. Color disabled (utilitarian items)."""
+    if c_pool.empty:
+        return c_pool
+    pool = _cb_apply_base_score(
+        c_pool, trigger_brand, trigger_tier, trigger_colors, notes,
+        color_exact_weight=0, color_partial_weight=0,
+    )
+    return pool.sort_values('Final_Score', ascending=False)
+
+
+# ═══════════════════════════════════════════════════════════════
+# 🟢 CURLERS & BRUSHES ENGINE — Ψαλίδια & Βούρτσες (Personal Care)
+# ═══════════════════════════════════════════════════════════════
+# Mirror of run_hair_dryers_engine: pre-build & score every pool from
+# CURLER_PRIORITY, then round-robin fill until 10 slots filled.
+# Adds device-subtype detection on the trigger row, passed only into the
+# hairstyling pool builder (where the multistyler-slot bias fires).
+
+def run_curlers_engine(trigger, df_sda, df_history):
+    """Build up to 10 cross-sell slots for a curler/brush trigger.
+
+    Slot composition: 5 styling-set slots (Straighteners×2, Hair Dryers×2,
+    Multistyler) + 2 men's grooming (Grooming Set, Shaving Machine) +
+    Epilator + 2 wellness (Body Scale, Toothbrush).
+    """
+    diag = []
+    slot_notes = {}
+    all_recs = []
+
+    # ── Trigger attributes
+    tm = trigger['Material']
+    tt = str(trigger.get('Title', ''))
+    tb = str(trigger.get('Κατασκευαστής', '')).strip().upper()
+    tmodel = str(trigger.get('Μοντέλο', '')).strip()
+    tprice = parse_euro_price(trigger.get('LIST PRICE', 0))
+    ttier = _str_price_tier(tprice)
+    tcolor_raw = str(trigger.get('Χρώμα', '') or '').strip()
+    tcolors = _str_color_group(tcolor_raw)
+    # ── NEW: subtype family of the trigger (drives multistyler-slot bias)
+    ttype_field = str(trigger.get('Τύπος συσκευής', '') or '').strip()
+    tsubtype_family = _cb_subtype_family(ttype_field)
+
+    diag.append(("0. Trigger", f"{tb} €{tprice:.0f}",
+                 f"Model={tmodel} | Tier={ttier} | Color={tcolor_raw} → {sorted(tcolors)} | "
+                 f"Subtype='{ttype_field}' → family={tsubtype_family or '(none)'}"))
+
+    if df_sda is None or df_sda.empty:
+        diag.append(("ERROR", 0, "SDA sheet is empty — engine cannot run"))
+        return pd.DataFrame(), diag, slot_notes, pd.DataFrame()
+
+    # ── Drop the trigger itself + every other curler (competitors)
+    c_sda = df_sda[df_sda['Material'] != tm].copy()
+    trigger_hiers = {h.upper().strip() for h in CURLER_TRIGGER_HIERARCHIES}
+    b4 = len(c_sda)
+    c_sda = c_sda[~c_sda['Hierarchy'].fillna('').astype(str).str.upper().str.strip().isin(trigger_hiers)]
+    diag.append(("1. Excl curlers", len(c_sda), f"Removed {b4 - len(c_sda)} competitor curlers"))
+
+    # ── Sales tiebreaker prep
+    if 'Sum of Sales' in c_sda.columns:
+        c_sda['Sales_Tiebreaker'] = pd.to_numeric(c_sda['Sum of Sales'], errors='coerce').fillna(0)
+    else:
+        c_sda['Sales_Tiebreaker'] = 0
+
+    # ── Build a sorted pool per priority entry
+    pools = {}
+    for rank, role_label, hiers, logic_key, max_r1, max_total in CURLER_PRIORITY:
+        notes = [f"=== Priority {rank}: {role_label} ({logic_key}) "
+                 f"| max_round_1={max_r1} | max_total={max_total if max_total else '∞'} ==="]
+
+        hier_upper = {h.upper().strip() for h in hiers}
+        base_pool = c_sda[c_sda['Hierarchy'].fillna('').astype(str).str.upper().str.strip().isin(hier_upper)].copy()
+        notes.append(f"  Base pool size: {len(base_pool)} (hierarchies={hiers})")
+
+        if base_pool.empty:
+            notes.append(f"  ⚠ Hierarchy not present in SDA data — slot will be filled from other pools")
+            pools[rank] = (role_label, pd.DataFrame(), logic_key, max_r1, max_total, notes)
+            continue
+
+        if logic_key == 'CB_HAIRSTYLING':
+            scored = _cb_build_hairstyling_pool(
+                base_pool, tb, ttier, tcolors, tsubtype_family, role_label, notes
+            )
+        elif logic_key == 'CB_MENS_GROOMING':
+            scored = _cb_build_mens_grooming_pool(
+                base_pool, tb, ttier, tcolors, role_label, notes
+            )
+        elif logic_key == 'CB_WELLNESS':
+            scored = _cb_build_wellness_pool(
+                base_pool, tb, ttier, tcolors, role_label, notes
+            )
+        elif logic_key == 'CB_WOMENS_CARE':
+            scored = _cb_build_womens_care_pool(
+                base_pool, tb, ttier, tcolors, role_label, notes
+            )
+        else:
+            scored = base_pool.copy()
+            scored['Final_Score'] = scored['Sales_Tiebreaker']
+
+        pools[rank] = (role_label, scored, logic_key, max_r1, max_total, notes)
+        diag.append((f"Pool {rank} ({role_label})", len(scored), logic_key))
+
+    # ── LOOPING: round-robin fill until target hit or all pools exhausted
+    used_materials = {tm}
+    pool_cursors  = {rank: 0 for rank in pools}
+    pool_taken    = {rank: 0 for rank in pools}
+    slot_num = 0
+    round_idx = 0
+
+    while slot_num < CURLER_SLOT_TARGET:
+        progress = False
+        round_idx += 1
+        for rank, (role_label, scored, logic_key, max_r1, max_total, notes) in pools.items():
+            if slot_num >= CURLER_SLOT_TARGET:
+                break
+            if scored is None or scored.empty:
+                continue
+            if max_total is not None and pool_taken[rank] >= max_total:
+                continue
+
+            take_n = max_r1 if round_idx == 1 else 1
+            if max_total is not None:
+                take_n = min(take_n, max_total - pool_taken[rank])
+
+            cursor = pool_cursors[rank]
+            taken_this_pass = 0
+            while taken_this_pass < take_n and cursor < len(scored) \
+                  and slot_num < CURLER_SLOT_TARGET:
+                row = scored.iloc[cursor]
+                cursor += 1
+                if row['Material'] in used_materials:
+                    continue
+
+                slot_num += 1
+                rc = row.copy()
+                rc['Assigned_Slot'] = slot_num
+                rc['Slot_Role'] = role_label
+                rc['Marketing_Copy'] = CURLER_MARKETING_COPY.get(role_label, "Ιδανική επιλογή!")
+                rc['Item_Rank'] = round_idx
+                all_recs.append(rc)
+                used_materials.add(row['Material'])
+                taken_this_pass += 1
+                pool_taken[rank] += 1
+                progress = True
+
+                title_preview = str(row.get('Title', ''))[:70]
+                score_val = float(row.get('Final_Score', 0))
+                if slot_num not in slot_notes:
+                    slot_notes[slot_num] = []
+                slot_notes[slot_num].append(
+                    f"Round {round_idx} | Pool '{role_label}' | "
+                    f"Score: {score_val:,.0f} | {title_preview}"
+                )
+
+            pool_cursors[rank] = cursor
+
+        if not progress:
+            diag.append(("Loop", round_idx, "All pools exhausted or capped — stopping"))
+            break
+
+    # ── Pool diagnostics under slot 0
+    pool_diag_notes = []
+    for rank, (role_label, scored, logic_key, max_r1, max_total, notes) in pools.items():
+        pool_diag_notes.extend(notes)
+        cap_note = f" (capped at {max_total})" if max_total is not None else ""
+        pool_diag_notes.append(
+            f"  → consumed {pool_taken[rank]} / {len(scored) if scored is not None else 0} from this pool{cap_note}"
+        )
+        pool_diag_notes.append("")
+    slot_notes[0] = pool_diag_notes
+
+    diag.append(("TOTAL", len(all_recs),
+                 f"Filled {slot_num}/{CURLER_SLOT_TARGET} slots in {round_idx} rounds"))
+
+    if all_recs:
+        recs_df = pd.DataFrame(all_recs)
+        recs_df['Draft_Score'] = recs_df['Assigned_Slot']
+        return recs_df, diag, slot_notes, recs_df
+    return pd.DataFrame(), diag, slot_notes, pd.DataFrame()
+
+
+# ═══════════════════════════════════════════════════════════════
 # 🟢 WASHING MACHINES HELPERS — Πλυντήρια Ρούχων (Μεγάλες Συσκευές)
 # ═══════════════════════════════════════════════════════════════
 # Five pool builders + one accessory subset filter. The engine follows the
@@ -16654,6 +17225,15 @@ elif active_cluster == "Hair Dryers":
     # Κατασκευαστής column is empty.
     recs, diag, slot_notes, full_candidates = run_hair_dryers_engine(trigger, df_sda, df_history)
     slot_diag = []
+elif active_cluster == "Curlers":
+    # Ψαλίδια & Βούρτσες — Personal Care. Heterogeneous hierarchy (curling
+    # irons + hot-air brushes) — engine reads the trigger's Τύπος συσκευής
+    # field and biases the MULTISTYLERS slot toward same-family alternatives
+    # (brush-trigger → brush-leaning multistylers like Dyson Airwrap/Shark
+    # FlexStyle; iron-trigger → curl-leaning multistylers with wand/wave/
+    # κυματιστά in the title).
+    recs, diag, slot_notes, full_candidates = run_curlers_engine(trigger, df_sda, df_history)
+    slot_diag = []
 elif active_cluster == "Washing Machines":
     # Πλυντήρια Ρούχων + Στεγνωτήρια + Αξεσουάρ Πλυντηρίου-Στεγνωτηρίου
     # live in the MDA sheet; iron-side companions (Σίδερα, Συστήματα
@@ -16953,6 +17533,15 @@ with st.expander("⚙️ System Diagnostics"):
                               'Κατασκευαστής','Μοντέλο','Τύπος συσκευής','Χρώμα',
                               'Βάρος','Διαστάσεις (ΠxΒxΥ)','Δυνατότητες',
                               'Experts Rating ≡',
+                              'Sum of Sales','LIST PRICE','AVAILABILITY']
+    elif active_cluster == "Curlers":
+        # Personal Care — Τύπος συσκευής is highlighted here because it
+        # drives the multistyler-slot subtype bias (curling iron vs hot-air
+        # brush). Engine reads brand / color / price / sales / device-type.
+        attr_keys_to_show = ['Material','Title','Level 1','Level 2','Hierarchy',
+                              'Κατασκευαστής','Μοντέλο','Τύπος συσκευής','Χρώμα',
+                              'Βάρος','Διαστάσεις (ΠxΒxΥ)','Δυνατότητες',
+                              'Ειδικά χαρακτηριστικά','Experts Rating ≡',
                               'Sum of Sales','LIST PRICE','AVAILABILITY']
     elif active_cluster == "Washing Machines":
         # MDA has no real spec columns filled for WMs — show what's there
