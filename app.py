@@ -102,7 +102,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v28.23 — 3 impulse-buy accessories at slots 5-7 across ALL hair-care engines (Straighteners, Hair Dryers, Curlers): hair scrunchie + 2 personal care gift items from Stationery sheet
+        🟢 Engine v28.24 — Multistylers (Πολυσυσκευές Styling) — premium-skewed Personal Care hero: brand × price-tier × color × 3 impulse slots at 5-7 (DYSON Airwrap class)
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -2184,6 +2184,130 @@ CB_S_MALE_PENALTY    = -300_000  # v28.21 — soft penalty for male-coded titles
                                   # large enough to blacklist (if the entire pool
                                   # is somehow male, the male product still shows).
 CB_S_SALES_FACTOR    =       0.5 # Sales tiebreaker weight
+
+
+# ═════════════════════════════════════════════════════════════
+# 🟢 MULTISTYLERS CONFIGURATION (Πολυσυσκευές Styling — Personal Care)
+# ═════════════════════════════════════════════════════════════
+# Trigger detection: products in SDA sheet with Hierarchy = "MULTISTYLERS"
+# (Level 1 = Personal Care, Level 2 = Women's Care). Premium-skewed
+# category — 17 unique SKUs spanning €30 (LEXICAL entry brush) to €749
+# (DYSON Airwrap HS09 Coanda). Mean €373. DYSON owns 7 of 17 SKUs.
+#
+# Recommendation depth — HYBRID (sales × brand × price-tier × color), same
+# recipe as Straighteners/Hair Dryers. No subtype-bias needed (unlike
+# Curlers) because multistylers are by definition the "all-in-one" device
+# with no internal heterogeneity — they're already the most general hair-
+# styling tool, so there's no axis along which one multistyler is
+# functionally different from another.
+#
+# Brand overlap audit (Multistyler brands vs each companion pool):
+#   HAIR DRYERS         8/27 (30%)   ★★★  # Strong — DYSON Supersonic
+#                                          # pair is canonical for Airwrap buyer
+#   STRAIGHTENERS       5/14 (36%)   ★★   # Decent
+#   CURLERS & BRUSHES   6/16 (38%)   ★★★  # Strong alternative
+#   EPILATORS           1/9  (11%)   ★    # Weak, sales-driven only
+#   BODY SCALES         1/23 (4%)    —    # Negligible
+#   TOOTHBRUSHES        0/8  (0%)    —    # Zero overlap, sales+price only
+#   GROOMING SET        2/8           —   # ← excluded (male audience)
+#   SHAVING MACHINES    0/9           —   # ← excluded (male)
+#   TRIMMERS            2/8           —   # ← excluded (male)
+#   ΚΟΥΡΕΥΤΙΚΕΣ ΜΗΧΑΝΕΣ 3/12         —    # ← excluded (male)
+#
+# Slot plan (10 slots / 9 pools) — same skeleton as Curlers v28.23.
+# Multistyler buyer is predominantly women's hair-styling audience (DYSON
+# Airwrap marketing, Shark FlexStyle, BaByliss multistylers all target
+# women), so male-grooming categories excluded as we did for Curlers/STR.
+
+MULTISTYLER_TRIGGER_HIERARCHIES = {
+    "MULTISTYLERS", "Multistylers", "multistylers",
+    "MULTISTYLER", "Multistyler",
+    "ΠΟΛΥΣΥΣΚΕΥΕΣ STYLING", "Πολυσυσκευές Styling", "Πολυσυσκευή Styling",
+}
+
+# Test SKUs — 6 representative multistylers covering the full spectrum.
+# Set: DYSON Airwrap HS08 PINK (#1 seller, premium hero), ROHNSON AIRGLOW
+# (surprise #2 seller at budget price), BELLISSIMA PRODIGY (mid-premium),
+# IZZY AIRFLEX (entry-level budget), SHARK FlexStyle (premium alt), and
+# BELLISSIMA Air Wonder (entry-level hot brush style).
+# Empty set = show all 17.
+MULTISTYLER_TEST_SKUS = {
+    "2098478",  # DYSON Airwrap HS08 I.D. STRAIGHT+ WAVY €549 Ροζ — #1 seller (72k)
+    "2095488",  # ROHNSON R-688 AIRGLOW €139 Μπλε — surprise #2 seller (67k)
+    "1981420",  # BELLISSIMA PRODIGY S6201 €249 — mid-premium
+    "2111512",  # IZZY IZ-7212 AIRFLEX 6in1 €100 — budget combo
+    "2000832",  # SHARK FLEXSTYLE €349 Χρυσό — premium Airwrap alternative
+    "1720906",  # BELLISSIMA Air Wonder €90 Λευκό — entry-level hot-air brush
+}
+
+# (priority_rank, role_label, hierarchies, logic_key, max_in_round_1, max_total)
+# v28.24 — Following the Curlers v28.23 pattern with 3 impulse-buy slots
+# at positions 5-7. HD gets max_total=2 (it's #1 cross-purchase 110 AND
+# has perfect brand overlap with multistylers). STR also gets max_total=2
+# (#2 cross-purchase 93). CURLERS at max_total=1 (cross-purchase 36).
+MULTISTYLER_PRIORITY = [
+    (1, 'Πιστολάκι Μαλλιών',
+        ['HAIR DRYERS'],
+        'MS_HAIRSTYLING', 1, 2),
+    (2, 'Ισιωτικό Μαλλιών',
+        ['STRAIGHTENERS'],
+        'MS_HAIRSTYLING', 1, 2),
+    (3, 'Ψαλίδι Μπούκλας / Βούρτσα',
+        ['CURLERS & BRUSHES'],
+        'MS_HAIRSTYLING', 1, 1),
+    (4, 'Συσκευή Αποτρίχωσης',
+        ['EPILATORS'],
+        'MS_WOMENS_CARE', 1, 1),
+    # Slots 5-7: 3 impulse-buy accessory slots from Stationery sheet.
+    (5, 'Αξεσουάρ Μαλλιών',
+        ['FASHION ACCESSORIES'],
+        'MS_IMPULSE_ACCESSORY', 1, 1),
+    (6, 'Δώρα Περιποίησης',
+        ['PERSONAL CARE'],   # df_stationery 'PERSONAL CARE', NOT SDA L1
+        'MS_IMPULSE_ACCESSORY', 2, 2),                      # ← max_r1=2: fills slots 6 AND 7
+    (7, 'Ζυγαριά Σώματος',
+        ['BODY SCALES'],
+        'MS_WELLNESS', 1, 1),
+    (8, 'Ηλεκτρική Οδοντόβουρτσα',
+        ['ELECTRIC TOOTHBRUSHES', 'ΗΛΕΚΤΡΙΚΕΣ ΟΔΟΝΤΟΒΟΥΡΤΣΕΣ'],
+        'MS_WELLNESS', 1, 1),
+]
+
+MULTISTYLER_SLOT_TARGET = 10
+
+MULTISTYLER_MARKETING_COPY = {
+    "Πιστολάκι Μαλλιών":         "Γρήγορη ξήρανση πριν το styling — ολοκληρώστε το σετ σας.",
+    "Ισιωτικό Μαλλιών":          "Αφιερωμένο ίσιωμα — η εναλλακτική επιλογή για κάθε look.",
+    "Ψαλίδι Μπούκλας / Βούρτσα": "Ψαλίδια και βούρτσες — εξειδικευμένα styling εργαλεία.",
+    "Συσκευή Αποτρίχωσης":       "Ολοκληρωμένη φροντίδα ομορφιάς — επαγγελματικό αποτέλεσμα στο σπίτι.",
+    "Αξεσουάρ Μαλλιών":          "Λαστιχάκια, κορδέλες και βούρτσες — ολοκληρώστε το styling σας.",
+    "Δώρα Περιποίησης":          "Μάσκες ματιών, πετσέτες και σετ περιποίησης — pamper yourself.",
+    "Ζυγαριά Σώματος":           "Παρακολούθησε την πρόοδό σου — υγεία και ευεξία.",
+    "Ηλεκτρική Οδοντόβουρτσα":   "Λευκό χαμόγελο, καθαριότητα επιπέδου οδοντιάτρου.",
+}
+
+# Brand-ecosystem hints — dominant multistyler brands. DYSON is the
+# hero brand (7/17 SKUs); brand-match boost is critical for the DYSON
+# Airwrap → DYSON Supersonic pairing.
+MULTISTYLER_KNOWN_ECOSYSTEM_BRANDS = {
+    'DYSON', 'SHARK', 'BELLISSIMA', 'BABYLISS', 'ROHNSON',
+    'ROWENTA', 'IZZY', 'LEXICAL',
+}
+
+# Scoring constants — mirror HD_S_*/CB_S_* values for consistency
+# across the hair-care engines. Multistylers don't need title-parsed
+# brand resolution (all 17 SKUs have populated Κατασκευαστής) but the
+# COMPANION pools (STR, HD, CURLERS) do, so we use the same brand
+# resolution helper via _hd_resolve_brand_series.
+MS_S_AVAILABILITY    = 100_000   # In-stock boost
+MS_S_BRAND_MATCH     = 500_000   # Column-derived brand match (full boost)
+MS_S_BRAND_PARSED    = 400_000   # Title-parsed brand match (slightly smaller)
+MS_S_PRICE_SAME_TIER = 250_000   # Same price tier
+MS_S_PRICE_ONE_OFF   =  80_000   # ±1 tier
+MS_S_PRICE_TWO_OFF   = -150_000  # ≥2 tiers away — penalty
+MS_S_COLOR_EXACT     =  60_000   # Color-group exact match
+MS_S_COLOR_PARTIAL   =  20_000   # Color-group token overlap
+MS_S_SALES_FACTOR    =       0.5 # Sales tiebreaker weight
 
 
 # ═════════════════════════════════════════════════════════════
@@ -4858,6 +4982,8 @@ L2_CHILDREN = {
          "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 11a3 3 0 0 1 3-3h7l5-3v12l-5-3H6a3 3 0 0 1-3-3z'/%3E%3Ccircle cx='9' cy='11' r='1.5'/%3E%3Cpath d='M11 16v4'/%3E%3Cpath d='M9 20h4'/%3E%3C/svg%3E"},
         {"key": "Curlers", "label": "Ψαλίδια\n& Βούρτσες",
          "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 4l-1 4 3 1 1-4z'/%3E%3Cpath d='M7 9l-3 11'/%3E%3Cpath d='M16 6c-2 2-2 5 0 7s5 2 7 0'/%3E%3Ccircle cx='19' cy='13' r='1' fill='%23ff5e00'/%3E%3C/svg%3E"},
+        {"key": "Multistylers", "label": "Πολυσυσκευές\nStyling",
+         "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='9' y='2' width='6' height='18' rx='3'/%3E%3Cpath d='M5 8c0 0 0 2 2 3'/%3E%3Cpath d='M19 8c0 0 0 2-2 3'/%3E%3Cpath d='M6 14c0 0 1 1 2 1.5'/%3E%3Cpath d='M18 14c0 0-1 1-2 1.5'/%3E%3Ccircle cx='12' cy='6' r='1' fill='%23ff5e00'/%3E%3C/svg%3E"},
     ],
     "MDA": [
         {"key": "Washing Machines", "label": "Πλυντήρια\nΡούχων",
@@ -5502,6 +5628,29 @@ else:
                 st.sidebar.markdown('<p class="sidebar-section">Επιλέξτε Ψαλίδι ή Βούρτσα</p>', unsafe_allow_html=True)
                 sel = st.sidebar.selectbox("", curlers['Title'].unique(), label_visibility="collapsed", key="curler_sel")
                 trigger = curlers[curlers['Title']==sel].iloc[0] if sel else None
+
+    elif active_cluster == "Multistylers":
+        # Trigger pool: MULTISTYLERS (Πολυσυσκευές Styling) from the SDA sheet.
+        # Premium-skewed (mean €373, max €749) — Dyson Airwrap dominates with
+        # 7/17 SKUs. Women's hair-styling audience.
+        if df_sda is None or df_sda.empty:
+            st.sidebar.warning("Sheet 'SDA' is empty or missing.")
+        else:
+            hier_upper = df_sda['Hierarchy'].fillna('').astype(str).str.upper().str.strip()
+            trigger_hiers_upper = {h.upper().strip() for h in MULTISTYLER_TRIGGER_HIERARCHIES}
+            multistylers = df_sda[hier_upper.isin(trigger_hiers_upper)].copy()
+
+            # 🧪 Optional test-list filter (leave MULTISTYLER_TEST_SKUS empty to show all 17)
+            if MULTISTYLER_TEST_SKUS:
+                mat_clean = multistylers['Material'].astype(str).str.strip().str.replace(r'\.0$', '', regex=True)
+                multistylers = multistylers[mat_clean.isin(MULTISTYLER_TEST_SKUS)]
+
+            if multistylers.empty:
+                st.sidebar.warning("Δεν βρέθηκαν Πολυσυσκευές Styling στο sheet SDA.")
+            else:
+                st.sidebar.markdown('<p class="sidebar-section">Επιλέξτε Πολυσυσκευή Styling</p>', unsafe_allow_html=True)
+                sel = st.sidebar.selectbox("", multistylers['Title'].unique(), label_visibility="collapsed", key="multistyler_sel")
+                trigger = multistylers[multistylers['Title']==sel].iloc[0] if sel else None
 
     elif active_cluster == "Washing Machines":
         # Trigger pool: Πλυντήρια Ρούχων from the MDA sheet.
@@ -12319,6 +12468,348 @@ def run_curlers_engine(trigger, df_sda, df_history, df_stationery=None):
 
 
 # ═══════════════════════════════════════════════════════════════
+# 🟢 MULTISTYLERS HELPERS — Πολυσυσκευές Styling (Personal Care)
+# ═══════════════════════════════════════════════════════════════
+# Four pool builders, one per logic_key in MULTISTYLER_PRIORITY:
+#   MS_HAIRSTYLING        — Hair Dryers / Straighteners / Curlers
+#   MS_WOMENS_CARE        — Epilators
+#   MS_WELLNESS           — Body Scales / Electric Toothbrushes
+#   MS_IMPULSE_ACCESSORY  — Fashion Accessories / Personal Care Stationery
+#                            → delegates to shared _pc_build_impulse_accessory_pool
+#
+# All four (except impulse) share _ms_apply_base_score scoring spine.
+# Brand resolution uses the shared _hd_resolve_brand_series helper
+# (column → title-parse fallback) — though for multistylers companions
+# all have populated Κατασκευαστής, so title-parsing won't fire often.
+
+def _ms_apply_base_score(pool, trigger_brand, trigger_tier, trigger_colors, notes,
+                         color_exact_weight=MS_S_COLOR_EXACT,
+                         color_partial_weight=MS_S_COLOR_PARTIAL):
+    """Shared scoring spine for the multistylers engine — availability +
+    sales + brand-match + price-tier + color. Mirrors _cb_apply_base_score
+    1:1 with MS_S_* constants to keep engines self-contained.
+    """
+    if pool.empty:
+        return pool
+
+    pool = pool.copy()
+    pool['Final_Score'] = 0.0
+
+    # ── Availability boost
+    if 'AVAILABILITY' in pool.columns:
+        avail_mask = pool['AVAILABILITY'] == 'Άμεσα Διαθέσιμο'
+        pool.loc[avail_mask, 'Final_Score'] += MS_S_AVAILABILITY
+        if avail_mask.any():
+            notes.append(f"  ✓ Availability: {avail_mask.sum()} in stock (+{MS_S_AVAILABILITY:,})")
+
+    # ── Base sales score (tiebreaker spine)
+    pool['Final_Score'] += pool['Sales_Tiebreaker'].fillna(0) * MS_S_SALES_FACTOR
+
+    # ── Brand-ecosystem boost (column-derived OR title-parsed)
+    if trigger_brand:
+        brand_resolved, was_parsed_mask = _hd_resolve_brand_series(pool)
+        same_brand = brand_resolved == trigger_brand
+        col_match_mask    = same_brand & ~was_parsed_mask
+        parsed_match_mask = same_brand & was_parsed_mask
+        pool.loc[col_match_mask,    'Final_Score'] += MS_S_BRAND_MATCH
+        pool.loc[parsed_match_mask, 'Final_Score'] += MS_S_BRAND_PARSED
+        if col_match_mask.any():
+            notes.append(f"  ✓ Brand ecosystem ({trigger_brand}, column): "
+                         f"{col_match_mask.sum()} (+{MS_S_BRAND_MATCH:,})")
+        if parsed_match_mask.any():
+            notes.append(f"  ✓ Brand ecosystem ({trigger_brand}, title-parsed): "
+                         f"{parsed_match_mask.sum()} (+{MS_S_BRAND_PARSED:,})")
+
+    # ── Price-tier proximity (critical for multistylers — €549 DYSON
+    # buyer must not see €15 IZZY epilators). Penalty is strong enough
+    # to push 2+ tier-away items below brand-match candidates.
+    if 'LIST PRICE' in pool.columns:
+        prices = pool['LIST PRICE'].apply(parse_euro_price)
+        tiers = prices.apply(_str_price_tier)
+        diffs = (tiers - trigger_tier).abs()
+        same_tier = diffs == 0
+        near_tier = diffs == 1
+        far_tier = diffs >= 2
+        pool.loc[same_tier, 'Final_Score'] += MS_S_PRICE_SAME_TIER
+        pool.loc[near_tier, 'Final_Score'] += MS_S_PRICE_ONE_OFF
+        pool.loc[far_tier,  'Final_Score'] += MS_S_PRICE_TWO_OFF
+        if same_tier.any() or near_tier.any() or far_tier.any():
+            notes.append(f"  ✓ Price-tier match (trigger tier {trigger_tier}): "
+                         f"same={same_tier.sum()} (+{MS_S_PRICE_SAME_TIER:,}), "
+                         f"near={near_tier.sum()} (+{MS_S_PRICE_ONE_OFF:,}), "
+                         f"far={far_tier.sum()} ({MS_S_PRICE_TWO_OFF:+,})")
+
+    # ── Color-group match (only fires when caller asks for it)
+    if trigger_colors and 'Χρώμα' in pool.columns and color_exact_weight > 0:
+        pool_colors = pool['Χρώμα'].apply(_str_color_group)
+        exact_mask   = pool_colors.apply(lambda g: g == trigger_colors and len(g) > 0)
+        partial_mask = pool_colors.apply(lambda g: bool(g & trigger_colors) and g != trigger_colors)
+        pool.loc[exact_mask,   'Final_Score'] += color_exact_weight
+        pool.loc[partial_mask, 'Final_Score'] += color_partial_weight
+        if exact_mask.any() or partial_mask.any():
+            trigger_color_label = '/'.join(sorted(trigger_colors)) or 'none'
+            notes.append(f"  ✓ Color match ({trigger_color_label}): "
+                         f"exact={exact_mask.sum()} (+{color_exact_weight:,}), "
+                         f"partial={partial_mask.sum()} (+{color_partial_weight:,})")
+
+    return pool
+
+
+def _ms_build_hairstyling_pool(c_pool, trigger_brand, trigger_tier,
+                                trigger_colors, role_label, notes):
+    """STR / HD / CURLERS pool. Column-brand populated 100% in all three.
+    Color matters most — coordinated styling-set aesthetic (women buying
+    a Dyson Airwrap in Strawberry Bronze may want a matching Dyson
+    Supersonic in similar Pink/Bronze)."""
+    if c_pool.empty:
+        return c_pool
+    pool = _ms_apply_base_score(
+        c_pool, trigger_brand, trigger_tier, trigger_colors, notes,
+        color_exact_weight=MS_S_COLOR_EXACT,
+        color_partial_weight=MS_S_COLOR_PARTIAL,
+    )
+    return pool.sort_values('Final_Score', ascending=False)
+
+
+def _ms_build_womens_care_pool(c_pool, trigger_brand, trigger_tier,
+                                trigger_colors, role_label, notes):
+    """EPILATORS pool. Brand overlap is weak (1/9), so sales + price-tier
+    do most of the work. Color downgraded to soft partial — epilators
+    aren't part of the styling-set aesthetic.
+
+    Applies the same male-coded title penalty as the curlers engine, since
+    the multistyler audience is also women-leaning (Dyson Airwrap class).
+    """
+    if c_pool.empty:
+        return c_pool
+    pool = _ms_apply_base_score(
+        c_pool, trigger_brand, trigger_tier, trigger_colors, notes,
+        color_exact_weight=MS_S_COLOR_PARTIAL,
+        color_partial_weight=MS_S_COLOR_PARTIAL,
+    )
+
+    # ── Male-keyword penalty (reuse shared helper from CB)
+    if 'Title' in pool.columns:
+        male_mask = pool['Title'].apply(_cb_is_male_coded)
+        if male_mask.any():
+            pool.loc[male_mask, 'Final_Score'] += CB_S_MALE_PENALTY
+            notes.append(f"  ⚠ Male-coded title penalty: {male_mask.sum()} product(s) "
+                         f"flagged & demoted ({CB_S_MALE_PENALTY:+,})")
+
+    return pool.sort_values('Final_Score', ascending=False)
+
+
+def _ms_build_wellness_pool(c_pool, trigger_brand, trigger_tier,
+                             trigger_colors, role_label, notes):
+    """BODY SCALES / ELECTRIC TOOTHBRUSHES pool. Near-zero brand overlap
+    with multistyler brands (1/23 and 0/8 respectively) — pure sales +
+    price-tier scoring. Color disabled (wellness items are utilitarian)."""
+    if c_pool.empty:
+        return c_pool
+    pool = _ms_apply_base_score(
+        c_pool, trigger_brand, trigger_tier, trigger_colors, notes,
+        color_exact_weight=0, color_partial_weight=0,
+    )
+    return pool.sort_values('Final_Score', ascending=False)
+
+
+# ═══════════════════════════════════════════════════════════════
+# 🟢 MULTISTYLERS ENGINE — Πολυσυσκευές Styling (Personal Care)
+# ═══════════════════════════════════════════════════════════════
+# Mirror of run_curlers_engine without the subtype-bias logic. Multistylers
+# don't need subtype detection because they're already the all-in-one
+# device — there's no functional axis along which one multistyler differs
+# from another (unlike Curlers' brush-vs-iron split).
+
+def run_multistylers_engine(trigger, df_sda, df_history, df_stationery=None):
+    """Build up to 10 cross-sell slots for a multistyler trigger.
+
+    Slot composition (v28.24, 10 slots / 9 pools):
+      1. HD ×2  (max_total=2 — #1 cross-purchase 110)
+      2. STR ×2 (max_total=2 — #2 cross-purchase 93)
+      3. CURLERS — alternative hair-styling
+      4. EPILATORS — women's care (male-coded title penalty applied)
+      5-7. Impulse accessories from Stationery sheet (FASHION + PC×2)
+      8. BODY SCALES (wellness)
+      9. ELECTRIC TOOTHBRUSHES (wellness)
+      10. HD round 2 overflow
+
+    Excluded male-grooming categories (GROOMING SET, SHAVING MACHINES,
+    TRIMMERS, ΚΟΥΡΕΥΤΙΚΕΣ ΜΗΧΑΝΕΣ) — multistyler audience is predominantly
+    women's hair-styling, same as Curlers/Straighteners.
+
+    Premium-price profile note: mean multistyler price is €373 (DYSON
+    Airwrap class). Price-tier proximity scoring will keep budget items
+    away from a €549 trigger and conversely keep premium items away from
+    a €30 LEXICAL or €100 IZZY trigger.
+    """
+    diag = []
+    slot_notes = {}
+    all_recs = []
+
+    # ── Trigger attributes
+    tm = trigger['Material']
+    tt = str(trigger.get('Title', ''))
+    tb = str(trigger.get('Κατασκευαστής', '')).strip().upper()
+    tmodel = str(trigger.get('Μοντέλο', '')).strip()
+    tprice = parse_euro_price(trigger.get('LIST PRICE', 0))
+    ttier = _str_price_tier(tprice)
+    tcolor_raw = str(trigger.get('Χρώμα', '') or '').strip()
+    tcolors = _str_color_group(tcolor_raw)
+
+    diag.append(("0. Trigger", f"{tb} €{tprice:.0f}",
+                 f"Model={tmodel} | Tier={ttier} | Color={tcolor_raw} → {sorted(tcolors)}"))
+
+    if df_sda is None or df_sda.empty:
+        diag.append(("ERROR", 0, "SDA sheet is empty — engine cannot run"))
+        return pd.DataFrame(), diag, slot_notes, pd.DataFrame()
+
+    # ── Drop the trigger itself + every other multistyler (competitors)
+    c_sda = df_sda[df_sda['Material'] != tm].copy()
+    trigger_hiers = {h.upper().strip() for h in MULTISTYLER_TRIGGER_HIERARCHIES}
+    b4 = len(c_sda)
+    c_sda = c_sda[~c_sda['Hierarchy'].fillna('').astype(str).str.upper().str.strip().isin(trigger_hiers)]
+    diag.append(("1. Excl multistylers", len(c_sda), f"Removed {b4 - len(c_sda)} competitor multistylers"))
+
+    # ── Sales tiebreaker prep
+    if 'Sum of Sales' in c_sda.columns:
+        c_sda['Sales_Tiebreaker'] = pd.to_numeric(c_sda['Sum of Sales'], errors='coerce').fillna(0)
+    else:
+        c_sda['Sales_Tiebreaker'] = 0
+
+    # ── Concatenate Stationery sheet for the impulse pools (slots 5-7)
+    if df_stationery is not None and not df_stationery.empty:
+        stat = df_stationery[df_stationery['Material'] != tm].copy()
+        if 'Sum of Sales' in stat.columns:
+            stat['Sales_Tiebreaker'] = pd.to_numeric(stat['Sum of Sales'], errors='coerce').fillna(0)
+        else:
+            stat['Sales_Tiebreaker'] = 0
+        if 'Χρώμα' not in stat.columns:
+            stat['Χρώμα'] = ''
+        c_combined = pd.concat([c_sda, stat], ignore_index=True, sort=False)
+        diag.append(("1b. + Stationery", len(c_combined), f"Added {len(stat)} stationery rows for impulse-buy pools"))
+    else:
+        c_combined = c_sda
+        diag.append(("1b. Stationery", 0, "No Stationery sheet provided — impulse pools will be empty"))
+
+    # ── Build a sorted pool per priority entry
+    pools = {}
+    for rank, role_label, hiers, logic_key, max_r1, max_total in MULTISTYLER_PRIORITY:
+        notes = [f"=== Priority {rank}: {role_label} ({logic_key}) "
+                 f"| max_round_1={max_r1} | max_total={max_total if max_total else '∞'} ==="]
+
+        hier_upper = {h.upper().strip() for h in hiers}
+        base_pool = c_combined[c_combined['Hierarchy'].fillna('').astype(str).str.upper().str.strip().isin(hier_upper)].copy()
+        notes.append(f"  Base pool size: {len(base_pool)} (hierarchies={hiers})")
+
+        if base_pool.empty:
+            notes.append(f"  ⚠ Hierarchy not present in data — slot will be filled from other pools")
+            pools[rank] = (role_label, pd.DataFrame(), logic_key, max_r1, max_total, notes)
+            continue
+
+        if logic_key == 'MS_HAIRSTYLING':
+            scored = _ms_build_hairstyling_pool(
+                base_pool, tb, ttier, tcolors, role_label, notes
+            )
+        elif logic_key == 'MS_WOMENS_CARE':
+            scored = _ms_build_womens_care_pool(
+                base_pool, tb, ttier, tcolors, role_label, notes
+            )
+        elif logic_key == 'MS_WELLNESS':
+            scored = _ms_build_wellness_pool(
+                base_pool, tb, ttier, tcolors, role_label, notes
+            )
+        elif logic_key == 'MS_IMPULSE_ACCESSORY':
+            scored = _pc_build_impulse_accessory_pool(
+                base_pool, tb, ttier, tcolors, role_label, notes
+            )
+        else:
+            scored = base_pool.copy()
+            scored['Final_Score'] = scored['Sales_Tiebreaker']
+
+        pools[rank] = (role_label, scored, logic_key, max_r1, max_total, notes)
+        diag.append((f"Pool {rank} ({role_label})", len(scored), logic_key))
+
+    # ── LOOPING: round-robin fill until target hit or all pools exhausted
+    used_materials = {tm}
+    pool_cursors  = {rank: 0 for rank in pools}
+    pool_taken    = {rank: 0 for rank in pools}
+    slot_num = 0
+    round_idx = 0
+
+    while slot_num < MULTISTYLER_SLOT_TARGET:
+        progress = False
+        round_idx += 1
+        for rank, (role_label, scored, logic_key, max_r1, max_total, notes) in pools.items():
+            if slot_num >= MULTISTYLER_SLOT_TARGET:
+                break
+            if scored is None or scored.empty:
+                continue
+            if max_total is not None and pool_taken[rank] >= max_total:
+                continue
+
+            take_n = max_r1 if round_idx == 1 else 1
+            if max_total is not None:
+                take_n = min(take_n, max_total - pool_taken[rank])
+
+            cursor = pool_cursors[rank]
+            taken_this_pass = 0
+            while taken_this_pass < take_n and cursor < len(scored) \
+                  and slot_num < MULTISTYLER_SLOT_TARGET:
+                row = scored.iloc[cursor]
+                cursor += 1
+                if row['Material'] in used_materials:
+                    continue
+
+                slot_num += 1
+                rc = row.copy()
+                rc['Assigned_Slot'] = slot_num
+                rc['Slot_Role'] = role_label
+                rc['Marketing_Copy'] = MULTISTYLER_MARKETING_COPY.get(role_label, "Ιδανική επιλογή!")
+                rc['Item_Rank'] = round_idx
+                all_recs.append(rc)
+                used_materials.add(row['Material'])
+                taken_this_pass += 1
+                pool_taken[rank] += 1
+                progress = True
+
+                title_preview = str(row.get('Title', ''))[:70]
+                score_val = float(row.get('Final_Score', 0))
+                if slot_num not in slot_notes:
+                    slot_notes[slot_num] = []
+                slot_notes[slot_num].append(
+                    f"Round {round_idx} | Pool '{role_label}' | "
+                    f"Score: {score_val:,.0f} | {title_preview}"
+                )
+
+            pool_cursors[rank] = cursor
+
+        if not progress:
+            diag.append(("Loop", round_idx, "All pools exhausted or capped — stopping"))
+            break
+
+    # ── Pool diagnostics under slot 0
+    pool_diag_notes = []
+    for rank, (role_label, scored, logic_key, max_r1, max_total, notes) in pools.items():
+        pool_diag_notes.extend(notes)
+        cap_note = f" (capped at {max_total})" if max_total is not None else ""
+        pool_diag_notes.append(
+            f"  → consumed {pool_taken[rank]} / {len(scored) if scored is not None else 0} from this pool{cap_note}"
+        )
+        pool_diag_notes.append("")
+    slot_notes[0] = pool_diag_notes
+
+    diag.append(("TOTAL", len(all_recs),
+                 f"Filled {slot_num}/{MULTISTYLER_SLOT_TARGET} slots in {round_idx} rounds"))
+
+    if all_recs:
+        recs_df = pd.DataFrame(all_recs)
+        recs_df['Draft_Score'] = recs_df['Assigned_Slot']
+        return recs_df, diag, slot_notes, recs_df
+    return pd.DataFrame(), diag, slot_notes, pd.DataFrame()
+
+
+# ═══════════════════════════════════════════════════════════════
 # 🟢 WASHING MACHINES HELPERS — Πλυντήρια Ρούχων (Μεγάλες Συσκευές)
 # ═══════════════════════════════════════════════════════════════
 # Five pool builders + one accessory subset filter. The engine follows the
@@ -17523,6 +18014,16 @@ elif active_cluster == "Curlers":
         trigger, df_sda, df_history, df_stationery=df_stationery
     )
     slot_diag = []
+elif active_cluster == "Multistylers":
+    # Πολυσυσκευές Styling — premium Personal Care hero (€30-€749, mean €373).
+    # Dyson Airwrap class. Women's hair-styling audience. No subtype-bias
+    # needed (multistylers are by definition all-in-one — no functional
+    # subdivision exists). Hybrid scoring: brand × price-tier × color + 3
+    # impulse-buy slots at positions 5-7 from Stationery sheet.
+    recs, diag, slot_notes, full_candidates = run_multistylers_engine(
+        trigger, df_sda, df_history, df_stationery=df_stationery
+    )
+    slot_diag = []
 elif active_cluster == "Washing Machines":
     # Πλυντήρια Ρούχων + Στεγνωτήρια + Αξεσουάρ Πλυντηρίου-Στεγνωτηρίου
     # live in the MDA sheet; iron-side companions (Σίδερα, Συστήματα
@@ -17827,6 +18328,15 @@ with st.expander("⚙️ System Diagnostics"):
         # Personal Care — Τύπος συσκευής is highlighted here because it
         # drives the multistyler-slot subtype bias (curling iron vs hot-air
         # brush). Engine reads brand / color / price / sales / device-type.
+        attr_keys_to_show = ['Material','Title','Level 1','Level 2','Hierarchy',
+                              'Κατασκευαστής','Μοντέλο','Τύπος συσκευής','Χρώμα',
+                              'Βάρος','Διαστάσεις (ΠxΒxΥ)','Δυνατότητες',
+                              'Ειδικά χαρακτηριστικά','Experts Rating ≡',
+                              'Sum of Sales','LIST PRICE','AVAILABILITY']
+    elif active_cluster == "Multistylers":
+        # Personal Care — premium hero (DYSON Airwrap class). Engine reads
+        # brand / color / price / sales. Δυνατότητες and Ειδικά
+        # χαρακτηριστικά shown for human reference but unused by scoring.
         attr_keys_to_show = ['Material','Title','Level 1','Level 2','Hierarchy',
                               'Κατασκευαστής','Μοντέλο','Τύπος συσκευής','Χρώμα',
                               'Βάρος','Διαστάσεις (ΠxΒxΥ)','Δυνατότητες',
