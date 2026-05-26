@@ -102,7 +102,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v28.27 — Impulse slots 5-7 now scale with trigger price: budget triggers keep €5-10 top sellers, premium triggers (€500+) surface €13-25 aspirational gifts (Simple Pleasure body-care boxes, Mad Beauty travel sets)
+        🟢 Engine v28.28 — Electric Brushes (Ηλεκτρικές Βούρτσες) — 5th hair-care engine: tiny but distinct hierarchy (6 unique SKUs, €19-204), strongest brand overlap with Hair Dryers (4/27), same women's-hair-styling template with 3 impulse @ 5-7
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -2391,6 +2391,127 @@ def _ms_price_tier(price: float) -> int:
     if p < 600:  return 5  # Pro (DYSON HS08 class)
     if p < 900:  return 6  # Ultra (DYSON HS09 class)
     return 7                # Luxury
+
+
+# ═════════════════════════════════════════════════════════════
+# 🟢 ELECTRIC BRUSHES CONFIGURATION (Ηλεκτρικές Βούρτσες — Personal Care)
+# ═════════════════════════════════════════════════════════════
+# Trigger detection: products in SDA sheet with Hierarchy = "Ηλεκτρικές
+# Βούρτσες" (Level 1 = Personal Care, Level 2 = Women's Care per Stibo).
+# A TINY but genuinely distinct category — 11 rows, 6 unique materials,
+# 4 brands (IQ, LEXICAL, REVLON, SOGO), €19-€204, mean €84.
+#
+# Zero material overlap with CURLERS & BRUSHES — Stibo categorizes
+# volumizer-style brushes (REVLON One Step Volumizer Plus) separately
+# from heated styling irons. The brand mix is also disjoint from Curlers'
+# brand mix (REMINGTON/BABYLISS/BELLISSIMA), so we can't just fold this
+# into the Curlers engine without diluting brand-ecosystem signal.
+#
+# Audience heterogeneity note: 4 of 6 unique products are women's hair
+# volumizers (REVLON €80 with 477 sales — 83% of category sales total,
+# SOGO €71/€204, IQ €109). The other 2 are LEXICAL beard brushes (€19,
+# "για Μούσια") — categorized as Women's Care in Stibo despite being
+# men's grooming items. The engine is designed for the dominant women's
+# audience; the 2 beard-brush edge cases will still produce coherent
+# (if women's-leaning) recommendations, acceptable given their minor
+# share (15 combined sales of 573 total = 2.6%).
+#
+# Brand-overlap audit (EB brands vs each companion category):
+#   HAIR DRYERS         4/27 (15%)  ★★★  # PERFECT — every EB brand
+#                                          # has a hair-dryer counterpart
+#   CURLERS & BRUSHES   3/16 (19%)  ★★   # Strong — but different products
+#   STRAIGHTENERS       2/14 (14%)  ★★   # Decent (IQ, REVLON)
+#   MULTISTYLERS        1/8  (12%)  ★    # Weak — only LEXICAL match
+#   EPILATORS           1/9  (11%)  ★    # Weak — only LEXICAL
+#   BODY SCALES         1/23 (4%)   —    # Negligible (IQ)
+#   ELECTRIC TOOTHBRUSHES 1/8  (12%) ★   # SOGO only
+#   GROOMING SET / TRIMMERS / SHAVING / ΚΟΥΡΕΥΤΙΚΕΣ — 0/0 (zero overlap)
+#                                          # ← excluded (male grooming)
+#
+# Caveat — the user-provided cross-purchase data (6 events: ΚΟΥΡΕΥΤΙΚΕΣ
+# ×2, STRAIGHTENERS ×2, SHAVING ×2) is too sparse for meaningful design
+# inference. The slot plan is driven by product-type intuition and the
+# brand-overlap audit above, NOT the cross-purchase counts.
+#
+# Slot plan (10 slots / 8 pools) — mirror of Curlers v28.23 template with
+# MULTI dropped (weakest brand overlap 1/8). HD gets max_total=2 because
+# its brand overlap is perfect; STR/CURLERS at max_total=1.
+
+ELECTRIC_BRUSH_TRIGGER_HIERARCHIES = {
+    "Ηλεκτρικές Βούρτσες", "ΗΛΕΚΤΡΙΚΕΣ ΒΟΥΡΤΣΕΣ",
+    "Ηλεκτρική Βούρτσα", "Electric Brushes",
+}
+
+# Test SKUs — 3 women's volumizers + 1 men's beard brush edge case.
+# Empty set = show all 6 unique materials.
+ELECTRIC_BRUSH_TEST_SKUS = {
+    "1958047",  # REVLON RVDR5298E One Step Volumizer Plus €80 — TOP SELLER (477 sales / 83%)
+    "2054298",  # SOGO SEC-SS-3730 €204 — premium ceiling, 0 sales
+    "2126379",  # IQ HD-1279 €109 — mid-range, 0 sales
+    "2104863",  # LEXICAL LSB-5150-GREY €19 — beard brush edge case
+}
+
+# (priority_rank, role_label, hierarchies, logic_key, max_in_round_1, max_total)
+ELECTRIC_BRUSH_PRIORITY = [
+    (1, 'Πιστολάκι Μαλλιών',
+        ['HAIR DRYERS'],
+        'EB_HAIRSTYLING', 1, 2),                            # ← max_total=2 (perfect brand overlap)
+    (2, 'Ισιωτικό Μαλλιών',
+        ['STRAIGHTENERS'],
+        'EB_HAIRSTYLING', 1, 1),
+    (3, 'Ψαλίδι Μπούκλας / Βούρτσα',
+        ['CURLERS & BRUSHES'],
+        'EB_HAIRSTYLING', 1, 1),
+    (4, 'Συσκευή Αποτρίχωσης',
+        ['EPILATORS'],
+        'EB_WOMENS_CARE', 1, 1),
+    # ── Slots 5-7: 3 impulse-buy accessory slots (Stationery sheet) ──
+    (5, 'Αξεσουάρ Μαλλιών',
+        ['FASHION ACCESSORIES'],
+        'EB_IMPULSE_ACCESSORY', 1, 1),
+    (6, 'Δώρα Περιποίησης',
+        ['PERSONAL CARE'],   # df_stationery 'PERSONAL CARE', NOT SDA L1
+        'EB_IMPULSE_ACCESSORY', 2, 2),                      # ← max_r1=2: fills slots 6 AND 7
+    (7, 'Ζυγαριά Σώματος',
+        ['BODY SCALES'],
+        'EB_WELLNESS', 1, 1),
+    (8, 'Ηλεκτρική Οδοντόβουρτσα',
+        ['ELECTRIC TOOTHBRUSHES', 'ΗΛΕΚΤΡΙΚΕΣ ΟΔΟΝΤΟΒΟΥΡΤΣΕΣ'],
+        'EB_WELLNESS', 1, 1),
+]
+
+ELECTRIC_BRUSH_SLOT_TARGET = 10
+
+ELECTRIC_BRUSH_MARKETING_COPY = {
+    "Πιστολάκι Μαλλιών":         "Ολοκληρώστε το hair-styling σας — γρήγορη ξήρανση πριν την περιποίηση.",
+    "Ισιωτικό Μαλλιών":          "Αφιερωμένο ίσιωμα — η εναλλακτική επιλογή για κάθε look.",
+    "Ψαλίδι Μπούκλας / Βούρτσα": "Ψαλίδια και θερμαινόμενες βούρτσες — εξειδικευμένα styling εργαλεία.",
+    "Συσκευή Αποτρίχωσης":       "Ολοκληρωμένη φροντίδα ομορφιάς — επαγγελματικό αποτέλεσμα στο σπίτι.",
+    "Αξεσουάρ Μαλλιών":          "Λαστιχάκια, κορδέλες και βούρτσες — ολοκληρώστε το styling σας.",
+    "Δώρα Περιποίησης":          "Μάσκες ματιών, πετσέτες και σετ περιποίησης — pamper yourself.",
+    "Ζυγαριά Σώματος":           "Παρακολούθησε την πρόοδό σου — υγεία και ευεξία.",
+    "Ηλεκτρική Οδοντόβουρτσα":   "Λευκό χαμόγελο, καθαριότητα επιπέδου οδοντιάτρου.",
+}
+
+# Brand-ecosystem hints — the 4 brands present in this hierarchy. All 4
+# also appear in HAIR DRYERS (perfect coverage), so the brand-match boost
+# is the strongest scoring signal for the engine.
+ELECTRIC_BRUSH_KNOWN_ECOSYSTEM_BRANDS = {
+    'REVLON', 'SOGO', 'IQ', 'LEXICAL',
+}
+
+# Scoring constants — mirror HD_S_*/CB_S_*/MS_S_* values for consistency
+# across the hair-care engines. Uses 4-bucket _str_price_tier (€19-€204
+# range fits naturally; no need for 8-bucket MS-style granularity).
+EB_S_AVAILABILITY    = 100_000   # In-stock boost
+EB_S_BRAND_MATCH     = 500_000   # Column-derived brand match
+EB_S_BRAND_PARSED    = 400_000   # Title-parsed brand match
+EB_S_PRICE_SAME_TIER = 250_000   # Same price tier
+EB_S_PRICE_ONE_OFF   =  80_000   # ±1 tier
+EB_S_PRICE_TWO_OFF   = -150_000  # ≥2 tiers away
+EB_S_COLOR_EXACT     =  60_000   # Color-group exact match
+EB_S_COLOR_PARTIAL   =  20_000   # Color-group token overlap
+EB_S_SALES_FACTOR    =       0.5 # Sales tiebreaker weight
 
 
 # ═════════════════════════════════════════════════════════════
@@ -5067,6 +5188,8 @@ L2_CHILDREN = {
          "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 4l-1 4 3 1 1-4z'/%3E%3Cpath d='M7 9l-3 11'/%3E%3Cpath d='M16 6c-2 2-2 5 0 7s5 2 7 0'/%3E%3Ccircle cx='19' cy='13' r='1' fill='%23ff5e00'/%3E%3C/svg%3E"},
         {"key": "Multistylers", "label": "Πολυσυσκευές\nStyling",
          "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='9' y='2' width='6' height='18' rx='3'/%3E%3Cpath d='M5 8c0 0 0 2 2 3'/%3E%3Cpath d='M19 8c0 0 0 2-2 3'/%3E%3Cpath d='M6 14c0 0 1 1 2 1.5'/%3E%3Cpath d='M18 14c0 0-1 1-2 1.5'/%3E%3Ccircle cx='12' cy='6' r='1' fill='%23ff5e00'/%3E%3C/svg%3E"},
+        {"key": "Electric Brushes", "label": "Ηλεκτρικές\nΒούρτσες",
+         "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='8' y='3' width='8' height='10' rx='4'/%3E%3Cpath d='M9 5h.01M11 5h.01M13 5h.01M15 5h.01M9 7h.01M11 7h.01M13 7h.01M15 7h.01M9 9h.01M11 9h.01M13 9h.01M15 9h.01M9 11h.01M11 11h.01M13 11h.01M15 11h.01'/%3E%3Cpath d='M12 13v8'/%3E%3Cpath d='M10 21h4'/%3E%3C/svg%3E"},
     ],
     "MDA": [
         {"key": "Washing Machines", "label": "Πλυντήρια\nΡούχων",
@@ -5734,6 +5857,29 @@ else:
                 st.sidebar.markdown('<p class="sidebar-section">Επιλέξτε Πολυσυσκευή Styling</p>', unsafe_allow_html=True)
                 sel = st.sidebar.selectbox("", multistylers['Title'].unique(), label_visibility="collapsed", key="multistyler_sel")
                 trigger = multistylers[multistylers['Title']==sel].iloc[0] if sel else None
+
+    elif active_cluster == "Electric Brushes":
+        # Trigger pool: Ηλεκτρικές Βούρτσες from the SDA sheet. A tiny but
+        # distinct category — 6 unique products, 4 brands (IQ, LEXICAL,
+        # REVLON, SOGO), €19-€204. Women's hair-styling audience.
+        if df_sda is None or df_sda.empty:
+            st.sidebar.warning("Sheet 'SDA' is empty or missing.")
+        else:
+            hier_upper = df_sda['Hierarchy'].fillna('').astype(str).str.upper().str.strip()
+            trigger_hiers_upper = {h.upper().strip() for h in ELECTRIC_BRUSH_TRIGGER_HIERARCHIES}
+            ebrushes = df_sda[hier_upper.isin(trigger_hiers_upper)].copy()
+
+            # 🧪 Optional test-list filter (leave ELECTRIC_BRUSH_TEST_SKUS empty to show all 11)
+            if ELECTRIC_BRUSH_TEST_SKUS:
+                mat_clean = ebrushes['Material'].astype(str).str.strip().str.replace(r'\.0$', '', regex=True)
+                ebrushes = ebrushes[mat_clean.isin(ELECTRIC_BRUSH_TEST_SKUS)]
+
+            if ebrushes.empty:
+                st.sidebar.warning("Δεν βρέθηκαν Ηλεκτρικές Βούρτσες στο sheet SDA.")
+            else:
+                st.sidebar.markdown('<p class="sidebar-section">Επιλέξτε Ηλεκτρική Βούρτσα</p>', unsafe_allow_html=True)
+                sel = st.sidebar.selectbox("", ebrushes['Title'].unique(), label_visibility="collapsed", key="electric_brush_sel")
+                trigger = ebrushes[ebrushes['Title']==sel].iloc[0] if sel else None
 
     elif active_cluster == "Washing Machines":
         # Trigger pool: Πλυντήρια Ρούχων from the MDA sheet.
@@ -13035,6 +13181,347 @@ def run_multistylers_engine(trigger, df_sda, df_history, df_stationery=None):
 
 
 # ═══════════════════════════════════════════════════════════════
+# 🟢 ELECTRIC BRUSHES HELPERS — Ηλεκτρικές Βούρτσες (Personal Care)
+# ═══════════════════════════════════════════════════════════════
+# Three pool builders, one per logic_key in ELECTRIC_BRUSH_PRIORITY:
+#   EB_HAIRSTYLING        — Hair Dryers / Straighteners / Curlers & Brushes
+#   EB_WOMENS_CARE        — Epilators (with male-coded title penalty)
+#   EB_WELLNESS           — Body Scales / Electric Toothbrushes
+#   EB_IMPULSE_ACCESSORY  — Fashion Accessories / Personal Care Stationery
+#                            → delegates to shared _pc_build_impulse_accessory_pool
+#
+# Mirror of the Curlers / Multistylers helper pattern with EB_S_* constants.
+# Brand resolution uses the shared _hd_resolve_brand_series helper since
+# the EB brands (IQ, LEXICAL, REVLON, SOGO) are all populated in
+# Κατασκευαστής column anyway — title-parsing rarely fires.
+
+def _eb_apply_base_score(pool, trigger_brand, trigger_tier, trigger_colors, notes,
+                         color_exact_weight=EB_S_COLOR_EXACT,
+                         color_partial_weight=EB_S_COLOR_PARTIAL):
+    """Shared scoring spine for the electric brushes engine — availability +
+    sales + brand-match + price-tier + color. Mirrors _ms_apply_base_score
+    using EB_S_* constants and the 4-bucket _str_price_tier.
+    """
+    if pool.empty:
+        return pool
+
+    pool = pool.copy()
+    pool['Final_Score'] = 0.0
+
+    # ── Availability boost
+    if 'AVAILABILITY' in pool.columns:
+        avail_mask = pool['AVAILABILITY'] == 'Άμεσα Διαθέσιμο'
+        pool.loc[avail_mask, 'Final_Score'] += EB_S_AVAILABILITY
+        if avail_mask.any():
+            notes.append(f"  ✓ Availability: {avail_mask.sum()} in stock (+{EB_S_AVAILABILITY:,})")
+
+    # ── Base sales score (tiebreaker spine)
+    pool['Final_Score'] += pool['Sales_Tiebreaker'].fillna(0) * EB_S_SALES_FACTOR
+
+    # ── Brand-ecosystem boost (column-derived OR title-parsed via shared helper)
+    if trigger_brand:
+        brand_resolved, was_parsed_mask = _hd_resolve_brand_series(pool)
+        same_brand = brand_resolved == trigger_brand
+        col_match_mask    = same_brand & ~was_parsed_mask
+        parsed_match_mask = same_brand & was_parsed_mask
+        pool.loc[col_match_mask,    'Final_Score'] += EB_S_BRAND_MATCH
+        pool.loc[parsed_match_mask, 'Final_Score'] += EB_S_BRAND_PARSED
+        if col_match_mask.any():
+            notes.append(f"  ✓ Brand ecosystem ({trigger_brand}, column): "
+                         f"{col_match_mask.sum()} (+{EB_S_BRAND_MATCH:,})")
+        if parsed_match_mask.any():
+            notes.append(f"  ✓ Brand ecosystem ({trigger_brand}, title-parsed): "
+                         f"{parsed_match_mask.sum()} (+{EB_S_BRAND_PARSED:,})")
+
+    # ── Price-tier proximity (4-bucket _str_price_tier, sufficient for
+    # the €19-€204 EB price range)
+    if 'LIST PRICE' in pool.columns:
+        prices = pool['LIST PRICE'].apply(parse_euro_price)
+        tiers = prices.apply(_str_price_tier)
+        diffs = (tiers - trigger_tier).abs()
+        same_tier = diffs == 0
+        near_tier = diffs == 1
+        far_tier = diffs >= 2
+        pool.loc[same_tier, 'Final_Score'] += EB_S_PRICE_SAME_TIER
+        pool.loc[near_tier, 'Final_Score'] += EB_S_PRICE_ONE_OFF
+        pool.loc[far_tier,  'Final_Score'] += EB_S_PRICE_TWO_OFF
+        if same_tier.any() or near_tier.any() or far_tier.any():
+            notes.append(f"  ✓ Price-tier match (trigger tier {trigger_tier}): "
+                         f"same={same_tier.sum()} (+{EB_S_PRICE_SAME_TIER:,}), "
+                         f"near={near_tier.sum()} (+{EB_S_PRICE_ONE_OFF:,}), "
+                         f"far={far_tier.sum()} ({EB_S_PRICE_TWO_OFF:+,})")
+
+    # ── Color-group match
+    if trigger_colors and 'Χρώμα' in pool.columns and color_exact_weight > 0:
+        pool_colors = pool['Χρώμα'].apply(_str_color_group)
+        exact_mask   = pool_colors.apply(lambda g: g == trigger_colors and len(g) > 0)
+        partial_mask = pool_colors.apply(lambda g: bool(g & trigger_colors) and g != trigger_colors)
+        pool.loc[exact_mask,   'Final_Score'] += color_exact_weight
+        pool.loc[partial_mask, 'Final_Score'] += color_partial_weight
+        if exact_mask.any() or partial_mask.any():
+            trigger_color_label = '/'.join(sorted(trigger_colors)) or 'none'
+            notes.append(f"  ✓ Color match ({trigger_color_label}): "
+                         f"exact={exact_mask.sum()} (+{color_exact_weight:,}), "
+                         f"partial={partial_mask.sum()} (+{color_partial_weight:,})")
+
+    return pool
+
+
+def _eb_build_hairstyling_pool(c_pool, trigger_brand, trigger_tier,
+                                trigger_colors, role_label, notes):
+    """HD / STR / CURLERS pool. EB brands (IQ, LEXICAL, REVLON, SOGO)
+    have perfect overlap with HD (4/4), decent with STR (2/4) and
+    CURLERS (3/4). Brand-match boost is the strongest signal.
+    """
+    if c_pool.empty:
+        return c_pool
+    pool = _eb_apply_base_score(
+        c_pool, trigger_brand, trigger_tier, trigger_colors, notes,
+        color_exact_weight=EB_S_COLOR_EXACT,
+        color_partial_weight=EB_S_COLOR_PARTIAL,
+    )
+    return pool.sort_values('Final_Score', ascending=False)
+
+
+def _eb_build_womens_care_pool(c_pool, trigger_brand, trigger_tier,
+                                trigger_colors, role_label, notes):
+    """EPILATORS pool. Brand overlap weak (1/9 — only LEXICAL), so sales
+    + price-tier do most of the work. Color downgraded to soft partial.
+
+    Applies the same male-coded title penalty as the curlers/multistylers
+    engines — the dominant EB audience is women's hair styling, so male
+    products in the EPILATORS pool (e.g. "men's body trimmer") should be
+    demoted.
+    """
+    if c_pool.empty:
+        return c_pool
+    pool = _eb_apply_base_score(
+        c_pool, trigger_brand, trigger_tier, trigger_colors, notes,
+        color_exact_weight=EB_S_COLOR_PARTIAL,
+        color_partial_weight=EB_S_COLOR_PARTIAL,
+    )
+
+    # ── Male-keyword penalty (reuse shared helper from CB)
+    if 'Title' in pool.columns:
+        male_mask = pool['Title'].apply(_cb_is_male_coded)
+        if male_mask.any():
+            pool.loc[male_mask, 'Final_Score'] += CB_S_MALE_PENALTY
+            notes.append(f"  ⚠ Male-coded title penalty: {male_mask.sum()} product(s) "
+                         f"flagged & demoted ({CB_S_MALE_PENALTY:+,})")
+
+    return pool.sort_values('Final_Score', ascending=False)
+
+
+def _eb_build_wellness_pool(c_pool, trigger_brand, trigger_tier,
+                             trigger_colors, role_label, notes):
+    """BODY SCALES / ELECTRIC TOOTHBRUSHES pool. Near-zero brand overlap
+    with EB brands — pure sales + price-tier scoring. Color disabled."""
+    if c_pool.empty:
+        return c_pool
+    pool = _eb_apply_base_score(
+        c_pool, trigger_brand, trigger_tier, trigger_colors, notes,
+        color_exact_weight=0, color_partial_weight=0,
+    )
+    return pool.sort_values('Final_Score', ascending=False)
+
+
+# ═══════════════════════════════════════════════════════════════
+# 🟢 ELECTRIC BRUSHES ENGINE — Ηλεκτρικές Βούρτσες (Personal Care)
+# ═══════════════════════════════════════════════════════════════
+# Mirror of run_curlers_engine without the subtype-bias logic (EB doesn't
+# need it — it's a more uniform category than CURLERS & BRUSHES which
+# heterogeneously mixes curling irons and hot-air brushes).
+
+def run_electric_brushes_engine(trigger, df_sda, df_history, df_stationery=None):
+    """Build up to 10 cross-sell slots for an electric brush trigger.
+
+    Slot composition (v28.28, 10 slots / 8 pools):
+      1. HAIR DRYERS ×2 (max_total=2 — perfect brand overlap 4/4)
+      2. STRAIGHTENERS (alt hair-styling)
+      3. CURLERS & BRUSHES (alt hair-styling — heated tools)
+      4. EPILATORS (women's care, male-coded penalty applied)
+      5-7. Impulse accessories from Stationery sheet (FASHION + PC×2)
+      8. BODY SCALES (wellness)
+      9. ELECTRIC TOOTHBRUSHES (wellness)
+      10. HD round 2 overflow
+
+    Excluded MULTISTYLERS and male-grooming categories. MULTI has only
+    1/8 brand overlap (just LEXICAL) — weakest of all candidates. Male
+    grooming categories have zero brand overlap with any EB brand.
+
+    Note: With 11 SKUs and 4 brands total, this is the smallest of the 5
+    hair-care engines. Trigger pool is intentionally restricted to 4 test
+    SKUs (REVLON €80, SOGO €204, IQ €109, LEXICAL €19) via
+    ELECTRIC_BRUSH_TEST_SKUS — clear the set to enable all 11.
+    """
+    diag = []
+    slot_notes = {}
+    all_recs = []
+
+    # ── Trigger attributes
+    tm = trigger['Material']
+    tt = str(trigger.get('Title', ''))
+    tb = str(trigger.get('Κατασκευαστής', '')).strip().upper()
+    tmodel = str(trigger.get('Μοντέλο', '')).strip()
+    tprice = parse_euro_price(trigger.get('LIST PRICE', 0))
+    ttier = _str_price_tier(tprice)                              # 4-bucket
+    tcolor_raw = str(trigger.get('Χρώμα', '') or '').strip()
+    tcolors = _str_color_group(tcolor_raw)
+
+    diag.append(("0. Trigger", f"{tb} €{tprice:.0f}",
+                 f"Model={tmodel} | Tier={ttier} | Color={tcolor_raw} → {sorted(tcolors)}"))
+
+    if df_sda is None or df_sda.empty:
+        diag.append(("ERROR", 0, "SDA sheet is empty — engine cannot run"))
+        return pd.DataFrame(), diag, slot_notes, pd.DataFrame()
+
+    # ── Drop the trigger itself + every other electric brush (competitors)
+    c_sda = df_sda[df_sda['Material'] != tm].copy()
+    trigger_hiers = {h.upper().strip() for h in ELECTRIC_BRUSH_TRIGGER_HIERARCHIES}
+    b4 = len(c_sda)
+    c_sda = c_sda[~c_sda['Hierarchy'].fillna('').astype(str).str.upper().str.strip().isin(trigger_hiers)]
+    diag.append(("1. Excl electric brushes", len(c_sda), f"Removed {b4 - len(c_sda)} competitor electric brushes"))
+
+    # ── Sales tiebreaker prep
+    if 'Sum of Sales' in c_sda.columns:
+        c_sda['Sales_Tiebreaker'] = pd.to_numeric(c_sda['Sum of Sales'], errors='coerce').fillna(0)
+    else:
+        c_sda['Sales_Tiebreaker'] = 0
+
+    # ── Concatenate Stationery sheet for the impulse pools (slots 5-7)
+    if df_stationery is not None and not df_stationery.empty:
+        stat = df_stationery[df_stationery['Material'] != tm].copy()
+        if 'Sum of Sales' in stat.columns:
+            stat['Sales_Tiebreaker'] = pd.to_numeric(stat['Sum of Sales'], errors='coerce').fillna(0)
+        else:
+            stat['Sales_Tiebreaker'] = 0
+        if 'Χρώμα' not in stat.columns:
+            stat['Χρώμα'] = ''
+        c_combined = pd.concat([c_sda, stat], ignore_index=True, sort=False)
+        diag.append(("1b. + Stationery", len(c_combined), f"Added {len(stat)} stationery rows for impulse-buy pools"))
+    else:
+        c_combined = c_sda
+        diag.append(("1b. Stationery", 0, "No Stationery sheet provided — impulse pools will be empty"))
+
+    # ── Build a sorted pool per priority entry
+    pools = {}
+    for rank, role_label, hiers, logic_key, max_r1, max_total in ELECTRIC_BRUSH_PRIORITY:
+        notes = [f"=== Priority {rank}: {role_label} ({logic_key}) "
+                 f"| max_round_1={max_r1} | max_total={max_total if max_total else '∞'} ==="]
+
+        hier_upper = {h.upper().strip() for h in hiers}
+        base_pool = c_combined[c_combined['Hierarchy'].fillna('').astype(str).str.upper().str.strip().isin(hier_upper)].copy()
+        notes.append(f"  Base pool size: {len(base_pool)} (hierarchies={hiers})")
+
+        if base_pool.empty:
+            notes.append(f"  ⚠ Hierarchy not present in data — slot will be filled from other pools")
+            pools[rank] = (role_label, pd.DataFrame(), logic_key, max_r1, max_total, notes)
+            continue
+
+        if logic_key == 'EB_HAIRSTYLING':
+            scored = _eb_build_hairstyling_pool(
+                base_pool, tb, ttier, tcolors, role_label, notes
+            )
+        elif logic_key == 'EB_WOMENS_CARE':
+            scored = _eb_build_womens_care_pool(
+                base_pool, tb, ttier, tcolors, role_label, notes
+            )
+        elif logic_key == 'EB_WELLNESS':
+            scored = _eb_build_wellness_pool(
+                base_pool, tb, ttier, tcolors, role_label, notes
+            )
+        elif logic_key == 'EB_IMPULSE_ACCESSORY':
+            scored = _pc_build_impulse_accessory_pool(
+                base_pool, tb, ttier, tcolors, role_label, notes,
+                trigger_price=tprice,                                    # ← v28.27 premium scaling
+            )
+        else:
+            scored = base_pool.copy()
+            scored['Final_Score'] = scored['Sales_Tiebreaker']
+
+        pools[rank] = (role_label, scored, logic_key, max_r1, max_total, notes)
+        diag.append((f"Pool {rank} ({role_label})", len(scored), logic_key))
+
+    # ── LOOPING: round-robin fill until target hit or all pools exhausted
+    used_materials = {tm}
+    pool_cursors  = {rank: 0 for rank in pools}
+    pool_taken    = {rank: 0 for rank in pools}
+    slot_num = 0
+    round_idx = 0
+
+    while slot_num < ELECTRIC_BRUSH_SLOT_TARGET:
+        progress = False
+        round_idx += 1
+        for rank, (role_label, scored, logic_key, max_r1, max_total, notes) in pools.items():
+            if slot_num >= ELECTRIC_BRUSH_SLOT_TARGET:
+                break
+            if scored is None or scored.empty:
+                continue
+            if max_total is not None and pool_taken[rank] >= max_total:
+                continue
+
+            take_n = max_r1 if round_idx == 1 else 1
+            if max_total is not None:
+                take_n = min(take_n, max_total - pool_taken[rank])
+
+            cursor = pool_cursors[rank]
+            taken_this_pass = 0
+            while taken_this_pass < take_n and cursor < len(scored) \
+                  and slot_num < ELECTRIC_BRUSH_SLOT_TARGET:
+                row = scored.iloc[cursor]
+                cursor += 1
+                if row['Material'] in used_materials:
+                    continue
+
+                slot_num += 1
+                rc = row.copy()
+                rc['Assigned_Slot'] = slot_num
+                rc['Slot_Role'] = role_label
+                rc['Marketing_Copy'] = ELECTRIC_BRUSH_MARKETING_COPY.get(role_label, "Ιδανική επιλογή!")
+                rc['Item_Rank'] = round_idx
+                all_recs.append(rc)
+                used_materials.add(row['Material'])
+                taken_this_pass += 1
+                pool_taken[rank] += 1
+                progress = True
+
+                title_preview = str(row.get('Title', ''))[:70]
+                score_val = float(row.get('Final_Score', 0))
+                if slot_num not in slot_notes:
+                    slot_notes[slot_num] = []
+                slot_notes[slot_num].append(
+                    f"Round {round_idx} | Pool '{role_label}' | "
+                    f"Score: {score_val:,.0f} | {title_preview}"
+                )
+
+            pool_cursors[rank] = cursor
+
+        if not progress:
+            diag.append(("Loop", round_idx, "All pools exhausted or capped — stopping"))
+            break
+
+    # ── Pool diagnostics under slot 0
+    pool_diag_notes = []
+    for rank, (role_label, scored, logic_key, max_r1, max_total, notes) in pools.items():
+        pool_diag_notes.extend(notes)
+        cap_note = f" (capped at {max_total})" if max_total is not None else ""
+        pool_diag_notes.append(
+            f"  → consumed {pool_taken[rank]} / {len(scored) if scored is not None else 0} from this pool{cap_note}"
+        )
+        pool_diag_notes.append("")
+    slot_notes[0] = pool_diag_notes
+
+    diag.append(("TOTAL", len(all_recs),
+                 f"Filled {slot_num}/{ELECTRIC_BRUSH_SLOT_TARGET} slots in {round_idx} rounds"))
+
+    if all_recs:
+        recs_df = pd.DataFrame(all_recs)
+        recs_df['Draft_Score'] = recs_df['Assigned_Slot']
+        return recs_df, diag, slot_notes, recs_df
+    return pd.DataFrame(), diag, slot_notes, pd.DataFrame()
+
+
+# ═══════════════════════════════════════════════════════════════
 # 🟢 WASHING MACHINES HELPERS — Πλυντήρια Ρούχων (Μεγάλες Συσκευές)
 # ═══════════════════════════════════════════════════════════════
 # Five pool builders + one accessory subset filter. The engine follows the
@@ -18249,6 +18736,17 @@ elif active_cluster == "Multistylers":
         trigger, df_sda, df_history, df_stationery=df_stationery
     )
     slot_diag = []
+elif active_cluster == "Electric Brushes":
+    # Ηλεκτρικές Βούρτσες — Personal Care, tiny category (11 rows, 6 unique
+    # SKUs, 4 brands). Volumizer-style hair brushes (REVLON One Step
+    # Volumizer Plus) + edge-case LEXICAL beard brushes. Women's hair-
+    # styling audience. Slot plan mirrors Curlers v28.23 with MULTI dropped
+    # (weakest brand overlap 1/8). HD gets max_total=2 (perfect 4/27 brand
+    # coverage). Same 3-impulse-slot pattern @ 5-7.
+    recs, diag, slot_notes, full_candidates = run_electric_brushes_engine(
+        trigger, df_sda, df_history, df_stationery=df_stationery
+    )
+    slot_diag = []
 elif active_cluster == "Washing Machines":
     # Πλυντήρια Ρούχων + Στεγνωτήρια + Αξεσουάρ Πλυντηρίου-Στεγνωτηρίου
     # live in the MDA sheet; iron-side companions (Σίδερα, Συστήματα
@@ -18562,6 +19060,16 @@ with st.expander("⚙️ System Diagnostics"):
         # Personal Care — premium hero (DYSON Airwrap class). Engine reads
         # brand / color / price / sales. Δυνατότητες and Ειδικά
         # χαρακτηριστικά shown for human reference but unused by scoring.
+        attr_keys_to_show = ['Material','Title','Level 1','Level 2','Hierarchy',
+                              'Κατασκευαστής','Μοντέλο','Τύπος συσκευής','Χρώμα',
+                              'Βάρος','Διαστάσεις (ΠxΒxΥ)','Δυνατότητες',
+                              'Ειδικά χαρακτηριστικά','Experts Rating ≡',
+                              'Sum of Sales','LIST PRICE','AVAILABILITY']
+    elif active_cluster == "Electric Brushes":
+        # Personal Care — tiny category (11 rows). Engine reads brand /
+        # color / price / sales. Same hybrid scoring as Multistylers but
+        # with 4-bucket _str_price_tier (price range €19-204 doesn't need
+        # the 8-bucket MS-style granularity).
         attr_keys_to_show = ['Material','Title','Level 1','Level 2','Hierarchy',
                               'Κατασκευαστής','Μοντέλο','Τύπος συσκευής','Χρώμα',
                               'Βάρος','Διαστάσεις (ΠxΒxΥ)','Δυνατότητες',
