@@ -102,7 +102,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v28.29 — Books v2 (Kids / Greek / International) — universal books engine with NEW two-set slot logic (slots 1-7 + 8-10 driven by series-depth). Same Series uses existing ordering (HP/Dog Man/Mikroi Kyrioi/pub-date/sales). Other Books: kids = sales × hierarchy × age; adults = sales × hierarchy × author × publisher × theme × language (deep spec match). Books-only carousel (no cross-sell).
+        🟢 Engine v28.29.1 — Books v2 (Kids / Greek / International) — universal books engine with NEW two-set slot logic (slots 1-7 + 8-10 driven by series-depth). Same Series uses existing ordering. Other Books layers DEEP-SPEC boosts: Publishing Series (+100k, cross-narrative shelf cohesion — Penguin Modern Classics, Πυξίδα HP line, etc.) > Author (+80k) > Publisher (+30k) > Theme (+20k) > Dimensions (+5k) > Language (+5k) > Cover (+1k). Books-only carousel.
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -3580,6 +3580,12 @@ BOOKS_V2_CATEGORIES = {
         "use_publisher_signal": False,
         "use_theme_signal":  False,
         "use_language_signal": False,
+        # v28.29.1 — shelf-cohesion signals (Εκδοτική Σειρά / Διαστάσεις / Εξώφυλλο)
+        # are present in the Kids "Books" sheet at 11% / 74% / 74% coverage and
+        # crucial for HP 2024-edition style recommendations across non-HP titles.
+        "use_pub_series_signal": True,
+        "use_dimensions_signal": True,
+        "use_cover_signal":     True,
         "apply_age_filter":  True,
         "apply_novelty_lang_filter": True,
         "apply_audiobook_filter":   True,
@@ -3593,6 +3599,12 @@ BOOKS_V2_CATEGORIES = {
         "use_publisher_signal": True, # 99.8% coverage in Εκδότης
         "use_theme_signal":  True,    # 75% coverage in Θέμα Βιβλίου
         "use_language_signal": True,  # 99.8% coverage in Γλώσσα Γραφής
+        # v28.29.1 — publisher product-line affinity (e.g. "Ξένη Λογοτεχνία"
+        # spans 272 books across many authors — collectors of these lines
+        # buy by series brand, not just by author).
+        "use_pub_series_signal": True,    # 17% coverage but high-value when present
+        "use_dimensions_signal": True,    # 90% coverage
+        "use_cover_signal":     True,    # 99.5% coverage
         "apply_age_filter":  False,
         "apply_novelty_lang_filter": False,
         "apply_audiobook_filter":   False,
@@ -3605,6 +3617,14 @@ BOOKS_V2_CATEGORIES = {
         "use_publisher_signal": True, # high coverage
         "use_theme_signal":  True,    # 61% coverage in Θέμα Βιβλίου
         "use_language_signal": True,  # 94% coverage
+        # v28.29.1 — Εκδοτική Σειρά coverage is only 2.9% in Int Books but
+        # when present it's exactly the cross-narrative line the user wants:
+        # "Penguin Modern Classics" (249), "Loeb Classical Library" (50),
+        # "Virago Modern Classics" (49). The boost fires sparingly but
+        # decisively when applicable.
+        "use_pub_series_signal": True,
+        "use_dimensions_signal": True,    # 95% coverage
+        "use_cover_signal":     True,    # 90% coverage
         "apply_age_filter":  False,
         "apply_novelty_lang_filter": False,
         "apply_audiobook_filter":   False,
@@ -3614,17 +3634,31 @@ BOOKS_V2_CATEGORIES = {
 
 BOOKS_V2_CLUSTERS = set(BOOKS_V2_CATEGORIES.keys())
 
-# Scoring constants for the adult "Other Books" deep-spec match.
-# Tuned against Greek Books sales distribution (P99 ≈ 2,420, max ≈ 56k):
-# author match is the dominant signal — a same-author book at sales=50 outranks
-# a different-author bestseller at sales=2k. Publisher + Theme + Language stack
-# so that within the same-Hierarchy pool, the most specifically-relevant book
-# bubbles up, with sales as the tiebreaker.
-BOOKS_V2_S_SAME_AUTHOR     = 80_000   # strongest signal — author affinity
-BOOKS_V2_S_SAME_PUBLISHER  = 30_000   # publisher catalog signal
-BOOKS_V2_S_SAME_THEME      = 20_000   # Θέμα Βιβλίου match (thematic)
-BOOKS_V2_S_SAME_LANGUAGE   =  5_000   # Γλώσσα Γραφής match (small bonus)
-BOOKS_V2_S_AVAIL_BONUS     =      2   # matches AVAIL_BOOST elsewhere
+# Scoring constants for the "Other Books" deep-spec match.
+# v28.29.1 — publishing-series + format signals added.
+#
+# Rationale for the ranking of magnitudes (Pub Series > Author > Publisher >
+# Theme > Dimensions ≈ Language > Cover):
+#   • Pub Series is a curated PUBLISHER LINE (Penguin Modern Classics, Loeb
+#     Classical Library, Πυξίδα). When the trigger is in one, the customer
+#     is likely collecting the line — that intent crosses authors and even
+#     book series, so it should outrank Author affinity.
+#   • Author next (people loyal to a writer cross genres).
+#   • Publisher (Εκδότης) is broader — many lines/authors per publisher.
+#   • Theme (Θέμα Βιβλίου) — genre-level match within hierarchy.
+#   • Dimensions — shelf-uniformity. Stronger than cover because dimensions
+#     define the physical "set" feel; cover is mostly binary soft/hard.
+#   • Language — within-Level-2 pools are already mostly homogeneous, so
+#     this fires for nearly all candidates and acts as a mild tiebreaker.
+#   • Cover — last-resort tiebreaker; only 2-3 dominant values exist.
+BOOKS_V2_S_SAME_PUB_SERIES = 100_000   # v28.29.1 — strongest: publisher product line
+BOOKS_V2_S_SAME_AUTHOR     =  80_000   # author affinity
+BOOKS_V2_S_SAME_PUBLISHER  =  30_000   # publisher catalog
+BOOKS_V2_S_SAME_THEME      =  20_000   # Θέμα Βιβλίου
+BOOKS_V2_S_SAME_DIMENSIONS =   5_000   # v28.29.1 — shelf cohesion (Διαστάσεις)
+BOOKS_V2_S_SAME_LANGUAGE   =   5_000   # Γλώσσα Γραφής
+BOOKS_V2_S_SAME_COVER      =   1_000   # v28.29.1 — soft vs hard cover tiebreaker
+BOOKS_V2_S_AVAIL_BONUS     =       2   # matches AVAIL_BOOST elsewhere
 
 def allocate_book_slots(series_books_available_count: int):
     """
@@ -3695,6 +3729,67 @@ def _books_v2_normalize_language(lang):
     gr_aliases  = {'greek', 'ελληνικά', 'ελληνικα'}
     if base in eng_aliases: return 'en'
     if base in gr_aliases:  return 'el'
+    return base
+
+
+def _books_v2_normalize_dimensions(dims):
+    """Normalize a Διαστάσεις string to a canonical form for matching.
+    
+    Handles the real-world dirty variants observed in the data:
+      • Latin 'x' vs Greek 'χ' vs '×': "21x14", "21χ14", "21×14"
+      • Whitespace: "14 x 21", "14x21", "14 x 21 cm"
+      • Units: "198 mm x 129 mm" stripped to "198x129"  
+      • 2D vs 3D: "20x13" and "20x2x13" canonicalize to the same key by
+        taking the two LARGEST numbers (the face dimensions, ignoring the
+        spine thickness which varies between editions of the same book)
+      • Order: "14x21" and "21x14" both → "14x21"
+    
+    Note: this normalizer does NOT convert between mm and cm — strings using
+    mm match other mm strings, cm/unitless match cm/unitless. Most book sets
+    are consistent in their unit usage so this is acceptable in practice.
+    """
+    if dims is None: return ''
+    try:
+        if pd.isna(dims): return ''
+    except (TypeError, ValueError):
+        pass
+    s = str(dims).strip().lower()
+    if not s or s in ('0', 'nan', 'n/a', 'none', '-'): return ''
+    # Normalize separator characters
+    s = s.replace('χ', 'x').replace('×', 'x')
+    # Detect whether this is in mm (we preserve the unit so mm doesn't
+    # cross-match cm). Default is treated as cm.
+    is_mm = ('mm' in s)
+    # Strip unit tokens
+    s = re.sub(r'\s*(mm|cm|εκ\.?|in\.?)\s*', '', s)
+    # Strip remaining whitespace
+    s = re.sub(r'\s+', '', s)
+    # Parse all numeric components (including decimals)
+    parts = re.findall(r'\d+\.?\d*', s)
+    if len(parts) < 2:
+        return f"{s}|mm" if is_mm else s
+    # Take the two LARGEST dimensions (face W×H, ignoring spine depth)
+    nums = sorted((float(p) for p in parts), reverse=True)[:2]
+    nums.sort()  # ascending for canonical order
+    key = 'x'.join(f"{n:g}" for n in nums)
+    return f"{key}|mm" if is_mm else key
+
+def _books_v2_normalize_cover(cover):
+    """Normalize Εξώφυλλο to a canonical token. Collapses the trailing-space
+    duplicates and case variants seen in the data ('Μαλακό εξώφυλλο' vs
+    'Μαλακό Εξώφυλλο' vs 'Μαλακό εξώφυλλο '; 'Paperback' vs 'Paperback ').
+    Maps EN/GR equivalents to a shared key so a Greek-tagged soft cover
+    matches an English-tagged soft cover."""
+    base = _books_v2_norm(cover)
+    if not base: return ''
+    base = base.strip()
+    # Family map — same physical binding type, multiple labels in the data
+    softs = {'μαλακό εξώφυλλο', 'paperback', 'paperback / softback', 'softcover', 'χαρτόδετο'}
+    hards = {'σκληρό εξώφυλλο', 'hardcover', 'hardback', 'σκληρόδετο'}
+    boards = {'board book', 'σκληρό μωρικό', 'board'}
+    if base in softs: return 'soft'
+    if base in hards: return 'hard'
+    if base in boards: return 'board'
     return base
 
 # ─────────────────────────────────────────────────────────────
@@ -7757,6 +7852,11 @@ def run_books_v2_engine(trigger, df_pool, df_history, category_key):
     t_theme = _books_v2_norm(trigger.get('Θέμα Βιβλίου', '')) if config["use_theme_signal"] else ''
     t_language = _books_v2_normalize_language(trigger.get('Γλώσσα Γραφής', '')) if config["use_language_signal"] else ''
     
+    # v28.29.1 — shelf-cohesion signals (apply to all 3 categories)
+    t_pub_series_norm = _books_v2_norm(t_pub_series) if config.get("use_pub_series_signal") else ''
+    t_dims_norm = _books_v2_normalize_dimensions(t_dims) if config.get("use_dimensions_signal") else ''
+    t_cover_norm = _books_v2_normalize_cover(t_cover) if config.get("use_cover_signal") else ''
+    
     effective_age = t_age if t_age and t_age != 'nan' and t_age != '0' else t_rec_age
     allowed_ages = get_allowed_ages(effective_age) if config["apply_age_filter"] else []
     has_series = is_valid_series(t_series)
@@ -7772,7 +7872,10 @@ def run_books_v2_engine(trigger, df_pool, df_history, category_key):
         diag.append(("   Trigger (kids)", "", f"Age: '{effective_age}' | Hierarchy: '{t_hierarchy}'"))
     else:
         author_preview = ", ".join(sorted(t_authors_set)[:3]) if t_authors_set else "—"
-        diag.append(("   Trigger (adult)", "", f"Hierarchy: '{t_hierarchy}' | Author: '{author_preview}' | Publisher: '{t_publisher}' | Theme: '{t_theme}' | Lang: '{t_language}'"))
+        diag.append(("   Trigger (adult)", "", f"Hierarchy: '{t_hierarchy}' | Author: '{author_preview}' | Publisher: '{t_publisher}' | Theme: '{t_theme[:50]}' | Lang: '{t_language}'"))
+    # v28.29.1 — shelf-cohesion signals (applies to all 3 categories)
+    diag.append(("   Trigger (format)", "",
+                 f"Pub.Series: '{t_pub_series_norm}' | Dims: '{t_dims_norm}' | Cover: '{t_cover_norm}'"))
     
     # ──────────────────────────────────────────────────────────
     # STEP 1 — BUILD SAME-SERIES POOL (ranked)
@@ -8023,12 +8126,23 @@ def run_books_v2_engine(trigger, df_pool, df_history, category_key):
             else:
                 other_pool['Sales_Score'] = 0
         
-        # ── Deep-spec scoring (adult Greek/Int Books only) ──
+        # ── Deep-spec scoring ──
         # The hybrid formula stacks tier-specific boosts atop Sales_Score so
-        # that within the same Hierarchy pool, an author-matched book with
-        # modest sales outranks a high-sales book with no shared specs.
+        # that within the same Hierarchy pool, the most specifically-relevant
+        # book bubbles up. For Kids Books the author/publisher/theme/language
+        # signals are off (the Books sheet doesn't have those columns), but
+        # the v28.29.1 shelf-cohesion signals (Pub Series / Dimensions / Cover)
+        # ARE on for kids — they leverage the existing columns and give us
+        # the "HP 2024-edition look-alike" recommendations the user asked for.
         other_pool['Spec_Score'] = 0
         spec_boosts_applied = []
+        
+        # v28.29.1 — Publishing Series match (strongest signal; cross-narrative
+        # shelf cohesion — Penguin Modern Classics, Loeb, Πυξίδα HP line, etc.)
+        if config.get("use_pub_series_signal") and t_pub_series_norm and 'Εκδοτική Σειρά' in other_pool.columns:
+            mask = other_pool['Εκδοτική Σειρά'].apply(_books_v2_norm) == t_pub_series_norm
+            other_pool.loc[mask, 'Spec_Score'] += BOOKS_V2_S_SAME_PUB_SERIES
+            spec_boosts_applied.append(f"Pub.Series (+{BOOKS_V2_S_SAME_PUB_SERIES:,}): {mask.sum()} matches")
         
         if config["use_author_signal"] and t_authors_set and 'Συγγραφέας' in other_pool.columns:
             def _author_match(field):
@@ -8048,10 +8162,22 @@ def run_books_v2_engine(trigger, df_pool, df_history, category_key):
             other_pool.loc[mask, 'Spec_Score'] += BOOKS_V2_S_SAME_THEME
             spec_boosts_applied.append(f"Theme (+{BOOKS_V2_S_SAME_THEME:,}): {mask.sum()} matches")
         
+        # v28.29.1 — Dimensions match (shelf cohesion — same face W×H)
+        if config.get("use_dimensions_signal") and t_dims_norm and 'Διαστάσεις' in other_pool.columns:
+            mask = other_pool['Διαστάσεις'].apply(_books_v2_normalize_dimensions) == t_dims_norm
+            other_pool.loc[mask, 'Spec_Score'] += BOOKS_V2_S_SAME_DIMENSIONS
+            spec_boosts_applied.append(f"Dimensions (+{BOOKS_V2_S_SAME_DIMENSIONS:,}): {mask.sum()} matches")
+        
         if config["use_language_signal"] and t_language and 'Γλώσσα Γραφής' in other_pool.columns:
             mask = other_pool['Γλώσσα Γραφής'].apply(_books_v2_normalize_language) == t_language
             other_pool.loc[mask, 'Spec_Score'] += BOOKS_V2_S_SAME_LANGUAGE
             spec_boosts_applied.append(f"Language (+{BOOKS_V2_S_SAME_LANGUAGE:,}): {mask.sum()} matches")
+        
+        # v28.29.1 — Cover match (last-resort tiebreaker)
+        if config.get("use_cover_signal") and t_cover_norm and 'Εξώφυλλο' in other_pool.columns:
+            mask = other_pool['Εξώφυλλο'].apply(_books_v2_normalize_cover) == t_cover_norm
+            other_pool.loc[mask, 'Spec_Score'] += BOOKS_V2_S_SAME_COVER
+            spec_boosts_applied.append(f"Cover (+{BOOKS_V2_S_SAME_COVER:,}): {mask.sum()} matches")
         
         # Availability tiebreaker
         other_pool['Avail_Score'] = 0
