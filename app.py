@@ -103,7 +103,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v28.30.6 — School Books: phase-split overflow
+        🟢 Engine v28.30.7 — School Books: dynamic layout + diverse overflow
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -9226,6 +9226,10 @@ def run_school_books_engine(trigger, df_school_pool, df_stationery_pool, df_hist
         m_author    = _mask_author_overlap(pool)
         m_orient    = _mask_orient_overlap(pool)
         
+        # Default — only the textbook branch sets this; carried out to the
+        # phase-split block so the primary filter can lock to it.
+        best_helper_pub = ''
+        
         if is_older_stage and trigger_is_helper:
             # ── OLDER + HELPER trigger ──
             # User rule: "only show ΣΧΟΛΙΚΑ ΒΟΗΘΗΜΑΤΑ - <class> from the same
@@ -9372,6 +9376,7 @@ def run_school_books_engine(trigger, df_school_pool, df_stationery_pool, df_hist
         tier_labels = ['', '', '', '', '', '']
         tier_bases = [0] * 6
         tomos_sort_tiers = set()
+        best_helper_pub = ''
         sb_notes.append("  No school-book catalog available")
     
     # Score & sort each tier (sales primary, availability tiebreaker)
@@ -9492,59 +9497,139 @@ def run_school_books_engine(trigger, df_school_pool, df_stationery_pool, df_hist
     # ──────────────────────────────────────────────────────────
     # STEP 3 — SLOT ALLOCATION
     # ──────────────────────────────────────────────────────────
-    # Default plan: slots 1-3 = SCHOOL, slots 4-6 = STATIONERY, slots 7-10 = SCHOOL (fallback).
-    # The filler reshapes when pools run dry — short school pool → stationery
-    # absorbs the deficit at slots 1-3; short school overflow → stationery
-    # absorbs slots 7-10.
-    base_plan = ['SCHOOL', 'SCHOOL', 'SCHOOL',
-                 'STATIONERY', 'STATIONERY', 'STATIONERY',
-                 'SCHOOL', 'SCHOOL', 'SCHOOL', 'SCHOOL']
-    
-    alloc_notes = [
-        "=== STEP 3: SLOT ALLOCATION ===",
-        f"Plan: {' '.join(s[:4] for s in base_plan)}",
-        f"Slots 1-3: School books (primary)",
-        f"Slots 4-6: Stationery (age-targeted, stage='{t_stage}')",
-        f"Slots 7-10: More school books (fallback chain); stationery overflow if exhausted",
-    ]
-    slot_notes[3] = alloc_notes
-    diag.append(("3. Slot Plan", "10 slots", "3 SS + 3 Stationery + 4 SS-fallback"))
-    
     # ──────────────────────────────────────────────────────────
     # STEP 4 — FILL THE 10 SLOTS
     # ──────────────────────────────────────────────────────────
     fill_notes = ["=== STEP 4: SLOT FILLING ==="]
     
-    # v28.30.6 — PHASE SPLIT for older modes (Γυμνάσιο/Λύκειο with helper or
-    # textbook trigger). Slots 1-3 pull from a "primary pool" of SAME-subject
-    # candidates (companion helpers, multi-volume); slots 7-10 pull from a
-    # "secondary pool" of DIFFERENT-subject candidates (cross-subject coverage).
-    # This prevents leftover same-subject helpers from leaking into the
-    # overflow when T1/T2 exceeds 3 candidates.
+    # v28.30.7 — PHASE SPLIT + DYNAMIC LAYOUT for older modes.
     #
-    # For younger stages (Δημοτικό/Προσχολική), no split — the entire pool
-    # already enforces different-subject in T1/T2 by design.
+    # Primary phase (front of carousel) = "author-matched companion volumes"
+    #   For helper trigger with known author(s): same-subject + author overlap
+    #   For helper trigger without author OR textbook trigger: same-subject only
+    #
+    # Secondary phase (back of carousel) = DIFFERENT-subject coverage
+    #
+    # Same-subject candidates that don't make it into primary (e.g. T2
+    # Σαββάλας brothers Φυσική when trigger's author team is Παναγιωτακόπουλος)
+    # are intentionally dropped — they're neither author-matched companions
+    # (so don't belong in primary) nor different-subject (so don't belong
+    # in secondary).
+    #
+    # The number of primary slots is DYNAMIC: if 4+ author-matched companions
+    # exist, expand the primary section, push stationery down, and keep at
+    # least 1 secondary slot. Cap at PRIMARY_MAX = 6 so the carousel never
+    # loses all different-subject discovery.
+    PRIMARY_MIN = 3   # at least 3 school slots in front (deficit from secondary if needed)
+    PRIMARY_MAX = 6   # at most 6 same-subject slots (preserves 1+ secondary slot)
+    STAT_SLOTS  = 3
+    TOTAL_SLOTS = 10
+    
     should_phase_split = (is_older_stage and t_subjects and not school_pool.empty
                           and (trigger_is_helper or trigger_is_textbook))
     
     if should_phase_split:
         t_sub_set = set(t_subjects)
-        same_subj_mask = school_pool['_subjects'].apply(
+        sp_same_subj = school_pool['_subjects'].apply(
             lambda lst: isinstance(lst, list) and bool(lst) and bool(set(lst) & t_sub_set))
-        primary_pool   = school_pool[same_subj_mask].reset_index(drop=True)
-        secondary_pool = school_pool[~same_subj_mask].reset_index(drop=True)
+        
+        # v28.30.7 — Tight primary filter, varies by trigger type.
+        #   * Helper trigger: same Hierarchy (= same class + helper type) +
+        #     same publisher + same subject + author overlap (if trigger has
+        #     known author). Strict: rules out helpers from other classes
+        #     (Α'/Β' Λυκείου) that happened to share author.
+        #   * Textbook trigger: helper-hierarchy + best_helper_pub + same
+        #     class + same subject. Strict: rules out other publishers'
+        #     helpers (Ελληνοεκδοτική when best_helper_pub is Σαββάλας).
+        sp_same_hier_strict = school_pool['_hier'] == t_hierarchy
+        sp_same_pub = school_pool['_pub_norm'] == t_publisher if t_publisher else pd.Series([False] * len(school_pool), index=school_pool.index)
+        
+        if trigger_is_helper:
+            primary_filter = sp_same_hier_strict & sp_same_pub & sp_same_subj
+            if t_authors:
+                sp_author = school_pool['_authors'].apply(
+                    lambda s: isinstance(s, set) and bool(s & t_authors))
+                primary_filter = primary_filter & sp_author
+            primary_filter_desc = (
+                f"same hier='{t_hierarchy}' + pub='{t_publisher_raw}' + subj"
+                + (f" + author{t_authors}" if t_authors else "")
+            )
+        elif trigger_is_textbook:
+            sp_helper_hier = school_pool['_hier'].apply(_sb_is_helper_hierarchy)
+            sp_best_pub    = (school_pool['_pub_norm'] == best_helper_pub) if best_helper_pub else pd.Series([False] * len(school_pool), index=school_pool.index)
+            # Class match — textbook hierarchy doesn't always cleanly align with
+            # the helper hierarchy for the same class, so check Τάξη directly.
+            if t_classes:
+                t_cls_set = set(t_classes)
+                sp_same_cls = school_pool['_classes'].apply(
+                    lambda lst: isinstance(lst, list) and bool(set(lst) & t_cls_set))
+            else:
+                sp_same_cls = pd.Series([True] * len(school_pool), index=school_pool.index)
+            primary_filter = sp_helper_hier & sp_best_pub & sp_same_cls & sp_same_subj
+            primary_filter_desc = (
+                f"helper-hierarchy + pub='{best_helper_pub}' (best helper publisher) "
+                f"+ class + subj"
+            )
+        else:
+            # Should not reach here (should_phase_split is True only for helper/textbook)
+            primary_filter = sp_same_subj
+            primary_filter_desc = "same subject (fallback)"
+        
+        # Secondary = different subject (NEVER include same-subject leftovers)
+        secondary_filter = ~sp_same_subj
+        
+        primary_pool   = school_pool[primary_filter].reset_index(drop=True)
+        secondary_pool = school_pool[secondary_filter].reset_index(drop=True)
+        # Same-subject rows that didn't pass the strict primary filter are
+        # dropped from view (e.g. T2 Σαββάλας brothers when trigger's authors
+        # are Παναγιωτακόπουλος/Μαθιουδάκης; or T6 Α'/Β' Λυκείου author-matches
+        # when trigger is Γ' Λυκείου).
+        dropped_n = int(sp_same_subj.sum() - primary_filter.sum())
+        
         fill_notes.append(
-            f"⚙ Phase split ON (older + helper/textbook): "
-            f"primary (same-subject)={len(primary_pool)}, "
-            f"secondary (different-subject)={len(secondary_pool)}")
-        fill_notes.append(
-            f"  Slots 1-3 pull from primary (same subject as trigger); "
-            f"slots 7-10 pull from secondary (different subject)")
+            f"⚙ Phase split ON: primary ({primary_filter_desc})={len(primary_pool)}, "
+            f"secondary (different-subj)={len(secondary_pool)}, "
+            f"dropped (same-subj but not author/class/pub match)={dropped_n}")
     else:
         primary_pool   = school_pool if not school_pool.empty else pd.DataFrame()
         secondary_pool = pd.DataFrame()
         if not is_older_stage:
-            fill_notes.append(f"⚙ Phase split OFF (younger stage '{t_stage}' — all tiers feed both phases)")
+            fill_notes.append(f"⚙ Phase split OFF (younger stage '{t_stage}' — single pool)")
+    
+    # ── Dynamic layout based on primary pool size ──
+    n_primary_avail = len(primary_pool)
+    if should_phase_split:
+        if n_primary_avail >= PRIMARY_MIN:
+            n_primary_slots = min(n_primary_avail, PRIMARY_MAX)
+        else:
+            n_primary_slots = PRIMARY_MIN   # deficit filled from secondary
+        n_secondary_slots = TOTAL_SLOTS - n_primary_slots - STAT_SLOTS
+        base_plan = (
+            ['SCHOOL_PRIMARY']   * n_primary_slots
+            + ['STATIONERY']     * STAT_SLOTS
+            + ['SCHOOL_SECONDARY'] * n_secondary_slots
+        )
+        fill_notes.append(
+            f"⚙ Dynamic layout: {n_primary_slots} primary + {STAT_SLOTS} stationery + "
+            f"{n_secondary_slots} secondary (cap on primary = {PRIMARY_MAX})")
+    else:
+        # Younger or no-split: original 3-3-4 layout, all SCHOOL_PRIMARY
+        # (younger has no secondary pool — primary IS the school_pool)
+        base_plan = (
+            ['SCHOOL_PRIMARY'] * 3
+            + ['STATIONERY']   * 3
+            + ['SCHOOL_PRIMARY'] * 4
+        )
+    
+    alloc_notes = [
+        "=== STEP 3: SLOT ALLOCATION ===",
+        f"Plan: {' '.join(s[:5] for s in base_plan)}",
+    ]
+    slot_notes[3] = alloc_notes
+    diag.append(("3. Slot Plan", f"{len(base_plan)} slots",
+                 f"{base_plan.count('SCHOOL_PRIMARY')} primary + "
+                 f"{base_plan.count('STATIONERY')} stat + "
+                 f"{base_plan.count('SCHOOL_SECONDARY')} secondary"))
     
     primary_list   = list(primary_pool.iterrows())   if not primary_pool.empty   else []
     secondary_list = list(secondary_pool.iterrows()) if not secondary_pool.empty else []
@@ -9552,20 +9637,21 @@ def run_school_books_engine(trigger, df_school_pool, df_stationery_pool, df_hist
     primary_consumed   = set()
     secondary_consumed = set()
     
-    # v28.30.2 — Subject diversity for younger stages.
-    # Older stages: user wants SAME-subject in slots 1-3 (companion volumes)
-    # and DIFFERENT-subject in slots 7-10 — handled by the phase split, so
-    # diversity OFF.
-    # Younger stages: each school slot picks a NEW subject (rather than
-    # 3 Math books in a row) — diversity ON.
-    school_diversity_enabled = (not is_older_stage)
-    used_subjects = set()
-    if school_diversity_enabled:
-        fill_notes.append(f"⚙ Subject diversity ON (stage='{t_stage}' is younger): "
-                          f"each school slot picks a different subject")
-    else:
-        fill_notes.append(f"⚙ Subject diversity OFF (stage='{t_stage}' is older): "
-                          f"same-subject in slots 1-3, different-subject in slots 7-10")
+    # v28.30.7 — Diversity sets per phase.
+    # Primary phase: no diversity tracking (same-subject companions WANTED).
+    # Secondary phase: diversity ON — each overflow slot picks a DIFFERENT subject.
+    # Younger stages (single pool): diversity ON throughout.
+    primary_used_subjects   = set()   # tracks subjects in primary slots (younger only)
+    secondary_used_subjects = set()   # tracks subjects in secondary slots (older split)
+    
+    if is_older_stage and should_phase_split:
+        fill_notes.append(
+            f"⚙ Subject diversity: OFF in primary (companion volumes), "
+            f"ON in secondary (each overflow slot a different subject)")
+    elif not is_older_stage:
+        fill_notes.append(
+            f"⚙ Subject diversity ON (younger stage '{t_stage}'): "
+            f"each school slot picks a different subject")
     
     # For stationery: track used materials AND used hierarchies, so we
     # round-robin across hierarchies before repeating one (avoids 3 notebooks
@@ -9573,51 +9659,69 @@ def run_school_books_engine(trigger, df_school_pool, df_stationery_pool, df_hist
     stat_used_materials = set()
     stat_used_hierarchies_in_round = set()
     
-    def _next_from(rows, consumed, enforce_diversity):
-        """Generic pool consumer with optional subject-diversity guard."""
+    def _next_from(rows, consumed, enforce_diversity, used_subjects_set):
+        """Generic pool consumer.
+        When enforce_diversity is True and used_subjects_set is provided,
+        skip rows whose subject overlaps with already-picked subjects."""
         for i, (_, row) in enumerate(rows):
             if i in consumed: continue
             mat = row.get('Material', None)
             if mat in used_materials:
                 consumed.add(i); continue
-            if enforce_diversity:
+            if enforce_diversity and used_subjects_set is not None:
                 row_subjects = _sb_parse_multi_value(row.get('Μάθημα_sales', ''))
-                if row_subjects and any(s in used_subjects for s in row_subjects):
-                    continue   # subject already covered — save for fallback
+                if row_subjects and any(s in used_subjects_set for s in row_subjects):
+                    continue   # subject already covered — save for relaxation pass
             # Accept
             consumed.add(i)
-            if enforce_diversity:
+            if enforce_diversity and used_subjects_set is not None:
                 for s in _sb_parse_multi_value(row.get('Μάθημα_sales', '')):
-                    used_subjects.add(s)
+                    used_subjects_set.add(s)
             return row
         return None
     
-    def _next_school(slot_idx, enforce_diversity):
-        """Pull the next eligible school candidate, phase-aware.
+    def _next_school(slot_type):
+        """Pull the next eligible school candidate based on slot type.
         
-        For older modes with phase split:
-          * slots 1-3: prefer primary (same-subject) pool. If exhausted,
-                       fall back to secondary (cross-subject) rather than
-                       leaving the slot empty.
-          * slots 7-10: secondary (different-subject) ONLY. NEVER pull from
-                       the primary pool — leftover same-subject candidates
-                       are deliberately dropped from the carousel.
-        For younger or no-split modes: just consume from the primary list.
+        SCHOOL_PRIMARY (front slots):
+          * Older + split: same-subject + author-matched pool.
+            Diversity OFF (we want companion volumes piled up).
+            Deficit fall to secondary if primary exhausted.
+          * Younger: single pool, diversity ON (cover different subjects).
+        SCHOOL_SECONDARY (overflow slots, older + split only):
+          * Different-subject pool, diversity ON (each slot a different subject).
+          * Relaxation pass if diversity exhausts the pool.
         """
-        if not should_phase_split:
-            return _next_from(primary_list, primary_consumed, enforce_diversity)
-        
-        if slot_idx <= 3:
-            # Primary phase — try same-subject; fall back to cross-subject as deficit
-            row = _next_from(primary_list, primary_consumed, enforce_diversity)
+        if slot_type == 'SCHOOL_PRIMARY':
+            if is_older_stage and should_phase_split:
+                # Older + split: companion volumes, no diversity needed
+                row = _next_from(primary_list, primary_consumed,
+                                 enforce_diversity=False, used_subjects_set=None)
+                if row is None:
+                    # Primary exhausted — fall to secondary with diversity ON
+                    row = _next_from(secondary_list, secondary_consumed,
+                                     enforce_diversity=True,
+                                     used_subjects_set=secondary_used_subjects)
+                return row
+            else:
+                # Younger: diversity ON
+                row = _next_from(primary_list, primary_consumed,
+                                 enforce_diversity=True,
+                                 used_subjects_set=primary_used_subjects)
+                if row is None:
+                    # Relaxation pass without diversity
+                    row = _next_from(primary_list, primary_consumed,
+                                     enforce_diversity=False, used_subjects_set=None)
+                return row
+        else:  # SCHOOL_SECONDARY (only used in older + split mode)
+            row = _next_from(secondary_list, secondary_consumed,
+                             enforce_diversity=True,
+                             used_subjects_set=secondary_used_subjects)
             if row is None:
-                row = _next_from(secondary_list, secondary_consumed, enforce_diversity)
+                # Diversity-relaxation fallback
+                row = _next_from(secondary_list, secondary_consumed,
+                                 enforce_diversity=False, used_subjects_set=None)
             return row
-        else:
-            # Overflow phase — DIFFERENT-subject pool only.
-            # Do NOT fall back to primary; the user explicitly does not want
-            # same-subject books in the overflow slots.
-            return _next_from(secondary_list, secondary_consumed, enforce_diversity)
     
     def _next_stationery():
         """Round-robin across hierarchies so we don't stack same-hierarchy
@@ -9644,16 +9748,11 @@ def run_school_books_engine(trigger, df_school_pool, df_stationery_pool, df_hist
         row = None
         picked_from = None
         
-        if slot_type == 'SCHOOL':
-            row = _next_school(slot_idx, enforce_diversity=school_diversity_enabled)
+        if slot_type in ('SCHOOL_PRIMARY', 'SCHOOL_SECONDARY'):
+            row = _next_school(slot_type)
             picked_from = 'school'
-            # Diversity-relaxation fallback when the constrained pool runs dry
-            if row is None and school_diversity_enabled:
-                row = _next_school(slot_idx, enforce_diversity=False)
-                if row is not None:
-                    picked_from = 'school (subject diversity relaxed)'
             if row is None:
-                # Fallback: try stationery (slots 1-3 deficit OR slots 7-10 overflow)
+                # Both school pools exhausted — fall back to stationery
                 row = _next_stationery()
                 picked_from = 'stationery (school exhausted)'
         else:  # STATIONERY
@@ -9661,8 +9760,10 @@ def run_school_books_engine(trigger, df_school_pool, df_stationery_pool, df_hist
             picked_from = 'stationery'
             if row is None:
                 # Stationery exhausted — try a school book to fill the slot.
-                # Use relaxed diversity here since we're already in fallback.
-                row = _next_school(slot_idx, enforce_diversity=False)
+                # Prefer secondary (cross-subject) for overflow position;
+                # primary (same-subject) for front position.
+                fallback_type = 'SCHOOL_SECONDARY' if slot_idx > 3 else 'SCHOOL_PRIMARY'
+                row = _next_school(fallback_type)
                 picked_from = 'school (stationery exhausted)'
         
         if row is None:
@@ -9671,7 +9772,15 @@ def run_school_books_engine(trigger, df_school_pool, df_stationery_pool, df_hist
         
         # Slot_Role label downstream
         if picked_from.startswith('school'):
-            role = 'School Book' if slot_idx <= 3 else 'School Book (overflow)'
+            # Use the slot_type to determine the role label so the carousel
+            # reflects the dynamic primary/secondary boundary.
+            if slot_type == 'SCHOOL_PRIMARY':
+                role = 'School Book'
+            elif slot_type == 'SCHOOL_SECONDARY':
+                role = 'School Book (overflow)'
+            else:
+                # Stationery slot that fell back to school — label by position
+                role = 'School Book' if slot_idx <= 3 else 'School Book (overflow)'
             # v28.30.2 — Read the tier label directly from the row (stored
             # during _score_tier). Robust across both older-stage and
             # younger-stage tier orderings.
