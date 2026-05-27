@@ -102,7 +102,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v28.32.2 — Self-diagnosing printer triggers — when "Δεν βρέθηκαν εκτυπωτές" fires, the sidebar warning now shows: (a) which sheets actually loaded, (b) which data source was tried (Spare vs Fallback), (c) the expected PRINTER_HIERARCHIES values, (d) the actual printer-like Hierarchy values present in the pool (first 20). Makes it trivial to spot data-vs-code drift (typos, new hierarchies, missing Home workbook, wrong working directory). Shared helper `_resolve_printer_pool_with_diag` ensures both "Printers" and "Office Printers" render identical diagnostics. No data/logic changes — just observability.
+        🟢 Engine v28.29 — Books v2 (Kids / Greek / International) — universal books engine with NEW two-set slot logic (slots 1-7 + 8-10 driven by series-depth). Same Series uses existing ordering (HP/Dog Man/Mikroi Kyrioi/pub-date/sales). Other Books: kids = sales × hierarchy × age; adults = sales × hierarchy × author × publisher × theme × language (deep spec match). Books-only carousel (no cross-sell).
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -125,145 +125,6 @@ APPL_CATS = {"MDA", "SDA", "Air Condition", "Personal Care"}
 COMPAT_COLS = ["Συμβατό με", "Συμβατή συσκευή"]
 CC = "_Compatible"
 ANDROID_OEMS = {"SAMSUNG", "XIAOMI", "HUAWEI", "MOTOROLA", "HONOR", "POCO", "REALME", "ONEPLUS", "NOTHING", "OPPO", "VIVO", "TCL", "NOKIA", "ASUS", "GOOGLE"}
-
-# ── Printer registry (v28.32) ────────────────────────────────────────────────
-# Defined early in CONFIG (not next to the slot lists) because the trigger
-# handlers reference these constants at module-top execution time. Streamlit
-# runs the script top-to-bottom on every interaction, so anything declared
-# down at line ~15000 (with the slot configs) isn't visible to the sidebar
-# trigger blocks at line ~6000 — hence "NameError: PRINTER_HIERARCHIES not
-# defined". Keep these here.
-#
-# Single source of truth for which Hierarchy values count as "a printer" for
-# trigger selection. Aligned with what's actually in the Spare sheet (Home
-# file):
-#   • INKJET A4              → Inkjet Home (regular single-function inkjet)
-#   • PHOTO PRINTERS         → Inkjet Home (photo-focused inkjets, same persona)
-#   • MULTIFUCTION INKJET    → Inkjet MFP (note: data uses typo "MULTIFUCTION")
-#   • LASER A4 MONO          → Mono Laser
-#   • LASER A4 COLOR         → Color Laser
-#   • MULTIFUCTION LASER A4 MONO   → Mono Laser MFP
-#   • MULTIFUCTION LASER A4 COLOR  → Color Laser MFP
-#   • MULTIFUCTION LASER A3 MONO   → Mono Laser MFP (A3 size, same persona)
-#   • MULTIFUCTION LASER A3 COLOR  → Color Laser MFP (A3 size, same persona)
-#
-# Deliberately excluded (no native persona — need their own slot lists if
-# we want to support them later):
-#   • THERMAL PRINTERS (54) — thermal paper, not ink/toner cartridges
-#   • PLOTTER (10)          — large-format, uses PLOTTER PAPERS not A4
-#   • DOT MATRIX A4 (2)     — uses RIBBONS CATRIDGES, not ink/toner
-#   • COPIERS A3 (2)        — large office copiers, niche
-PRINTER_HIERARCHIES = {
-    # Inkjet → routes to Inkjet Home (single-function) or Inkjet MFP
-    'INKJET A4',
-    'PHOTO PRINTERS',
-    'MULTIFUCTION INKJET',
-    # Laser → routes to Mono/Color × Single/MFP via existing detection
-    'LASER A4 MONO',
-    'LASER A4 COLOR',
-    'MULTIFUCTION LASER A4 MONO',
-    'MULTIFUCTION LASER A4 COLOR',
-    'MULTIFUCTION LASER A3 MONO',
-    'MULTIFUCTION LASER A3 COLOR',
-}
-
-# Brand extraction pattern for printer triggers (v28.32). Printer rows in
-# the Spare sheet have empty Κατασκευαστής, so the engine falls back to
-# parsing the brand out of the title. Order matters loosely — longer/more
-# specific names should appear before substrings (e.g. "HEWLETT-PACKARD"
-# before "HP"). Regex uses word boundaries to avoid false positives like
-# matching "HP" inside "PHILIPS". Validated 100% coverage on the 481
-# printer SKUs across the 9 registered hierarchies.
-PRINTER_BRANDS_PATTERN = (
-    r'\b(HEWLETT[- ]?PACKARD|HP|CANON|EPSON|BROTHER|SAMSUNG|XEROX|LEXMARK|'
-    r'RICOH|OLIVETTI|KYOCERA|PANTUM|OKI|DELL|FUJITSU|TOSHIBA|SHARP|'
-    r'KONICA|PHILIPS|XIAOMI|POLAROID|KODAK)\b'
-)
-
-
-def _resolve_printer_pool_with_diag(df_spare, df_products, df_peripherals, sheets_loaded):
-    """
-    Returns (printers_df, diagnostic_msg).
-
-    Tries data sources in order — Spare (Home file) first, then a
-    Products+Peripherals concat fallback. On empty result, builds a
-    diagnostic string with enough info to tell whether the issue is a
-    missing Home workbook, a missing Spare sheet, a hierarchy-name
-    mismatch, or a wrong working directory. The diagnostic is shown
-    via st.sidebar.warning, so users see it inside the app instead of
-    having to dig through Streamlit Cloud logs.
-
-    Shared by both the "Printers" and "Office Printers" trigger handlers
-    so they always render identical diagnostics.
-    """
-    import pandas as pd
-
-    # ── Step 1: pick a source dataframe ──
-    pool = pd.DataFrame()
-    source_used = None
-    if df_spare is not None and not df_spare.empty:
-        pool = df_spare
-        source_used = f"Spare ({len(df_spare):,} rows)"
-    elif df_peripherals is not None and not df_peripherals.empty:
-        pool = pd.concat([df_products, df_peripherals], ignore_index=True)
-        source_used = f"Fallback: Products + Peripherals ({len(pool):,} rows)"
-    elif df_products is not None and not df_products.empty:
-        pool = df_products
-        source_used = f"Fallback: Products only ({len(pool):,} rows)"
-
-    if pool.empty or 'Hierarchy' not in pool.columns:
-        sheets_str = ", ".join(sheets_loaded) if sheets_loaded else "(none)"
-        msg = (
-            "❌ Δεν βρέθηκαν εκτυπωτές — **το pool ήταν άδειο**.\n\n"
-            f"**Sheets που φορτώθηκαν**: {sheets_str}\n\n"
-            "Βεβαιωθείτε ότι το αρχείο `Recommendations GitHub Home.xlsx` "
-            "είναι committed στο repo δίπλα στο `Recommendations GitHub.xlsx`. "
-            "Οι εκτυπωτές ζουν στο sheet `Spare` του Home workbook."
-        )
-        return pool.head(0), msg
-
-    # ── Step 2: filter by PRINTER_HIERARCHIES ──
-    hier_upper = pool['Hierarchy'].fillna('').astype(str).str.upper().str.strip()
-    printers = pool[hier_upper.isin(PRINTER_HIERARCHIES)].copy()
-
-    # ── Step 3: fallback to Level 2 if hierarchy filter is empty ──
-    if printers.empty and 'Level 2' in pool.columns:
-        l2_lower = pool['Level 2'].fillna('').astype(str).str.strip().str.lower()
-        printers = pool[l2_lower.isin(['printers', 'εκτυπωτές'])].copy()
-
-    # ── Step 4: build diagnostic on empty result ──
-    if printers.empty:
-        # Show what hierarchies the pool actually has that look printer-ish,
-        # so we can immediately see if there's a naming mismatch (typo,
-        # extra spaces, different capitalization, new hierarchy etc).
-        sample_hiers = sorted([
-            h for h in pool['Hierarchy'].dropna().astype(str).str.upper().str.strip().unique()
-            if any(kw in h for kw in ['INKJET', 'LASER', 'PRINT', 'COPIER', 'MULTI', 'FAX', 'PHOTO PRINT'])
-        ])[:20]
-        sheets_str = ", ".join(sheets_loaded) if sheets_loaded else "(none)"
-        expected = ", ".join(sorted(PRINTER_HIERARCHIES))
-        if sample_hiers:
-            present = "\n".join(f"  • `{h}`" for h in sample_hiers)
-            msg = (
-                f"❌ Δεν βρέθηκαν εκτυπωτές — **το source `{source_used}` δεν "
-                f"περιείχε καμία από τις αναμενόμενες ιεραρχίες**.\n\n"
-                f"**Αναμένονται** (από `PRINTER_HIERARCHIES`):\n  {expected}\n\n"
-                f"**Υπάρχουν στα data** (printer-like hierarchies στο pool):\n{present}\n\n"
-                f"Πιθανώς υπάρχει αναντιστοιχία (π.χ. νέα ιεραρχία, typo, "
-                f"trailing space). Ενημερώστε το `PRINTER_HIERARCHIES` set."
-            )
-        else:
-            msg = (
-                f"❌ Δεν βρέθηκαν εκτυπωτές — **το source `{source_used}` δεν "
-                f"περιέχει printer-like ιεραρχίες**.\n\n"
-                f"**Sheets που φορτώθηκαν**: {sheets_str}\n\n"
-                f"Συνήθως αυτό σημαίνει ότι λείπει το `Recommendations GitHub "
-                f"Home.xlsx` ή ότι το `Spare` sheet δεν έχει φορτώσει σωστά."
-            )
-        return printers, msg
-
-    return printers, ""  # success — no diagnostic needed
-
 
 # ═════════════════════════════════════════════════════════════
 # 🟢 LAPTOPS CONFIGURATION (Mainstream / Road Warrior)
@@ -3663,6 +3524,179 @@ BOOKS_SLOT_MATRIX = [
     {"slot": 10, "role": "Category Discovery 3", "type": "DISCOVERY", "max": 1},
 ]
 
+# ═════════════════════════════════════════════════════════════════════════════
+# 🟢 v28.29 — BOOKS V2 CONFIGURATION (Universal Engine: Kids / Greek / International)
+# ═════════════════════════════════════════════════════════════════════════════
+#
+# This is the NEW slot-allocation framework that REPLACES the previous Kids Books
+# cross-sell carousel (Books + Toys + Stationery) with a books-only carousel
+# governed by a single "two-set" slot rule keyed off the depth of the trigger's
+# series.
+#
+# Slot allocation (per the proposed-logic image, May 2026):
+#     ┌──────────────────────────┬─────────────────────┬─────────────────────┐
+#     │ Same-series books avail. │   Front set (1-7)   │    Back set (8-10)  │
+#     ├──────────────────────────┼─────────────────────┼─────────────────────┤
+#     │ 0-1 (no/single book)     │ 0 SS, 7 Other Books │ 0 SS, 3 Other Books │
+#     │ 2                        │ 1 SS, 6 Other Books │ 0 SS, 3 Other Books │
+#     │ 3                        │ 2 SS, 5 Other Books │ 0 SS, 3 Other Books │
+#     │ 4-5                      │ 3 SS, 4 Other Books │ 0 SS, 3 Other Books │
+#     │ 6-7                      │ 4 SS, 3 Other Books │ 0 SS, 3 Other Books │
+#     │ 8-9                      │ 4 SS, 3 Other Books │ 3 SS, 0 Other Books │
+#     │ 10+                      │ 5 SS, 2 Other Books │ 3 SS, 0 Other Books │
+#     └──────────────────────────┴─────────────────────┴─────────────────────┘
+#
+# Design rationale for the "two-set" layout:
+#   • Front set (slots 1-7) — high-visibility positions. Lead with series depth
+#     to maximize completion-rate for series readers, but ALWAYS keep a tail of
+#     Other Books so even a 10-book-deep series shows the customer they're not
+#     pigeon-holed.
+#   • Back set (slots 8-10) — exploration / serendipity. For shallow series
+#     this stays Other Books (variety). For deep series (≥8 books) it flips to
+#     Same Series, on the assumption that someone with 8+ books in the same
+#     series wants to KEEP filling gaps in their collection rather than browse.
+#
+# What "same series" and "other books" mean is unchanged from the v28.0-28.28
+# Kids Books engine — see `run_books_v2_engine` for details:
+#   • SAME_SERIES — series-matched books with ordering logic (HP / Dog Man /
+#     Mikroi Kyrioi hardcoded sequences; SERIES_ORDER_MAP file for the rest;
+#     pub-date fallback for "Ordered" series; sales-rank for "Standalone").
+#     Edition/format/cover/pub-series bonuses preserved.
+#   • OTHER_BOOKS — same Level 2 + same Hierarchy, sorted by sales. For Kids
+#     Books also applies age-bracket filter + novelty-language exclusion +
+#     audiobook exclusion. For Greek/International Books layers DEEP-SPEC
+#     boosts on top of sales: same Author (+80k), Publisher (+30k), Theme
+#     (+20k Θέμα Βιβλίου), Language (+5k Γλώσσα Γραφής).
+#
+# The CROSS-SELL pillar (toys, plush, stationery) is REMOVED in v28.29 — this
+# is intentional and matches the new slot diagram. Kids who buy books still
+# get a 10-slot carousel; it just won't include a Squishmallow at slot 4.
+
+BOOKS_V2_CATEGORIES = {
+    "Kids Books": {
+        "level2_filter":     ["Greek Kids Books", "International Kids Books"],
+        "is_kids":           True,
+        "use_author_signal": False,   # 23-col Books sheet has no Συγγραφέας
+        "use_publisher_signal": False,
+        "use_theme_signal":  False,
+        "use_language_signal": False,
+        "apply_age_filter":  True,
+        "apply_novelty_lang_filter": True,
+        "apply_audiobook_filter":   True,
+        # Data source — read from the existing main "Books" sheet (df_books)
+        "data_source":       "df_books",
+    },
+    "Greek Books": {
+        "level2_filter":     ["Greek Books"],
+        "is_kids":           False,
+        "use_author_signal": True,    # 97% coverage in Συγγραφέας
+        "use_publisher_signal": True, # 99.8% coverage in Εκδότης
+        "use_theme_signal":  True,    # 75% coverage in Θέμα Βιβλίου
+        "use_language_signal": True,  # 99.8% coverage in Γλώσσα Γραφής
+        "apply_age_filter":  False,
+        "apply_novelty_lang_filter": False,
+        "apply_audiobook_filter":   False,
+        "data_source":       "df_greek_books",
+    },
+    "International Books": {
+        "level2_filter":     ["International Books"],
+        "is_kids":           False,
+        "use_author_signal": True,    # 95.5% coverage
+        "use_publisher_signal": True, # high coverage
+        "use_theme_signal":  True,    # 61% coverage in Θέμα Βιβλίου
+        "use_language_signal": True,  # 94% coverage
+        "apply_age_filter":  False,
+        "apply_novelty_lang_filter": False,
+        "apply_audiobook_filter":   False,
+        "data_source":       "df_int_books",
+    },
+}
+
+BOOKS_V2_CLUSTERS = set(BOOKS_V2_CATEGORIES.keys())
+
+# Scoring constants for the adult "Other Books" deep-spec match.
+# Tuned against Greek Books sales distribution (P99 ≈ 2,420, max ≈ 56k):
+# author match is the dominant signal — a same-author book at sales=50 outranks
+# a different-author bestseller at sales=2k. Publisher + Theme + Language stack
+# so that within the same-Hierarchy pool, the most specifically-relevant book
+# bubbles up, with sales as the tiebreaker.
+BOOKS_V2_S_SAME_AUTHOR     = 80_000   # strongest signal — author affinity
+BOOKS_V2_S_SAME_PUBLISHER  = 30_000   # publisher catalog signal
+BOOKS_V2_S_SAME_THEME      = 20_000   # Θέμα Βιβλίου match (thematic)
+BOOKS_V2_S_SAME_LANGUAGE   =  5_000   # Γλώσσα Γραφής match (small bonus)
+BOOKS_V2_S_AVAIL_BONUS     =      2   # matches AVAIL_BOOST elsewhere
+
+def allocate_book_slots(series_books_available_count: int):
+    """
+    Map the count of available Same-Series books to a 10-slot allocation
+    per the v28.29 two-set rule (see BOOKS_V2 doc block above).
+    
+    Returns a list of 10 strings — each one of 'SAME_SERIES' or 'OTHER_BOOKS' —
+    indexed 0..9 for carousel slots 1..10.
+    """
+    n = max(0, int(series_books_available_count))
+    
+    # Front set (slots 1-7, 7 cells total)
+    if   n >= 10: front_ss = 5
+    elif n >=  6: front_ss = 4   # covers 6-7 AND 8-9 (back set differs)
+    elif n >=  4: front_ss = 3   # covers 4-5
+    elif n >=  3: front_ss = 2
+    elif n >=  2: front_ss = 1
+    else:         front_ss = 0
+    
+    # Slight correction for n in {8, 9}: front_ss must be 4 (not 5).
+    # The chained-elif above already gives 4 for n in [6,9] so no override
+    # needed — leaving this comment as a marker for the rule boundary.
+    
+    # Back set (slots 8-10, 3 cells total). All-or-nothing: deep series → all
+    # SS, otherwise all OB.
+    back_ss = 3 if n >= 8 else 0
+    
+    front_slots = ['SAME_SERIES'] * front_ss + ['OTHER_BOOKS'] * (7 - front_ss)
+    back_slots  = ['SAME_SERIES'] * back_ss  + ['OTHER_BOOKS'] * (3 - back_ss)
+    return front_slots + back_slots
+
+
+def _books_v2_norm(s):
+    """Normalize a string field for spec-match comparison: lowercase, strip,
+    collapse common Greek/Latin variants. Handles None/NaN safely."""
+    if s is None: return ''
+    try:
+        if pd.isna(s): return ''
+    except (TypeError, ValueError):
+        pass
+    return str(s).strip().lower()
+
+
+def _books_v2_extract_authors_set(authors_field):
+    """Parse a Συγγραφέας field that may be semicolon-separated and return a
+    SET of normalized author names. Returns empty set if blank/missing.
+    Multi-author co-bylines are matched if ANY author overlaps."""
+    raw = _books_v2_norm(authors_field)
+    if not raw or raw in ('0', 'nan', 'n/a', 'none'):
+        return set()
+    parts = [p.strip() for p in re.split(r'[;,&]| και | and ', raw) if p.strip()]
+    return {p for p in parts if p}
+
+
+def _books_v2_normalize_language(lang):
+    """Map known Γλώσσα Γραφής variants to a canonical token. Handles case
+    differences ('ελληνικά' vs 'Ελληνικά'), Greek↔English duplicates
+    ('αγγλικά' vs 'english'), and the trailing-whitespace pattern seen in
+    Int Books ('english ')."""
+    base = _books_v2_norm(lang)
+    if not base: return ''
+    # Strip multi-language semicolon lists down to the first language.
+    if ';' in base:
+        base = base.split(';')[0].strip()
+    base = base.strip()
+    # Bilingual normalization map
+    eng_aliases = {'english', 'αγγλικά', 'αγγλικα'}
+    gr_aliases  = {'greek', 'ελληνικά', 'ελληνικα'}
+    if base in eng_aliases: return 'en'
+    if base in gr_aliases:  return 'el'
+    return base
+
 # ─────────────────────────────────────────────────────────────
 # HELPER FUNCTIONS
 # ─────────────────────────────────────────────────────────────
@@ -5056,6 +5090,8 @@ def get_desktop_accessory_budget(logic_key, tier):
 EXCEL_FILES = [
     "Recommendations GitHub.xlsx",
     "Recommendations GitHub Home.xlsx",
+    "Recommendations GitHub Books.xlsx",      # v28.29 — Greek Books + School Books
+    "Recommendations GitHub IntBooks.xlsx",   # v28.29 — International Books (Sheet1)
 ]
 
 @st.cache_data(ttl=600)
@@ -5128,21 +5164,20 @@ def load_all_data():
     # ALLINONE. Persona field (Προτεινόμενη χρήση) is noisy so the engine
     # does its own detection. Used by the Desktops engine.
     ddt  = _load('IT')
-    # ── Spare sheet (Home file, v28.32): the canonical source for printer
-    # products and printer ecosystem accessories. Contains:
-    #   • 549 printer SKUs across 9 active hierarchies (MULTIFUCTION INKJET,
-    #     INKJET A4, PHOTO PRINTERS, LASER A4 MONO/COLOR, all MULTIFUCTION
-    #     LASER variants for A4 and A3)
-    #   • 2933 cartridge SKUs (1759 INK + 1074 TONER + 134 COMPATIBLE TONERS
-    #     + 83 COMPATIBLE INK CARTRIDGES — 2.3× more than Peripherals)
-    #   • Paper (COPIERS PAPER, INKJET PAPER, SPECIAL PAPERS), drums,
-    #     printheads, ribbons, fusers, calculators, laminators, shredders,
-    #     and PRINTER ACCESSORIES (93 SKUs)
-    # The Printers and Office Printers clusters now use Spare as the primary
-    # data source, combined with Peripherals/Stationery/Products for slots
-    # that reference hierarchies not in Spare (USB CABLES, SURGE PROTECTORS,
-    # photo frames, office stationery).
-    dspare = _load('Spare')
+    
+    # ── v28.29: Greek Books (adult/general) sheet from
+    # "Recommendations GitHub Books.xlsx". 35,675 rows, Level 2='Greek Books'.
+    # Rich metadata: Συγγραφέας (97% cov), Εκδότης (99.8%), Θέμα Βιβλίου (75%),
+    # Γλώσσα Γραφής (99.8%). Used by the Greek Books engine.
+    dgr_books = _load('Greek Books')
+    
+    # ── v28.29: International Books sheet from
+    # "Recommendations GitHub IntBooks.xlsx". 54,115 rows, Level 2='International Books'.
+    # Sheet is named "Sheet1" in the workbook. Same 87-col structure as Greek Books.
+    # Higher series coverage (25% vs 8.5%) — Penguin/Oxford/Travel classics dominate.
+    dint_books = _load('International Books')
+    if dint_books.empty:
+        dint_books = _load('Sheet1')   # fallback: workbook ships with default sheet name
     
     if not dp.empty:
         parts = [dp[c].fillna('').astype(str).str.strip() for c in COMPAT_COLS if c in dp.columns]
@@ -5159,11 +5194,18 @@ def load_all_data():
     if not db.empty and CC not in db.columns:
         db[CC] = ''
     
-    return dp, dm, dh, ds, db, dl, dv, dper, dstat, dair, dfloor, dgaming, dsda, dmda, ddt, dspare, available_sheets
+    # v28.29 — same CC-column hygiene for the new adult-books sheets so that
+    # they merge cleanly with df_products in any downstream concat.
+    if not dgr_books.empty and CC not in dgr_books.columns:
+        dgr_books[CC] = ''
+    if not dint_books.empty and CC not in dint_books.columns:
+        dint_books[CC] = ''
+    
+    return dp, dm, dh, ds, db, dl, dv, dper, dstat, dair, dfloor, dgaming, dsda, dmda, ddt, dgr_books, dint_books, available_sheets
 
 try:
 
-    df_products, df_music, df_history, df_slots, df_books, df_laptops, df_vacuums, df_peripherals, df_stationery, df_air, df_floor, df_gaming, df_sda, df_mda, df_desktops, df_spare, sheets_loaded = load_all_data()
+    df_products, df_music, df_history, df_slots, df_books, df_laptops, df_vacuums, df_peripherals, df_stationery, df_air, df_floor, df_gaming, df_sda, df_mda, df_desktops, df_greek_books, df_int_books, sheets_loaded = load_all_data()
     compat_cols_found = [c for c in COMPAT_COLS if c in df_products.columns]
 except Exception as e:
     st.error(f"🚨 Error loading data: {e}")
@@ -5254,6 +5296,10 @@ L2_CHILDREN = {
     "Books": [
         {"key": "Kids Books", "label": "Παιδικά\nΒιβλία",
          "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 19.5A2.5 2.5 0 0 1 6.5 17H20'/%3E%3Cpath d='M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z'/%3E%3C/svg%3E"},
+        {"key": "Greek Books", "label": "Ελληνικά\nΒιβλία",
+         "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z'/%3E%3Cpath d='M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z'/%3E%3C/svg%3E"},
+        {"key": "International Books", "label": "Ξενόγλωσσα\nΒιβλία",
+         "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3Cline x1='2' y1='12' x2='22' y2='12'/%3E%3Cpath d='M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z'/%3E%3C/svg%3E"},
     ],
     "Telephony": [
         {"key": "Smartphones", "label": "Smart-\nphones",
@@ -5280,8 +5326,6 @@ L2_CHILDREN = {
          "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='2' y='3' width='20' height='14' rx='1'/%3E%3Cline x1='8' y1='21' x2='16' y2='21'/%3E%3Cline x1='12' y1='17' x2='12' y2='21'/%3E%3C/svg%3E"},
         {"key": "Printers", "label": "Εκτυπωτές",
          "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 6 2 18 2 18 9'/%3E%3Cpath d='M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2'/%3E%3Crect x='6' y='14' width='12' height='8'/%3E%3C/svg%3E"},
-        {"key": "Office Printers", "label": "Εκτυπωτές\nΓραφείου",
-         "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 6 2 18 2 18 9'/%3E%3Cpath d='M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2'/%3E%3Crect x='6' y='14' width='12' height='8'/%3E%3Ccircle cx='9' cy='17' r='0.8' fill='%23ff5e00'/%3E%3Ccircle cx='12' cy='17' r='0.8' fill='%23ff5e00'/%3E%3Ccircle cx='15' cy='17' r='0.8' fill='%23ff5e00'/%3E%3C/svg%3E"},
         {"key": "Webcam", "label": "Webcam",
          "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='10' r='6'/%3E%3Ccircle cx='12' cy='10' r='2'/%3E%3Cpath d='M5 22h14l-2-5H7l-2 5z'/%3E%3C/svg%3E"},
         {"key": "USB Hub", "label": "USB Hub",
@@ -6184,32 +6228,19 @@ else:
                 trigger = monitors[monitors['Title']==sel].iloc[0] if sel else None
 
     elif active_cluster == "Printers":
-        # v28.32.2 — Self-diagnosing trigger. Shows the user exactly what went
-        # wrong when the dropdown comes back empty: which sheets loaded,
-        # whether Spare was found, how many rows it has, and which Hierarchy
-        # values are actually present (so we can spot data-vs-code drift).
-        printers, _printers_diag = _resolve_printer_pool_with_diag(
-            df_spare, df_products, df_peripherals, sheets_loaded
-        )
+        combined = pd.concat([df_products, df_peripherals], ignore_index=True) if not df_peripherals.empty else df_products
+        printer_hiers = {'INKJET', 'MULTIFUNCTION INKJET', 'MULTIFUCTION LASER', 'LASER', 'LASER A4 MONO',
+                         'LASER A4 COLOR', 'LASER A3 MONO', 'LASER A3 COLOR', 'FAX LASER',
+                         'MULTIFUCTION LASER A4 COLOR', 'MULTIFUCTION LASER A4 MONO',
+                         'MULTIFUCTION LASER A3 COLOR', 'MULTIFUCTION LASER A3 MONO'}
+        printers = combined[combined['Hierarchy'].fillna('').astype(str).str.upper().str.strip().isin(printer_hiers)].copy()
         if printers.empty:
-            st.sidebar.warning(_printers_diag)
+            printers = combined[combined['Level 2'].fillna('').str.strip().str.lower().isin(['printers', 'εκτυπωτές'])].copy()
+        if printers.empty:
+            st.sidebar.warning("Δεν βρέθηκαν εκτυπωτές.")
         else:
             st.sidebar.markdown('<p class="sidebar-section">Επιλέξτε Εκτυπωτή</p>', unsafe_allow_html=True)
             sel = st.sidebar.selectbox("", printers['Title'].unique(), label_visibility="collapsed", key="print_sel")
-            trigger = printers[printers['Title']==sel].iloc[0] if sel else None
-
-    elif active_cluster == "Office Printers":
-        # Same trigger detection as "Printers" — any printer in the catalog
-        # is a valid anchor for the office bundle. Inkjet/laser/color/mono is
-        # detected inside the engine; the user just picks the printer.
-        printers, _printers_diag = _resolve_printer_pool_with_diag(
-            df_spare, df_products, df_peripherals, sheets_loaded
-        )
-        if printers.empty:
-            st.sidebar.warning(_printers_diag)
-        else:
-            st.sidebar.markdown('<p class="sidebar-section">Επιλέξτε Εκτυπωτή (Office Bundle)</p>', unsafe_allow_html=True)
-            sel = st.sidebar.selectbox("", printers['Title'].unique(), label_visibility="collapsed", key="office_print_sel")
             trigger = printers[printers['Title']==sel].iloc[0] if sel else None
 
     elif active_cluster == "Webcam":
@@ -6272,6 +6303,138 @@ else:
                     matching_books['_has_series'] = matching_books['Σειρά βιβλίου'].apply(lambda x: 0 if (pd.isna(x) or str(x).strip().lower() in ['', '0', 'nan']) else 1)
                     matching_books = matching_books.sort_values('_has_series', ascending=False)
                 trigger = matching_books.iloc[0]
+
+    # ── v28.29: Greek Books (adult) ────────────────────────────
+    elif active_cluster == "Greek Books":
+        if df_greek_books is None or df_greek_books.empty:
+            sheets_str = ", ".join(sheets_loaded) if sheets_loaded else "(none)"
+            st.sidebar.warning(
+                "Sheet 'Greek Books' is empty or missing.\n\n"
+                f"**Sheets loaded**: {sheets_str}\n\n"
+                "Make sure `Recommendations GitHub Books.xlsx` is committed."
+            )
+            st.stop()
+        gr_books = df_greek_books[
+            (df_greek_books['Level 1'] == 'Books') &
+            (df_greek_books['Level 2'] == 'Greek Books')
+        ].copy()
+        if gr_books.empty: gr_books = df_greek_books[df_greek_books['Level 1'] == 'Books'].copy()
+        
+        if not gr_books.empty:
+            # Series filter (same UX as Kids Books — search + dropdown)
+            if 'Σειρά βιβλίου' in gr_books.columns:
+                sc = gr_books['Σειρά βιβλίου'].fillna('').astype(str)
+                sc = sc[(sc != '0') & (sc != '') & (sc != '-') & (sc.str.lower() != 'nan') & (sc.str.lower() != 'n/a')]
+                if len(sc) > 0:
+                    series_counts = sc.value_counts()
+                    top_series = series_counts.head(200)
+                    series_items = [(f"{name} ({count})", name) for name, count in top_series.items()]
+                    st.sidebar.markdown('<p class="sidebar-section">Φιλτράρισμα ανά Σειρά</p>', unsafe_allow_html=True)
+                    series_search = st.sidebar.text_input("🔍 Αναζήτηση σειράς:", placeholder="π.χ. Ηρακλής Πουαρό", label_visibility="collapsed", key="gb_search")
+                    if series_search:
+                        matching = [(f"{name} ({count})", name) for name, count in series_counts.items() if series_search.lower() in name.lower()][:100]
+                        series_options = ['Όλες οι σειρές'] + [m[0] for m in matching]
+                        series_display = {m[0]: m[1] for m in matching}
+                    else:
+                        series_options = ['Όλες οι σειρές'] + [item[0] for item in series_items]
+                        series_display = {item[0]: item[1] for item in series_items}
+                    selected_series_display = st.sidebar.selectbox("", series_options, label_visibility="collapsed", key="gb_series")
+                    if selected_series_display != 'Όλες οι σειρές':
+                        actual_series = series_display.get(selected_series_display, selected_series_display)
+                        gr_books = gr_books[gr_books['Σειρά βιβλίου'] == actual_series]
+            
+            # Optional Author filter (adult-books extra — author affinity is the
+            # primary recommendation driver so giving the demo a way to test
+            # a specific author's book matters).
+            if 'Συγγραφέας' in gr_books.columns:
+                ac = gr_books['Συγγραφέας'].fillna('').astype(str)
+                ac = ac[(ac != '0') & (ac != '') & (ac.str.lower() != 'nan')]
+                if len(ac) > 0:
+                    st.sidebar.markdown('<p class="sidebar-section">Φιλτράρισμα ανά Συγγραφέα (προαιρετικό)</p>', unsafe_allow_html=True)
+                    author_search = st.sidebar.text_input("🔍 Αναζήτηση συγγραφέα:", placeholder="π.χ. Στίβεν Κινγκ", label_visibility="collapsed", key="gb_author_search")
+                    if author_search:
+                        gr_books = gr_books[gr_books['Συγγραφέας'].fillna('').astype(str).str.lower().str.contains(author_search.lower(), na=False)]
+            
+            st.sidebar.markdown('<p class="sidebar-section">Επιλέξτε Βιβλίο</p>', unsafe_allow_html=True)
+            if not gr_books.empty:
+                # Sort by sales so most-relevant titles appear first in the dropdown
+                if 'Sum of Sales' in gr_books.columns:
+                    gr_books = gr_books.sort_values('Sum of Sales', ascending=False, na_position='last')
+                titles = gr_books['Title'].dropna().unique()
+                if len(titles) > 0:
+                    sel = st.sidebar.selectbox("", titles, label_visibility="collapsed", key="gb_sel")
+                    if sel:
+                        matching_books = gr_books[gr_books['Title'] == sel].copy()
+                        if len(matching_books) > 1 and 'Σειρά βιβλίου' in matching_books.columns:
+                            matching_books['_has_series'] = matching_books['Σειρά βιβλίου'].apply(
+                                lambda x: 0 if (pd.isna(x) or str(x).strip().lower() in ['', '0', '-', 'nan']) else 1)
+                            matching_books = matching_books.sort_values('_has_series', ascending=False)
+                        trigger = matching_books.iloc[0]
+    
+    # ── v28.29: International Books (adult) ─────────────────────
+    elif active_cluster == "International Books":
+        if df_int_books is None or df_int_books.empty:
+            sheets_str = ", ".join(sheets_loaded) if sheets_loaded else "(none)"
+            st.sidebar.warning(
+                "Sheet 'International Books' (or 'Sheet1') is empty or missing.\n\n"
+                f"**Sheets loaded**: {sheets_str}\n\n"
+                "Make sure `Recommendations GitHub IntBooks.xlsx` is committed."
+            )
+            st.stop()
+        int_books = df_int_books[
+            (df_int_books['Level 1'] == 'Books') &
+            (df_int_books['Level 2'] == 'International Books')
+        ].copy()
+        if int_books.empty: int_books = df_int_books[df_int_books['Level 1'] == 'Books'].copy()
+        
+        if not int_books.empty:
+            # Series filter (25% series coverage — much higher than Greek;
+            # series like 'Penguin Modern Classics' (284) / 'Oxford World's Classics' (241) dominate)
+            if 'Σειρά βιβλίου' in int_books.columns:
+                sc = int_books['Σειρά βιβλίου'].fillna('').astype(str)
+                sc = sc[(sc != '0') & (sc != '') & (sc != '-') & (sc.str.lower() != 'nan') & (sc.str.lower() != 'n/a')]
+                if len(sc) > 0:
+                    series_counts = sc.value_counts()
+                    top_series = series_counts.head(200)
+                    series_items = [(f"{name} ({count})", name) for name, count in top_series.items()]
+                    st.sidebar.markdown('<p class="sidebar-section">Φιλτράρισμα ανά Σειρά</p>', unsafe_allow_html=True)
+                    series_search = st.sidebar.text_input("🔍 Αναζήτηση σειράς:", placeholder="π.χ. Penguin Modern Classics", label_visibility="collapsed", key="ib_search")
+                    if series_search:
+                        matching = [(f"{name} ({count})", name) for name, count in series_counts.items() if series_search.lower() in name.lower()][:100]
+                        series_options = ['Όλες οι σειρές'] + [m[0] for m in matching]
+                        series_display = {m[0]: m[1] for m in matching}
+                    else:
+                        series_options = ['Όλες οι σειρές'] + [item[0] for item in series_items]
+                        series_display = {item[0]: item[1] for item in series_items}
+                    selected_series_display = st.sidebar.selectbox("", series_options, label_visibility="collapsed", key="ib_series")
+                    if selected_series_display != 'Όλες οι σειρές':
+                        actual_series = series_display.get(selected_series_display, selected_series_display)
+                        int_books = int_books[int_books['Σειρά βιβλίου'] == actual_series]
+            
+            # Optional Author filter
+            if 'Συγγραφέας' in int_books.columns:
+                ac = int_books['Συγγραφέας'].fillna('').astype(str)
+                ac = ac[(ac != '0') & (ac != '') & (ac.str.lower() != 'nan')]
+                if len(ac) > 0:
+                    st.sidebar.markdown('<p class="sidebar-section">Φιλτράρισμα ανά Συγγραφέα (προαιρετικό)</p>', unsafe_allow_html=True)
+                    author_search = st.sidebar.text_input("🔍 Αναζήτηση συγγραφέα:", placeholder="π.χ. Stephen King", label_visibility="collapsed", key="ib_author_search")
+                    if author_search:
+                        int_books = int_books[int_books['Συγγραφέας'].fillna('').astype(str).str.lower().str.contains(author_search.lower(), na=False)]
+            
+            st.sidebar.markdown('<p class="sidebar-section">Επιλέξτε Βιβλίο</p>', unsafe_allow_html=True)
+            if not int_books.empty:
+                if 'Sum of Sales' in int_books.columns:
+                    int_books = int_books.sort_values('Sum of Sales', ascending=False, na_position='last')
+                titles = int_books['Title'].dropna().unique()
+                if len(titles) > 0:
+                    sel = st.sidebar.selectbox("", titles, label_visibility="collapsed", key="ib_sel")
+                    if sel:
+                        matching_books = int_books[int_books['Title'] == sel].copy()
+                        if len(matching_books) > 1 and 'Σειρά βιβλίου' in matching_books.columns:
+                            matching_books['_has_series'] = matching_books['Σειρά βιβλίου'].apply(
+                                lambda x: 0 if (pd.isna(x) or str(x).strip().lower() in ['', '0', '-', 'nan']) else 1)
+                            matching_books = matching_books.sort_values('_has_series', ascending=False)
+                        trigger = matching_books.iloc[0]
 
 
     elif active_cluster == "PS5 Console":
@@ -7315,6 +7478,707 @@ def run_books_engine(trigger, df_all, df_history):
     slot_notes[3] = discovery_notes
     diag.append(("3. Discovery", discovery_count, f"Filled {discovery_count} slots"))
     diag.append(("TOTAL", series_count + crosssell_count + discovery_count, f"out of 10"))
+    
+    if all_recs:
+        recs_df = pd.DataFrame(all_recs)
+        recs_df['Draft_Score'] = recs_df['Assigned_Slot']
+        recs_df = recs_df.sort_values('Assigned_Slot').reset_index(drop=True)
+        return recs_df, diag, slot_notes, recs_df
+    else:
+        return pd.DataFrame(), diag, slot_notes, pd.DataFrame()
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# 🟢 v28.29 — UNIVERSAL BOOKS ENGINE (Kids / Greek / International)
+# ═════════════════════════════════════════════════════════════════════════════
+#
+# This is a books-only carousel engine using the two-set slot allocation
+# (see BOOKS_V2_CATEGORIES doc block earlier in the file for the slot rule
+# and design rationale).
+#
+# Selection logic per slot type:
+#   • SAME_SERIES — IDENTICAL to the previous Kids Books engine's Priority-1
+#     series stage. All edition/format bonuses preserved (cover, dimensions,
+#     pub-series, illustration), all hardcoded ordering rules preserved (HP
+#     book order, Dog Man book order, Mikroi Kyrioi numeric order), and the
+#     external Ordered/Mixed/Standalone map from kids_books_categories.xlsx
+#     is honored.
+#   • OTHER_BOOKS:
+#       — KIDS path: same as the previous engine's Priority-3 Category
+#         Discovery — same Hierarchy + Level 2 + allowed-ages filter + sort
+#         by Sum of Sales.
+#       — ADULT path (Greek/Int): same Hierarchy + Level 2 hard filter, then
+#         layer DEEP-SPEC boosts on top of sales:
+#             same Author    → +80,000  (strongest — author affinity)
+#             same Publisher → +30,000
+#             same Theme     → +20,000  (Θέμα Βιβλίου)
+#             same Language  →  +5,000  (Γλώσσα Γραφής)
+#         Final ranking: by composite score desc, then by Sum of Sales desc
+#         as tiebreaker.
+#
+# The function reuses helpers defined inside `run_books_engine` (canonical
+# name, HP / Dog Man / Mikroi Kyrioi orderings, box-set detection, etc.) by
+# redefining them locally — they're not module-level so we can't import them.
+# This keeps v28.28 behavior bit-perfect for the SAME_SERIES side.
+# ═════════════════════════════════════════════════════════════════════════════
+def run_books_v2_engine(trigger, df_pool, df_history, category_key):
+    """
+    Universal books engine (v28.29) — Kids Books / Greek Books / International Books.
+    
+    Parameters
+    ----------
+    trigger : pd.Series
+        The trigger book row (with all its attribute columns).
+    df_pool : pd.DataFrame
+        The candidate pool. Should already be filtered to the category's
+        Level 2 (i.e. for Kids Books → the 'Books' sheet rows with
+        Level 2 ∈ KIDS_BOOKS_LEVEL2; for Greek/Int → the respective new sheet).
+    df_history : pd.DataFrame
+        Customer purchase history (fallback for sales when 'Sum of Sales' is
+        missing). Kept for parity with run_books_engine.
+    category_key : str
+        One of "Kids Books", "Greek Books", "International Books".
+    """
+    config = BOOKS_V2_CATEGORIES[category_key]
+    diag = []
+    slot_notes = {}
+    all_recs = []
+    used_materials = set()
+    used_titles = set()
+    
+    # ──────────────────────────────────────────────────────────
+    # 🟢 LOAD GENDER & ORDER CATEGORIES FROM FILE (kids only)
+    # ──────────────────────────────────────────────────────────
+    # The kids_books_categories.xlsx file ships an Ordered/Mixed/Standalone
+    # column per series — required to drive the series-engine sort. Adult
+    # books fall back to Standalone (sales-first) by default.
+    SERIES_GENDER_MAP = {}
+    SERIES_ORDER_MAP = {}
+    if config["is_kids"]:
+        try:
+            import os
+            gender_file_paths = [
+                '/mnt/user-data/uploads/kids_books_categories.xlsx',
+                'kids_books_categories.xlsx',
+                '/mount/src/recommender-poc/kids_books_categories.xlsx',
+            ]
+            for gf_path in gender_file_paths:
+                if os.path.exists(gf_path):
+                    gender_df = pd.read_excel(gf_path)
+                    for _, row in gender_df.iterrows():
+                        series_name = str(row.get('Series Name', '')).strip()
+                        category = str(row.get('Category', 'Universal')).strip()
+                        order_type = str(row.iloc[2]).strip() if len(row) > 2 else 'Standalone'
+                        if series_name:
+                            series_lower = series_name.lower()
+                            if category == 'Girls-leaning':
+                                SERIES_GENDER_MAP[series_lower] = 'girl'
+                            elif category == 'Boys-leaning':
+                                SERIES_GENDER_MAP[series_lower] = 'boy'
+                            else:
+                                SERIES_GENDER_MAP[series_lower] = 'neutral'
+                            SERIES_ORDER_MAP[series_lower] = order_type
+                    break
+        except Exception:
+            pass
+    
+    # ──────────────────────────────────────────────────────────
+    # 🟢 HARDCODED ORDERINGS (apply to all 3 categories — series authors are
+    # universal; Harry Potter is found in both Kids and Int)
+    # ──────────────────────────────────────────────────────────
+    HARRY_POTTER_ORDER = {
+        'φιλοσοφική λίθος': 1, 'philosopher': 1, "sorcerer's stone": 1,
+        'μυστικό δωμάτιο': 2, 'chamber of secrets': 2, 'κάμαρα': 2,
+        'αιχμάλωτος': 3, 'αζκαμπάν': 3, 'prisoner of azkaban': 3,
+        'κύπελλο φωτιάς': 4, 'goblet of fire': 4, 'κύπελλο της φωτιάς': 4,
+        'τάγμα του φοίνικα': 5, 'order of the phoenix': 5, 'φοίνικα': 5,
+        'ημίαιμος πρίγκιψ': 6, 'half-blood prince': 6, 'ημίαιμος': 6,
+        'κλήροι του θανάτου': 7, 'deathly hallows': 7, 'θανάτου': 7,
+        'καταραμένο παιδί': 8, 'cursed child': 8,
+        'φανταστικά ζώα': 9, 'fantastic beasts': 9,
+        'quidditch': 10, 'κουίντιτς': 10,
+        'beedle': 11, 'μπιντλ': 11,
+    }
+    
+    def get_hp_order(title):
+        title_lower = str(title).lower()
+        for keyword, order in HARRY_POTTER_ORDER.items():
+            if keyword in title_lower: return order
+        return 99
+    
+    def is_harry_potter_series(series_name):
+        series_lower = str(series_name).lower()
+        return 'harry potter' in series_lower or 'χάρι πότερ' in series_lower or 'χαρι ποτερ' in series_lower
+    
+    def is_dog_man_series(series_name):
+        return 'dog man' in str(series_name).lower()
+    
+    def get_dog_man_order(title):
+        title_lower = str(title).lower()
+        match = re.search(r'dog\s*man\s*(\d{1,2})(?:\s*[-:]|\s|$)', title_lower)
+        if match: return int(match.group(1))
+        if 'dog man' in title_lower and not re.search(r'dog\s*man\s*\d', title_lower):
+            adv_match = re.search(r'adventures\s*of\s*dog\s*man\s*(\d)', title_lower)
+            if adv_match: return int(adv_match.group(1))
+            return 1
+        known_titles = {
+            'a tale of two kitties': 3, 'tale of two kitties': 3,
+            'lord of the fleas': 5, 'brawl of the wild': 6,
+            'for whom the ball rolls': 7, 'fetch-22': 8, 'fetch 22': 8,
+            'grime and punishment': 9, 'mothering heights': 10,
+            'twenty thousand fleas': 11, 'scarlet shedder': 12, 'big jim begins': 13,
+        }
+        for keyword, order in known_titles.items():
+            if keyword in title_lower: return order
+        return 99
+    
+    def is_mikroi_kyrioi_series(series_name):
+        series_lower = str(series_name).lower()
+        return ('μικροί κύριοι' in series_lower or 'μικρές κυρίες' in series_lower
+                or 'mr. men' in series_lower or 'little miss' in series_lower)
+    
+    def get_mikroi_kyrioi_order(title):
+        title_lower = str(title).lower()
+        match = re.search(r'(?:μικροί κύριοι|μικρές κυρίες|mr\.?\s*men|little miss)[^0-9]*(\d{1,3})', title_lower)
+        if match: return int(match.group(1))
+        return 99
+    
+    def is_box_set(title):
+        title_lower = str(title).lower()
+        box_keywords = ['box set', 'boxset', 'box-set', 'κασετίνα', 'συλλογή', 'collection',
+                        'βαλιτσάκι', 'σετ βιβλίων', 'book set', 'complete series', 'books 1-']
+        return any(kw in title_lower for kw in box_keywords)
+    
+    def is_complete_box_set(title):
+        title_lower = str(title).lower()
+        complete_keywords = ['complete', 'ολοκληρωμένη', 'πλήρης', 'all books', 'όλα τα βιβλία',
+                            'full collection', '1-7', '1-8', 'complete collection']
+        return any(kw in title_lower for kw in complete_keywords)
+    
+    def get_canonical_book_name(title, orig_title=''):
+        title_lower = str(title).lower().strip() if title and str(title) != 'nan' else ''
+        orig_lower = ''
+        if orig_title is not None and not pd.isna(orig_title):
+            orig_str = str(orig_title).lower().strip()
+            if orig_str and orig_str != 'nan':
+                orig_lower = orig_str
+        canonical = orig_lower if orig_lower else title_lower
+        if not canonical or canonical == 'nan':
+            return title_lower if title_lower and title_lower != 'nan' else ''
+        
+        prefixes = [
+            'ο χάρι πότερ και ', 'ο χαρι ποτερ και ', 'harry potter and the ', 'harry potter and ',
+            'fantastic beasts: ', 'φανταστικά ζώα: ', 'φανταστικά ζώα και ',
+            'diary of a wimpy kid: ', 'diary of a wimpy kid ',
+            'captain underpants: ', 'captain underpants ',
+        ]
+        for prefix in prefixes:
+            if canonical.startswith(prefix):
+                canonical = canonical[len(prefix):]
+                break
+        
+        dm_patterns = [
+            r'^adventures\s+of\s+dog\s*man\s*\d{0,2}\s*[-:]\s*',
+            r'^dog\s*man\s*\d{1,2}\s*[-:]\s*',
+            r'^dog\s*man\s*[-:]\s*',
+            r'^dog\s*man\s+',
+        ]
+        for pattern in dm_patterns:
+            dm_match = re.match(pattern, canonical)
+            if dm_match:
+                canonical = canonical[dm_match.end():]
+                break
+        
+        edition_keywords = [
+            'edition', 'έκδοση', 'illustrated', 'εικονογραφημένο', 'εικονογραφημένη',
+            'collector', 'συλλεκτική', 'deluxe', 'anniversary', 'special', 'gift',
+            'paperback', 'hardcover', 'hardback', 'softcover', 'minalima',
+            'gryffindor', 'slytherin', 'hufflepuff', 'ravenclaw', 'rehearsal',
+        ]
+        paren_match = re.search(r'\s*\([^)]*(?:' + '|'.join(edition_keywords) + r')[^)]*\)\s*$', canonical)
+        if paren_match: canonical = canonical[:paren_match.start()]
+        
+        for delimiter in [' - ', ': ', ' – ', ' — ']:
+            if delimiter in canonical:
+                parts = canonical.split(delimiter)
+                if len(parts) >= 2:
+                    suffix_part = parts[-1].lower().strip()
+                    words = suffix_part.split()
+                    if len(words) <= 4 and any(kw in suffix_part for kw in edition_keywords):
+                        canonical = delimiter.join(parts[:-1])
+        for suffix in [' cd', ' audiobook', ' audio book', ' mp3', ' audio']:
+            if canonical.endswith(suffix):
+                canonical = canonical[:-len(suffix)]
+                break
+        for suffix in [' pb', ' hb', ' (pb)', ' (hb)']:
+            if canonical.endswith(suffix):
+                canonical = canonical[:-len(suffix)]
+                break
+        marketing_paren = re.search(r'\s*\([^)]*(?:new|graphic novel|book|novel)[^)]*\)\s*$', canonical, re.IGNORECASE)
+        if marketing_paren: canonical = canonical[:marketing_paren.start()]
+        for suffix in [': a graphic novel', ' - a graphic novel', ': graphic novel']:
+            if canonical.endswith(suffix):
+                canonical = canonical[:-len(suffix)]
+                break
+        if canonical.startswith('dog man: '): canonical = canonical[9:]
+        canonical = canonical.replace("'", "'").replace("'", "'").replace("`", "'")
+        return canonical.strip()
+    
+    # ──────────────────────────────────────────────────────────
+    # TRIGGER ATTRIBUTES
+    # ──────────────────────────────────────────────────────────
+    tm = trigger['Material']
+    tt = str(trigger.get('Title', ''))
+    used_materials.add(tm)
+    
+    t_series_raw = trigger.get('Σειρά βιβλίου', None)
+    if t_series_raw is None:
+        for col in trigger.index:
+            if 'σειρά' in col.lower() or 'series' in col.lower():
+                t_series_raw = trigger.get(col, None)
+                break
+    t_series = str(t_series_raw).strip() if t_series_raw is not None and not pd.isna(t_series_raw) else ''
+    
+    t_age = str(trigger.get('Ηλικία', '')).strip()
+    t_rec_age = str(trigger.get('Προτεινόμενη Ηλικία', '')).strip()
+    t_cover = str(trigger.get('Εξώφυλλο', '')).strip()
+    t_dims = str(trigger.get('Διαστάσεις', '')).strip()
+    t_illus = str(trigger.get('Λεπτομέρειες εικονογράφησης', '')).strip()
+    t_pub_series = str(trigger.get('Εκδοτική Σειρά', '')).strip()
+    t_orig_title = str(trigger.get('Τίτλος πρωτοτύπου', '')).strip()
+    t_hierarchy = str(trigger.get('Hierarchy', '')).strip()
+    t_level2 = str(trigger.get('Level 2', '')).strip()
+    t_price = parse_euro_price(trigger.get('LIST PRICE', 0))
+    
+    # Adult-books-only deep-spec attributes
+    t_author_field = trigger.get('Συγγραφέας', '')
+    t_authors_set = _books_v2_extract_authors_set(t_author_field) if config["use_author_signal"] else set()
+    t_publisher = _books_v2_norm(trigger.get('Εκδότης', '')) if config["use_publisher_signal"] else ''
+    t_theme = _books_v2_norm(trigger.get('Θέμα Βιβλίου', '')) if config["use_theme_signal"] else ''
+    t_language = _books_v2_normalize_language(trigger.get('Γλώσσα Γραφής', '')) if config["use_language_signal"] else ''
+    
+    effective_age = t_age if t_age and t_age != 'nan' and t_age != '0' else t_rec_age
+    allowed_ages = get_allowed_ages(effective_age) if config["apply_age_filter"] else []
+    has_series = is_valid_series(t_series)
+    
+    trigger_is_box_set = is_box_set(tt)
+    trigger_is_complete_box = trigger_is_box_set and is_complete_box_set(tt)
+    trigger_canonical = get_canonical_book_name(tt, t_orig_title)
+    used_titles.add(trigger_canonical)
+    
+    box_status = "complete box set" if trigger_is_complete_box else ("partial box set" if trigger_is_box_set else "individual book")
+    diag.append(("0. Trigger", "", f"Cat: {category_key} | Series: '{t_series}' (valid: {has_series}) | Type: {box_status}"))
+    if config["is_kids"]:
+        diag.append(("   Trigger (kids)", "", f"Age: '{effective_age}' | Hierarchy: '{t_hierarchy}'"))
+    else:
+        author_preview = ", ".join(sorted(t_authors_set)[:3]) if t_authors_set else "—"
+        diag.append(("   Trigger (adult)", "", f"Hierarchy: '{t_hierarchy}' | Author: '{author_preview}' | Publisher: '{t_publisher}' | Theme: '{t_theme}' | Lang: '{t_language}'"))
+    
+    # ──────────────────────────────────────────────────────────
+    # STEP 1 — BUILD SAME-SERIES POOL (ranked)
+    # ──────────────────────────────────────────────────────────
+    series_notes = ["=== STEP 1: SAME-SERIES POOL ==="]
+    series_pool = pd.DataFrame()
+    
+    if trigger_is_complete_box:
+        series_notes.append("⚠ Complete box set detected → skipping series pool (Other Books only)")
+    elif has_series:
+        # Hard filter: same Level 1 (always 'Books') and category Level 2
+        books_only = df_pool[
+            (df_pool['Level 1'] == 'Books') &
+            (df_pool['Level 2'].isin(config["level2_filter"]))
+        ].copy()
+        
+        # Find the series column dynamically (handles trailing-whitespace variants)
+        series_col = 'Σειρά βιβλίου'
+        if series_col not in books_only.columns:
+            for col in books_only.columns:
+                if 'σειρά' in col.lower() or 'series' in col.lower():
+                    series_col = col
+                    break
+        
+        if series_col in books_only.columns:
+            sp = books_only[books_only[series_col].fillna('').astype(str).str.strip() == t_series].copy()
+        else:
+            sp = pd.DataFrame()
+        
+        # Exclude the trigger itself + same canonical (different editions of same book)
+        sp = sp[sp['Material'] != tm]
+        if not sp.empty:
+            sp['_canonical'] = sp.apply(lambda r: get_canonical_book_name(r.get('Title', ''), r.get('Τίτλος πρωτοτύπου', '')), axis=1)
+            sp = sp[sp['_canonical'] != trigger_canonical]
+        
+        # Exclude box sets when the trigger ISN'T a box set
+        if not trigger_is_box_set and not sp.empty:
+            sp = sp[~sp['Title'].apply(is_box_set)]
+        
+        # If trigger has an explicit Level 2 (always set after the filter above), keep it
+        if t_level2 and not sp.empty:
+            sp = sp[sp['Level 2'] == t_level2]
+        
+        # Optional kids-only quality filters
+        if config["apply_novelty_lang_filter"] and not sp.empty:
+            def is_novelty_language(title):
+                novelty_langs = ['(ancient greek)', '(latin)', '(irish)', '(scots)', '(welsh)',
+                                 '(gaelic)', '(αρχαία ελληνικά)', '(λατινικά)']
+                return any(lang in str(title).lower() for lang in novelty_langs)
+            sp = sp[~sp['Title'].apply(is_novelty_language)]
+        if config["apply_audiobook_filter"] and not sp.empty:
+            def is_audiobook(title):
+                audiobook_keywords = [' cd', ' audiobook', ' audio book', ' mp3', 'ηχητικό', 'ακουστικό']
+                return any(kw in str(title).lower() for kw in audiobook_keywords)
+            sp = sp[~sp['Title'].apply(is_audiobook)]
+        
+        # ── Scoring layer (format/cover/edition bonuses) ──
+        def get_edition_line(title):
+            title_lower = str(title).lower()
+            for house in ['gryffindor', 'slytherin', 'hufflepuff', 'ravenclaw']:
+                if house in title_lower: return 'house_' + house
+            edition_patterns = [
+                ('minalima', 'minalima'), ('illustrated', 'illustrated'), ('20th anniversary', 'anniversary_20'),
+                ('25th anniversary', 'anniversary_25'), ('anniversary', 'anniversary'), ('deluxe', 'deluxe'),
+                ('collector', 'collector'), ('special', 'special'), ('gift', 'gift'),
+            ]
+            for pattern, line in edition_patterns:
+                if pattern in title_lower: return line
+            return 'standard'
+        trigger_edition_line = get_edition_line(tt)
+        
+        if not sp.empty:
+            sp['Format_Score'] = 0
+            sp['_edition_line'] = sp['Title'].apply(get_edition_line)
+            sp.loc[sp['_edition_line'] == trigger_edition_line, 'Format_Score'] += 5000
+            if t_cover and t_cover != 'nan' and t_cover != '0' and 'Εξώφυλλο' in sp.columns:
+                sp.loc[sp['Εξώφυλλο'].fillna('').astype(str).str.strip() == t_cover, 'Format_Score'] += 1000
+            if t_dims and t_dims != 'nan' and t_dims != 'NaN' and 'Διαστάσεις' in sp.columns:
+                sp.loc[sp['Διαστάσεις'].fillna('').astype(str).str.strip() == t_dims, 'Format_Score'] += 1000
+            if t_pub_series and t_pub_series != 'nan' and t_pub_series != '0' and 'Εκδοτική Σειρά' in sp.columns:
+                sp.loc[sp['Εκδοτική Σειρά'].fillna('').astype(str).str.strip() == t_pub_series, 'Format_Score'] += 1000
+            if t_illus and t_illus != 'nan' and t_illus != '0' and 'Λεπτομέρειες εικονογράφησης' in sp.columns:
+                sp.loc[sp['Λεπτομέρειες εικονογράφησης'].fillna('').astype(str).str.strip() == t_illus, 'Format_Score'] += 1000
+            sp['Final_Score'] = SERIES_BOOST + sp['Format_Score']
+            if 'AVAILABILITY' in sp.columns:
+                sp.loc[sp['AVAILABILITY'] == 'Άμεσα Διαθέσιμο', 'Final_Score'] += AVAIL_BOOST
+            
+            # Pub date + sales for sort
+            if 'Ημερ/νία έκδοσης' in sp.columns:
+                sp['Pub_Date'] = pd.to_datetime(sp['Ημερ/νία έκδοσης'], errors='coerce')
+            else:
+                sp['Pub_Date'] = pd.NaT
+            t_pub_date = trigger.get('Ημερ/νία έκδοσης', '')
+            t_pub_date_parsed = pd.to_datetime(t_pub_date, errors='coerce') if t_pub_date else pd.NaT
+            
+            if 'Sum of Sales' in sp.columns:
+                sp['Sales_Score'] = pd.to_numeric(sp['Sum of Sales'], errors='coerce').fillna(0)
+            else:
+                # Sales fallback via customer history — matches v28.28 run_books_engine
+                tcust = df_history[df_history['Material']==tm]['customerEmail'].unique() if not df_history.empty else []
+                bw = df_history[(df_history['customerEmail'].isin(tcust))&(df_history['Material']!=tm)] if not df_history.empty else pd.DataFrame()
+                fdf = bw['Material'].value_counts().reset_index() if not bw.empty else pd.DataFrame(columns=['NID', 'Frequency'])
+                if not fdf.empty:
+                    fdf.columns = ['NID', 'Frequency']
+                    sp = sp.merge(fdf, left_on='Material', right_on='NID', how='left')
+                    sp['Sales_Score'] = sp['Frequency'].fillna(0)
+                else:
+                    sp['Sales_Score'] = 0
+            
+            # Ordered / Mixed / Standalone — file-driven, with hardcoded
+            # overrides for HP / Dog Man / Mikroi Kyrioi.
+            t_series_lower = t_series.lower()
+            if is_harry_potter_series(t_series) or is_dog_man_series(t_series) or is_mikroi_kyrioi_series(t_series):
+                order_logic = 'Ordered'
+            else:
+                # Adult books default to 'Standalone' (sales-first) unless the
+                # kids file explicitly maps the series. For kids categories
+                # the file is the authority.
+                order_logic = SERIES_ORDER_MAP.get(t_series_lower, 'Standalone')
+            series_notes.append(f"Series order logic: {order_logic}")
+            
+            series_pool = pd.DataFrame()
+            
+            # If the trigger is a partial box set, surface OTHER box sets first
+            # (collectors wanting completion). Matches v28.28 behavior.
+            if trigger_is_box_set and not trigger_is_complete_box:
+                box_sets_in_series = sp[sp['Title'].apply(is_box_set)]
+                if not box_sets_in_series.empty:
+                    series_pool = pd.concat([series_pool, box_sets_in_series.head(2)])
+                    series_notes.append(f"Pre-pushed {len(box_sets_in_series.head(2))} sibling box set(s)")
+            
+            # Apply ordering for the remaining series books
+            if order_logic in ['Ordered', 'Mixed']:
+                if is_harry_potter_series(t_series):
+                    trigger_order = get_hp_order(tt)
+                    sp['_order'] = sp['Title'].apply(get_hp_order)
+                elif is_dog_man_series(t_series):
+                    trigger_order = get_dog_man_order(tt)
+                    sp['_order'] = sp['Title'].apply(get_dog_man_order)
+                elif is_mikroi_kyrioi_series(t_series):
+                    trigger_order = get_mikroi_kyrioi_order(tt)
+                    sp['_order'] = sp['Title'].apply(get_mikroi_kyrioi_order)
+                else:
+                    trigger_order = t_pub_date_parsed
+                    sp['_order'] = sp['Pub_Date']
+                
+                if pd.isna(trigger_order):
+                    sp_sorted = sp.sort_values(['_order', 'Final_Score'], ascending=[True, False])
+                else:
+                    books_after  = sp[sp['_order'] > trigger_order].sort_values(['_order', 'Final_Score'], ascending=[True, False])
+                    books_before = sp[sp['_order'] < trigger_order].sort_values(['_order', 'Final_Score'], ascending=[True, False])
+                    books_same   = sp[sp['_order'] == trigger_order].sort_values('Final_Score', ascending=False)
+                    sp_sorted = pd.concat([books_after, books_before, books_same])
+            else:
+                # Standalone: sales-first, pub-date fallback
+                sp_sorted = sp.sort_values(['Sales_Score', 'Pub_Date', 'Final_Score'], ascending=[False, False, False])
+            
+            series_pool = pd.concat([series_pool, sp_sorted]).drop_duplicates(subset='Material', keep='first')
+            
+            # Dedup by canonical title — different editions of the same book collapse
+            seen_canonicals = {trigger_canonical}
+            keep_mask = []
+            for _, r in series_pool.iterrows():
+                c = get_canonical_book_name(r.get('Title', ''), r.get('Τίτλος πρωτοτύπου', ''))
+                if c in seen_canonicals or r['Material'] in used_materials:
+                    keep_mask.append(False)
+                else:
+                    keep_mask.append(True)
+                    seen_canonicals.add(c)
+            series_pool = series_pool[keep_mask]
+            series_notes.append(f"Same-series pool size (post-dedup): {len(series_pool)}")
+    else:
+        series_notes.append("No valid series on trigger → all slots will be Other Books")
+    
+    n_series_available = len(series_pool)
+    slot_notes[1] = series_notes
+    diag.append(("1. Same-Series Pool", n_series_available, f"{n_series_available} unique candidates"))
+    
+    # ──────────────────────────────────────────────────────────
+    # STEP 2 — BUILD OTHER-BOOKS POOL (ranked)
+    # ──────────────────────────────────────────────────────────
+    other_notes = ["=== STEP 2: OTHER-BOOKS POOL ==="]
+    other_pool = pd.DataFrame()
+    
+    # Hard filter: same Level 1 + Level 2 (within category)
+    other_pool = df_pool[
+        (df_pool['Level 1'] == 'Books') &
+        (df_pool['Level 2'].isin(config["level2_filter"]))
+    ].copy()
+    
+    # Exclude trigger itself + series books already selected
+    other_pool = other_pool[~other_pool['Material'].isin(used_materials)]
+    other_pool = other_pool[other_pool['Material'] != tm]
+    if not series_pool.empty:
+        other_pool = other_pool[~other_pool['Material'].isin(series_pool['Material'])]
+    
+    # Same Hierarchy hard filter (genre-aligned discovery). Falls back to the
+    # whole Level-2 pool if the trigger's hierarchy yields too few candidates.
+    if t_hierarchy and not other_pool.empty:
+        same_hier = other_pool[other_pool['Hierarchy'] == t_hierarchy].copy()
+        if len(same_hier) >= 10:
+            other_pool = same_hier
+            other_notes.append(f"Hierarchy filter: '{t_hierarchy}' → {len(other_pool)} candidates")
+        else:
+            other_notes.append(f"Hierarchy filter would leave {len(same_hier)} candidates (<10) — kept full Level 2 pool ({len(other_pool)})")
+    
+    # Canonical-title dedup (drops different editions of the same work)
+    if not other_pool.empty:
+        other_pool['_canonical'] = other_pool.apply(
+            lambda r: get_canonical_book_name(r.get('Title', ''), r.get('Τίτλος πρωτοτύπου', '')), axis=1)
+        other_pool = other_pool[other_pool['_canonical'] != trigger_canonical]
+        other_pool = other_pool[~other_pool['_canonical'].isin(used_titles)]
+    
+    # Box-set exclusion when trigger isn't a box set (kids parity)
+    if not trigger_is_box_set and not other_pool.empty:
+        other_pool = other_pool[~other_pool['Title'].apply(is_box_set)]
+    
+    # Kids-only filters: age bracket + novelty languages + audiobooks
+    if config["apply_age_filter"] and not other_pool.empty and 'Ηλικία' in other_pool.columns and allowed_ages:
+        other_pool = other_pool[
+            other_pool['Ηλικία'].fillna('').astype(str).str.strip().isin(allowed_ages)
+            | (other_pool['Ηλικία'].fillna('') == '')
+            | (other_pool['Ηλικία'].fillna('').astype(str) == '0')
+        ]
+    if config["apply_novelty_lang_filter"] and not other_pool.empty:
+        def _is_novelty_lang(title):
+            novelty_langs = ['(ancient greek)', '(latin)', '(irish)', '(scots)', '(welsh)',
+                             '(gaelic)', '(αρχαία ελληνικά)', '(λατινικά)']
+            return any(lang in str(title).lower() for lang in novelty_langs)
+        other_pool = other_pool[~other_pool['Title'].apply(_is_novelty_lang)]
+    if config["apply_audiobook_filter"] and not other_pool.empty:
+        def _is_audiobook(title):
+            return any(kw in str(title).lower() for kw in [' cd', ' audiobook', ' audio book', ' mp3', 'ηχητικό', 'ακουστικό'])
+        other_pool = other_pool[~other_pool['Title'].apply(_is_audiobook)]
+    
+    # Sales (always primary signal)
+    if not other_pool.empty:
+        if 'Sum of Sales' in other_pool.columns:
+            other_pool['Sales_Score'] = pd.to_numeric(other_pool['Sum of Sales'], errors='coerce').fillna(0)
+        else:
+            tcust = df_history[df_history['Material']==tm]['customerEmail'].unique() if not df_history.empty else []
+            bw = df_history[(df_history['customerEmail'].isin(tcust))&(df_history['Material']!=tm)] if not df_history.empty else pd.DataFrame()
+            fdf = bw['Material'].value_counts().reset_index() if not bw.empty else pd.DataFrame(columns=['NID', 'Frequency'])
+            if not fdf.empty:
+                fdf.columns = ['NID', 'Frequency']
+                other_pool = other_pool.merge(fdf, left_on='Material', right_on='NID', how='left')
+                other_pool['Sales_Score'] = other_pool['Frequency'].fillna(0)
+            else:
+                other_pool['Sales_Score'] = 0
+        
+        # ── Deep-spec scoring (adult Greek/Int Books only) ──
+        # The hybrid formula stacks tier-specific boosts atop Sales_Score so
+        # that within the same Hierarchy pool, an author-matched book with
+        # modest sales outranks a high-sales book with no shared specs.
+        other_pool['Spec_Score'] = 0
+        spec_boosts_applied = []
+        
+        if config["use_author_signal"] and t_authors_set and 'Συγγραφέας' in other_pool.columns:
+            def _author_match(field):
+                cand_authors = _books_v2_extract_authors_set(field)
+                return bool(cand_authors & t_authors_set)
+            mask = other_pool['Συγγραφέας'].apply(_author_match)
+            other_pool.loc[mask, 'Spec_Score'] += BOOKS_V2_S_SAME_AUTHOR
+            spec_boosts_applied.append(f"Author (+{BOOKS_V2_S_SAME_AUTHOR:,}): {mask.sum()} matches")
+        
+        if config["use_publisher_signal"] and t_publisher and 'Εκδότης' in other_pool.columns:
+            mask = other_pool['Εκδότης'].apply(_books_v2_norm) == t_publisher
+            other_pool.loc[mask, 'Spec_Score'] += BOOKS_V2_S_SAME_PUBLISHER
+            spec_boosts_applied.append(f"Publisher (+{BOOKS_V2_S_SAME_PUBLISHER:,}): {mask.sum()} matches")
+        
+        if config["use_theme_signal"] and t_theme and 'Θέμα Βιβλίου' in other_pool.columns:
+            mask = other_pool['Θέμα Βιβλίου'].apply(_books_v2_norm) == t_theme
+            other_pool.loc[mask, 'Spec_Score'] += BOOKS_V2_S_SAME_THEME
+            spec_boosts_applied.append(f"Theme (+{BOOKS_V2_S_SAME_THEME:,}): {mask.sum()} matches")
+        
+        if config["use_language_signal"] and t_language and 'Γλώσσα Γραφής' in other_pool.columns:
+            mask = other_pool['Γλώσσα Γραφής'].apply(_books_v2_normalize_language) == t_language
+            other_pool.loc[mask, 'Spec_Score'] += BOOKS_V2_S_SAME_LANGUAGE
+            spec_boosts_applied.append(f"Language (+{BOOKS_V2_S_SAME_LANGUAGE:,}): {mask.sum()} matches")
+        
+        # Availability tiebreaker
+        other_pool['Avail_Score'] = 0
+        if 'AVAILABILITY' in other_pool.columns:
+            other_pool.loc[other_pool['AVAILABILITY'] == 'Άμεσα Διαθέσιμο', 'Avail_Score'] = BOOKS_V2_S_AVAIL_BONUS
+        
+        # Composite ranking: Spec tier dominates, then Sales as tiebreaker.
+        # For Kids Books, Spec_Score is always 0 so this collapses to pure sales-first.
+        other_pool['Combined_Score'] = other_pool['Spec_Score'] + other_pool['Avail_Score']
+        other_pool = other_pool.sort_values(
+            ['Combined_Score', 'Sales_Score'],
+            ascending=[False, False]
+        )
+        
+        if spec_boosts_applied:
+            other_notes.append("Deep-spec boosts applied: " + " | ".join(spec_boosts_applied))
+        else:
+            other_notes.append("Pure sales sort (kids categories or no deep-spec data)")
+        
+        other_notes.append(f"Other-books pool size (post-dedup, post-filter): {len(other_pool)}")
+    else:
+        other_notes.append("Empty Other-Books pool after filters")
+    
+    slot_notes[2] = other_notes
+    diag.append(("2. Other-Books Pool", len(other_pool), f"{len(other_pool)} unique candidates"))
+    
+    # ──────────────────────────────────────────────────────────
+    # STEP 3 — ALLOCATE SLOTS PER v28.29 TWO-SET RULE
+    # ──────────────────────────────────────────────────────────
+    slot_plan = allocate_book_slots(n_series_available)
+    n_ss_slots = sum(1 for s in slot_plan if s == 'SAME_SERIES')
+    n_ob_slots = 10 - n_ss_slots
+    
+    alloc_notes = [
+        "=== STEP 3: SLOT ALLOCATION (v28.29 two-set rule) ===",
+        f"Series books available: {n_series_available}",
+        f"Front set (1-7): " + " ".join(["SS" if s == 'SAME_SERIES' else 'OB' for s in slot_plan[:7]]),
+        f"Back  set (8-10): " + " ".join(["SS" if s == 'SAME_SERIES' else 'OB' for s in slot_plan[7:]]),
+        f"Total SAME_SERIES slots: {n_ss_slots} | Total OTHER_BOOKS slots: {n_ob_slots}",
+    ]
+    slot_notes[3] = alloc_notes
+    diag.append(("3. Slot Plan", f"{n_ss_slots}/{n_ob_slots}", f"SS/OB: front={slot_plan[:7].count('SAME_SERIES')}/{slot_plan[:7].count('OTHER_BOOKS')} back={slot_plan[7:].count('SAME_SERIES')}/{slot_plan[7:].count('OTHER_BOOKS')}"))
+    
+    # ──────────────────────────────────────────────────────────
+    # STEP 4 — FILL THE 10 SLOTS
+    # ──────────────────────────────────────────────────────────
+    fill_notes = ["=== STEP 4: SLOT FILLING ==="]
+    
+    # Iterators over each pool (pre-sorted)
+    series_iter = series_pool.iterrows() if not series_pool.empty else iter([])
+    other_iter = other_pool.iterrows() if not other_pool.empty else iter([])
+    series_iter_done = False
+    other_iter_done = False
+    
+    def _next_series():
+        """Pull the next non-dup series candidate, skipping used materials/titles."""
+        nonlocal series_iter, series_iter_done
+        if series_iter_done: return None
+        for _, row in series_iter:
+            canonical = get_canonical_book_name(row['Title'], row.get('Τίτλος πρωτοτύπου', ''))
+            if row['Material'] in used_materials or canonical in used_titles:
+                continue
+            return row
+        series_iter_done = True
+        return None
+    
+    def _next_other():
+        """Pull the next non-dup other candidate, skipping used materials/titles."""
+        nonlocal other_iter, other_iter_done
+        if other_iter_done: return None
+        for _, row in other_iter:
+            canonical = get_canonical_book_name(row['Title'], row.get('Τίτλος πρωτοτύπου', ''))
+            if row['Material'] in used_materials or canonical in used_titles:
+                continue
+            return row
+        other_iter_done = True
+        return None
+    
+    for slot_idx, slot_type in enumerate(slot_plan, start=1):
+        primary, fallback = ('SAME_SERIES', 'OTHER_BOOKS') if slot_type == 'SAME_SERIES' else ('OTHER_BOOKS', 'SAME_SERIES')
+        
+        # Try primary pool first
+        if primary == 'SAME_SERIES':
+            row = _next_series()
+            picked_from = 'series'
+        else:
+            row = _next_other()
+            picked_from = 'other'
+        
+        # Graceful degradation: if primary pool exhausted, try fallback pool.
+        # This handles edge cases like a series with 8 known books but only 5
+        # in the catalog (allocator says back_ss=3, only 5 SS available so the
+        # back set partially falls back to OB).
+        if row is None:
+            if fallback == 'SAME_SERIES':
+                row = _next_series()
+                picked_from = 'series (fallback from OB)'
+            else:
+                row = _next_other()
+                picked_from = 'other (fallback from SS)'
+        
+        if row is None:
+            fill_notes.append(f"Slot {slot_idx} ({slot_type}): EMPTY — both pools exhausted")
+            continue
+        
+        # Record the recommendation
+        canonical = get_canonical_book_name(row['Title'], row.get('Τίτλος πρωτοτύπου', ''))
+        row_copy = row.copy()
+        row_copy['Assigned_Slot'] = slot_idx
+        # Slot_Role label — used by the marketing-copy lookup downstream.
+        # We keep the labels that v28.28 already understands for backward compat:
+        #   "Series Book" for SS slots, "Category Discovery" for OB slots.
+        if 'series' in picked_from:
+            row_copy['Slot_Role'] = 'Series Book'
+        else:
+            row_copy['Slot_Role'] = 'Category Discovery'
+        row_copy['Item_Rank'] = 1
+        all_recs.append(row_copy)
+        used_materials.add(row['Material'])
+        used_titles.add(canonical)
+        
+        title_preview = str(row.get('Title', ''))[:50]
+        fill_notes.append(f"Slot {slot_idx} ({slot_type}) ← {picked_from}: {title_preview}")
+    
+    slot_notes[4] = fill_notes
+    total_filled = len(all_recs)
+    diag.append(("4. Slots Filled", total_filled, f"{total_filled} of 10"))
     
     if all_recs:
         recs_df = pd.DataFrame(all_recs)
@@ -14793,7 +15657,6 @@ PERIPHERAL_TRIGGERS = {
 #   ups_min_va: int — minimum UPS VA
 #   ink_model_match: bool — match ink cartridge to printer
 #   toner_model_match: bool — match toner to printer
-#   cartridge_color: str — 'BLACK' | 'CYAN' | 'MAGENTA' | 'YELLOW' — hard-filter cartridge pool by Χρώμα column (v28.29)
 #   paper_weight_max/paper_weight_min: int — paper weight filter
 #   resolution_match: bool — match webcam to monitor resolution
 #   usb_version_match: bool — match USB speed
@@ -15215,280 +16078,30 @@ STATIONERY_CLUSTER_SLOTS = {
 }
 
 # ── Printer sub-personas (Inkjet vs Laser) ──
-# ── Inkjet Printers (v28.30 refresh) ─────────────────────────────────────────
-# Replaces the legacy 10-slot PRINTER_INKJET_SLOTS, which had three bugs:
-#   1. Ink slots 1-4 used identical flags → no color awareness → engine
-#      could return 4 black-ink bestsellers instead of K/C/M/Y.
-#   2. "Surge Protector" pointed at 'LINE INTERACTIVE' which is actually the
-#      UPS hierarchy. Surge protectors are now in Office Printers (correctly
-#      using SURGE PROTECTORS) so we drop them here entirely — they're an
-#      office concern, not a photo-printer concern.
-#   3. Two consecutive "Cleaning" slots (Cleaning + Cleaning 2) returned the
-#      same bestsellers twice. Consolidated to one slot with title_include
-#      filtering for actual printer-cleaning products.
-#
-# We also split by MFP detection. The trigger handler still accepts both
-# 'INKJET' and 'MULTIFUNCTION INKJET' — the difference is which slot list
-# fires after selection:
-#   • PRINTER_INKJET_HOME_SLOTS — regular INKJET → photo-first persona
-#       (gloss + matte photo paper, photo frame/album for displaying prints)
-#   • PRINTER_INKJET_MFP_SLOTS  — MULTIFUNCTION INKJET → home-office persona
-#       (heavier A4 emphasis, USB flash disk for scan-to-USB, single photo
-#        paper slot since scanning, not just photo printing, is the use case)
-#
-# Differentiation vs Office Printers (v28.29):
-#   • Office Printers = business bundle (pens, folders, highlighters, staplers,
-#     sleeves, surge protector). Office Printers does NOT include photo paper
-#     or photo frames.
-#   • Inkjet Home/MFP = home/photo bundle (photo paper variants, photo frame
-#     for display). Inkjet does NOT include office stationery.
-#   Buyers should pick the cluster that matches what they actually want to
-#   print: business documents vs family photos.
-
-PRINTER_INKJET_HOME_SLOTS = [
-    # Color-aware ink slots (cartridge_color hard-filters by Χρώμα column)
-    ("Black Ink",           ['INK CATRIDGES', 'COMPATIBLE INK CARTRIDGES'],
-                            {'cartridge_color': 'BLACK',   'ink_model_match': True, 'brand_match': True}),
-    ("Cyan Ink",            ['INK CATRIDGES', 'COMPATIBLE INK CARTRIDGES'],
-                            {'cartridge_color': 'CYAN',    'ink_model_match': True, 'brand_match': True}),
-    ("Magenta Ink",         ['INK CATRIDGES', 'COMPATIBLE INK CARTRIDGES'],
-                            {'cartridge_color': 'MAGENTA', 'ink_model_match': True, 'brand_match': True}),
-    ("Yellow Ink",          ['INK CATRIDGES', 'COMPATIBLE INK CARTRIDGES'],
-                            {'cartridge_color': 'YELLOW',  'ink_model_match': True, 'brand_match': True}),
-    # Photo paper — two variants because gloss vs matte is a meaningful choice
-    # for photo printers. title_hide ensures the two slots return different
-    # products (gloss slot can't pick a matte paper, and vice versa).
-    ("Glossy Photo Paper",  ['SPECIAL PAPERS', 'INKJET PAPER'],
-                            {'paper_weight_min': 150,
-                             'title_boost': ['Gloss', 'Glossy', 'Photo', '10x15', '13x18', 'Premium', 'Γυαλιστερό'],
-                             'title_hide':  ['Matte', 'Ματ']}),
-    ("Matte Photo Paper",   ['SPECIAL PAPERS', 'INKJET PAPER'],
-                            {'paper_weight_min': 150,
-                             'title_boost': ['Matte', 'Ματ', 'Photo Matt'],
-                             'title_hide':  ['Gloss', 'Glossy', 'Γυαλιστερό']}),
-    # Light A4 for occasional document printing (paper_weight_max = 90)
-    ("A4 Plain Paper",      ['INKJET PAPER', 'COPIERS PAPER'],
-                            {'paper_weight_max': 90, 'title_boost': ['A4', '80g', '500']}),
-    # USB-A to USB-B printer cable
-    ("USB Printer Cable",   ['USB CABLES'],
-                            {'title_boost': ['USB-B', 'Type-B', 'Printer', 'Εκτυπωτή', '1.5m', '1.8m', '2m'],
-                             'title_hide':  ['HDMI', 'DisplayPort', 'Lightning', 'Micro USB', 'USB-C to USB-C']}),
-    # Display the photo prints — Stationery hierarchy (requires combined pool)
-    ("Photo Frame / Album", ['ΚΟΡΝΙΖΕΣ - ALBUM'],                {}),
-    # Cleaning — single slot with title_include to filter to actual cleaning
-    # products (spray, compressed air, microfiber, wipes — not generic items)
-    ("Cleaning",            ['CLEANING PRODUCTS'],
-                            {'title_include': ['Σπρέι', 'Spray', 'Αέρας', 'Compressed', 'Wipes', 'Microfiber', 'Μικροϊνών']}),
+PRINTER_INKJET_SLOTS = [
+    ("Ink Cartridge 1",     ['INK CATRIDGES', 'COMPATIBLE INK CARTRIDGES'], {'ink_model_match': True, 'brand_match': True}),
+    ("Ink Cartridge 2",     ['INK CATRIDGES', 'COMPATIBLE INK CARTRIDGES'], {'ink_model_match': True, 'brand_match': True}),
+    ("Ink Cartridge 3",     ['INK CATRIDGES', 'COMPATIBLE INK CARTRIDGES'], {'ink_model_match': True, 'brand_match': True}),
+    ("Ink Cartridge 4",     ['INK CATRIDGES', 'COMPATIBLE INK CARTRIDGES'], {'ink_model_match': True, 'brand_match': True}),
+    ("A4 Paper",            ['INKJET PAPER', 'COPIERS PAPER'],{'paper_weight_max': 90}),
+    ("Photo Paper",         ['SPECIAL PAPERS'],               {'paper_weight_min': 150, 'title_boost': ['Gloss', 'Matte', 'Photo']}),
+    ("USB Printer Cable",   ['USB CABLES'],                   {'title_boost': ['USB-B', 'Printer', 'Type-B']}),
+    ("Surge Protector",     ['LINE INTERACTIVE'],                          {}),
+    ("Cleaning",            ['CLEANING PRODUCTS'],            {}),
+    ("Cleaning 2",          ['CLEANING PRODUCTS'],            {}),
 ]
 
-PRINTER_INKJET_MFP_SLOTS = [
-    # Same color-aware ink slots
-    ("Black Ink",           ['INK CATRIDGES', 'COMPATIBLE INK CARTRIDGES'],
-                            {'cartridge_color': 'BLACK',   'ink_model_match': True, 'brand_match': True}),
-    ("Cyan Ink",            ['INK CATRIDGES', 'COMPATIBLE INK CARTRIDGES'],
-                            {'cartridge_color': 'CYAN',    'ink_model_match': True, 'brand_match': True}),
-    ("Magenta Ink",         ['INK CATRIDGES', 'COMPATIBLE INK CARTRIDGES'],
-                            {'cartridge_color': 'MAGENTA', 'ink_model_match': True, 'brand_match': True}),
-    ("Yellow Ink",          ['INK CATRIDGES', 'COMPATIBLE INK CARTRIDGES'],
-                            {'cartridge_color': 'YELLOW',  'ink_model_match': True, 'brand_match': True}),
-    # MFP buyers print MORE documents (scan+print combo), so A4 comes BEFORE
-    # photo paper in slot order, and we keep only one photo-paper slot.
-    ("A4 Plain Paper",      ['INKJET PAPER', 'COPIERS PAPER'],
-                            {'paper_weight_max': 90, 'title_boost': ['A4', '80g', '500']}),
-    ("Glossy Photo Paper",  ['SPECIAL PAPERS', 'INKJET PAPER'],
-                            {'paper_weight_min': 150,
-                             'title_boost': ['Gloss', 'Glossy', 'Photo', '10x15', '13x18'],
-                             'title_hide':  ['Matte', 'Ματ']}),
-    # USB-A to USB-B printer cable
-    ("USB Printer Cable",   ['USB CABLES'],
-                            {'title_boost': ['USB-B', 'Type-B', 'Printer', 'Εκτυπωτή', '1.5m', '1.8m', '2m'],
-                             'title_hide':  ['HDMI', 'DisplayPort', 'Lightning', 'Micro USB', 'USB-C to USB-C']}),
-    # MFP-specific: USB flash for scan-to-USB workflow (the differentiator)
-    ("USB Flash (Scan)",    ['USB FLASH DISK'],
-                            {'title_boost': ['32GB', '64GB', '128GB', 'USB 3']}),
-    ("Photo Frame / Album", ['ΚΟΡΝΙΖΕΣ - ALBUM'],                {}),
-    ("Cleaning",            ['CLEANING PRODUCTS'],
-                            {'title_include': ['Σπρέι', 'Spray', 'Αέρας', 'Compressed', 'Wipes', 'Microfiber', 'Μικροϊνών']}),
-]
-
-# Backward-compat alias — code that still references PRINTER_INKJET_SLOTS
-# (none should after this refactor, but defensive) gets the HOME variant.
-PRINTER_INKJET_SLOTS = PRINTER_INKJET_HOME_SLOTS
-
-# ── Laser Printers (v28.31 refresh) ──────────────────────────────────────────
-# Replaces the legacy single-toner-slot PRINTER_LASER_SLOTS. The legacy list
-# had one "Toner" slot which is correct for mono lasers but leaves color-laser
-# buyers with only the black-toner bestseller as a suggestion — the other
-# three toners they actually need (C/M/Y) never surface. Same symptom as the
-# inkjet bug we fixed in v28.30, opposite cause (too few slots instead of too
-# many color-blind ones).
-#
-# Two axes, four variants:
-#
-#                     │  Single-function (LASER, FAX LASER)   │  MFP (MULTIFUCTION LASER …)
-#   ─────────────────┼───────────────────────────────────────┼─────────────────────────────
-#   Mono   (… MONO)  │  PRINTER_LASER_MONO_SLOTS  (1 toner)  │  PRINTER_LASER_MONO_MFP_SLOTS
-#   Color  (… COLOR) │  PRINTER_LASER_COLOR_SLOTS (4 toners) │  PRINTER_LASER_COLOR_MFP_SLOTS
-#
-# Plain LASER / MULTIFUCTION LASER (no mono/color specifier) default to MONO
-# since most plain-named laser SKUs in the catalog are mono workhorses; the
-# more specific COLOR hierarchies always trigger the color path.
-#
-# MFP variants swap a low-priority business slot for "USB Flash (Scan)" —
-# scan-to-USB is the defining MFP workflow and the natural co-purchase.
-# We drop:
-#   • MONO MFP: drops Calculator (least essential of the 10)
-#   • COLOR MFP: starts from COLOR (already 6 business slots, no Calculator/
-#                 Laminator/A3) and drops Shredder to make room
-# Cleaning + UPS are kept in every variant — toner is messy, laser printers
-# are power-sensitive.
-#
-# Color awareness uses the same cartridge_color flag added in v28.29. Toners
-# have the same Χρώμα column populated for 556/556 rows with values like
-# Μαύρο / Κυανό / Ματζέντα / Κίτρινο (plus English fallbacks Black / Cyan /
-# Magenta / Yellow). toner_model_match is on every cartridge slot so OEM
-# compatibility wins over generic bestsellers.
-
-PRINTER_LASER_MONO_SLOTS = [
-    ("Black Toner",         ['TONER CATRIDGES', 'COMPATIBLE TONERS'],
-                            {'cartridge_color': 'BLACK', 'toner_model_match': True, 'brand_match': True}),
+PRINTER_LASER_SLOTS = [
+    ("Toner",               ['TONER CATRIDGES', 'COMPATIBLE TONERS'], {'toner_model_match': True, 'brand_match': True}),
     ("Drum Unit",           ['DRUMS CATRIDGES'],              {'brand_match': True}),
     ("A4 Paper",            ['LASER PAPERS', 'COPIERS PAPER'],{}),
     ("Network Cable",       ['NETWORK CABLES'],               {'title_boost': ['Cat6', 'Cat 6']}),
     ("Shredder",            ['ΚΑΤΑΣΤΡΟΦΕΙΣ ΕΓΓΡΑΦΩΝ'],        {}),
-    ("UPS",                 ['ΜΠΑΤΑΡΙΕΣ UPS'],                {'ups_min_va': 1000}),
+    ("UPS",                 ['ΜΠΑΤΑΡΙΕΣ UPS'],                          {'ups_min_va': 1000}),
     ("Laminator",           ['ΠΛΑΣΤΙΚΟΠΟΙΗΤΕΣ'],              {}),
     ("A3 Paper",            ['LASER PAPERS', 'COPIERS PAPER'],{'title_boost': ['A3']}),
-    ("Cleaning",            ['CLEANING PRODUCTS'],
-                            {'title_include': ['Σπρέι', 'Spray', 'Αέρας', 'Compressed', 'Wipes', 'Microfiber', 'Μικροϊνών']}),
+    ("Cleaning",            ['CLEANING PRODUCTS'],            {}),
     ("Calculator",          ['CALCULATORS'],                  {}),
-]
-
-PRINTER_LASER_MONO_MFP_SLOTS = [
-    # Same as MONO except the last slot — Calculator out, USB Flash in for
-    # scan-to-USB workflow.
-    ("Black Toner",         ['TONER CATRIDGES', 'COMPATIBLE TONERS'],
-                            {'cartridge_color': 'BLACK', 'toner_model_match': True, 'brand_match': True}),
-    ("Drum Unit",           ['DRUMS CATRIDGES'],              {'brand_match': True}),
-    ("A4 Paper",            ['LASER PAPERS', 'COPIERS PAPER'],{}),
-    ("Network Cable",       ['NETWORK CABLES'],               {'title_boost': ['Cat6', 'Cat 6']}),
-    ("Shredder",            ['ΚΑΤΑΣΤΡΟΦΕΙΣ ΕΓΓΡΑΦΩΝ'],        {}),
-    ("UPS",                 ['ΜΠΑΤΑΡΙΕΣ UPS'],                {'ups_min_va': 1000}),
-    ("Laminator",           ['ΠΛΑΣΤΙΚΟΠΟΙΗΤΕΣ'],              {}),
-    ("A3 Paper",            ['LASER PAPERS', 'COPIERS PAPER'],{'title_boost': ['A3']}),
-    ("Cleaning",            ['CLEANING PRODUCTS'],
-                            {'title_include': ['Σπρέι', 'Spray', 'Αέρας', 'Compressed', 'Wipes', 'Microfiber', 'Μικροϊνών']}),
-    ("USB Flash (Scan)",    ['USB FLASH DISK'],               {'title_boost': ['32GB', '64GB', '128GB', 'USB 3']}),
-]
-
-PRINTER_LASER_COLOR_SLOTS = [
-    # 4 color-aware toner slots solve the "color-laser buyer sees only the
-    # black bestseller" friction. Each cartridge_color hard-filters by Χρώμα
-    # so slot N can only return color N.
-    ("Black Toner",         ['TONER CATRIDGES', 'COMPATIBLE TONERS'],
-                            {'cartridge_color': 'BLACK',   'toner_model_match': True, 'brand_match': True}),
-    ("Cyan Toner",          ['TONER CATRIDGES', 'COMPATIBLE TONERS'],
-                            {'cartridge_color': 'CYAN',    'toner_model_match': True, 'brand_match': True}),
-    ("Magenta Toner",       ['TONER CATRIDGES', 'COMPATIBLE TONERS'],
-                            {'cartridge_color': 'MAGENTA', 'toner_model_match': True, 'brand_match': True}),
-    ("Yellow Toner",        ['TONER CATRIDGES', 'COMPATIBLE TONERS'],
-                            {'cartridge_color': 'YELLOW',  'toner_model_match': True, 'brand_match': True}),
-    # 6 business slots (Laminator / A3 / Calculator dropped to make room for
-    # the 3 extra toner slots vs the mono variant).
-    ("Drum Unit",           ['DRUMS CATRIDGES'],              {'brand_match': True}),
-    ("A4 Paper",            ['LASER PAPERS', 'COPIERS PAPER'],{}),
-    ("Network Cable",       ['NETWORK CABLES'],               {'title_boost': ['Cat6', 'Cat 6']}),
-    ("Shredder",            ['ΚΑΤΑΣΤΡΟΦΕΙΣ ΕΓΓΡΑΦΩΝ'],        {}),
-    ("UPS",                 ['ΜΠΑΤΑΡΙΕΣ UPS'],                {'ups_min_va': 1000}),
-    ("Cleaning",            ['CLEANING PRODUCTS'],
-                            {'title_include': ['Σπρέι', 'Spray', 'Αέρας', 'Compressed', 'Wipes', 'Microfiber', 'Μικροϊνών']}),
-]
-
-PRINTER_LASER_COLOR_MFP_SLOTS = [
-    # Same 4 color-aware toners as COLOR. Drop Shredder (least essential of
-    # the remaining 6 business slots) to free a position for USB Flash (Scan).
-    ("Black Toner",         ['TONER CATRIDGES', 'COMPATIBLE TONERS'],
-                            {'cartridge_color': 'BLACK',   'toner_model_match': True, 'brand_match': True}),
-    ("Cyan Toner",          ['TONER CATRIDGES', 'COMPATIBLE TONERS'],
-                            {'cartridge_color': 'CYAN',    'toner_model_match': True, 'brand_match': True}),
-    ("Magenta Toner",       ['TONER CATRIDGES', 'COMPATIBLE TONERS'],
-                            {'cartridge_color': 'MAGENTA', 'toner_model_match': True, 'brand_match': True}),
-    ("Yellow Toner",        ['TONER CATRIDGES', 'COMPATIBLE TONERS'],
-                            {'cartridge_color': 'YELLOW',  'toner_model_match': True, 'brand_match': True}),
-    ("Drum Unit",           ['DRUMS CATRIDGES'],              {'brand_match': True}),
-    ("A4 Paper",            ['LASER PAPERS', 'COPIERS PAPER'],{}),
-    ("Network Cable",       ['NETWORK CABLES'],               {'title_boost': ['Cat6', 'Cat 6']}),
-    ("UPS",                 ['ΜΠΑΤΑΡΙΕΣ UPS'],                {'ups_min_va': 1000}),
-    ("Cleaning",            ['CLEANING PRODUCTS'],
-                            {'title_include': ['Σπρέι', 'Spray', 'Αέρας', 'Compressed', 'Wipes', 'Microfiber', 'Μικροϊνών']}),
-    ("USB Flash (Scan)",    ['USB FLASH DISK'],               {'title_boost': ['32GB', '64GB', '128GB', 'USB 3']}),
-]
-
-# Backward-compat alias — defaults to the safest variant (Mono).
-PRINTER_LASER_SLOTS = PRINTER_LASER_MONO_SLOTS
-
-# ── Office Printers (v28.29) ────────────────────────────────────────────────
-# Goal: a complete "ξεκίνα το γραφείο σου" bundle around any printer (inkjet
-# or laser, color or mono). 13 slots: 4 consumable cartridges (K/C/M/Y) +
-# the office staples buyers actually re-order with their printer.
-#
-# Slot strategy (decided after looking at the data):
-#   • Cartridges 1-4 → HYBRID (sales × specs). Pure sales would rank the
-#     best-selling Black HP cartridge for any printer regardless of model
-#     compatibility, which is the worst possible suggestion. So we:
-#       - hard-filter the pool by Χρώμα column (cartridge_color) — clean
-#         and reliable (1313/1313 rows have it populated with values like
-#         "Μαύρο", "Κυανό", "Ματζέντα", "Κίτρινο")
-#       - heavily boost OEM model match (ink_model_match / toner_model_match)
-#         using the printer's Αναλώσιμο υλικό against cartridge Μοντέλο /
-#         Συμβατό μοντέλο columns (+200k)
-#       - boost same-brand (brand_match, +80k) — HP printer → HP ink wins
-#         over generic compatibles unless sales overwhelmingly dominate
-#       - within the surviving (correct-color, correct-model, same-brand)
-#         pool, sales rank decides. For inkjet/laser hybrid we list BOTH
-#         ink and toner hierarchies; the OEM model match will naturally
-#         steer laser printers to toners and inkjets to inks.
-#   • Slot 1 (Black) — universal; every printer has black consumable.
-#   • Slots 2-4 (CMY) — pool may be empty for mono printers; that's fine,
-#     the engine just renders an empty slot (no false fills).
-#   • Copy Paper → SALES-only within COPIERS PAPER hierarchy (commodity).
-#     COPIERS PAPER products are nearly interchangeable; A4 80g is the
-#     default. Light A4/80g title boost just to break ties.
-#   • USB Cable → SALES + light spec (USB-B / Type-B / Printer keywords)
-#     because printer cables are a specific USB-A-to-USB-B variant most
-#     people don't know to ask for. Hide HDMI/DisplayPort/Lightning.
-#   • USB Flash Disk → SALES only. Sweet-spot 32-128GB capacity gets a
-#     soft boost (matches typical office "save scan to USB" use case).
-#   • Surge Protector → SALES with light boost for multi-outlet ones
-#     (Πολύπριζο with 4-6 θέσεων is the office norm). Uses SURGE PROTECTORS
-#     hierarchy from the Products sheet (NOT 'LINE INTERACTIVE' which is
-#     actually UPS — that was a bug in the legacy PRINTER_INKJET_SLOTS).
-#   • Stationery (slots 9-13) → pure SALES within each hierarchy. These
-#     are commodity items where the bestseller is genuinely what people
-#     want; spec matching adds no signal.
-PRINTER_OFFICE_SLOTS = [
-    # ── Consumables (4 cartridge slots, hard-filtered by Χρώμα) ──
-    ("Black Cartridge",     ['INK CATRIDGES', 'COMPATIBLE INK CARTRIDGES', 'TONER CATRIDGES', 'COMPATIBLE TONERS'],
-                            {'cartridge_color': 'BLACK', 'ink_model_match': True, 'toner_model_match': True, 'brand_match': True}),
-    ("Cyan Cartridge",      ['INK CATRIDGES', 'COMPATIBLE INK CARTRIDGES', 'TONER CATRIDGES', 'COMPATIBLE TONERS'],
-                            {'cartridge_color': 'CYAN',  'ink_model_match': True, 'toner_model_match': True, 'brand_match': True}),
-    ("Magenta Cartridge",   ['INK CATRIDGES', 'COMPATIBLE INK CARTRIDGES', 'TONER CATRIDGES', 'COMPATIBLE TONERS'],
-                            {'cartridge_color': 'MAGENTA','ink_model_match': True, 'toner_model_match': True, 'brand_match': True}),
-    ("Yellow Cartridge",    ['INK CATRIDGES', 'COMPATIBLE INK CARTRIDGES', 'TONER CATRIDGES', 'COMPATIBLE TONERS'],
-                            {'cartridge_color': 'YELLOW','ink_model_match': True, 'toner_model_match': True, 'brand_match': True}),
-    # ── Print supplies ──
-    ("Copy Paper",          ['COPIERS PAPER'],                {'title_boost': ['A4', '80g', '80gr', '500']}),
-    # ── Connectivity & power ──
-    ("USB Cable",           ['USB CABLES'],                   {'title_boost': ['USB-B', 'Type-B', 'Printer', 'Εκτυπωτή', '1.5m', '1.8m', '2m'],
-                                                              'title_hide':  ['HDMI', 'DisplayPort', 'Lightning', 'Micro USB', 'USB-C to USB-C']}),
-    ("USB Flash Disk",      ['USB FLASH DISK'],               {'title_boost': ['32GB', '64GB', '128GB', 'USB 3']}),
-    ("Surge Protector",     ['SURGE PROTECTORS'],             {'title_boost': ['6 Θέσεων', '5 Θέσεων', '4 Θέσεων', 'USB', 'Πολύπριζο']}),
-    # ── Office stationery essentials (sales-only) ──
-    ("Ballpoint Pens",      ['ΣΤΥΛΟ ΔΙΑΡΚΕΙΑΣ'],              {}),
-    ("Transfer Folders",    ['ΦΑΚΕΛΟΙ ΜΕΤΑΦΟΡΑΣ'],            {}),
-    ("Highlighters",        ['ΜΑΡΚΑΔΟΡΟΙ ΥΠΟΓΡΑΜΜΙΣΗΣ'],      {}),
-    ("Staplers",            ['ΣΥΡΡΑΠΤΙΚΑ'],                   {}),
-    ("Plastic Sleeves",     ['ΘΗΚΕΣ-ΖΕΛΑΤΙΝΕΣ'],              {}),
 ]
 
 # ── Webcam ──
@@ -15545,7 +16158,6 @@ PERIPHERAL_CLUSTER_SLOTS = {
     "Gaming Keyboard":  GAMING_KEYBOARD_SLOTS,
     "Monitors":         None,  # Detected dynamically from Χρήση
     "Printers":         None,  # Detected dynamically from Hierarchy
-    "Office Printers":  PRINTER_OFFICE_SLOTS,  # v28.29 — unified office bundle
     "Webcam":           WEBCAM_SLOTS,
     "USB Hub":          USB_HUB_SLOTS,
 }
@@ -15701,19 +16313,6 @@ def run_peripherals_engine(trigger, df_products, df_history, cluster_key):
     _tt_lower = tt.lower()
     tb = str(trigger.get('Κατασκευαστής', '')).strip().upper()
     thier = str(trigger.get('Hierarchy', '')).strip().upper()
-
-    # v28.32 — title-based brand fallback for printer triggers.
-    # Printer rows in the Spare sheet (Home file) have empty Κατασκευαστής,
-    # so brand_match would never fire on the cartridge/accessory slots,
-    # leaving same-brand consumables stranded behind sales-rank generics.
-    # We only run the fallback when the trigger is actually a printer AND
-    # the brand is empty — keeps non-printer clusters' behavior identical.
-    if (not tb or tb in ('NAN', 'N/A')) and thier in PRINTER_HIERARCHIES:
-        _brand_match = re.search(PRINTER_BRANDS_PATTERN, tt.upper())
-        if _brand_match:
-            tb = _brand_match.group(1).upper().replace('HEWLETT-PACKARD', 'HP').replace('HEWLETT PACKARD', 'HP')
-            diag.append(("0. Brand from Title", tb, f"Title='{tt[:60]}…' (Κατασκευαστής was empty)"))
-
     tprice = parse_euro_price(trigger.get('LIST PRICE', 0))
     tcolor = str(trigger.get('Χρώμα Γραφής', trigger.get('Χρώμα', ''))).strip()
 
@@ -15859,55 +16458,12 @@ def run_peripherals_engine(trigger, df_products, df_history, cluster_key):
         diag.append(("0b. Monitor Ports", port_info, f"Res={tres}"))
     elif cluster_key == "Printers":
         if is_laser:
-            # v28.31 — Laser splits into 4 variants by hierarchy:
-            #   COLOR + MFP  → PRINTER_LASER_COLOR_MFP_SLOTS
-            #   COLOR only   → PRINTER_LASER_COLOR_SLOTS
-            #   MFP only     → PRINTER_LASER_MONO_MFP_SLOTS
-            #   plain/mono   → PRINTER_LASER_MONO_SLOTS
-            # 'MULTIFUCTION' (typo) is the registered spelling in printer_hiers;
-            # we also accept the correct 'MULTIFUNCTION' defensively.
-            is_color_laser = 'COLOR' in thier or 'ΕΓΧΡΩΜ' in thier
-            is_mfp_laser   = 'MULTIFUCTION' in thier or 'MULTIFUNCTION' in thier
-            if is_color_laser and is_mfp_laser:
-                slots = PRINTER_LASER_COLOR_MFP_SLOTS
-                persona = "Color Laser MFP"
-            elif is_color_laser:
-                slots = PRINTER_LASER_COLOR_SLOTS
-                persona = "Color Laser"
-            elif is_mfp_laser:
-                slots = PRINTER_LASER_MONO_MFP_SLOTS
-                persona = "Mono Laser MFP"
-            else:
-                slots = PRINTER_LASER_MONO_SLOTS
-                persona = "Mono Laser"
+            slots = PRINTER_LASER_SLOTS
+            persona = "Laser"
         else:
-            # Inkjet split (v28.30): MFP vs regular single-function.
-            # Hierarchy 'MULTIFUNCTION INKJET' (or the legacy typo
-            # 'MULTIFUCTION INKJET' if it ever appears) → MFP slots.
-            # Anything else inkjet → HOME slots.
-            is_mfp_inkjet = ('MULTIFUNCTION' in thier) or ('MULTIFUCTION' in thier and not is_laser)
-            if is_mfp_inkjet:
-                slots = PRINTER_INKJET_MFP_SLOTS
-                persona = "Multifunction Inkjet"
-            else:
-                slots = PRINTER_INKJET_HOME_SLOTS
-                persona = "Inkjet (Photo/Home)"
+            slots = PRINTER_INKJET_SLOTS
+            persona = "Inkjet"
         diag.append(("0. Printer Persona", persona, f"Hierarchy='{thier}'"))
-    elif cluster_key == "Office Printers":
-        # Unified office bundle — same 13 slots for inkjet and laser printers,
-        # mono and color. Slot 1 (Black) is universal; slots 2-4 (C/M/Y) will
-        # auto-empty for mono printers via the cartridge_color hard filter
-        # finding zero matching items. ink_model_match + toner_model_match
-        # are both on, so the engine works for either consumable type.
-        slots = PRINTER_OFFICE_SLOTS
-        _is_color_printer = 'COLOR' in thier or 'ΕΓΧΡΩΜ' in thier
-        _is_mono_printer  = 'MONO' in thier or 'MONOCHROME' in thier
-        if is_laser and _is_color_printer:    persona = "Office (Color Laser)"
-        elif is_laser and _is_mono_printer:   persona = "Office (Mono Laser)"
-        elif is_laser:                        persona = "Office (Laser)"
-        elif _is_mono_printer:                persona = "Office (Mono Inkjet)"
-        else:                                 persona = "Office (Inkjet)"
-        diag.append(("0. Office Printer Persona", persona, f"Hierarchy='{thier}', Αναλώσιμο='{tink[:50]}'"))
     elif cluster_key == "Webcam":
         # Webcam sub-cluster: gaming brands → gaming-variant slot list (gaming audio, streaming, RGB).
         _gaming_webcam_brands = {'RAZER', 'LOGITECH G', 'CORSAIR', 'HYPERX', 'ASUS ROG', 'ROCCAT', 'ELGATO'}
@@ -16965,33 +17521,6 @@ def run_peripherals_engine(trigger, df_products, df_history, cluster_key):
                             )
                             pool.loc[m, 'Final_Score'] += 200000
                 notes.append(f"Consumable match: '{tink[:40]}'")
-
-        # ── Cartridge color match (Office Printers — v28.29) ──
-        # Hard-filters the cartridge pool by the Χρώμα column so the
-        # "Cyan slot" can never return a Black/Magenta/Yellow product.
-        # Synonyms cover the Greek/English variants present in the data
-        # (Μαύρο/Black, Κυανό/Cyan/Γαλάζιο, Ματζέντα/Magenta, Κίτρινο/Yellow).
-        # Multi-color combo packs (Πολλαπλό) are excluded from single-color
-        # slots — slot 1 (Black) deliberately also rejects them to avoid
-        # showing a 4-color combo when the buyer needs only black.
-        if flags.get('cartridge_color') and 'Χρώμα' in pool.columns:
-            _color_synonyms = {
-                'BLACK':   {'ΜΑΥΡΟ', 'BLACK', 'BK', 'BLK'},
-                'CYAN':    {'ΚΥΑΝΟ', 'CYAN', 'ΓΑΛΑΖΙΟ'},
-                'MAGENTA': {'ΜΑΤΖΕΝΤΑ', 'MAGENTA', 'MAGENDA'},
-                'YELLOW':  {'ΚΙΤΡΙΝΟ', 'YELLOW', 'ΚΟΚΚΙΝΟ-ΚΙΤΡΙΝΟ'},
-            }
-            wanted = flags['cartridge_color'].upper()
-            allowed = _color_synonyms.get(wanted, {wanted})
-            col_vals = pool['Χρώμα'].fillna('').astype(str).str.strip().str.upper()
-            m = col_vals.isin(allowed)
-            if m.any():
-                b4 = len(pool)
-                pool = pool[m]
-                notes.append(f"Cartridge color [{wanted}]: {b4} → {len(pool)} rows")
-            else:
-                notes.append(f"⚠ No {wanted} cartridges available — slot will be empty")
-                pool = pool.head(0)
 
         # ── Paper weight filters ──
         if flags.get('paper_weight_max') and 'Βάρος' in pool.columns:
@@ -19341,35 +19870,33 @@ elif active_cluster in STATIONERY_CLUSTERS:
         PERIPHERAL_CLUSTER_SLOTS[active_cluster] = stat_slots
     recs, diag, slot_notes, full_candidates = run_peripherals_engine(trigger, combined_stat_books, df_history, active_cluster)
     slot_diag = []
-elif active_cluster == "Printers":
-    # v28.32 — pool combines Spare (Home file: cartridges, paper, drums,
-    # cleaning, etc.) + Peripherals (USB cables, USB hubs not in Spare) +
-    # Stationery (ΚΟΡΝΙΖΕΣ - ALBUM photo frame slot in inkjet HOME persona).
-    # Each slot's hierarchy filter narrows the pool, so extra rows from
-    # unrelated hierarchies are harmless. Spare-first ordering means the
-    # 2933-cartridge catalog in Spare wins over Peripherals' 1313.
-    _frames = [f for f in [df_spare, df_peripherals, df_stationery] if f is not None and not f.empty]
-    _printer_pool = pd.concat(_frames, ignore_index=True) if _frames else df_peripherals
-    recs, diag, slot_notes, full_candidates = run_peripherals_engine(trigger, _printer_pool, df_history, active_cluster)
-    slot_diag = []
-elif active_cluster in ("Monitors", "Webcam", "USB Hub"):
+elif active_cluster in ("Monitors", "Printers", "Webcam", "USB Hub"):
     recs, diag, slot_notes, full_candidates = run_peripherals_engine(trigger, df_peripherals, df_history, active_cluster)
     slot_diag = []
-elif active_cluster == "Office Printers":
-    # The office bundle pulls from FOUR sheets (v28.32):
-    #   • Spare      — cartridges (K/C/M/Y inks AND toners), copy paper,
-    #                   PRINTER ACCESSORIES, cleaning
-    #   • Peripherals — USB cables, USB flash disks (not in Spare)
-    #   • Stationery — pens, folders, highlighters, staplers, sleeves
-    #   • Products   — surge protectors (SURGE PROTECTORS hierarchy lives
-    #                   here, not in Peripherals or Spare; the legacy
-    #                   PRINTER_INKJET_SLOTS used 'LINE INTERACTIVE' which
-    #                   is actually UPS — bug fixed in v28.29)
-    _frames = [f for f in [df_spare, df_peripherals, df_stationery, df_products] if f is not None and not f.empty]
-    _office_pool = pd.concat(_frames, ignore_index=True) if _frames else df_peripherals
-    recs, diag, slot_notes, full_candidates = run_peripherals_engine(trigger, _office_pool, df_history, active_cluster)
+# ─────────────────────────────────────────────────────────────
+# v28.29 — UNIVERSAL BOOKS ROUTING (Kids / Greek / International)
+# Each cluster gets its own data source per BOOKS_V2_CATEGORIES["data_source"].
+# Kids Books still reads df_books (the existing 'Books' sheet), Greek Books
+# reads df_greek_books, International Books reads df_int_books. The engine
+# itself is universal — only the input pool changes.
+# ─────────────────────────────────────────────────────────────
+elif active_cluster in BOOKS_V2_CLUSTERS:
+    _cat_cfg = BOOKS_V2_CATEGORIES[active_cluster]
+    _ds = _cat_cfg["data_source"]
+    if _ds == "df_books":
+        _book_pool = df_books
+    elif _ds == "df_greek_books":
+        _book_pool = df_greek_books
+    elif _ds == "df_int_books":
+        _book_pool = df_int_books
+    else:
+        _book_pool = pd.DataFrame()
+    recs, diag, slot_notes, full_candidates = run_books_v2_engine(
+        trigger, _book_pool, df_history, active_cluster)
     slot_diag = []
 else:
+    # Final fallback — preserved for any non-books cluster that ends up
+    # routing through here. Should not normally be reached.
     df_all_for_books = pd.concat([df_books, df_products], ignore_index=True)
     recs, diag, slot_notes, full_candidates = run_books_engine(trigger, df_all_for_books, df_history)
 
@@ -19527,6 +20054,23 @@ with st.expander("⚙️ System Diagnostics"):
         t_age = str(trigger.get('Ηλικία', '')).strip()
         t_hierarchy = str(trigger.get('Hierarchy', '')).strip()
         st.markdown(f"**Series:** `{t_series}` (Valid: {is_valid_series(t_series)}) | **Age:** `{t_age}` | **Hierarchy:** `{t_hierarchy}`")
+    elif active_cluster in ("Greek Books", "International Books"):
+        # v28.29 — adult-books diagnostic surface: emphasize the deep-spec
+        # signals the engine actually uses (Author, Publisher, Theme, Lang).
+        t_series_v2 = str(trigger.get('Σειρά βιβλίου', '')).strip()
+        t_hier_v2 = str(trigger.get('Hierarchy', '')).strip()
+        t_auth_v2 = str(trigger.get('Συγγραφέας', '')).strip()
+        t_pub_v2 = str(trigger.get('Εκδότης', '')).strip()
+        t_theme_v2 = str(trigger.get('Θέμα Βιβλίου', '')).strip()
+        t_lang_v2 = str(trigger.get('Γλώσσα Γραφής', '')).strip()
+        st.markdown(
+            f"**Series:** `{t_series_v2}` (Valid: {is_valid_series(t_series_v2)}) | "
+            f"**Hierarchy:** `{t_hier_v2}`"
+        )
+        st.markdown(
+            f"**Author:** `{t_auth_v2[:80]}` | **Publisher:** `{t_pub_v2}` | "
+            f"**Theme:** `{t_theme_v2[:60]}` | **Language:** `{t_lang_v2}`"
+        )
 
     st.markdown("### Engine Funnel")
     st.dataframe(pd.DataFrame(diag, columns=["Step","Count","Note"]), use_container_width=True, hide_index=True)
@@ -19544,6 +20088,14 @@ with st.expander("⚙️ System Diagnostics"):
     attr_keys_to_show = []
     if active_cluster == "Kids Books":
         attr_keys_to_show = ['Material','Title','Level 2','Hierarchy','Σειρά βιβλίου','Ηλικία','Εξώφυλλο','Brand','LIST PRICE']
+    elif active_cluster in ("Greek Books", "International Books"):
+        # v28.29 — adult-books attributes: the deep-spec columns the engine
+        # actually scores against, plus the publisher/category context.
+        attr_keys_to_show = ['Material','Title','Level 2','Hierarchy',
+                              'Σειρά βιβλίου','Συγγραφέας','Εκδότης','Εκδοτικός οίκος',
+                              'Θέμα Βιβλίου','Κατηγορία Βιβλίου','Γλώσσα Γραφής',
+                              'Εξώφυλλο','Αριθμός Σελίδων','Ημερ/νία έκδοσης',
+                              'Sum of Sales','LIST PRICE','AVAILABILITY']
     elif active_cluster == "Laptops":
         attr_keys_to_show = ['Material','Title','Level 1','Level 2','Hierarchy','Κατασκευαστής','Μοντέλο','Προτεινόμενη χρήση','Μέγεθος οθόνης','Θύρες','LIST PRICE']
     elif active_cluster == "Desktops":
