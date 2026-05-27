@@ -6,6 +6,7 @@ import html as html_lib
 import re
 import io
 import traceback
+import unicodedata
 from difflib import SequenceMatcher
 
 
@@ -102,7 +103,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v28.30 — New cluster: Σχολικά Βιβλία (Greek School Books). Trigger flow: slots 1-3 = same publisher + same class + different subject (so a parent buying Άλγεβρα Α' Λυκείου Πατάκη also sees Φυσική / Ιστορία / Χημεία Α' Λυκείου Πατάκη); slots 4-6 = age-targeted stationery (different curated hierarchy list per Προσχολική / Δημοτικό / Γυμνάσιο / Λύκειο stage — pre-school gets coloring/craft, Δημοτικό gets basics + colors, Γυμνάσιο writing essentials, Λύκειο exam-prep); slots 7-10 = more school books via fallback chain (relax publisher → adjacent class → any publisher), overflow with stationery if school pool exhausted. Stationery uses round-robin across hierarchies (no 3 notebooks back-to-back) and is sales-ranked within each age-appropriate hierarchy.
+        🟢 Engine v28.30.4 — School Books: type-aware tiers driven by Hierarchy. Helper-book trigger (ΣΧΟΛΙΚΑ ΒΟΗΘΗΜΑΤΑ - Γ' ΛΥΚΕΙΟΥ) → same hierarchy + same publisher + same subject + AUTHOR overlap leads (companion volumes by the same author team — Σαλτερής Χημεία, Παναγιωτακόπουλος Φυσική). Textbook trigger (Βιβλία Οργανισμού — Διόφαντος main books) → top helpers for same subject + Προσανατολισμός, then other Διόφαντος textbooks for cross-subject coverage. Author surname extraction handles Greek name-format variants ("Last First", "First Last", "Last F."). Younger stages (Δημοτικό/Προσχολική) keep different-subjects-led with same-publisher preference + subject diversity per slot.
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -3833,6 +3834,145 @@ def _sb_get_stationery_priority(hierarchy, stage):
         return len(hierarchies) - idx
     except ValueError:
         return 0
+
+
+# v28.30.2 — Stage-age tiering. Older stages (Γυμνάσιο, Λύκειο) follow the
+# "Συνήθως αγοράζονται μαζί" pattern where parents buy multiple helpers of
+# the SAME subject (multi-volume / επανάληψη / θέματα). Younger stages
+# (Δημοτικό, Προσχολική) follow the "cover all subjects" pattern where each
+# subject typically maps to one book.
+SB_OLDER_STAGES = {"Γυμνάσιο", "Λύκειο"}
+
+
+# v28.30.2 — Τόμος / Τεύχος / Μέρος detection.
+# Catches Greek volume markers: "Α' τόμος", "Α΄ Τεύχος", "Β' Μέρος",
+# "(Α' Τεύχος)", "Α΄ ΤΟΜΟΣ", and reverse "Τόμος Α'". Used to group
+# multi-volume helpers together at the top of same-subject tiers so a
+# parent buying "Χημεία Γ' τόμος" sees Α', Β' (and other volumes of the
+# same series) in adjacent slots.
+SB_TOMOS_LETTER_RANK = {'Α': 1, 'Β': 2, 'Γ': 3, 'Δ': 4, 'Ε': 5,
+                        'ΣΤ': 6, 'Ζ': 7, 'Η': 8, 'Θ': 9, 'Ι': 10}
+
+# Two patterns: letter-then-marker ("Α' τόμος") and marker-then-letter ("Τόμος Α'").
+# Greek typographic apostrophes: regular ' (U+0027), tonos ΄ (U+1FFD),
+# Greek dasia ʹ (U+02B9), prime ′ (U+2032).
+_SB_TOMOS_RX_LETTER_FIRST = re.compile(
+    r'(?P<letter>ΣΤ|[ΑΒΓΔΕΖΗΘΙ])[\'΄ʹ\u2032]\s*'
+    r'(?:τόμος|τεύχος|μέρος|Τόμος|Τεύχος|Μέρος|ΤΟΜΟΣ|ΤΕΥΧΟΣ|ΜΕΡΟΣ)',
+    re.UNICODE
+)
+_SB_TOMOS_RX_MARKER_FIRST = re.compile(
+    r'(?:τόμος|τεύχος|μέρος|Τόμος|Τεύχος|Μέρος|ΤΟΜΟΣ|ΤΕΥΧΟΣ|ΜΕΡΟΣ)\s*'
+    r'(?P<letter>ΣΤ|[ΑΒΓΔΕΖΗΘΙ])[\'΄ʹ\u2032]?',
+    re.UNICODE
+)
+
+
+def _sb_extract_volume(title):
+    """Detect a Greek volume marker in a school-book title.
+    
+    Returns (rank, base_title) where:
+      - rank: int 1-10 if a τόμος/τεύχος/μέρος marker is found, else None
+      - base_title: the title with the volume marker stripped (used for
+                    grouping siblings of the same series together)
+    
+    Examples:
+      "Χημεία Γ' Λυκείου (Α' Τεύχος)" → (1, "Χημεία Γ' Λυκείου")
+      "Βοήθημα Χημεία Γ΄ λυκείου Γ' τόμος" → (3, "Βοήθημα Χημεία Γ΄ λυκείου")
+      "Ανόργανη Χημεία" → (None, "Ανόργανη Χημεία")
+    
+    Note: "Γ' Λυκείου" (class marker) is NOT mistaken for volume because the
+    regex requires the marker word (τόμος/τεύχος/μέρος) to follow, and "Λυκείου"
+    is not in the marker set.
+    """
+    if not title: return (None, '')
+    s = str(title)
+    m = _SB_TOMOS_RX_LETTER_FIRST.search(s) or _SB_TOMOS_RX_MARKER_FIRST.search(s)
+    if not m: return (None, s)
+    rank = SB_TOMOS_LETTER_RANK.get(m.group('letter'))
+    # Strip the matched span PLUS any surrounding parens/commas/whitespace
+    # so the remaining base title cleanly groups siblings.
+    span_start, span_end = m.span()
+    # Extend the strip range to consume wrapping ( ) , and adjacent spaces
+    while span_start > 0 and s[span_start - 1] in ' (,':
+        span_start -= 1
+    while span_end < len(s) and s[span_end] in ' ),':
+        span_end += 1
+    base = (s[:span_start] + ' ' + s[span_end:]).strip()
+    base = re.sub(r'\s+', ' ', base).strip(' ,()-')
+    return (rank, base)
+
+
+# v28.30.4 — Author surname extraction for school-book series matching.
+# Greek author strings come in many formats:
+#   "Γεώργιος Παναγιωτακόπουλος;Γεώργιος Μαθιουδάκης"  (firstname-first, semicolons)
+#   "Παναγιωτακόπουλος Γεώργιος, Μαθιουδάκης Γεώργιος"  (surname-first, commas)
+#   "Μαθιουδάκης Γ.;Παναγιωτακόπουλος Γιώργος"  (initials + name variants)
+# We extract the surname per author by taking the LONGEST word (Greek
+# surnames are typically longer than first names) and matching by set
+# overlap. Common first names like "Γεώργιος" can still be among the
+# tokens but the surnames dominate.
+def _sb_extract_authors_surname_set(val):
+    """Return a set of surname tokens (lowercase) from a multi-author string.
+    Each author (semicolon-separated) contributes its longest word.
+    "Συλλογικό έργο" (collective work) returns an empty set — no signal."""
+    if val is None: return set()
+    try:
+        if pd.isna(val): return set()
+    except (TypeError, ValueError):
+        pass
+    s = str(val).strip()
+    if not s or s.lower() in ('0', '-', 'nan', 'n/a'):
+        return set()
+    if 'συλλογικό' in s.lower():
+        return set()   # Collective work — no specific author
+    
+    # Split into individual authors (prefer semicolon, fallback to comma).
+    if ';' in s:
+        author_strs = [a.strip() for a in s.split(';')]
+    else:
+        # Heuristic: only split on commas if there are multiple word groups
+        # that look like full names (i.e. multiple words per side).
+        parts = [p.strip() for p in s.split(',')]
+        if len(parts) > 1 and all(len(p.split()) >= 2 for p in parts):
+            author_strs = parts
+        else:
+            author_strs = [s]
+    
+    surnames = set()
+    for author_str in author_strs:
+        cleaned = re.sub(r'[.,]', ' ', author_str.lower())
+        # Keep tokens >= 4 chars (filters out "κ.", "γ.", short initials)
+        words = [w for w in cleaned.split() if len(w) >= 4]
+        if words:
+            longest = max(words, key=len)
+            surnames.add(longest)
+    return surnames
+
+
+# v28.30.4 — Helper / textbook classification from Hierarchy.
+# - "ΣΧΟΛΙΚΑ ΒΟΗΘΗΜΑΤΑ - <class>" = helper book (the upper-case Greek text 
+#   for "school helpers"). Recommendations are sibling helpers from same
+#   publisher + same subject (companion volumes).
+# - "Βιβλία Οργανισμού <class>" = main gov-issued textbook. Recommendations
+#   are top-selling helpers for the same subject from any publisher, plus
+#   other Διόφαντος textbooks for other subjects.
+#
+# Note: Python's str.upper() preserves Greek tonos accents ('Βιβλία' →
+# 'ΒΙΒΛΊΑ' with tonos on the Ι), so a naive 'ΒΙΒΛΙΑ' substring match fails.
+# We normalize via NFD decomposition + combining-mark stripping before
+# matching.
+def _sb_strip_accents_upper(text):
+    """Uppercase + strip Greek tonos/diacritics for accent-insensitive match."""
+    if text is None: return ''
+    s = unicodedata.normalize('NFD', str(text))
+    return ''.join(c for c in s if unicodedata.category(c) != 'Mn').upper()
+
+def _sb_is_helper_hierarchy(hierarchy):
+    return 'ΒΟΗΘΗΜΑΤΑ' in _sb_strip_accents_upper(hierarchy)
+
+def _sb_is_textbook_hierarchy(hierarchy):
+    return 'ΒΙΒΛΙΑ ΟΡΓΑΝΙΣΜΟΥ' in _sb_strip_accents_upper(hierarchy)
 
 
 # Scoring constants for the "Other Books" deep-spec match.
@@ -8960,10 +9100,29 @@ def run_school_books_engine(trigger, df_school_pool, df_stationery_pool, df_hist
     t_subjects  = _sb_parse_multi_value(t_subject_raw)
     t_stage     = _sb_class_to_stage(t_class_raw) or SB_DEFAULT_STAGE
     
+    # v28.30.4 — Hierarchy is the type signal (helper vs textbook).
+    t_hierarchy = str(trigger.get('Hierarchy', '')).strip()
+    trigger_is_helper   = _sb_is_helper_hierarchy(t_hierarchy)
+    trigger_is_textbook = _sb_is_textbook_hierarchy(t_hierarchy)
+    
+    # v28.30.4 — Author surnames for companion-volume matching.
+    t_author_raw = trigger.get('Συγγραφέας_sales', trigger.get('Συγγραφέας', ''))
+    t_authors    = _sb_extract_authors_surname_set(t_author_raw)
+    
+    # v28.30.4 — Προσανατολισμός (high-school orientation track).
+    # Note: the data lives in _catalog column; _sales is empty for all rows.
+    t_orient_raw = trigger.get('Προσανατολισμός_catalog', '')
+    t_orientation = _sb_parse_multi_value(t_orient_raw)
+    
     diag.append(("0. Trigger", "", f"Cluster: Greek School Books"))
     diag.append(("   Trigger (attrs)", "", 
                  f"Publisher: '{t_publisher_raw}' | Class: {t_classes or '∅'} | "
                  f"Subject: {t_subjects or '∅'} | Stage: '{t_stage}'"))
+    diag.append(("   Trigger (type)", "",
+                 f"Hierarchy: '{t_hierarchy}' | "
+                 f"Type: {'helper' if trigger_is_helper else ('textbook' if trigger_is_textbook else 'other')} | "
+                 f"Authors: {t_authors or '∅'} | "
+                 f"Προσανατολισμός: {t_orientation or '∅'}"))
     
     used_materials = {tm} if tm is not None else set()
     
@@ -8989,6 +9148,16 @@ def run_school_books_engine(trigger, df_school_pool, df_stationery_pool, df_hist
             pool['_subjects'] = [[] for _ in range(len(pool))]
         pool['_stage'] = pool['_classes'].apply(
             lambda lst: _sb_class_to_stage(';'.join(lst)) if lst else None)
+        # v28.30.4 — Hierarchy + Authors + Orientation
+        pool['_hier'] = pool['Hierarchy'].fillna('').astype(str) if 'Hierarchy' in pool.columns else ''
+        if 'Συγγραφέας_sales' in pool.columns:
+            pool['_authors'] = pool['Συγγραφέας_sales'].apply(_sb_extract_authors_surname_set)
+        else:
+            pool['_authors'] = [set() for _ in range(len(pool))]
+        if 'Προσανατολισμός_catalog' in pool.columns:
+            pool['_orientation'] = pool['Προσανατολισμός_catalog'].apply(_sb_parse_multi_value)
+        else:
+            pool['_orientation'] = [[] for _ in range(len(pool))]
     
     # Tier filters — produced as masks for transparency in the funnel
     def _mask_same_publisher(p): return (p['_pub_norm'] == t_publisher) & (t_publisher != '')
@@ -8996,63 +9165,238 @@ def run_school_books_engine(trigger, df_school_pool, df_stationery_pool, df_hist
         if not t_classes: return pd.Series([False] * len(p), index=p.index)
         t_set = set(t_classes)
         return p['_classes'].apply(lambda lst: bool(set(lst) & t_set))
+    def _mask_same_subject(p):
+        if not t_subjects:
+            # No trigger subject → same-subject filter trivially fails (nothing matches)
+            return pd.Series([False] * len(p), index=p.index)
+        t_set = set(t_subjects)
+        return p['_subjects'].apply(lambda lst: bool(lst) and bool(set(lst) & t_set))
     def _mask_different_subject(p):
         if not t_subjects:
-            # No trigger subject → don't enforce "different"; everything qualifies
+            # No trigger subject → "different" is undefined; everything qualifies
             return pd.Series([True] * len(p), index=p.index)
         t_set = set(t_subjects)
         return p['_subjects'].apply(lambda lst: bool(lst) and not (set(lst) & t_set))
     def _mask_same_stage(p):
         return p['_stage'] == t_stage
+    # v28.30.4 — hierarchy, author, orientation masks
+    def _mask_same_hierarchy(p):
+        if not t_hierarchy: return pd.Series([False] * len(p), index=p.index)
+        return p['_hier'] == t_hierarchy
+    def _mask_helper_hierarchy(p):
+        return p['_hier'].apply(_sb_is_helper_hierarchy)
+    def _mask_textbook_hierarchy(p):
+        return p['_hier'].apply(_sb_is_textbook_hierarchy)
+    def _mask_author_overlap(p):
+        if not t_authors: return pd.Series([False] * len(p), index=p.index)
+        return p['_authors'].apply(lambda s: isinstance(s, set) and bool(s & t_authors))
+    def _mask_orient_overlap(p):
+        if not t_orientation: return pd.Series([False] * len(p), index=p.index)
+        t_orient_set = set(t_orientation)
+        return p['_orientation'].apply(
+            lambda lst: isinstance(lst, list) and bool(lst) and bool(set(lst) & t_orient_set))
     
     sb_notes.append(f"Total school-book catalog (excl. trigger): {len(pool)}")
     
-    # Build tiered candidate buckets — the slot filler consumes them in order
+    # v28.30.4 — TYPE-AWARE TIER ORDERING.
+    # Routing depends on stage AND hierarchy type:
+    #   * Older stage + helper trigger (Hierarchy = ΣΧΟΛΙΚΑ ΒΟΗΘΗΜΑΤΑ - …):
+    #     Sibling helpers from same publisher + same subject + same author
+    #     (companion volumes, the "συνήθως αγοράζονται μαζί" image pattern).
+    #   * Older stage + textbook trigger (Hierarchy = Βιβλία Οργανισμού …):
+    #     Top helpers for same subject + orientation, then other Διόφαντος
+    #     textbooks for the kid's other subjects.
+    #   * Younger stages (Δημοτικό/Προσχολική): keep different-subjects-led
+    #     logic (cover all the kid's subjects), with same-publisher preference.
+    is_older_stage = (t_stage in SB_OLDER_STAGES)
+    SB_S_SAME_SUBJECT     = 80_000   # v28.30.1 — same-subject bonus
+    SB_S_AUTHOR_OVERLAP   = 60_000   # v28.30.4 — companion-volume signal
+    SB_S_ORIENT_OVERLAP   = 40_000   # v28.30.4 — orientation match
+    SB_S_HELPER_HIERARCHY = 25_000   # v28.30.4 — helper-vs-textbook signal
+
     if not pool.empty:
-        tier1_mask = _mask_same_publisher(pool) & _mask_same_class(pool) & _mask_different_subject(pool)
-        tier2_mask = _mask_same_publisher(pool) & _mask_same_stage(pool)  & _mask_different_subject(pool) & (~tier1_mask)
-        tier3_mask = _mask_same_class(pool)     & _mask_different_subject(pool) & (~tier1_mask) & (~tier2_mask)
-        tier4_mask = _mask_same_stage(pool)     & _mask_different_subject(pool) & (~tier1_mask) & (~tier2_mask) & (~tier3_mask)
+        m_same_pub  = _mask_same_publisher(pool)
+        m_same_cls  = _mask_same_class(pool)
+        m_same_sub  = _mask_same_subject(pool)
+        m_diff_sub  = _mask_different_subject(pool)
+        m_same_stg  = _mask_same_stage(pool)
+        m_same_hier = _mask_same_hierarchy(pool)
+        m_helper    = _mask_helper_hierarchy(pool)
+        m_textbook  = _mask_textbook_hierarchy(pool)
+        m_author    = _mask_author_overlap(pool)
+        m_orient    = _mask_orient_overlap(pool)
         
-        tier1 = pool[tier1_mask].copy()
-        tier2 = pool[tier2_mask].copy()
-        tier3 = pool[tier3_mask].copy()
-        tier4 = pool[tier4_mask].copy()
+        if is_older_stage and trigger_is_helper:
+            # ── OLDER + HELPER trigger ──
+            # Hierarchy is a HARD anchor — only same hierarchy (e.g.,
+            # ΣΧΟΛΙΚΑ ΒΟΗΘΗΜΑΤΑ - Γ' ΛΥΚΕΙΟΥ). Layer by author/subject/publisher.
+            tier1_mask = m_same_hier & m_same_pub & m_same_sub & m_author          # companions by SAME author
+            tier2_mask = m_same_hier & m_same_pub & m_same_sub & (~tier1_mask)     # same-pub same-subject (other author)
+            tier3_mask = m_same_hier & m_same_sub & (~tier1_mask) & (~tier2_mask)  # cross-pub helpers same-subject
+            tier4_mask = m_same_hier & m_same_pub & m_diff_sub & (~tier1_mask) & (~tier2_mask) & (~tier3_mask)  # cross-subject same-pub helpers
+            tier5_mask = m_same_hier & m_diff_sub & (~tier1_mask) & (~tier2_mask) & (~tier3_mask) & (~tier4_mask)  # cross-subject any-pub helpers
+            tier6_mask = m_same_stg & (~tier1_mask) & (~tier2_mask) & (~tier3_mask) & (~tier4_mask) & (~tier5_mask)
+            
+            tier_labels = [
+                "T1: same hierarchy + pub + subject + AUTHOR (companions)",
+                "T2: same hierarchy + pub + subject (any author)",
+                "T3: same hierarchy + subject (any pub)",
+                "T4: same hierarchy + pub (different subject)",
+                "T5: same hierarchy (any pub, different subject)",
+                "T6: same stage (last resort)",
+            ]
+            tier_bases = [
+                SB_S_SAME_PUBLISHER + SB_S_SAME_CLASS + SB_S_SAME_SUBJECT + SB_S_AUTHOR_OVERLAP + SB_S_HELPER_HIERARCHY,
+                SB_S_SAME_PUBLISHER + SB_S_SAME_CLASS + SB_S_SAME_SUBJECT + SB_S_HELPER_HIERARCHY,
+                SB_S_SAME_CLASS + SB_S_SAME_SUBJECT + SB_S_HELPER_HIERARCHY,
+                SB_S_SAME_PUBLISHER + SB_S_SAME_CLASS + SB_S_DIFFERENT_SUBJECT + SB_S_HELPER_HIERARCHY,
+                SB_S_SAME_CLASS + SB_S_DIFFERENT_SUBJECT + SB_S_HELPER_HIERARCHY,
+                SB_S_SAME_STAGE,
+            ]
+            tomos_sort_tiers = {0, 1, 2}   # same-subject tiers benefit from τόμος sort
+            ordering_strategy = "OLDER + HELPER (same-hierarchy companion volumes)"
         
-        sb_notes.append(f"  Tier 1 — same Εκδότης + same Τάξη + different Μάθημα: {len(tier1)} matches")
-        sb_notes.append(f"  Tier 2 — same Εκδότης + same stage ({t_stage}) + different Μάθημα: {len(tier2)} matches")
-        sb_notes.append(f"  Tier 3 — same Τάξη + different Μάθημα (any publisher): {len(tier3)} matches")
-        sb_notes.append(f"  Tier 4 — same stage + different Μάθημα (any publisher): {len(tier4)} matches")
+        elif is_older_stage and trigger_is_textbook:
+            # ── OLDER + TEXTBOOK trigger (e.g., Διόφαντος Χημεία Γ' Λυκείου) ──
+            # User spec: "show top-selling helper books for this Μάθημα and
+            # Προσανατολισμός, then the rest of the books for same age, same
+            # Προσανατολισμός, but aren't helpers — regular class books usually
+            # from Εκδότης Διόφαντος"
+            tier1_mask = m_helper & m_same_cls & m_same_sub & m_orient            # top helpers + orientation match
+            tier2_mask = m_helper & m_same_cls & m_same_sub & (~tier1_mask)        # top helpers (any orientation)
+            tier3_mask = m_textbook & m_same_pub & m_same_cls & m_diff_sub & (~tier1_mask) & (~tier2_mask)  # Διόφαντος cross-subject textbooks
+            tier4_mask = m_textbook & m_same_cls & m_diff_sub & (~tier1_mask) & (~tier2_mask) & (~tier3_mask)  # any-pub cross-subject textbooks
+            tier5_mask = m_helper & m_same_cls & m_diff_sub & (~tier1_mask) & (~tier2_mask) & (~tier3_mask) & (~tier4_mask)  # any helpers same class
+            tier6_mask = m_same_stg & (~tier1_mask) & (~tier2_mask) & (~tier3_mask) & (~tier4_mask) & (~tier5_mask)
+            
+            tier_labels = [
+                "T1: top helpers for same subject + Προσανατολισμός",
+                "T2: top helpers for same subject (any Προσανατολισμός)",
+                "T3: same pub (Διόφαντος) textbooks, different subject",
+                "T4: any-pub textbooks, different subject",
+                "T5: any helpers, different subject",
+                "T6: same stage (last resort)",
+            ]
+            tier_bases = [
+                SB_S_SAME_CLASS + SB_S_SAME_SUBJECT + SB_S_HELPER_HIERARCHY + SB_S_ORIENT_OVERLAP,
+                SB_S_SAME_CLASS + SB_S_SAME_SUBJECT + SB_S_HELPER_HIERARCHY,
+                SB_S_SAME_PUBLISHER + SB_S_SAME_CLASS + SB_S_DIFFERENT_SUBJECT,
+                SB_S_SAME_CLASS + SB_S_DIFFERENT_SUBJECT,
+                SB_S_SAME_CLASS + SB_S_DIFFERENT_SUBJECT + SB_S_HELPER_HIERARCHY,
+                SB_S_SAME_STAGE,
+            ]
+            tomos_sort_tiers = {0, 1}   # helper-subject tiers benefit from τόμος sort
+            ordering_strategy = "OLDER + TEXTBOOK (top helpers, then cross-subject textbooks)"
+        
+        else:
+            # ── YOUNGER (Δημοτικό/Προσχολική) — keeps prior behavior ──
+            # User's rule: "different subjects, same publishers (ideally)"
+            # Hierarchy match is a soft preference (same-hierarchy boost) rather
+            # than a hard filter, since helpers and textbooks are often mixed
+            # at this level.
+            tier1_mask = m_same_pub & m_same_cls & m_diff_sub
+            tier2_mask = m_same_cls & m_diff_sub & (~tier1_mask)
+            tier3_mask = m_same_pub & m_same_cls & m_same_sub & (~tier1_mask) & (~tier2_mask)
+            tier4_mask = m_same_cls & m_same_sub & (~tier1_mask) & (~tier2_mask) & (~tier3_mask)
+            tier5_mask = m_same_pub & m_same_stg & (~tier1_mask) & (~tier2_mask) & (~tier3_mask) & (~tier4_mask)
+            tier6_mask = m_same_stg & (~tier1_mask) & (~tier2_mask) & (~tier3_mask) & (~tier4_mask) & (~tier5_mask)
+            
+            tier_labels = [
+                "T1: same pub + class + different subject (ideal for younger)",
+                "T2: same class + different subject (any pub)",
+                "T3: same pub + class + same subject (companion — rare)",
+                "T4: same class + same subject (any pub)",
+                "T5: same pub + same stage",
+                "T6: same stage (any pub)",
+            ]
+            tier_bases = [
+                SB_S_SAME_PUBLISHER + SB_S_SAME_CLASS + SB_S_DIFFERENT_SUBJECT,
+                SB_S_SAME_CLASS + SB_S_DIFFERENT_SUBJECT,
+                SB_S_SAME_PUBLISHER + SB_S_SAME_CLASS + SB_S_SAME_SUBJECT,
+                SB_S_SAME_CLASS + SB_S_SAME_SUBJECT,
+                SB_S_SAME_PUBLISHER + SB_S_SAME_STAGE,
+                SB_S_SAME_STAGE,
+            ]
+            tomos_sort_tiers = {2, 3}
+            ordering_strategy = f"YOUNGER ({t_stage}) — different-subjects led"
+        
+        tier_masks = [tier1_mask, tier2_mask, tier3_mask, tier4_mask, tier5_mask, tier6_mask]
+        tiers = [pool[m].copy() for m in tier_masks]
+        
+        sb_notes.append(f"Strategy: {ordering_strategy}")
+        for i, (t, label) in enumerate(zip(tiers, tier_labels), start=1):
+            sb_notes.append(f"  {label}: {len(t)} matches")
     else:
-        tier1 = tier2 = tier3 = tier4 = pd.DataFrame()
+        tiers = [pd.DataFrame() for _ in range(6)]
+        tier_labels = ['', '', '', '', '', '']
+        tier_bases = [0] * 6
+        tomos_sort_tiers = set()
         sb_notes.append("  No school-book catalog available")
     
     # Score & sort each tier (sales primary, availability tiebreaker)
-    def _score_tier(t, tier_base):
+    def _score_tier(t, tier_base, tier_label):
         if t.empty: return t
         t = t.copy()
         t['_sales'] = t['Sum of Sales'].apply(_safe_num) if 'Sum of Sales' in t.columns else 0.0
-        # In-stock bonus
         if 'AVAILABILITY' in t.columns:
             t['_avail'] = t['AVAILABILITY'].apply(
                 lambda v: SB_S_AVAIL_BONUS if str(v).strip() == 'Άμεσα Διαθέσιμο' else 0)
         else:
             t['_avail'] = 0
         t['Final_Score'] = tier_base + t['_sales'] + t['_avail']
+        t['_tier_label'] = tier_label
         return t.sort_values('Final_Score', ascending=False)
     
-    tier1 = _score_tier(tier1, SB_S_SAME_PUBLISHER + SB_S_SAME_CLASS + SB_S_DIFFERENT_SUBJECT)
-    tier2 = _score_tier(tier2, SB_S_SAME_PUBLISHER + SB_S_SAME_STAGE  + SB_S_DIFFERENT_SUBJECT)
-    tier3 = _score_tier(tier3, SB_S_SAME_CLASS     + SB_S_DIFFERENT_SUBJECT)
-    tier4 = _score_tier(tier4, SB_S_SAME_STAGE     + SB_S_DIFFERENT_SUBJECT)
+    def _sort_with_tomos(t):
+        """Apply τόμος-aware ordering to a tier. Items with a τόμος marker
+        are surfaced first, grouped by base title (so siblings of one series
+        stay together), and within each group sorted by τόμος rank ASC
+        (Α' before Β' before Γ'). Groups are ordered by max sales DESC so
+        the best-selling series leads."""
+        if t.empty or 'Title' not in t.columns: return t
+        t = t.copy()
+        vols = t['Title'].apply(_sb_extract_volume)
+        t['_tomos_rank'] = vols.apply(lambda v: v[0] if v[0] is not None else 999)
+        t['_tomos_base'] = vols.apply(lambda v: v[1])
+        t['_has_tomos']  = vols.apply(lambda v: v[0] is not None)
+        
+        # Per-base-group max sales — drives which τόμος series leads
+        if 'Sum of Sales' in t.columns:
+            try:
+                t['_group_max_sales'] = t.groupby('_tomos_base')['Sum of Sales'].transform(
+                    lambda s: s.apply(_safe_num).max())
+            except Exception:
+                t['_group_max_sales'] = 0
+        else:
+            t['_group_max_sales'] = 0
+        
+        # Sort: τόμος items first; among them, best-selling group leads;
+        # within group, Α' before Β' before Γ'. Non-τόμος items fall back
+        # to Final_Score order.
+        t = t.sort_values(
+            ['_has_tomos', '_group_max_sales', '_tomos_base', '_tomos_rank', 'Final_Score'],
+            ascending=[False, False, True, True, False],
+            na_position='last',
+        )
+        return t
+    
+    # Apply scoring + τόμος sort
+    scored_tiers = []
+    for i, (t, base, label) in enumerate(zip(tiers, tier_bases, tier_labels)):
+        t = _score_tier(t, base, label)
+        if i in tomos_sort_tiers and not t.empty:
+            t = _sort_with_tomos(t)
+        scored_tiers.append(t)
+    
+    tier1, tier2, tier3, tier4, tier5, tier6 = scored_tiers
     
     # Concatenate tier-ordered (high → low priority) for sequential consumption
-    school_pool = pd.concat([tier1, tier2, tier3, tier4], ignore_index=True) if any(len(t) > 0 for t in [tier1, tier2, tier3, tier4]) else pd.DataFrame()
+    school_pool = pd.concat(scored_tiers, ignore_index=True) if any(len(t) > 0 for t in scored_tiers) else pd.DataFrame()
     sb_notes.append(f"  → Combined ordered pool: {len(school_pool)} candidates")
     
     slot_notes[1] = sb_notes
     diag.append(("1. School-Book Pool", len(school_pool),
-                 f"T1={len(tier1)} T2={len(tier2)} T3={len(tier3)} T4={len(tier4)}"))
+                 f"T1={len(tier1)} T2={len(tier2)} T3={len(tier3)} T4={len(tier4)} T5={len(tier5)} T6={len(tier6)} | stage={'older' if is_older_stage else 'younger'}"))
     
     # ──────────────────────────────────────────────────────────
     # STEP 2 — STATIONERY POOL (age-targeted)
@@ -9134,19 +9478,50 @@ def run_school_books_engine(trigger, df_school_pool, df_stationery_pool, df_hist
     stat_list   = list(stat_pool.iterrows())   if not stat_pool.empty   else []
     school_consumed = set()
     
+    # v28.30.2 — Subject diversity for younger stages.
+    # Older stages (Γυμνάσιο/Λύκειο): user explicitly wants SAME-subject
+    # companion volumes — diversity OFF.
+    # Younger stages (Δημοτικό/Προσχολική): user wants DIFFERENT subjects
+    # to cover all the kid's school subjects — diversity ON so each school
+    # slot surfaces a NEW subject (rather than 3 Math books in a row).
+    school_diversity_enabled = (not is_older_stage)
+    used_subjects = set()
+    if school_diversity_enabled:
+        fill_notes.append(f"⚙ Subject diversity ON (stage='{t_stage}' is younger): "
+                          f"each school slot picks a different subject")
+    else:
+        fill_notes.append(f"⚙ Subject diversity OFF (stage='{t_stage}' is older): "
+                          f"same-subject companion volumes prioritized")
+    
     # For stationery: track used materials AND used hierarchies, so we
     # round-robin across hierarchies before repeating one (avoids 3 notebooks
     # back to back).
     stat_used_materials = set()
     stat_used_hierarchies_in_round = set()
     
-    def _next_school():
+    def _next_school(enforce_diversity):
+        """Pull the next eligible school candidate.
+        
+        When enforce_diversity is True (younger stages), skip rows whose
+        subject overlaps with already-picked subjects. Rows with no subject
+        (catalog Μάθημα=0) are always eligible — they're their own discovery.
+        Skipped rows are NOT consumed — they remain available for a fallback
+        pass with diversity off (when the constrained pool is exhausted).
+        """
         for i, (_, row) in enumerate(school_list):
             if i in school_consumed: continue
             mat = row.get('Material', None)
             if mat in used_materials:
                 school_consumed.add(i); continue
+            if enforce_diversity:
+                row_subjects = _sb_parse_multi_value(row.get('Μάθημα_sales', ''))
+                if row_subjects and any(s in used_subjects for s in row_subjects):
+                    continue   # subject already covered — save for fallback
+            # Accept
             school_consumed.add(i)
+            if enforce_diversity:
+                for s in _sb_parse_multi_value(row.get('Μάθημα_sales', '')):
+                    used_subjects.add(s)
             return row
         return None
     
@@ -9176,8 +9551,13 @@ def run_school_books_engine(trigger, df_school_pool, df_stationery_pool, df_hist
         picked_from = None
         
         if slot_type == 'SCHOOL':
-            row = _next_school()
+            row = _next_school(enforce_diversity=school_diversity_enabled)
             picked_from = 'school'
+            # Diversity-relaxation fallback when the constrained pool runs dry
+            if row is None and school_diversity_enabled:
+                row = _next_school(enforce_diversity=False)
+                if row is not None:
+                    picked_from = 'school (subject diversity relaxed)'
             if row is None:
                 # Fallback: try stationery (slots 1-3 deficit OR slots 7-10 overflow)
                 row = _next_stationery()
@@ -9186,8 +9566,9 @@ def run_school_books_engine(trigger, df_school_pool, df_stationery_pool, df_hist
             row = _next_stationery()
             picked_from = 'stationery'
             if row is None:
-                # Stationery exhausted — try a school book to fill the slot
-                row = _next_school()
+                # Stationery exhausted — try a school book to fill the slot.
+                # Use relaxed diversity here since we're already in fallback.
+                row = _next_school(enforce_diversity=False)
                 picked_from = 'school (stationery exhausted)'
         
         if row is None:
@@ -9197,17 +9578,21 @@ def run_school_books_engine(trigger, df_school_pool, df_stationery_pool, df_hist
         # Slot_Role label downstream
         if picked_from.startswith('school'):
             role = 'School Book' if slot_idx <= 3 else 'School Book (overflow)'
-            tier_note = ''
-            # Identify tier the row came from (for diagnostics)
-            row_score = _safe_num(row.get('Final_Score', 0))
-            if row_score >= SB_S_SAME_PUBLISHER + SB_S_SAME_CLASS:
-                tier_note = ' [T1: same pub + same class]'
-            elif row_score >= SB_S_SAME_PUBLISHER + SB_S_SAME_STAGE:
-                tier_note = ' [T2: same pub + same stage]'
-            elif row_score >= SB_S_SAME_CLASS:
-                tier_note = ' [T3: same class, any pub]'
-            else:
-                tier_note = ' [T4: same stage]'
+            # v28.30.2 — Read the tier label directly from the row (stored
+            # during _score_tier). Robust across both older-stage and
+            # younger-stage tier orderings.
+            label = str(row.get('_tier_label', '') or '')
+            tier_note = f" [{label}]" if label else ''
+            # If a τόμος was detected, append volume info so the diagnostic
+            # makes the grouping reason visible.
+            tomos_rank = row.get('_tomos_rank', None)
+            try:
+                if tomos_rank is not None and not pd.isna(tomos_rank) and int(tomos_rank) < 999:
+                    letter = {1:'Α', 2:'Β', 3:'Γ', 4:'Δ', 5:'Ε', 6:'ΣΤ',
+                              7:'Ζ', 8:'Η', 9:'Θ', 10:'Ι'}.get(int(tomos_rank), '')
+                    if letter: tier_note += f" τόμος {letter}'"
+            except (TypeError, ValueError):
+                pass
         else:
             role = 'Stationery (age-targeted)'
             tier_note = f" [{row.get('Hierarchy', '')}]"
