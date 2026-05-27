@@ -103,7 +103,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v28.30.4 — School Books: type-aware tiers driven by Hierarchy. Helper-book trigger (ΣΧΟΛΙΚΑ ΒΟΗΘΗΜΑΤΑ - Γ' ΛΥΚΕΙΟΥ) → same hierarchy + same publisher + same subject + AUTHOR overlap leads (companion volumes by the same author team — Σαλτερής Χημεία, Παναγιωτακόπουλος Φυσική). Textbook trigger (Βιβλία Οργανισμού — Διόφαντος main books) → top helpers for same subject + Προσανατολισμός, then other Διόφαντος textbooks for cross-subject coverage. Author surname extraction handles Greek name-format variants ("Last First", "First Last", "Last F."). Younger stages (Δημοτικό/Προσχολική) keep different-subjects-led with same-publisher preference + subject diversity per slot.
+        🟢 Engine v28.30.5 — School Books: single-publisher lock
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -9228,65 +9228,106 @@ def run_school_books_engine(trigger, df_school_pool, df_stationery_pool, df_hist
         
         if is_older_stage and trigger_is_helper:
             # ── OLDER + HELPER trigger ──
-            # Hierarchy is a HARD anchor — only same hierarchy (e.g.,
-            # ΣΧΟΛΙΚΑ ΒΟΗΘΗΜΑΤΑ - Γ' ΛΥΚΕΙΟΥ). Layer by author/subject/publisher.
+            # User rule: "only show ΣΧΟΛΙΚΑ ΒΟΗΘΗΜΑΤΑ - <class> from the same
+            # publisher". The trigger's publisher is the HARD anchor — every
+            # school slot stays within that publisher. Slots 1-3 surface
+            # same-subject companions (with author preference); slots 7-10
+            # are same-publisher cross-subject helpers.
             tier1_mask = m_same_hier & m_same_pub & m_same_sub & m_author          # companions by SAME author
             tier2_mask = m_same_hier & m_same_pub & m_same_sub & (~tier1_mask)     # same-pub same-subject (other author)
-            tier3_mask = m_same_hier & m_same_sub & (~tier1_mask) & (~tier2_mask)  # cross-pub helpers same-subject
-            tier4_mask = m_same_hier & m_same_pub & m_diff_sub & (~tier1_mask) & (~tier2_mask) & (~tier3_mask)  # cross-subject same-pub helpers
-            tier5_mask = m_same_hier & m_diff_sub & (~tier1_mask) & (~tier2_mask) & (~tier3_mask) & (~tier4_mask)  # cross-subject any-pub helpers
+            tier3_mask = m_same_hier & m_same_pub & m_diff_sub & (~tier1_mask) & (~tier2_mask)  # same-pub cross-subject helpers
+            # The last 3 tiers are DEEP fallbacks for the rare case where the
+            # trigger's publisher has fewer than 7 helpers in this class — they
+            # let other publishers' helpers fill the carousel rather than leave
+            # slots empty. In normal operation (Σαββάλας Χημεία trigger with
+            # 4+ Σαββάλας Χημεία helpers + dozens of cross-subject helpers),
+            # T1-T3 fill everything and T4-T6 stay at 0.
+            tier4_mask = m_same_hier & m_same_sub & (~tier1_mask) & (~tier2_mask) & (~tier3_mask)         # rare: cross-pub same-subject helpers
+            tier5_mask = m_same_hier & (~tier1_mask) & (~tier2_mask) & (~tier3_mask) & (~tier4_mask)      # rare: any-pub same-hier (cross-subject)
             tier6_mask = m_same_stg & (~tier1_mask) & (~tier2_mask) & (~tier3_mask) & (~tier4_mask) & (~tier5_mask)
             
             tier_labels = [
                 "T1: same hierarchy + pub + subject + AUTHOR (companions)",
                 "T2: same hierarchy + pub + subject (any author)",
-                "T3: same hierarchy + subject (any pub)",
-                "T4: same hierarchy + pub (different subject)",
-                "T5: same hierarchy (any pub, different subject)",
-                "T6: same stage (last resort)",
+                "T3: same hierarchy + pub (cross-subject same-pub helpers)",
+                "T4: [deep fallback] same hierarchy + subject (other pub)",
+                "T5: [deep fallback] same hierarchy (other pub, any subject)",
+                "T6: [last resort] same stage",
             ]
             tier_bases = [
                 SB_S_SAME_PUBLISHER + SB_S_SAME_CLASS + SB_S_SAME_SUBJECT + SB_S_AUTHOR_OVERLAP + SB_S_HELPER_HIERARCHY,
                 SB_S_SAME_PUBLISHER + SB_S_SAME_CLASS + SB_S_SAME_SUBJECT + SB_S_HELPER_HIERARCHY,
-                SB_S_SAME_CLASS + SB_S_SAME_SUBJECT + SB_S_HELPER_HIERARCHY,
                 SB_S_SAME_PUBLISHER + SB_S_SAME_CLASS + SB_S_DIFFERENT_SUBJECT + SB_S_HELPER_HIERARCHY,
-                SB_S_SAME_CLASS + SB_S_DIFFERENT_SUBJECT + SB_S_HELPER_HIERARCHY,
+                SB_S_SAME_CLASS + SB_S_SAME_SUBJECT + SB_S_HELPER_HIERARCHY,
+                SB_S_SAME_CLASS + SB_S_HELPER_HIERARCHY,
                 SB_S_SAME_STAGE,
             ]
-            tomos_sort_tiers = {0, 1, 2}   # same-subject tiers benefit from τόμος sort
-            ordering_strategy = "OLDER + HELPER (same-hierarchy companion volumes)"
+            tomos_sort_tiers = {0, 1, 3}   # same-subject tiers benefit from τόμος sort
+            ordering_strategy = f"OLDER + HELPER (LOCKED to publisher '{t_publisher_raw}')"
         
         elif is_older_stage and trigger_is_textbook:
             # ── OLDER + TEXTBOOK trigger (e.g., Διόφαντος Χημεία Γ' Λυκείου) ──
-            # User spec: "show top-selling helper books for this Μάθημα and
-            # Προσανατολισμός, then the rest of the books for same age, same
-            # Προσανατολισμός, but aren't helpers — regular class books usually
-            # from Εκδότης Διόφαντος"
-            tier1_mask = m_helper & m_same_cls & m_same_sub & m_orient            # top helpers + orientation match
-            tier2_mask = m_helper & m_same_cls & m_same_sub & (~tier1_mask)        # top helpers (any orientation)
+            # User rule: "show only the top selling helper books for this
+            # Μάθημα and Προσανατολισμός, only from one publisher, not all
+            # publishers. only 1 publisher and as many helper books this
+            # publisher has". Then non-helper textbooks (Διόφαντος) for the
+            # kid's other subjects.
+            #
+            # Step 1: find the BEST helper publisher for this subject+class.
+            # Aggregate total sales of matching helpers per publisher; the
+            # winner is the top-selling publisher for this subject's helpers.
+            best_helper_pub = ''
+            if t_subjects:
+                t_sub_set = set(t_subjects)
+                helper_mask_sub = m_helper & m_same_cls & pool['_subjects'].apply(
+                    lambda lst: bool(lst) and bool(set(lst) & t_sub_set))
+                # Prefer orientation match when available
+                if t_orientation:
+                    helper_mask_sub_ori = helper_mask_sub & m_orient
+                    if helper_mask_sub_ori.any():
+                        helper_mask_sub = helper_mask_sub_ori
+                cands = pool[helper_mask_sub]
+                if not cands.empty:
+                    cands = cands.copy()
+                    cands['_sales_num'] = cands['Sum of Sales'].apply(_safe_num) if 'Sum of Sales' in cands.columns else 0
+                    pub_totals = cands.groupby('_pub_norm')['_sales_num'].sum().sort_values(ascending=False)
+                    # Skip empty publisher (e.g., catalog rows with no Εκδότης)
+                    pub_totals = pub_totals[pub_totals.index != '']
+                    if len(pub_totals) > 0:
+                        best_helper_pub = pub_totals.index[0]
+            
+            # Lock T1+T2 to that single publisher
+            m_best_helper_pub = pd.Series([False] * len(pool), index=pool.index)
+            if best_helper_pub:
+                m_best_helper_pub = (pool['_pub_norm'] == best_helper_pub)
+            
+            tier1_mask = m_helper & m_best_helper_pub & m_same_cls & m_same_sub & m_orient            # best-pub helpers + orientation
+            tier2_mask = m_helper & m_best_helper_pub & m_same_cls & m_same_sub & (~tier1_mask)        # best-pub helpers (any orientation)
             tier3_mask = m_textbook & m_same_pub & m_same_cls & m_diff_sub & (~tier1_mask) & (~tier2_mask)  # Διόφαντος cross-subject textbooks
             tier4_mask = m_textbook & m_same_cls & m_diff_sub & (~tier1_mask) & (~tier2_mask) & (~tier3_mask)  # any-pub cross-subject textbooks
-            tier5_mask = m_helper & m_same_cls & m_diff_sub & (~tier1_mask) & (~tier2_mask) & (~tier3_mask) & (~tier4_mask)  # any helpers same class
+            # Deep fallback only if the best-publisher pool exhausted: any helpers
+            tier5_mask = m_helper & m_same_cls & m_same_sub & (~tier1_mask) & (~tier2_mask) & (~tier3_mask) & (~tier4_mask)
             tier6_mask = m_same_stg & (~tier1_mask) & (~tier2_mask) & (~tier3_mask) & (~tier4_mask) & (~tier5_mask)
             
             tier_labels = [
-                "T1: top helpers for same subject + Προσανατολισμός",
-                "T2: top helpers for same subject (any Προσανατολισμός)",
+                f"T1: top helpers (pub='{best_helper_pub or '∅'}') + Προσανατολισμός",
+                f"T2: top helpers (pub='{best_helper_pub or '∅'}') any orientation",
                 "T3: same pub (Διόφαντος) textbooks, different subject",
                 "T4: any-pub textbooks, different subject",
-                "T5: any helpers, different subject",
-                "T6: same stage (last resort)",
+                "T5: [deep fallback] any helpers same subject (other pub)",
+                "T6: [last resort] same stage",
             ]
             tier_bases = [
                 SB_S_SAME_CLASS + SB_S_SAME_SUBJECT + SB_S_HELPER_HIERARCHY + SB_S_ORIENT_OVERLAP,
                 SB_S_SAME_CLASS + SB_S_SAME_SUBJECT + SB_S_HELPER_HIERARCHY,
                 SB_S_SAME_PUBLISHER + SB_S_SAME_CLASS + SB_S_DIFFERENT_SUBJECT,
                 SB_S_SAME_CLASS + SB_S_DIFFERENT_SUBJECT,
-                SB_S_SAME_CLASS + SB_S_DIFFERENT_SUBJECT + SB_S_HELPER_HIERARCHY,
+                SB_S_SAME_CLASS + SB_S_SAME_SUBJECT + SB_S_HELPER_HIERARCHY,
                 SB_S_SAME_STAGE,
             ]
-            tomos_sort_tiers = {0, 1}   # helper-subject tiers benefit from τόμος sort
-            ordering_strategy = "OLDER + TEXTBOOK (top helpers, then cross-subject textbooks)"
+            tomos_sort_tiers = {0, 1, 4}
+            ordering_strategy = (f"OLDER + TEXTBOOK (best helper publisher: '{best_helper_pub}'; "
+                                 f"cross-subject overflow: trigger publisher)")
         
         else:
             # ── YOUNGER (Δημοτικό/Προσχολική) — keeps prior behavior ──
