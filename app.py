@@ -102,7 +102,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v28.29.6 — SS cover-filter logic: enforce cover purity ONLY when the matching-cover sibling pool can fill all the SS slots the series warrants. Otherwise show ALL siblings mixed (cover preference yields to series visibility). User rule: "if you have mixed then just show mixed it's okay, the important thing is to show the series." Twisted love trigger (4-book series, 2 paperback + 1 hardcover siblings) now correctly shows all 3 siblings since 2 paperback can't fill the 3 SS slots a 4-book series deserves.
+        🟢 Engine v28.29.7 — OB diversity now includes AUTHOR (same author = almost always same narrative series in romance/fantasy, robust fallback for catalogs that tag Σειρά inconsistently — Powerless/Η Αδύναμη/blank for one Lauren Roberts trilogy). Canonical dedup also catches "X- Edition Y" patterns with flexible dash delimiters (no leading space required: "Dune- Deluxe Edition" → "dune") and the keywords list adds reissue, limited, platinum, επετειακή. Both fixes target the same root issue: data inconsistencies in the catalog.
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -6868,7 +6868,8 @@ def run_books_engine(trigger, df_all, df_history):
         
         edition_keywords = [
             'edition', 'έκδοση', 'illustrated', 'εικονογραφημένο', 'εικονογραφημένη',
-            'collector', 'συλλεκτική', 'deluxe', 'anniversary', 'special', 'gift',
+            'collector', 'συλλεκτική', 'deluxe', 'anniversary', 'επετειακή',
+            'special', 'gift', 'reissue', 'limited', 'platinum',
             'paperback', 'hardcover', 'hardback', 'softcover', 'minalima',
             'gryffindor', 'slytherin', 'hufflepuff', 'ravenclaw', 'rehearsal',
         ]
@@ -6876,7 +6877,8 @@ def run_books_engine(trigger, df_all, df_history):
         paren_match = re.search(r'\s*\([^)]*(?:' + '|'.join(edition_keywords) + r')[^)]*\)\s*$', canonical)
         if paren_match: canonical = canonical[:paren_match.start()]
         
-        for delimiter in [' - ', ': ', ' – ', ' — ']:
+        # v28.29.7 — flexible delimiter list
+        for delimiter in [' - ', ' – ', ' — ', ': ', '- ', '– ', '— ']:
             if delimiter in canonical:
                 parts = canonical.split(delimiter)
                 if len(parts) >= 2:
@@ -6884,6 +6886,7 @@ def run_books_engine(trigger, df_all, df_history):
                     words = suffix_part.split()
                     if len(words) <= 4 and any(kw in suffix_part for kw in edition_keywords):
                         canonical = delimiter.join(parts[:-1])
+                        break
         
         for suffix in [' cd', ' audiobook', ' audio book', ' mp3', ' audio']:
             if canonical.endswith(suffix):
@@ -7786,14 +7789,21 @@ def run_books_v2_engine(trigger, df_pool, df_history, category_key):
         
         edition_keywords = [
             'edition', 'έκδοση', 'illustrated', 'εικονογραφημένο', 'εικονογραφημένη',
-            'collector', 'συλλεκτική', 'deluxe', 'anniversary', 'special', 'gift',
+            'collector', 'συλλεκτική', 'deluxe', 'anniversary', 'επετειακή',
+            'special', 'gift', 'reissue', 'limited', 'platinum',
             'paperback', 'hardcover', 'hardback', 'softcover', 'minalima',
             'gryffindor', 'slytherin', 'hufflepuff', 'ravenclaw', 'rehearsal',
         ]
         paren_match = re.search(r'\s*\([^)]*(?:' + '|'.join(edition_keywords) + r')[^)]*\)\s*$', canonical)
         if paren_match: canonical = canonical[:paren_match.start()]
         
-        for delimiter in [' - ', ': ', ' – ', ' — ']:
+        # v28.29.7 — Catch dash/colon-delimited edition suffixes even when
+        # the catalog title has no leading space before the delimiter
+        # (e.g. "Dune- Deluxe Edition" — dash glued to "Dune"). Order
+        # matters: longer / more specific delimiters first, then less
+        # specific ones. A break after a successful strip prevents
+        # double-stripping.
+        for delimiter in [' - ', ' – ', ' — ', ': ', '- ', '– ', '— ']:
             if delimiter in canonical:
                 parts = canonical.split(delimiter)
                 if len(parts) >= 2:
@@ -7801,6 +7811,7 @@ def run_books_v2_engine(trigger, df_pool, df_history, category_key):
                     words = suffix_part.split()
                     if len(words) <= 4 and any(kw in suffix_part for kw in edition_keywords):
                         canonical = delimiter.join(parts[:-1])
+                        break
         for suffix in [' cd', ' audiobook', ' audio book', ' mp3', ' audio']:
             if canonical.endswith(suffix):
                 canonical = canonical[:-len(suffix)]
@@ -7969,6 +7980,15 @@ def run_books_v2_engine(trigger, df_pool, df_history, category_key):
                 audiobook_keywords = [' cd', ' audiobook', ' audio book', ' mp3', 'ηχητικό', 'ακουστικό']
                 return any(kw in str(title).lower() for kw in audiobook_keywords)
             sp = sp[~sp['Title'].apply(is_audiobook)]
+        
+        # v28.29.7 — Capture the "catalog truth" SS total BEFORE the cover
+        # filter runs. The slot allocator should use this stable number so
+        # the SS-slot count is determined by series depth as the user sees
+        # it — not shrunken by the cover filter. Without this, a 7-book
+        # series whose cover filter trims to 4 candidates would have the
+        # allocator switch from "7 books → 4 SS slots" to "5 books → 3 SS
+        # slots", leaving one valid candidate sitting unused.
+        n_series_total_for_allocation = (len(sp) + 1) if has_series else 0
         
         # v28.29.3 — COVER HARD FILTER on SS pool. The trigger cover
         # (soft/hard/board) acts as a preference for the same-series pool.
@@ -8348,7 +8368,15 @@ def run_books_v2_engine(trigger, df_pool, df_history, category_key):
     #
     # Adjustment: n_series_total = n_series_available + 1 (when the trigger
     # has a series). For no-series triggers, total stays 0 → all OB.
-    n_series_total = (n_series_available + 1) if has_series else 0
+    # v28.29.7 — Use the pre-cover-filter total when available so the
+    # slot allocator sees the "catalog truth" series depth rather than the
+    # post-filter shrunken count. Falls back to post-filter computation
+    # when no cover-filter block ran (no series on trigger, or complete
+    # box set path that skips the entire SS pool construction).
+    try:
+        n_series_total = n_series_total_for_allocation
+    except NameError:
+        n_series_total = (n_series_available + 1) if has_series else 0
     
     # v28.29.3 — Box-set triggers use a different allocation strategy.
     # The two-set rule was designed for individual-book triggers and gives
@@ -8406,10 +8434,11 @@ def run_books_v2_engine(trigger, df_pool, df_history, category_key):
     # spec: "if we're in 5 or below books in the series".
     diversity_enabled = (n_series_total <= 5)
     used_other_series = set()
+    used_other_authors = set()   # v28.29.7 — author-based diversity
     
     if diversity_enabled:
         fill_notes.append(f"⚙ Diversity enabled (n_total_in_series={n_series_total} ≤ 5): "
-                          f"at most 1 OB pick per other-series")
+                          f"at most 1 OB pick per other-series AND per other-author")
     else:
         fill_notes.append(f"⚙ Diversity OFF (n_total_in_series={n_series_total} > 5): "
                           f"unrestricted OB picks")
@@ -8434,6 +8463,36 @@ def run_books_v2_engine(trigger, df_pool, df_history, category_key):
             return ''
         return s
     
+    def _author_set(row):
+        """Return the set of normalized author names for a candidate row.
+        Empty set if author is missing — those rows are exempt from author
+        diversity (treated like standalone titles).
+        
+        v28.29.7 — Normalize each author name by collapsing middle initials
+        / middle names so 'Sarah J. Maas' and 'Sarah Maas' match. The
+        normalization takes the first word + last word of the name (after
+        stripping periods and extra whitespace). This handles common
+        catalog inconsistencies: 'Sarah J. Maas' / 'Sarah Maas', 'J.R.R.
+        Tolkien' / 'J. R. R. Tolkien'. Pure single-name authors are
+        kept as-is.
+        """
+        val = row.get('Συγγραφέας', '')
+        try:
+            if pd.isna(val): return set()
+        except (TypeError, ValueError):
+            pass
+        raw = _books_v2_extract_authors_set(val)
+        normalized = set()
+        for name in raw:
+            if not name: continue
+            cleaned = name.lower().replace('.', ' ').strip()
+            words = [w for w in cleaned.split() if w]
+            if len(words) >= 2:
+                normalized.add(f"{words[0]} {words[-1]}")
+            elif len(words) == 1:
+                normalized.add(words[0])
+        return normalized
+    
     def _next_series():
         """Pull the next non-dup series candidate, skipping used materials/titles."""
         for i, (_, row) in enumerate(series_list):
@@ -8450,12 +8509,19 @@ def run_books_v2_engine(trigger, df_pool, df_history, category_key):
         """Pull the next eligible other candidate.
         
         If enforce_diversity is True, skip (do NOT consume) any candidate
-        whose Σειρά βιβλίου has already been picked into an OB slot earlier
-        in this run. That preserves the candidate for a possible fallback
-        pass with diversity off.
+        that would violate diversity — either by Σειρά βιβλίου or by author.
+        Author diversity (v28.29.7) is the practical fallback for cases where
+        the catalog tags the same narrative series with inconsistent Σειρά
+        values (e.g. "Powerless" vs "Η Αδύναμη" vs blank for three books in
+        one Lauren Roberts series). Same-author books are almost always
+        same-narrative-series in romance/fantasy publishing.
         
-        Standalone titles (empty Σειρά βιβλίου) are always eligible — they
-        don't contribute to the diversity set and can be picked freely.
+        Candidates skipped due to diversity are NOT consumed — they remain
+        available for a possible fallback pass with diversity off.
+        
+        Books with no Σειρά βιβλίου AND no author are always eligible — each
+        is its own discovery. Books with no Σειρά but a known author DO
+        participate in author diversity.
         """
         for i, (_, row) in enumerate(other_list):
             if i in other_consumed: continue
@@ -8463,16 +8529,22 @@ def run_books_v2_engine(trigger, df_pool, df_history, category_key):
             if row['Material'] in used_materials or canonical in used_titles:
                 other_consumed.add(i)
                 continue
-            # Diversity check
+            # Diversity check — series AND author
             if enforce_diversity:
                 cand_series = _series_value(row)
                 if cand_series and cand_series in used_other_series:
-                    continue  # skip, do NOT consume — leave for fallback pass
+                    continue  # same series as a previous OB pick — skip
+                cand_authors = _author_set(row)
+                if cand_authors and (cand_authors & used_other_authors):
+                    continue  # at least one author overlaps a previous OB pick
             # Accept
             other_consumed.add(i)
             cand_series = _series_value(row)
             if cand_series:
                 used_other_series.add(cand_series)
+            cand_authors = _author_set(row)
+            if cand_authors:
+                used_other_authors.update(cand_authors)
             return row
         return None
     
