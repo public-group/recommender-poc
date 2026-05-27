@@ -102,7 +102,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v28.29.7 — OB diversity now includes AUTHOR (same author = almost always same narrative series in romance/fantasy, robust fallback for catalogs that tag Σειρά inconsistently — Powerless/Η Αδύναμη/blank for one Lauren Roberts trilogy). Canonical dedup also catches "X- Edition Y" patterns with flexible dash delimiters (no leading space required: "Dune- Deluxe Edition" → "dune") and the keywords list adds reissue, limited, platinum, επετειακή. Both fixes target the same root issue: data inconsistencies in the catalog.
+        🟢 Engine v28.30 — New cluster: Σχολικά Βιβλία (Greek School Books). Trigger flow: slots 1-3 = same publisher + same class + different subject (so a parent buying Άλγεβρα Α' Λυκείου Πατάκη also sees Φυσική / Ιστορία / Χημεία Α' Λυκείου Πατάκη); slots 4-6 = age-targeted stationery (different curated hierarchy list per Προσχολική / Δημοτικό / Γυμνάσιο / Λύκειο stage — pre-school gets coloring/craft, Δημοτικό gets basics + colors, Γυμνάσιο writing essentials, Λύκειο exam-prep); slots 7-10 = more school books via fallback chain (relax publisher → adjacent class → any publisher), overflow with stationery if school pool exhausted. Stationery uses round-robin across hierarchies (no 3 notebooks back-to-back) and is sales-ranked within each age-appropriate hierarchy.
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -3634,6 +3634,207 @@ BOOKS_V2_CATEGORIES = {
 
 BOOKS_V2_CLUSTERS = set(BOOKS_V2_CATEGORIES.keys())
 
+# ═════════════════════════════════════════════════════════════
+# v28.30 — GREEK SCHOOL BOOKS ENGINE CONFIG
+# ═════════════════════════════════════════════════════════════
+# Trigger flow for "Greek School Books" cluster:
+#   1. Identify trigger's publisher (Εκδότης), class (Τάξη), subject (Μάθημα)
+#   2. Slots 1-3: same-publisher + same-class + DIFFERENT subject school books
+#      (cover other subjects for the same kid — parent buys math, we suggest
+#      physics, history, biology from the same publisher and grade).
+#   3. Slots 4-6: stationery, age-targeted to the trigger's class. Stage
+#      mapping below — Νηπιαγωγείο gets coloring/craft, Δημοτικό gets basics
+#      + colors, Γυμνάσιο gets writing essentials, Λύκειο gets exam-prep
+#      supplies.
+#   4. Slots 7-10: more school books via a fallback chain (relax publisher
+#      → relax class within stage → any publisher same-class). If exhausted,
+#      fill with more stationery.
+
+# Scoring constants — hard filters drive the funnel; scores are tiebreakers
+# within the filtered candidate set, with sales as the dominant signal.
+SB_S_SAME_PUBLISHER = 200_000   # same Εκδότης (primary filter)
+SB_S_SAME_CLASS     = 150_000   # same Τάξη (primary filter; ties to age)
+SB_S_DIFFERENT_SUBJECT = 50_000 # subject ≠ trigger (preference, not filter)
+SB_S_SAME_STAGE     =  30_000   # fallback when class mismatches
+SB_S_ADJACENT_CLASS =  20_000   # fallback for off-by-one grade
+SB_S_AVAIL_BONUS    =       2   # tiebreaker — in-stock first
+
+# Stationery scoring — within an age-appropriate hierarchy, sales rank
+# within hierarchy + hierarchy-priority bonus.
+SB_STAT_S_HIER_PRIORITY = 100_000   # multiplied by hierarchy-tier weight
+SB_STAT_S_AVAIL_BONUS   =       2
+
+# v28.30 — Greek class → school stage mapping.
+# The stage is used both for stationery age-targeting and as a fallback
+# "broaden the class filter" signal. Class strings in the catalog use
+# semicolon-separated values for multi-grade workbooks; we treat any
+# overlap as a match.
+SB_CLASS_TO_STAGE = {
+    "Προνήπιο":        "Προσχολική",
+    "Νηπιαγωγείο":     "Προσχολική",
+    "Α' Δημοτικού":    "Δημοτικό",
+    "Β' Δημοτικού":    "Δημοτικό",
+    "Γ' Δημοτικού":    "Δημοτικό",
+    "Δ' Δημοτικού":    "Δημοτικό",
+    "Ε' Δημοτικού":    "Δημοτικό",
+    "ΣΤ' Δημοτικού":   "Δημοτικό",
+    "Α' Γυμνασίου":    "Γυμνάσιο",
+    "Β' Γυμνασίου":    "Γυμνάσιο",
+    "Γ' Γυμνασίου":    "Γυμνάσιο",
+    "Α' Λυκείου":      "Λύκειο",
+    "Β' Λυκείου":      "Λύκειο",
+    "Γ' Λυκείου":      "Λύκειο",
+}
+
+# v28.30 — Stage → stationery hierarchy ranking.
+# Per user requirement "stationery should be based on the kids age, not
+# just sales". For each school stage, we define the hierarchies that are
+# age-appropriate, ordered by relevance. Hierarchies earlier in the list
+# get a stronger priority bonus, then ranked-by-sales within hierarchy.
+#
+# Source list provided by user in the original spec (top stationery
+# hierarchies by sales) — curated and reordered per stage:
+#   - Προσχολική: art/craft/coloring (no pens, no rulers, no highlighters)
+#   - Δημοτικό:   basics + coloring (pencils, erasers, colored pencils,
+#                 markers, notebooks, scissors, art paper)
+#   - Γυμνάσιο:   writing essentials + organization (pens, highlighters,
+#                 folders, geometric tools, correction)
+#   - Λύκειο:     exam-prep + advanced (gel pens, ink pens, highlighters,
+#                 post-its, presentation folders, bookmarks)
+SB_STAGE_TO_STATIONERY = {
+    "Προσχολική": [
+        "ΧΡΩΜΑΤΙΣΤΑ ΜΟΛΥΒΙΑ",
+        "ΚΗΡΟΜΠΟΓΙΕΣ-ΠΑΣΤΕΛ",
+        "ΧΡΩΜΑΤΑ ΖΩΓΡΑΦΙΚΗΣ",
+        "ΠΗΛΟΣ-ΠΛΑΣΤΕΛΙΝΗ",
+        "ΠΙΝΕΛΑ",
+        "ΑΥΤΟΚΟΛΛΗΤΑ-STICKERS",
+        "ΨΑΛΙΔΙΑ",
+        "ΜΑΡΚΑΔΟΡΟΙ",
+        "ΚΟΛΛΕΣ",
+        "ΜΠΛΟΚ-ΧΑΡΤΙΑ",
+        "ACCESSORIES ΧΕΙΡΟΤΕΧΝΙΑΣ",
+    ],
+    "Δημοτικό": [
+        "ΤΕΤΡΑΔΙΑ",
+        "ΜΟΛΥΒΙΑ",
+        "ΧΡΩΜΑΤΙΣΤΑ ΜΟΛΥΒΙΑ",
+        "ΓΟΜΕΣ",
+        "ΞΥΣΤΡΕΣ",
+        "ΚΑΣΕΤΙΝΕΣ-ΘΗΚΕΣ",
+        "ΜΑΡΚΑΔΟΡΟΙ",
+        "ΚΗΡΟΜΠΟΓΙΕΣ-ΠΑΣΤΕΛ",
+        "ΨΑΛΙΔΙΑ",
+        "ΜΠΛΟΚ-ΧΑΡΤΙΑ",
+        "ΧΡΩΜΑΤΑ ΖΩΓΡΑΦΙΚΗΣ",
+        "ΟΡΓΑΝΑ ΣΧΕΔΙΑΣΗΣ",
+        "ΦΑΚΕΛΟΙ ΜΕΤΑΦΟΡΑΣ",
+        "ΚΟΛΛΕΣ",
+        "ΑΥΤΟΚΟΛΛΗΤΑ-STICKERS",
+        "ΜΑΡΚΑΔΟΡΟΙ ΣΧΕΔΙΟΥ-ΕΙΔΙΚΩΝ ΧΡΗΣΕΩΝ",
+    ],
+    "Γυμνάσιο": [
+        "ΤΕΤΡΑΔΙΑ",
+        "ΣΤΥΛΟ ΔΙΑΡΚΕΙΑΣ",
+        "ΣΤΥΛΟ GEL",
+        "ΜΑΡΚΑΔΟΡΟΙ ΥΠΟΓΡΑΜΜΙΣΗΣ",
+        "ΦΑΚΕΛΟΙ ΜΕΤΑΦΟΡΑΣ",
+        "ΝΤΟΣΙΕ",
+        "ΟΡΓΑΝΑ ΣΧΕΔΙΑΣΗΣ",
+        "ΔΙΟΡΘΩΤΙΚΑ",
+        "ΚΑΣΕΤΙΝΕΣ-ΘΗΚΕΣ",
+        "ΜΟΛΥΒΙΑ",
+        "ΓΟΜΕΣ",
+        "ΞΥΣΤΡΕΣ",
+        "POST-IT-ΧΑΡΤΑΚΙΑ ΣΗΜΕΙΩΣΕΩΝ",
+        "ΘΗΚΕΣ-ΖΕΛΑΤΙΝΕΣ",
+        "ΧΡΩΜΑΤΙΣΤΑ ΜΟΛΥΒΙΑ",
+        "ΚΟΛΛΕΣ",
+        "ΜΠΛΟΚ-ΧΑΡΤΙΑ",
+    ],
+    "Λύκειο": [
+        "ΤΕΤΡΑΔΙΑ",
+        "ΣΤΥΛΟ GEL",
+        "ΣΤΥΛΟ ΥΓΡΗΣ ΜΕΛΑΝΗΣ",
+        "ΜΑΡΚΑΔΟΡΟΙ ΥΠΟΓΡΑΜΜΙΣΗΣ",
+        "POST-IT-ΧΑΡΤΑΚΙΑ ΣΗΜΕΙΩΣΕΩΝ",
+        "ΦΑΚΕΛΟΙ ΜΕΤΑΦΟΡΑΣ",
+        "ΝΤΟΣΙΕ ΣΕΜΙΝΑΡΙΩΝ - ΠΑΡΟΥΣΙΑΣΗΣ",
+        "ΣΕΛΙΔΟΔΕΙΚΤΕΣ",
+        "ΔΙΟΡΘΩΤΙΚΑ",
+        "ΣΤΥΛΟ ΔΙΑΡΚΕΙΑΣ",
+        "ΚΑΣΕΤΙΝΕΣ-ΘΗΚΕΣ",
+        "ΟΡΓΑΝΑ ΣΧΕΔΙΑΣΗΣ",
+        "ΘΗΚΕΣ-ΖΕΛΑΤΙΝΕΣ",
+        "ΝΤΟΣΙΕ",
+        "ΜΟΛΥΒΙΑ",
+        "ΓΟΜΕΣ",
+        "COPIERS PAPER",
+        "ΜΠΛΟΚ",
+    ],
+}
+
+# Default stage when class can't be identified (no Τάξη, or "0", or
+# multi-grade book): use Γυμνάσιο as the most universal age stationery list
+# (covers writing, organization, color — works for both younger and older).
+SB_DEFAULT_STAGE = "Γυμνάσιο"
+
+
+def _sb_parse_multi_value(val):
+    """Parse a catalog value that may contain semicolon-separated entries.
+    Returns a list of stripped non-empty entries. Handles NaN/0/'-' as empty.
+    Used for Τάξη_sales (multi-grade workbooks), Μάθημα_sales (multi-subject
+    review books)."""
+    if val is None: return []
+    try:
+        if pd.isna(val): return []
+    except (TypeError, ValueError):
+        pass
+    s = str(val).strip()
+    if not s or s in ('0', '-', 'nan', 'N/A', 'None'):
+        return []
+    return [p.strip() for p in s.split(';') if p.strip() and p.strip() not in ('0', '-', 'nan')]
+
+
+def _sb_class_to_stage(class_label):
+    """Map a class label to its school stage. Multi-grade entries return
+    the stage of the FIRST grade (workbooks spanning Δημοτικό only map to
+    Δημοτικό; workbooks crossing stages get the youngest stage)."""
+    grades = _sb_parse_multi_value(class_label)
+    if not grades: return None
+    for g in grades:
+        stage = SB_CLASS_TO_STAGE.get(g)
+        if stage: return stage
+    # Unknown label — leave None so the engine can fall back to default
+    return None
+
+
+def _sb_normalize_publisher(val):
+    """Normalize publisher for comparison (strip, casefold)."""
+    if val is None: return ''
+    try:
+        if pd.isna(val): return ''
+    except (TypeError, ValueError):
+        pass
+    return str(val).strip().lower()
+
+
+def _sb_get_stationery_priority(hierarchy, stage):
+    """For a stationery row's hierarchy and the trigger's stage, return
+    a tier-priority weight (0 = not age-appropriate, 1 = least relevant,
+    higher = more relevant). The weight is the REVERSE rank within the
+    stage's curated hierarchy list — top of list gets highest weight.
+    
+    Hierarchies not in the stage's list return 0 — they're filtered out.
+    """
+    hierarchies = SB_STAGE_TO_STATIONERY.get(stage, [])
+    try:
+        idx = hierarchies.index(hierarchy)
+        return len(hierarchies) - idx
+    except ValueError:
+        return 0
+
+
 # Scoring constants for the "Other Books" deep-spec match.
 # v28.29.1 — publishing-series + format signals added.
 #
@@ -5274,6 +5475,14 @@ def load_all_data():
     if dint_books.empty:
         dint_books = _load('Sheet1')   # fallback: workbook ships with default sheet name
     
+    # ── v28.30: Greek School Books from
+    # "Recommendations GitHub Books.xlsx". 3,814 rows, Level 2='Greek School Books'.
+    # 127-col sheet (Stibo dual-source: _sales and _catalog suffixes for every
+    # attribute). Key cols: Τάξη_sales, Μάθημα_sales, Εκδότης_sales,
+    # Συγγραφέας_sales. Powers the same-publisher + same-class + different-
+    # subject recommendation engine with age-targeted stationery cross-sell.
+    dgr_school = _load('Greek School Books')
+    
     if not dp.empty:
         parts = [dp[c].fillna('').astype(str).str.strip() for c in COMPAT_COLS if c in dp.columns]
         if parts:
@@ -5295,12 +5504,14 @@ def load_all_data():
         dgr_books[CC] = ''
     if not dint_books.empty and CC not in dint_books.columns:
         dint_books[CC] = ''
+    if not dgr_school.empty and CC not in dgr_school.columns:
+        dgr_school[CC] = ''
     
-    return dp, dm, dh, ds, db, dl, dv, dper, dstat, dair, dfloor, dgaming, dsda, dmda, ddt, dgr_books, dint_books, available_sheets
+    return dp, dm, dh, ds, db, dl, dv, dper, dstat, dair, dfloor, dgaming, dsda, dmda, ddt, dgr_books, dint_books, dgr_school, available_sheets
 
 try:
 
-    df_products, df_music, df_history, df_slots, df_books, df_laptops, df_vacuums, df_peripherals, df_stationery, df_air, df_floor, df_gaming, df_sda, df_mda, df_desktops, df_greek_books, df_int_books, sheets_loaded = load_all_data()
+    df_products, df_music, df_history, df_slots, df_books, df_laptops, df_vacuums, df_peripherals, df_stationery, df_air, df_floor, df_gaming, df_sda, df_mda, df_desktops, df_greek_books, df_int_books, df_school_books, sheets_loaded = load_all_data()
     compat_cols_found = [c for c in COMPAT_COLS if c in df_products.columns]
 except Exception as e:
     st.error(f"🚨 Error loading data: {e}")
@@ -5395,6 +5606,8 @@ L2_CHILDREN = {
          "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z'/%3E%3Cpath d='M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z'/%3E%3C/svg%3E"},
         {"key": "International Books", "label": "Ξενόγλωσσα\nΒιβλία",
          "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3Cline x1='2' y1='12' x2='22' y2='12'/%3E%3Cpath d='M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z'/%3E%3C/svg%3E"},
+        {"key": "Greek School Books", "label": "Σχολικά\nΒιβλία",
+         "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M22 10v6M2 10l10-5 10 5-10 5z'/%3E%3Cpath d='M6 12v5c3 3 9 3 12 0v-5'/%3E%3C/svg%3E"},
     ],
     "Telephony": [
         {"key": "Smartphones", "label": "Smart-\nphones",
@@ -6530,6 +6743,65 @@ else:
                                 lambda x: 0 if (pd.isna(x) or str(x).strip().lower() in ['', '0', '-', 'nan']) else 1)
                             matching_books = matching_books.sort_values('_has_series', ascending=False)
                         trigger = matching_books.iloc[0]
+    
+    # ── v28.30: Greek School Books ──────────────────────────────
+    elif active_cluster == "Greek School Books":
+        if df_school_books is None or df_school_books.empty:
+            sheets_str = ", ".join(sheets_loaded) if sheets_loaded else "(none)"
+            st.sidebar.warning(
+                "Sheet 'Greek School Books' is empty or missing.\n\n"
+                f"**Sheets loaded**: {sheets_str}\n\n"
+                "Make sure `Recommendations GitHub Books.xlsx` includes the 'Greek School Books' sheet."
+            )
+            st.stop()
+        sb_pool = df_school_books[
+            (df_school_books['Level 1'] == 'Books') &
+            (df_school_books['Level 2'] == 'Greek School Books')
+        ].copy()
+        if sb_pool.empty:
+            sb_pool = df_school_books[df_school_books['Level 1'] == 'Books'].copy()
+        
+        if not sb_pool.empty:
+            # Filter by Class (Τάξη) — primary axis since the engine recommends
+            # same-publisher + same-class + different-subject.
+            if 'Τάξη_sales' in sb_pool.columns:
+                tc = sb_pool['Τάξη_sales'].fillna('').astype(str)
+                tc = tc[(tc != '0') & (tc != '') & (tc != '-') & (tc.str.lower() != 'nan')]
+                if len(tc) > 0:
+                    class_counts = tc.value_counts()
+                    class_items = [(f"{name} ({count})", name) for name, count in class_counts.items()]
+                    st.sidebar.markdown('<p class="sidebar-section">Φιλτράρισμα ανά Τάξη</p>', unsafe_allow_html=True)
+                    class_options = ['Όλες οι τάξεις'] + [item[0] for item in class_items[:50]]
+                    class_display = {item[0]: item[1] for item in class_items[:50]}
+                    selected_class_display = st.sidebar.selectbox("", class_options, label_visibility="collapsed", key="sb_class")
+                    if selected_class_display != 'Όλες οι τάξεις':
+                        actual_class = class_display.get(selected_class_display, selected_class_display)
+                        sb_pool = sb_pool[sb_pool['Τάξη_sales'].fillna('').astype(str) == actual_class]
+            
+            # Filter by Publisher (Εκδότης) — secondary, optional
+            if 'Εκδότης_sales' in sb_pool.columns:
+                pc = sb_pool['Εκδότης_sales'].fillna('').astype(str)
+                pc = pc[(pc != '0') & (pc != '') & (pc.str.lower() != 'nan')]
+                if len(pc) > 0:
+                    pub_counts = pc.value_counts().head(40)
+                    pub_items = [(f"{name} ({count})", name) for name, count in pub_counts.items()]
+                    st.sidebar.markdown('<p class="sidebar-section">Φιλτράρισμα ανά Εκδότη (προαιρετικό)</p>', unsafe_allow_html=True)
+                    pub_options = ['Όλοι οι εκδότες'] + [item[0] for item in pub_items]
+                    pub_display = {item[0]: item[1] for item in pub_items}
+                    selected_pub_display = st.sidebar.selectbox("", pub_options, label_visibility="collapsed", key="sb_pub")
+                    if selected_pub_display != 'Όλοι οι εκδότες':
+                        actual_pub = pub_display.get(selected_pub_display, selected_pub_display)
+                        sb_pool = sb_pool[sb_pool['Εκδότης_sales'].fillna('').astype(str) == actual_pub]
+            
+            st.sidebar.markdown('<p class="sidebar-section">Επιλέξτε Σχολικό Βιβλίο</p>', unsafe_allow_html=True)
+            if not sb_pool.empty:
+                if 'Sum of Sales' in sb_pool.columns:
+                    sb_pool = sb_pool.sort_values('Sum of Sales', ascending=False, na_position='last')
+                titles = sb_pool['Title'].dropna().unique()
+                if len(titles) > 0:
+                    sel = st.sidebar.selectbox("", titles, label_visibility="collapsed", key="sb_sel")
+                    if sel:
+                        trigger = sb_pool[sb_pool['Title'] == sel].iloc[0]
 
 
     elif active_cluster == "PS5 Console":
@@ -8640,9 +8912,329 @@ def run_books_v2_engine(trigger, df_pool, df_history, category_key):
         return pd.DataFrame(), diag, slot_notes, pd.DataFrame()
 
 
-# ─────────────────────────────────────────────────────────────
-# 🟢 SMARTPHONES ENGINE (UPDATED FOR HIGH-END BRAND & BEST SELLER FALLBACK)
-# ─────────────────────────────────────────────────────────────
+# ═════════════════════════════════════════════════════════════
+# v28.30 — GREEK SCHOOL BOOKS ENGINE
+# ═════════════════════════════════════════════════════════════
+def run_school_books_engine(trigger, df_school_pool, df_stationery_pool, df_history):
+    """Σχολικά Βιβλία recommender.
+    
+    Layout:
+      - Slots 1-3 (primary):   school-book recs (same publisher + same class
+                               + different subject; fallback chain when sparse)
+      - Slots 4-6 (guaranteed): age-targeted stationery
+      - Slots 7-10 (overflow):  more school books via fallback chain; if
+                                exhausted, fill with more age-targeted stationery
+    
+    Per user spec:
+      "showcase books from the same publisher, for the same age, but different
+       classes [= subjects]; also show stationery at slots 4,5,6, and more
+       stationery if you don't have matches for similar school books;
+       stationery should be based on the kids age, not just sales."
+    """
+    diag = []
+    slot_notes = {1: [], 2: [], 3: [], 4: []}
+    
+    # ── Helper: bulletproof numeric for scoring (matches v28.29.3 pattern)
+    def _safe_num(v):
+        try:
+            if v is None: return 0.0
+            if pd.isna(v): return 0.0
+            return float(v)
+        except (TypeError, ValueError):
+            return 0.0
+    
+    # ──────────────────────────────────────────────────────────
+    # STEP 0 — TRIGGER ATTRIBUTES
+    # ──────────────────────────────────────────────────────────
+    tm   = trigger.get('Material', None)
+    tt   = str(trigger.get('Title', ''))
+    
+    # School Books sheet uses _sales-suffixed columns for the rich attributes;
+    # the Stationery sheet uses plain ones. We always pull from _sales here.
+    t_publisher_raw = trigger.get('Εκδότης_sales', trigger.get('Εκδότης', ''))
+    t_class_raw     = trigger.get('Τάξη_sales',    trigger.get('Τάξη', ''))
+    t_subject_raw   = trigger.get('Μάθημα_sales',  trigger.get('Μάθημα', ''))
+    
+    t_publisher = _sb_normalize_publisher(t_publisher_raw)
+    t_classes   = _sb_parse_multi_value(t_class_raw)   # list — multi-grade workbooks
+    t_subjects  = _sb_parse_multi_value(t_subject_raw)
+    t_stage     = _sb_class_to_stage(t_class_raw) or SB_DEFAULT_STAGE
+    
+    diag.append(("0. Trigger", "", f"Cluster: Greek School Books"))
+    diag.append(("   Trigger (attrs)", "", 
+                 f"Publisher: '{t_publisher_raw}' | Class: {t_classes or '∅'} | "
+                 f"Subject: {t_subjects or '∅'} | Stage: '{t_stage}'"))
+    
+    used_materials = {tm} if tm is not None else set()
+    
+    # ──────────────────────────────────────────────────────────
+    # STEP 1 — SCHOOL-BOOK CANDIDATE POOL (multi-tier filter)
+    # ──────────────────────────────────────────────────────────
+    sb_notes = ["=== STEP 1: SCHOOL-BOOK POOL (multi-tier filter) ==="]
+    
+    pool = df_school_pool.copy() if df_school_pool is not None else pd.DataFrame()
+    if not pool.empty and 'Material' in pool.columns:
+        pool = pool[pool['Material'] != tm].copy()
+    
+    # Cache normalized column extracts for repeated filtering
+    if not pool.empty:
+        pool['_pub_norm'] = pool['Εκδότης_sales'].apply(_sb_normalize_publisher) if 'Εκδότης_sales' in pool.columns else ''
+        if 'Τάξη_sales' in pool.columns:
+            pool['_classes'] = pool['Τάξη_sales'].apply(_sb_parse_multi_value)
+        else:
+            pool['_classes'] = [[] for _ in range(len(pool))]
+        if 'Μάθημα_sales' in pool.columns:
+            pool['_subjects'] = pool['Μάθημα_sales'].apply(_sb_parse_multi_value)
+        else:
+            pool['_subjects'] = [[] for _ in range(len(pool))]
+        pool['_stage'] = pool['_classes'].apply(
+            lambda lst: _sb_class_to_stage(';'.join(lst)) if lst else None)
+    
+    # Tier filters — produced as masks for transparency in the funnel
+    def _mask_same_publisher(p): return (p['_pub_norm'] == t_publisher) & (t_publisher != '')
+    def _mask_same_class(p):
+        if not t_classes: return pd.Series([False] * len(p), index=p.index)
+        t_set = set(t_classes)
+        return p['_classes'].apply(lambda lst: bool(set(lst) & t_set))
+    def _mask_different_subject(p):
+        if not t_subjects:
+            # No trigger subject → don't enforce "different"; everything qualifies
+            return pd.Series([True] * len(p), index=p.index)
+        t_set = set(t_subjects)
+        return p['_subjects'].apply(lambda lst: bool(lst) and not (set(lst) & t_set))
+    def _mask_same_stage(p):
+        return p['_stage'] == t_stage
+    
+    sb_notes.append(f"Total school-book catalog (excl. trigger): {len(pool)}")
+    
+    # Build tiered candidate buckets — the slot filler consumes them in order
+    if not pool.empty:
+        tier1_mask = _mask_same_publisher(pool) & _mask_same_class(pool) & _mask_different_subject(pool)
+        tier2_mask = _mask_same_publisher(pool) & _mask_same_stage(pool)  & _mask_different_subject(pool) & (~tier1_mask)
+        tier3_mask = _mask_same_class(pool)     & _mask_different_subject(pool) & (~tier1_mask) & (~tier2_mask)
+        tier4_mask = _mask_same_stage(pool)     & _mask_different_subject(pool) & (~tier1_mask) & (~tier2_mask) & (~tier3_mask)
+        
+        tier1 = pool[tier1_mask].copy()
+        tier2 = pool[tier2_mask].copy()
+        tier3 = pool[tier3_mask].copy()
+        tier4 = pool[tier4_mask].copy()
+        
+        sb_notes.append(f"  Tier 1 — same Εκδότης + same Τάξη + different Μάθημα: {len(tier1)} matches")
+        sb_notes.append(f"  Tier 2 — same Εκδότης + same stage ({t_stage}) + different Μάθημα: {len(tier2)} matches")
+        sb_notes.append(f"  Tier 3 — same Τάξη + different Μάθημα (any publisher): {len(tier3)} matches")
+        sb_notes.append(f"  Tier 4 — same stage + different Μάθημα (any publisher): {len(tier4)} matches")
+    else:
+        tier1 = tier2 = tier3 = tier4 = pd.DataFrame()
+        sb_notes.append("  No school-book catalog available")
+    
+    # Score & sort each tier (sales primary, availability tiebreaker)
+    def _score_tier(t, tier_base):
+        if t.empty: return t
+        t = t.copy()
+        t['_sales'] = t['Sum of Sales'].apply(_safe_num) if 'Sum of Sales' in t.columns else 0.0
+        # In-stock bonus
+        if 'AVAILABILITY' in t.columns:
+            t['_avail'] = t['AVAILABILITY'].apply(
+                lambda v: SB_S_AVAIL_BONUS if str(v).strip() == 'Άμεσα Διαθέσιμο' else 0)
+        else:
+            t['_avail'] = 0
+        t['Final_Score'] = tier_base + t['_sales'] + t['_avail']
+        return t.sort_values('Final_Score', ascending=False)
+    
+    tier1 = _score_tier(tier1, SB_S_SAME_PUBLISHER + SB_S_SAME_CLASS + SB_S_DIFFERENT_SUBJECT)
+    tier2 = _score_tier(tier2, SB_S_SAME_PUBLISHER + SB_S_SAME_STAGE  + SB_S_DIFFERENT_SUBJECT)
+    tier3 = _score_tier(tier3, SB_S_SAME_CLASS     + SB_S_DIFFERENT_SUBJECT)
+    tier4 = _score_tier(tier4, SB_S_SAME_STAGE     + SB_S_DIFFERENT_SUBJECT)
+    
+    # Concatenate tier-ordered (high → low priority) for sequential consumption
+    school_pool = pd.concat([tier1, tier2, tier3, tier4], ignore_index=True) if any(len(t) > 0 for t in [tier1, tier2, tier3, tier4]) else pd.DataFrame()
+    sb_notes.append(f"  → Combined ordered pool: {len(school_pool)} candidates")
+    
+    slot_notes[1] = sb_notes
+    diag.append(("1. School-Book Pool", len(school_pool),
+                 f"T1={len(tier1)} T2={len(tier2)} T3={len(tier3)} T4={len(tier4)}"))
+    
+    # ──────────────────────────────────────────────────────────
+    # STEP 2 — STATIONERY POOL (age-targeted)
+    # ──────────────────────────────────────────────────────────
+    st_notes = ["=== STEP 2: STATIONERY POOL (age-targeted) ==="]
+    
+    stat_pool = pd.DataFrame()
+    if df_stationery_pool is not None and not df_stationery_pool.empty:
+        stage_hierarchies = SB_STAGE_TO_STATIONERY.get(t_stage, [])
+        if not stage_hierarchies:
+            st_notes.append(f"⚠ No stationery hierarchies configured for stage '{t_stage}' — using default '{SB_DEFAULT_STAGE}'")
+            stage_hierarchies = SB_STAGE_TO_STATIONERY.get(SB_DEFAULT_STAGE, [])
+        
+        st_notes.append(f"Stage '{t_stage}' → age-appropriate hierarchies "
+                        f"(in priority order): {len(stage_hierarchies)}")
+        st_notes.append(f"  {', '.join(stage_hierarchies[:8])}{'…' if len(stage_hierarchies) > 8 else ''}")
+        
+        stat_pool = df_stationery_pool[df_stationery_pool['Hierarchy'].isin(stage_hierarchies)].copy()
+        st_notes.append(f"Pool after hierarchy filter: {len(stat_pool)} candidates")
+        
+        if not stat_pool.empty:
+            # Score = priority(hierarchy) × tier_weight + sales (in-stock tiebreaker).
+            # Priority weight gives top-of-list hierarchies a multi-million-point
+            # head-start; sales determines ranking WITHIN a hierarchy. Combined,
+            # we visit hierarchies in user-curated order, picking the best-seller
+            # within each.
+            stat_pool['_priority'] = stat_pool['Hierarchy'].apply(
+                lambda h: _sb_get_stationery_priority(h, t_stage))
+            stat_pool['_sales'] = stat_pool['Sum of Sales'].apply(_safe_num) if 'Sum of Sales' in stat_pool.columns else 0.0
+            if 'AVAILABILITY' in stat_pool.columns:
+                stat_pool['_avail'] = stat_pool['AVAILABILITY'].apply(
+                    lambda v: SB_STAT_S_AVAIL_BONUS if str(v).strip() == 'Άμεσα Διαθέσιμο' else 0)
+            else:
+                stat_pool['_avail'] = 0
+            
+            # To "visit each hierarchy in order then go best-seller", we sort
+            # primarily by priority (desc), then by sales (desc) within. The
+            # slot filler then does round-robin across hierarchies so we don't
+            # stack 6 notebooks back-to-back.
+            stat_pool['Final_Score'] = (
+                stat_pool['_priority'] * SB_STAT_S_HIER_PRIORITY
+                + stat_pool['_sales']
+                + stat_pool['_avail']
+            )
+            stat_pool = stat_pool.sort_values(['_priority', '_sales'], ascending=[False, False])
+    else:
+        st_notes.append("⚠ Stationery sheet not loaded")
+    
+    slot_notes[2] = st_notes
+    diag.append(("2. Stationery Pool", len(stat_pool), f"Stage='{t_stage}'"))
+    
+    # ──────────────────────────────────────────────────────────
+    # STEP 3 — SLOT ALLOCATION
+    # ──────────────────────────────────────────────────────────
+    # Default plan: slots 1-3 = SCHOOL, slots 4-6 = STATIONERY, slots 7-10 = SCHOOL (fallback).
+    # The filler reshapes when pools run dry — short school pool → stationery
+    # absorbs the deficit at slots 1-3; short school overflow → stationery
+    # absorbs slots 7-10.
+    base_plan = ['SCHOOL', 'SCHOOL', 'SCHOOL',
+                 'STATIONERY', 'STATIONERY', 'STATIONERY',
+                 'SCHOOL', 'SCHOOL', 'SCHOOL', 'SCHOOL']
+    
+    alloc_notes = [
+        "=== STEP 3: SLOT ALLOCATION ===",
+        f"Plan: {' '.join(s[:4] for s in base_plan)}",
+        f"Slots 1-3: School books (primary)",
+        f"Slots 4-6: Stationery (age-targeted, stage='{t_stage}')",
+        f"Slots 7-10: More school books (fallback chain); stationery overflow if exhausted",
+    ]
+    slot_notes[3] = alloc_notes
+    diag.append(("3. Slot Plan", "10 slots", "3 SS + 3 Stationery + 4 SS-fallback"))
+    
+    # ──────────────────────────────────────────────────────────
+    # STEP 4 — FILL THE 10 SLOTS
+    # ──────────────────────────────────────────────────────────
+    fill_notes = ["=== STEP 4: SLOT FILLING ==="]
+    
+    school_list = list(school_pool.iterrows()) if not school_pool.empty else []
+    stat_list   = list(stat_pool.iterrows())   if not stat_pool.empty   else []
+    school_consumed = set()
+    
+    # For stationery: track used materials AND used hierarchies, so we
+    # round-robin across hierarchies before repeating one (avoids 3 notebooks
+    # back to back).
+    stat_used_materials = set()
+    stat_used_hierarchies_in_round = set()
+    
+    def _next_school():
+        for i, (_, row) in enumerate(school_list):
+            if i in school_consumed: continue
+            mat = row.get('Material', None)
+            if mat in used_materials:
+                school_consumed.add(i); continue
+            school_consumed.add(i)
+            return row
+        return None
+    
+    def _next_stationery():
+        """Round-robin across hierarchies so we don't stack same-hierarchy
+        items. Once each hierarchy has been visited (within the available
+        pool), reset the round and start picking the next-best from each."""
+        nonlocal stat_used_hierarchies_in_round
+        for round_pass in range(3):  # safety cap — at most 3 round-robin passes
+            for _, row in stat_list:
+                mat = row.get('Material', None)
+                if mat in stat_used_materials: continue
+                h = row.get('Hierarchy', '')
+                if h in stat_used_hierarchies_in_round:
+                    continue   # save for the next round
+                # Accept
+                stat_used_materials.add(mat)
+                stat_used_hierarchies_in_round.add(h)
+                return row
+            # End of round — reset hierarchy tracking and try again
+            stat_used_hierarchies_in_round = set()
+        return None
+    
+    all_recs = []
+    for slot_idx, slot_type in enumerate(base_plan, start=1):
+        row = None
+        picked_from = None
+        
+        if slot_type == 'SCHOOL':
+            row = _next_school()
+            picked_from = 'school'
+            if row is None:
+                # Fallback: try stationery (slots 1-3 deficit OR slots 7-10 overflow)
+                row = _next_stationery()
+                picked_from = 'stationery (school exhausted)'
+        else:  # STATIONERY
+            row = _next_stationery()
+            picked_from = 'stationery'
+            if row is None:
+                # Stationery exhausted — try a school book to fill the slot
+                row = _next_school()
+                picked_from = 'school (stationery exhausted)'
+        
+        if row is None:
+            fill_notes.append(f"Slot {slot_idx}: EMPTY — both pools exhausted")
+            continue
+        
+        # Slot_Role label downstream
+        if picked_from.startswith('school'):
+            role = 'School Book' if slot_idx <= 3 else 'School Book (overflow)'
+            tier_note = ''
+            # Identify tier the row came from (for diagnostics)
+            row_score = _safe_num(row.get('Final_Score', 0))
+            if row_score >= SB_S_SAME_PUBLISHER + SB_S_SAME_CLASS:
+                tier_note = ' [T1: same pub + same class]'
+            elif row_score >= SB_S_SAME_PUBLISHER + SB_S_SAME_STAGE:
+                tier_note = ' [T2: same pub + same stage]'
+            elif row_score >= SB_S_SAME_CLASS:
+                tier_note = ' [T3: same class, any pub]'
+            else:
+                tier_note = ' [T4: same stage]'
+        else:
+            role = 'Stationery (age-targeted)'
+            tier_note = f" [{row.get('Hierarchy', '')}]"
+        
+        row_copy = row.copy()
+        row_copy['Assigned_Slot'] = slot_idx
+        row_copy['Slot_Role']     = role
+        row_copy['Item_Rank']     = 1
+        if 'Final_Score' not in row_copy.index or pd.isna(row_copy.get('Final_Score', None)):
+            row_copy['Final_Score'] = _safe_num(row_copy.get('_sales', 0))
+        
+        all_recs.append(row_copy)
+        used_materials.add(row_copy.get('Material', None))
+        fill_notes.append(f"Slot {slot_idx} ({slot_type}) ← {picked_from}: "
+                          f"{str(row.get('Title', ''))[:50]}{tier_note}")
+    
+    slot_notes[4] = fill_notes
+    diag.append(("4. Slots Filled", len(all_recs), f"{len(all_recs)} of 10"))
+    
+    if not all_recs:
+        return pd.DataFrame(), diag, slot_notes, pd.DataFrame()
+    
+    recs_df = pd.DataFrame(all_recs).reset_index(drop=True)
+    return recs_df, diag, slot_notes, recs_df
+
+
+
 def run_engine(trigger, df_products, df_history, df_slots):
     diag, slot_diag, slot_notes = [], [], {}
 
@@ -20345,6 +20937,14 @@ elif active_cluster in BOOKS_V2_CLUSTERS:
     recs, diag, slot_notes, full_candidates = run_books_v2_engine(
         trigger, _book_pool, df_history, active_cluster)
     slot_diag = []
+
+# v28.30 — Greek School Books (separate engine — different layout: school
+# books at slots 1-3, age-targeted stationery at 4-6, more school books at
+# 7-10 with stationery overflow if exhausted).
+elif active_cluster == "Greek School Books":
+    recs, diag, slot_notes, full_candidates = run_school_books_engine(
+        trigger, df_school_books, df_stationery, df_history)
+    slot_diag = []
 else:
     # Final fallback — preserved for any non-books cluster that ends up
     # routing through here. Should not normally be reached.
@@ -20546,6 +21146,16 @@ with st.expander("⚙️ System Diagnostics"):
                               'Σειρά βιβλίου','Συγγραφέας','Εκδότης','Εκδοτικός οίκος',
                               'Θέμα Βιβλίου','Κατηγορία Βιβλίου','Γλώσσα Γραφής',
                               'Εξώφυλλο','Αριθμός Σελίδων','Ημερ/νία έκδοσης',
+                              'Sum of Sales','LIST PRICE','AVAILABILITY']
+    elif active_cluster == "Greek School Books":
+        # v28.30 — school book attributes: class + subject + publisher
+        # drive the recommendation; show those plus general bibliographic
+        # context. Uses _sales-suffixed columns from the Stibo dual-source
+        # sheet.
+        attr_keys_to_show = ['Material','Title','Level 2','Hierarchy',
+                              'Τάξη_sales','Μάθημα_sales','Εκδότης_sales',
+                              'Συγγραφέας_sales','Σειρά βιβλίου_sales',
+                              'Γλώσσα Γραφής_sales','Εξώφυλλο_sales',
                               'Sum of Sales','LIST PRICE','AVAILABILITY']
     elif active_cluster == "Laptops":
         attr_keys_to_show = ['Material','Title','Level 1','Level 2','Hierarchy','Κατασκευαστής','Μοντέλο','Προτεινόμενη χρήση','Μέγεθος οθόνης','Θύρες','LIST PRICE']
