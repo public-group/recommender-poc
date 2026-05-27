@@ -102,7 +102,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v28.29.1 — Books v2 (Kids / Greek / International) — universal books engine with NEW two-set slot logic (slots 1-7 + 8-10 driven by series-depth). Same Series uses existing ordering. Other Books layers DEEP-SPEC boosts: Publishing Series (+100k, cross-narrative shelf cohesion — Penguin Modern Classics, Πυξίδα HP line, etc.) > Author (+80k) > Publisher (+30k) > Theme (+20k) > Dimensions (+5k) > Language (+5k) > Cover (+1k). Books-only carousel.
+        🟢 Engine v28.29.6 — SS cover-filter logic: enforce cover purity ONLY when the matching-cover sibling pool can fill all the SS slots the series warrants. Otherwise show ALL siblings mixed (cover preference yields to series visibility). User rule: "if you have mixed then just show mixed it's okay, the important thing is to show the series." Twisted love trigger (4-book series, 2 paperback + 1 hardcover siblings) now correctly shows all 3 siblings since 2 paperback can't fill the 3 SS slots a 4-book series deserves.
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -7817,6 +7817,29 @@ def run_books_v2_engine(trigger, df_pool, df_history, category_key):
                 break
         if canonical.startswith('dog man: '): canonical = canonical[9:]
         canonical = canonical.replace("'", "'").replace("'", "'").replace("`", "'")
+        canonical = canonical.strip()
+        
+        # v28.29.3 — collapse literal title doubling FIRST (before article
+        # strip — "The X The X" must be detected with the articles intact).
+        # Some catalog rows have "The Fellowship of the Ring The Fellowship
+        # of the Ring" — same string repeated. Detect "X X" patterns where
+        # the first half equals the second half and keep one copy.
+        if len(canonical) > 10:
+            half = len(canonical) // 2
+            for split_pt in (half, half - 1, half + 1):
+                left = canonical[:split_pt].strip()
+                right = canonical[split_pt:].strip()
+                if left and left == right:
+                    canonical = left
+                    break
+        
+        # v28.29.3 — strip leading articles so "Two Towers" ↔ "The Two Towers"
+        # and "Hobbit" ↔ "The Hobbit" canonicalize to the same key.
+        for art in ('the ', 'a ', 'an ', 'ο ', 'η ', 'το ', 'οι ', 'τα ', 'ένα ', 'μια ', 'έναν '):
+            if canonical.startswith(art):
+                canonical = canonical[len(art):]
+                break
+        
         return canonical.strip()
     
     # ──────────────────────────────────────────────────────────
@@ -7911,8 +7934,23 @@ def run_books_v2_engine(trigger, df_pool, df_history, category_key):
             sp['_canonical'] = sp.apply(lambda r: get_canonical_book_name(r.get('Title', ''), r.get('Τίτλος πρωτοτύπου', '')), axis=1)
             sp = sp[sp['_canonical'] != trigger_canonical]
         
-        # Exclude box sets when the trigger ISN'T a box set
-        if not trigger_is_box_set and not sp.empty:
+        # v28.29.3 — BOX SET RULE
+        # If the trigger IS a box set (partial or complete), restrict the SS
+        # pool to OTHER box sets only — the individual books are almost
+        # certainly contained in the trigger box set itself, so recommending
+        # them as separates is redundant and misleading. The remaining SS
+        # candidates are: alternate-edition sibling box sets (e.g. hardcover
+        # version of a paperback box set), or extended/complete box sets
+        # that contain books beyond the original.
+        if trigger_is_box_set and not sp.empty:
+            sp_box = sp[sp['Title'].apply(is_box_set)]
+            series_notes.append(
+                f"⚙ Trigger IS a box set → SS pool restricted to sibling box sets "
+                f"({len(sp)} → {len(sp_box)} candidates). Individual books from this "
+                f"series are excluded (assumed contained in the box set).")
+            sp = sp_box
+        elif not trigger_is_box_set and not sp.empty:
+            # Original v28.x behavior — exclude box sets when trigger isn't one
             sp = sp[~sp['Title'].apply(is_box_set)]
         
         # If trigger has an explicit Level 2 (always set after the filter above), keep it
@@ -7931,6 +7969,53 @@ def run_books_v2_engine(trigger, df_pool, df_history, category_key):
                 audiobook_keywords = [' cd', ' audiobook', ' audio book', ' mp3', 'ηχητικό', 'ακουστικό']
                 return any(kw in str(title).lower() for kw in audiobook_keywords)
             sp = sp[~sp['Title'].apply(is_audiobook)]
+        
+        # v28.29.3 — COVER HARD FILTER on SS pool. The trigger cover
+        # (soft/hard/board) acts as a preference for the same-series pool.
+        # v28.29.6 — Per user clarification: "if you have mixed then just
+        # show mixed it's okay ... if we can't showcase only soft or hard,
+        # the important thing is to show the series."
+        #
+        # The new rule: enforce cover purity ONLY when the matching-cover
+        # pool is LARGE ENOUGH to fill all the SS slots the series would
+        # be allocated. Otherwise, fall back to ALL same-series siblings
+        # (mixed covers) so the carousel shows the full series depth the
+        # image rule promises.
+        #
+        # Required SS slot count is computed from the slot allocator using
+        # the pre-cover-filter catalog count — that's the natural "this
+        # series deserves N SS slots" figure.
+        ss_cover_filter_applied = False
+        if config.get("use_cover_signal") and t_cover_norm and not sp.empty and 'Εξώφυλλο' in sp.columns:
+            # Pre-cover-filter catalog math
+            pre_filter_n_avail = len(sp)
+            pre_filter_n_total = (pre_filter_n_avail + 1) if has_series else 0
+            
+            # Required SS slot count for THIS series depth (image rule)
+            if trigger_is_box_set:
+                # Box-set triggers use the specialized allocation: min(n_avail, 2)
+                required_ss_slots = min(pre_filter_n_avail, 2)
+            else:
+                hypothetical_plan = allocate_book_slots(pre_filter_n_total)
+                required_ss_slots = sum(1 for s in hypothetical_plan if s == 'SAME_SERIES')
+            
+            sp_cover_match = sp[sp['Εξώφυλλο'].apply(_books_v2_normalize_cover) == t_cover_norm]
+            
+            if len(sp_cover_match) >= required_ss_slots and required_ss_slots > 0:
+                series_notes.append(
+                    f"⚙ Cover hard filter '{t_cover_norm}' applied to SS pool "
+                    f"({pre_filter_n_avail} → {len(sp_cover_match)} candidates; "
+                    f"≥ {required_ss_slots} required SS slots → enforce cover purity)")
+                sp = sp_cover_match
+                ss_cover_filter_applied = True
+            elif not sp.empty:
+                # Matching pool too small to fill the SS slots this series
+                # warrants. Per user rule, show ALL siblings (mixed covers)
+                # so the carousel preserves series visibility.
+                series_notes.append(
+                    f"⚙ Cover filter '{t_cover_norm}' would leave only {len(sp_cover_match)} "
+                    f"matching siblings (< {required_ss_slots} required SS slots) — "
+                    f"showing MIXED siblings ({pre_filter_n_avail} kept) for series visibility")
         
         # ── Scoring layer (format/cover/edition bonuses) ──
         def get_edition_line(title):
@@ -8072,6 +8157,24 @@ def run_books_v2_engine(trigger, df_pool, df_history, category_key):
     if not series_pool.empty:
         other_pool = other_pool[~other_pool['Material'].isin(series_pool['Material'])]
     
+    # v28.29.3 — BOX SET RULE (OB-pool side).
+    # When trigger IS a box set, also exclude OTHER individual books in the
+    # same series from the OB pool. Those individuals are presumed contained
+    # in the trigger box set and the user explicitly does not want them
+    # showcased "again as separate ones". Sibling BOX SETS in the same series
+    # are kept in series_pool (handled by the SS-pool box-set rule above).
+    if trigger_is_box_set and t_series and not other_pool.empty:
+        series_col_ob = 'Σειρά βιβλίου'
+        if series_col_ob in other_pool.columns:
+            same_series_mask = other_pool[series_col_ob].fillna('').astype(str).str.strip() == t_series
+            same_series_individuals_mask = same_series_mask & (~other_pool['Title'].apply(is_box_set))
+            n_excluded = int(same_series_individuals_mask.sum())
+            if n_excluded > 0:
+                other_pool = other_pool[~same_series_individuals_mask]
+                other_notes.append(
+                    f"⚙ Trigger IS a box set → excluded {n_excluded} same-series individual "
+                    f"books from OB pool (presumed contained in the box set)")
+    
     # Same Hierarchy hard filter (genre-aligned discovery). Falls back to the
     # whole Level-2 pool if the trigger's hierarchy yields too few candidates.
     if t_hierarchy and not other_pool.empty:
@@ -8110,6 +8213,24 @@ def run_books_v2_engine(trigger, df_pool, df_history, category_key):
         def _is_audiobook(title):
             return any(kw in str(title).lower() for kw in [' cd', ' audiobook', ' audio book', ' mp3', 'ηχητικό', 'ακουστικό'])
         other_pool = other_pool[~other_pool['Title'].apply(_is_audiobook)]
+    
+    # v28.29.3 — COVER HARD FILTER on OB pool. Same rule as the SS pool:
+    # paperback trigger → only paperback recommendations; hardcover trigger
+    # → only hardcover. Graceful fallback if filtering would leave too few
+    # candidates to fill the carousel (need ≥10).
+    ob_cover_filter_applied = False
+    if config.get("use_cover_signal") and t_cover_norm and not other_pool.empty and 'Εξώφυλλο' in other_pool.columns:
+        other_cover_match = other_pool[other_pool['Εξώφυλλο'].apply(_books_v2_normalize_cover) == t_cover_norm]
+        if len(other_cover_match) >= 10:
+            other_notes.append(
+                f"⚙ Cover hard filter '{t_cover_norm}' applied to OB pool "
+                f"({len(other_pool)} → {len(other_cover_match)} candidates)")
+            other_pool = other_cover_match
+            ob_cover_filter_applied = True
+        else:
+            other_notes.append(
+                f"⚙ Cover filter '{t_cover_norm}' would leave {len(other_cover_match)} "
+                f"candidates (<10) — kept OB pool unfiltered ({len(other_pool)})")
     
     # Sales (always primary signal)
     if not other_pool.empty:
@@ -8174,7 +8295,13 @@ def run_books_v2_engine(trigger, df_pool, df_history, category_key):
             spec_boosts_applied.append(f"Language (+{BOOKS_V2_S_SAME_LANGUAGE:,}): {mask.sum()} matches")
         
         # v28.29.1 — Cover match (last-resort tiebreaker)
-        if config.get("use_cover_signal") and t_cover_norm and 'Εξώφυλλο' in other_pool.columns:
+        # Skip when the hard filter has already enforced cover match — every
+        # candidate in the pool would qualify, so the +1k boost would be a
+        # universal no-op. The boost is only meaningful when the pool is
+        # mixed-cover (i.e. filter relaxed via fallback).
+        if (config.get("use_cover_signal") and t_cover_norm
+                and not ob_cover_filter_applied
+                and 'Εξώφυλλο' in other_pool.columns):
             mask = other_pool['Εξώφυλλο'].apply(_books_v2_normalize_cover) == t_cover_norm
             other_pool.loc[mask, 'Spec_Score'] += BOOKS_V2_S_SAME_COVER
             spec_boosts_applied.append(f"Cover (+{BOOKS_V2_S_SAME_COVER:,}): {mask.sum()} matches")
@@ -8207,53 +8334,146 @@ def run_books_v2_engine(trigger, df_pool, df_history, category_key):
     # ──────────────────────────────────────────────────────────
     # STEP 3 — ALLOCATE SLOTS PER v28.29 TWO-SET RULE
     # ──────────────────────────────────────────────────────────
-    slot_plan = allocate_book_slots(n_series_available)
+    # v28.29.4 — Slot allocation now keys off the TOTAL number of books in
+    # the series (including the trigger itself), not the count of OTHER
+    # books available after excluding the trigger.
+    #
+    # Reason: the reference image labels its rows by total series depth —
+    # "4 book(s)" means "the series contains 4 books in our catalog", which
+    # gives 3 OTHER books that can fill SS slots, and the image expects 3
+    # SS slots in that case. Previously the engine computed
+    # n_series_available (= 3 for a 4-book series, after excluding trigger)
+    # and looked up the rule for "3" → 2 SS slots — off by one from the
+    # image specification.
+    #
+    # Adjustment: n_series_total = n_series_available + 1 (when the trigger
+    # has a series). For no-series triggers, total stays 0 → all OB.
+    n_series_total = (n_series_available + 1) if has_series else 0
+    
+    # v28.29.3 — Box-set triggers use a different allocation strategy.
+    # The two-set rule was designed for individual-book triggers and gives
+    # 0 SS slots when n ≤ 1 — but for box-set triggers we want sibling
+    # box sets (rare, usually only 1-2 exist) surfaced at the front of the
+    # carousel rather than dropped entirely. Layout for box-set triggers:
+    # at most n_series_available SS slots at the front (capped at 2 — there
+    # are rarely more than 2 sibling box sets), rest is OB for cross-series
+    # discovery.
+    if trigger_is_box_set and n_series_available > 0:
+        n_box_ss = min(n_series_available, 2)
+        slot_plan = (['SAME_SERIES'] * n_box_ss + ['OTHER_BOOKS'] * (10 - n_box_ss))
+        alloc_label = f"BOX-SET layout: {n_box_ss} SS (sibling box sets) + {10 - n_box_ss} OB (cross-series discovery)"
+    else:
+        slot_plan = allocate_book_slots(n_series_total)   # v28.29.4: total, not available
+        alloc_label = "v28.29 two-set rule"
+    
     n_ss_slots = sum(1 for s in slot_plan if s == 'SAME_SERIES')
     n_ob_slots = 10 - n_ss_slots
     
     alloc_notes = [
-        "=== STEP 3: SLOT ALLOCATION (v28.29 two-set rule) ===",
-        f"Series books available: {n_series_available}",
+        f"=== STEP 3: SLOT ALLOCATION ({alloc_label}) ===",
+        f"Total books in series (incl. trigger): {n_series_total} | Other-series-books available: {n_series_available}",
         f"Front set (1-7): " + " ".join(["SS" if s == 'SAME_SERIES' else 'OB' for s in slot_plan[:7]]),
         f"Back  set (8-10): " + " ".join(["SS" if s == 'SAME_SERIES' else 'OB' for s in slot_plan[7:]]),
         f"Total SAME_SERIES slots: {n_ss_slots} | Total OTHER_BOOKS slots: {n_ob_slots}",
     ]
     slot_notes[3] = alloc_notes
-    diag.append(("3. Slot Plan", f"{n_ss_slots}/{n_ob_slots}", f"SS/OB: front={slot_plan[:7].count('SAME_SERIES')}/{slot_plan[:7].count('OTHER_BOOKS')} back={slot_plan[7:].count('SAME_SERIES')}/{slot_plan[7:].count('OTHER_BOOKS')}"))
+    diag.append(("3. Slot Plan", f"{n_ss_slots}/{n_ob_slots}", f"SS/OB: front={slot_plan[:7].count('SAME_SERIES')}/{slot_plan[:7].count('OTHER_BOOKS')} back={slot_plan[7:].count('SAME_SERIES')}/{slot_plan[7:].count('OTHER_BOOKS')} | total-in-series={n_series_total}"))
     
     # ──────────────────────────────────────────────────────────
     # STEP 4 — FILL THE 10 SLOTS
     # ──────────────────────────────────────────────────────────
     fill_notes = ["=== STEP 4: SLOT FILLING ==="]
     
-    # Iterators over each pool (pre-sorted)
-    series_iter = series_pool.iterrows() if not series_pool.empty else iter([])
-    other_iter = other_pool.iterrows() if not other_pool.empty else iter([])
-    series_iter_done = False
-    other_iter_done = False
+    # v28.29.2 — Diversity rule for the Other-Books pool.
+    # When the trigger's series depth is shallow (≤ 5 books TOTAL — see
+    # n_series_total above), the OB pool fills 6-10 slots. Without a
+    # diversity rule the engine will happily fill multiple OB slots with
+    # consecutive books from the same OTHER series (e.g. trigger=standalone
+    # fantasy → OB slots = books 1-4 of a single Throne-of-Glass-style
+    # series). That reads as redundant in a discovery carousel.
+    #
+    # Rule: when n_series_total ≤ 5, enforce "at most 1 book per other
+    # series" in the OB pool. Standalone titles (no Σειρά βιβλίου) are
+    # exempt — each standalone is its own discovery. If the constrained
+    # pool runs out (rare — usually only when the hierarchy is dominated by
+    # a single mega-series), fall back to allowing duplicate-series picks.
+    #
+    # v28.29.4 — Switched threshold to use n_series_total (counts trigger
+    # itself) for consistency with the slot-allocation rule. A series with
+    # 5 total books → 4 SS-available → was previously triggering diversity
+    # at the n_avail=4 ≤ 5 mark anyway. A 6-book series → 5 SS-available
+    # → previously ON; now OFF (n_total=6 > 5). This matches the user's
+    # spec: "if we're in 5 or below books in the series".
+    diversity_enabled = (n_series_total <= 5)
+    used_other_series = set()
+    
+    if diversity_enabled:
+        fill_notes.append(f"⚙ Diversity enabled (n_total_in_series={n_series_total} ≤ 5): "
+                          f"at most 1 OB pick per other-series")
+    else:
+        fill_notes.append(f"⚙ Diversity OFF (n_total_in_series={n_series_total} > 5): "
+                          f"unrestricted OB picks")
+    
+    # Materialize pools as (idx, row) lists so we can iterate multiple times
+    # for fallback passes without resetting cursors.
+    series_list = list(series_pool.iterrows()) if not series_pool.empty else []
+    other_list  = list(other_pool.iterrows())  if not other_pool.empty  else []
+    series_consumed = set()   # indices into series_list that are exhausted
+    other_consumed  = set()   # indices into other_list  that are exhausted
+    
+    def _series_value(row):
+        """Return the normalized series value of a candidate row, or '' if
+        the candidate has no series."""
+        val = row.get('Σειρά βιβλίου', '')
+        try:
+            if pd.isna(val): return ''
+        except (TypeError, ValueError):
+            pass
+        s = str(val).strip()
+        if s.lower() in ('', '0', '-', 'nan', 'n/a', 'none'):
+            return ''
+        return s
     
     def _next_series():
         """Pull the next non-dup series candidate, skipping used materials/titles."""
-        nonlocal series_iter, series_iter_done
-        if series_iter_done: return None
-        for _, row in series_iter:
+        for i, (_, row) in enumerate(series_list):
+            if i in series_consumed: continue
             canonical = get_canonical_book_name(row['Title'], row.get('Τίτλος πρωτοτύπου', ''))
             if row['Material'] in used_materials or canonical in used_titles:
+                series_consumed.add(i)
                 continue
+            series_consumed.add(i)
             return row
-        series_iter_done = True
         return None
     
-    def _next_other():
-        """Pull the next non-dup other candidate, skipping used materials/titles."""
-        nonlocal other_iter, other_iter_done
-        if other_iter_done: return None
-        for _, row in other_iter:
+    def _next_other(enforce_diversity):
+        """Pull the next eligible other candidate.
+        
+        If enforce_diversity is True, skip (do NOT consume) any candidate
+        whose Σειρά βιβλίου has already been picked into an OB slot earlier
+        in this run. That preserves the candidate for a possible fallback
+        pass with diversity off.
+        
+        Standalone titles (empty Σειρά βιβλίου) are always eligible — they
+        don't contribute to the diversity set and can be picked freely.
+        """
+        for i, (_, row) in enumerate(other_list):
+            if i in other_consumed: continue
             canonical = get_canonical_book_name(row['Title'], row.get('Τίτλος πρωτοτύπου', ''))
             if row['Material'] in used_materials or canonical in used_titles:
+                other_consumed.add(i)
                 continue
+            # Diversity check
+            if enforce_diversity:
+                cand_series = _series_value(row)
+                if cand_series and cand_series in used_other_series:
+                    continue  # skip, do NOT consume — leave for fallback pass
+            # Accept
+            other_consumed.add(i)
+            cand_series = _series_value(row)
+            if cand_series:
+                used_other_series.add(cand_series)
             return row
-        other_iter_done = True
         return None
     
     for slot_idx, slot_type in enumerate(slot_plan, start=1):
@@ -8264,8 +8484,15 @@ def run_books_v2_engine(trigger, df_pool, df_history, category_key):
             row = _next_series()
             picked_from = 'series'
         else:
-            row = _next_other()
+            row = _next_other(enforce_diversity=diversity_enabled)
             picked_from = 'other'
+            # v28.29.2 — Diversity-relaxation pass. If the constrained OB
+            # pool came up empty, retry without the diversity rule before
+            # falling all the way back to the SS pool.
+            if row is None and diversity_enabled:
+                row = _next_other(enforce_diversity=False)
+                if row is not None:
+                    picked_from = 'other (diversity relaxed)'
         
         # Graceful degradation: if primary pool exhausted, try fallback pool.
         # This handles edge cases like a series with 8 known books but only 5
@@ -8276,7 +8503,7 @@ def run_books_v2_engine(trigger, df_pool, df_history, category_key):
                 row = _next_series()
                 picked_from = 'series (fallback from OB)'
             else:
-                row = _next_other()
+                row = _next_other(enforce_diversity=False)
                 picked_from = 'other (fallback from SS)'
         
         if row is None:
@@ -8295,6 +8522,32 @@ def run_books_v2_engine(trigger, df_pool, df_history, category_key):
         else:
             row_copy['Slot_Role'] = 'Category Discovery'
         row_copy['Item_Rank'] = 1
+        # v28.29.3 — Bulletproof Final_Score computation. Previously OB rows
+        # showed up as NaN in the dashboard because `nan or 0` evaluates to
+        # nan in Python (nan is truthy), and the row.get(..., 0) default
+        # only fires when the COLUMN is absent — not when it's present-but-NaN.
+        # This helper handles None / NaN / missing-column uniformly.
+        def _safe_num(v):
+            try:
+                if v is None: return 0.0
+                if pd.isna(v): return 0.0
+                return float(v)
+            except (TypeError, ValueError):
+                return 0.0
+        
+        ss_final = _safe_num(row_copy.get('Final_Score', None))
+        if ss_final > 0:
+            # SS rows: keep the existing Final_Score (SERIES_BOOST + Format_Score)
+            row_copy['Final_Score'] = ss_final
+        else:
+            # OB rows (or any row without a SS-style Final_Score): synthesize
+            # from Sales + Spec + Avail. Sales is ALWAYS counted — the user
+            # explicitly wants sales in the ranking signal.
+            row_copy['Final_Score'] = (
+                _safe_num(row_copy.get('Sales_Score', None))
+                + _safe_num(row_copy.get('Spec_Score', None))
+                + _safe_num(row_copy.get('Avail_Score', None))
+            )
         all_recs.append(row_copy)
         used_materials.add(row['Material'])
         used_titles.add(canonical)
