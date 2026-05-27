@@ -103,7 +103,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v28.30.7 — School Books: dynamic layout + diverse overflow
+        🟢 Engine v28.30.9 — School Books: scarce-helpers textbook fallback
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -3973,6 +3973,67 @@ def _sb_is_helper_hierarchy(hierarchy):
 
 def _sb_is_textbook_hierarchy(hierarchy):
     return 'ΒΙΒΛΙΑ ΟΡΓΑΝΙΣΜΟΥ' in _sb_strip_accents_upper(hierarchy)
+
+
+# v28.30.8 — Greek high-school Προσανατολισμός (orientation track) normalization.
+# Books for Γ' Λυκείου especially are split into orientation tracks. A Θετικ
+# student needs Θετικ Math/Physics/Chemistry/Biology — not Ανθρωπιστικών Αρχαία.
+# Exact string match fails because the same conceptual orientation has variant
+# wordings ("Προσανατολισμός Θετικών Σπουδών" vs "Προσανατολισμός Θετικών
+# Σπουδών & Σπουδών Υγείας"). We canonicalize to a small set of tokens.
+SB_ORIENT_TOKEN_KEYWORDS = (
+    ('θετικ',     'θετικ'),       # Προσανατολισμός Θετικών Σπουδών
+    ('υγει',      'υγει'),        # Σπουδών Υγείας
+    ('ανθρωπ',    'ανθρωπ'),      # Ανθρωπιστικών Σπουδών
+    ('οικον',     'οικον'),       # Οικονομίας
+    ('πληροφορ',  'πληροφορ'),    # Πληροφορικής
+    ('γενικ',     'γενικ'),       # Γενικής Παιδείας (treated as a wildcard for specialist triggers)
+    ('επαλ',      'επαλ'),        # ΕΠΑ.Λ.
+    ('τεχν',      'επαλ'),        # τεχνολογικής — fold into ΕΠΑ.Λ.
+)
+
+def _sb_orient_tokens(orient_value):
+    """Extract canonical orientation tokens from a string OR list of strings.
+    Returns a set; empty if no recognized orientation found."""
+    if not orient_value:
+        return set()
+    if isinstance(orient_value, (list, set, tuple)):
+        items = list(orient_value)
+    else:
+        items = [orient_value]
+    out = set()
+    for item in items:
+        if not item: continue
+        s = _sb_strip_accents_upper(str(item)).lower()
+        for needle, token in SB_ORIENT_TOKEN_KEYWORDS:
+            if needle in s:
+                out.add(token)
+    return out
+
+def _sb_orient_compatible(row_orient_value, trigger_tokens):
+    """Decide whether a row is orientation-compatible with the trigger.
+    
+    Rules:
+      * Trigger has no orientation tokens → no filter (compatible).
+      * Row has no orientation data at all → compatible (general/uncategorized).
+      * Row has tokens that intersect trigger's → compatible.
+      * Row is Γενικής Παιδείας (token 'γενικ') → compatible with any specialist
+        trigger (general track applies to everyone).
+    For a Γενικής-trigger, the compatibility narrows to Γενικής rows only, because
+    the wildcard branch checks the ROW for 'γενικ' (which only helps when trigger
+    is specialized).
+    """
+    if not trigger_tokens:
+        return True
+    row_tokens = _sb_orient_tokens(row_orient_value)
+    if not row_tokens:
+        return True   # uncategorized — assumed general
+    if row_tokens & trigger_tokens:
+        return True
+    if 'γενικ' in row_tokens and trigger_tokens != {'γενικ'}:
+        # Wildcard: a non-Γενικής trigger accepts Γενικής rows alongside its own.
+        return True
+    return False
 
 
 # Scoring constants for the "Other Books" deep-spec match.
@@ -9533,6 +9594,22 @@ def run_school_books_engine(trigger, df_school_pool, df_stationery_pool, df_hist
         sp_same_subj = school_pool['_subjects'].apply(
             lambda lst: isinstance(lst, list) and bool(lst) and bool(set(lst) & t_sub_set))
         
+        # v28.30.8 — Προσανατολισμός (orientation track) compatibility.
+        # For Γ' Λυκείου especially, the student is committed to a track (Θετικ,
+        # Ανθρωπ, Οικον, Γενικ, ΕΠΑ.Λ.). All recommended books — both primary
+        # (same-subject companions) and secondary (cross-subject discovery) —
+        # must be track-compatible. We token-normalize because exact wording
+        # varies ("Θετικών Σπουδών" vs "Θετικών Σπουδών & Σπουδών Υγείας").
+        # Empty trigger orientation (e.g. Διόφαντος core textbooks) skips the
+        # filter; Γενικής Παιδείας books are accepted by any specialist trigger
+        # since the general subjects apply to all tracks.
+        t_orient_tokens = _sb_orient_tokens(t_orientation)
+        if t_orient_tokens:
+            sp_orient_ok = school_pool['_orientation'].apply(
+                lambda v: _sb_orient_compatible(v, t_orient_tokens))
+        else:
+            sp_orient_ok = pd.Series([True] * len(school_pool), index=school_pool.index)
+        
         # v28.30.7 — Tight primary filter, varies by trigger type.
         #   * Helper trigger: same Hierarchy (= same class + helper type) +
         #     same publisher + same subject + author overlap (if trigger has
@@ -9575,21 +9652,29 @@ def run_school_books_engine(trigger, df_school_pool, df_stationery_pool, df_hist
             primary_filter = sp_same_subj
             primary_filter_desc = "same subject (fallback)"
         
-        # Secondary = different subject (NEVER include same-subject leftovers)
-        secondary_filter = ~sp_same_subj
+        # Apply Προσανατολισμός to BOTH phases — a Θετικ student doesn't want
+        # Ανθρωπ Αρχαία in overflow either.
+        primary_filter   = primary_filter   & sp_orient_ok
+        secondary_filter = (~sp_same_subj)  & sp_orient_ok
         
         primary_pool   = school_pool[primary_filter].reset_index(drop=True)
         secondary_pool = school_pool[secondary_filter].reset_index(drop=True)
         # Same-subject rows that didn't pass the strict primary filter are
-        # dropped from view (e.g. T2 Σαββάλας brothers when trigger's authors
-        # are Παναγιωτακόπουλος/Μαθιουδάκης; or T6 Α'/Β' Λυκείου author-matches
-        # when trigger is Γ' Λυκείου).
-        dropped_n = int(sp_same_subj.sum() - primary_filter.sum())
+        # dropped from view.
+        dropped_same_subj_n = int(sp_same_subj.sum() - primary_filter.sum())
+        # Different-subject rows removed by orientation filter
+        dropped_orient_n    = int((~sp_same_subj).sum() - secondary_filter.sum())
         
+        if t_orient_tokens:
+            orient_desc = f", Προσανατολισμός tokens={sorted(t_orient_tokens)}"
+        else:
+            orient_desc = ", Προσανατολισμός=∅ (no filter)"
         fill_notes.append(
-            f"⚙ Phase split ON: primary ({primary_filter_desc})={len(primary_pool)}, "
-            f"secondary (different-subj)={len(secondary_pool)}, "
-            f"dropped (same-subj but not author/class/pub match)={dropped_n}")
+            f"⚙ Phase split ON: primary ({primary_filter_desc}){orient_desc}")
+        fill_notes.append(
+            f"   primary={len(primary_pool)}, secondary={len(secondary_pool)}, "
+            f"dropped (same-subj, filter mismatch)={dropped_same_subj_n}, "
+            f"dropped (diff-subj, wrong orientation)={dropped_orient_n}")
     else:
         primary_pool   = school_pool if not school_pool.empty else pd.DataFrame()
         secondary_pool = pd.DataFrame()
@@ -9599,19 +9684,39 @@ def run_school_books_engine(trigger, df_school_pool, df_stationery_pool, df_hist
     # ── Dynamic layout based on primary pool size ──
     n_primary_avail = len(primary_pool)
     if should_phase_split:
-        if n_primary_avail >= PRIMARY_MIN:
-            n_primary_slots = min(n_primary_avail, PRIMARY_MAX)
+        # v28.30.9 — Scarce-helpers layout for TEXTBOOK triggers only.
+        # When the best helper publisher has fewer than 3 same-subject
+        # helpers, the carousel leads with Βιβλία Οργανισμού (cross-subject
+        # Διόφαντος textbooks) instead of helpers; the available helpers
+        # (0, 1, or 2) move to the overflow section after stationery.
+        # Helper triggers keep the standard 3-6 primary + stat + secondary
+        # layout (with deficit fill from secondary when primary < 3).
+        if trigger_is_textbook and n_primary_avail < 3:
+            n_boost = 4 if n_primary_avail <= 1 else 3   # "less than 2" → 4; "less than 3" → 3
+            n_overflow_primary   = n_primary_avail        # all available helpers in overflow
+            n_overflow_secondary = TOTAL_SLOTS - n_boost - STAT_SLOTS - n_overflow_primary
+            base_plan = (
+                ['SCHOOL_SECONDARY']   * n_boost
+                + ['STATIONERY']       * STAT_SLOTS
+                + ['SCHOOL_PRIMARY']   * n_overflow_primary
+                + ['SCHOOL_SECONDARY'] * n_overflow_secondary
+            )
+            fill_notes.append(
+                f"⚙ Scarce-helpers layout (textbook trigger, {n_primary_avail} helper(s)): "
+                f"{n_boost} textbooks front + {STAT_SLOTS} stationery + "
+                f"{n_overflow_primary} helper(s) + {n_overflow_secondary} textbooks overflow")
         else:
-            n_primary_slots = PRIMARY_MIN   # deficit filled from secondary
-        n_secondary_slots = TOTAL_SLOTS - n_primary_slots - STAT_SLOTS
-        base_plan = (
-            ['SCHOOL_PRIMARY']   * n_primary_slots
-            + ['STATIONERY']     * STAT_SLOTS
-            + ['SCHOOL_SECONDARY'] * n_secondary_slots
-        )
-        fill_notes.append(
-            f"⚙ Dynamic layout: {n_primary_slots} primary + {STAT_SLOTS} stationery + "
-            f"{n_secondary_slots} secondary (cap on primary = {PRIMARY_MAX})")
+            # Standard dynamic layout (3-6 primary + stat + remaining secondary)
+            n_primary_slots = min(max(n_primary_avail, PRIMARY_MIN), PRIMARY_MAX)
+            n_secondary_slots = TOTAL_SLOTS - n_primary_slots - STAT_SLOTS
+            base_plan = (
+                ['SCHOOL_PRIMARY']   * n_primary_slots
+                + ['STATIONERY']     * STAT_SLOTS
+                + ['SCHOOL_SECONDARY'] * n_secondary_slots
+            )
+            fill_notes.append(
+                f"⚙ Dynamic layout: {n_primary_slots} primary + {STAT_SLOTS} stationery + "
+                f"{n_secondary_slots} secondary (cap on primary = {PRIMARY_MAX})")
     else:
         # Younger or no-split: original 3-3-4 layout, all SCHOOL_PRIMARY
         # (younger has no secondary pool — primary IS the school_pool)
