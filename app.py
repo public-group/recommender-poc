@@ -103,7 +103,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v28.30.5 — School Books: single-publisher lock
+        🟢 Engine v28.30.6 — School Books: phase-split overflow
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -9515,16 +9515,49 @@ def run_school_books_engine(trigger, df_school_pool, df_stationery_pool, df_hist
     # ──────────────────────────────────────────────────────────
     fill_notes = ["=== STEP 4: SLOT FILLING ==="]
     
-    school_list = list(school_pool.iterrows()) if not school_pool.empty else []
-    stat_list   = list(stat_pool.iterrows())   if not stat_pool.empty   else []
-    school_consumed = set()
+    # v28.30.6 — PHASE SPLIT for older modes (Γυμνάσιο/Λύκειο with helper or
+    # textbook trigger). Slots 1-3 pull from a "primary pool" of SAME-subject
+    # candidates (companion helpers, multi-volume); slots 7-10 pull from a
+    # "secondary pool" of DIFFERENT-subject candidates (cross-subject coverage).
+    # This prevents leftover same-subject helpers from leaking into the
+    # overflow when T1/T2 exceeds 3 candidates.
+    #
+    # For younger stages (Δημοτικό/Προσχολική), no split — the entire pool
+    # already enforces different-subject in T1/T2 by design.
+    should_phase_split = (is_older_stage and t_subjects and not school_pool.empty
+                          and (trigger_is_helper or trigger_is_textbook))
+    
+    if should_phase_split:
+        t_sub_set = set(t_subjects)
+        same_subj_mask = school_pool['_subjects'].apply(
+            lambda lst: isinstance(lst, list) and bool(lst) and bool(set(lst) & t_sub_set))
+        primary_pool   = school_pool[same_subj_mask].reset_index(drop=True)
+        secondary_pool = school_pool[~same_subj_mask].reset_index(drop=True)
+        fill_notes.append(
+            f"⚙ Phase split ON (older + helper/textbook): "
+            f"primary (same-subject)={len(primary_pool)}, "
+            f"secondary (different-subject)={len(secondary_pool)}")
+        fill_notes.append(
+            f"  Slots 1-3 pull from primary (same subject as trigger); "
+            f"slots 7-10 pull from secondary (different subject)")
+    else:
+        primary_pool   = school_pool if not school_pool.empty else pd.DataFrame()
+        secondary_pool = pd.DataFrame()
+        if not is_older_stage:
+            fill_notes.append(f"⚙ Phase split OFF (younger stage '{t_stage}' — all tiers feed both phases)")
+    
+    primary_list   = list(primary_pool.iterrows())   if not primary_pool.empty   else []
+    secondary_list = list(secondary_pool.iterrows()) if not secondary_pool.empty else []
+    stat_list      = list(stat_pool.iterrows())      if not stat_pool.empty      else []
+    primary_consumed   = set()
+    secondary_consumed = set()
     
     # v28.30.2 — Subject diversity for younger stages.
-    # Older stages (Γυμνάσιο/Λύκειο): user explicitly wants SAME-subject
-    # companion volumes — diversity OFF.
-    # Younger stages (Δημοτικό/Προσχολική): user wants DIFFERENT subjects
-    # to cover all the kid's school subjects — diversity ON so each school
-    # slot surfaces a NEW subject (rather than 3 Math books in a row).
+    # Older stages: user wants SAME-subject in slots 1-3 (companion volumes)
+    # and DIFFERENT-subject in slots 7-10 — handled by the phase split, so
+    # diversity OFF.
+    # Younger stages: each school slot picks a NEW subject (rather than
+    # 3 Math books in a row) — diversity ON.
     school_diversity_enabled = (not is_older_stage)
     used_subjects = set()
     if school_diversity_enabled:
@@ -9532,7 +9565,7 @@ def run_school_books_engine(trigger, df_school_pool, df_stationery_pool, df_hist
                           f"each school slot picks a different subject")
     else:
         fill_notes.append(f"⚙ Subject diversity OFF (stage='{t_stage}' is older): "
-                          f"same-subject companion volumes prioritized")
+                          f"same-subject in slots 1-3, different-subject in slots 7-10")
     
     # For stationery: track used materials AND used hierarchies, so we
     # round-robin across hierarchies before repeating one (avoids 3 notebooks
@@ -9540,31 +9573,51 @@ def run_school_books_engine(trigger, df_school_pool, df_stationery_pool, df_hist
     stat_used_materials = set()
     stat_used_hierarchies_in_round = set()
     
-    def _next_school(enforce_diversity):
-        """Pull the next eligible school candidate.
-        
-        When enforce_diversity is True (younger stages), skip rows whose
-        subject overlaps with already-picked subjects. Rows with no subject
-        (catalog Μάθημα=0) are always eligible — they're their own discovery.
-        Skipped rows are NOT consumed — they remain available for a fallback
-        pass with diversity off (when the constrained pool is exhausted).
-        """
-        for i, (_, row) in enumerate(school_list):
-            if i in school_consumed: continue
+    def _next_from(rows, consumed, enforce_diversity):
+        """Generic pool consumer with optional subject-diversity guard."""
+        for i, (_, row) in enumerate(rows):
+            if i in consumed: continue
             mat = row.get('Material', None)
             if mat in used_materials:
-                school_consumed.add(i); continue
+                consumed.add(i); continue
             if enforce_diversity:
                 row_subjects = _sb_parse_multi_value(row.get('Μάθημα_sales', ''))
                 if row_subjects and any(s in used_subjects for s in row_subjects):
                     continue   # subject already covered — save for fallback
             # Accept
-            school_consumed.add(i)
+            consumed.add(i)
             if enforce_diversity:
                 for s in _sb_parse_multi_value(row.get('Μάθημα_sales', '')):
                     used_subjects.add(s)
             return row
         return None
+    
+    def _next_school(slot_idx, enforce_diversity):
+        """Pull the next eligible school candidate, phase-aware.
+        
+        For older modes with phase split:
+          * slots 1-3: prefer primary (same-subject) pool. If exhausted,
+                       fall back to secondary (cross-subject) rather than
+                       leaving the slot empty.
+          * slots 7-10: secondary (different-subject) ONLY. NEVER pull from
+                       the primary pool — leftover same-subject candidates
+                       are deliberately dropped from the carousel.
+        For younger or no-split modes: just consume from the primary list.
+        """
+        if not should_phase_split:
+            return _next_from(primary_list, primary_consumed, enforce_diversity)
+        
+        if slot_idx <= 3:
+            # Primary phase — try same-subject; fall back to cross-subject as deficit
+            row = _next_from(primary_list, primary_consumed, enforce_diversity)
+            if row is None:
+                row = _next_from(secondary_list, secondary_consumed, enforce_diversity)
+            return row
+        else:
+            # Overflow phase — DIFFERENT-subject pool only.
+            # Do NOT fall back to primary; the user explicitly does not want
+            # same-subject books in the overflow slots.
+            return _next_from(secondary_list, secondary_consumed, enforce_diversity)
     
     def _next_stationery():
         """Round-robin across hierarchies so we don't stack same-hierarchy
@@ -9592,11 +9645,11 @@ def run_school_books_engine(trigger, df_school_pool, df_stationery_pool, df_hist
         picked_from = None
         
         if slot_type == 'SCHOOL':
-            row = _next_school(enforce_diversity=school_diversity_enabled)
+            row = _next_school(slot_idx, enforce_diversity=school_diversity_enabled)
             picked_from = 'school'
             # Diversity-relaxation fallback when the constrained pool runs dry
             if row is None and school_diversity_enabled:
-                row = _next_school(enforce_diversity=False)
+                row = _next_school(slot_idx, enforce_diversity=False)
                 if row is not None:
                     picked_from = 'school (subject diversity relaxed)'
             if row is None:
@@ -9609,7 +9662,7 @@ def run_school_books_engine(trigger, df_school_pool, df_stationery_pool, df_hist
             if row is None:
                 # Stationery exhausted — try a school book to fill the slot.
                 # Use relaxed diversity here since we're already in fallback.
-                row = _next_school(enforce_diversity=False)
+                row = _next_school(slot_idx, enforce_diversity=False)
                 picked_from = 'school (stationery exhausted)'
         
         if row is None:
