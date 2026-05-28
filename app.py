@@ -103,7 +103,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v28.30.20 — School Books: kids' books start after slot 4
+        🟢 Engine v28.30.21 — School Books: private-school curriculum list cross-sell
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -5782,6 +5782,7 @@ EXCEL_FILES = [
     "Recommendations GitHub Home.xlsx",
     "Recommendations GitHub Books.xlsx",      # v28.29 — Greek Books + School Books
     "Recommendations GitHub IntBooks.xlsx",   # v28.29 — International Books (Sheet1)
+    "school_books.xlsx",                       # v28.30.21 — private-school curriculum lists
 ]
 
 @st.cache_data(ttl=600)
@@ -5877,6 +5878,47 @@ def load_all_data():
     # subject recommendation engine with age-targeted stationery cross-sell.
     dgr_school = _load('Greek School Books')
     
+    # ── v28.30.21: International School Books sheet (same workbook as Greek
+    # School Books). 19,801 rows, Level 2='International School Books'. Holds
+    # the foreign-language curriculum books (English/French/German/IB) that
+    # many private-school lists reference. Used to resolve private-list SAPs.
+    dint_school = _load('International School Books')
+    
+    # ── v28.30.21: Private-school curriculum lists from "school_books.xlsx".
+    # Sheet1 = raw (Εκπαιδευτήριo2 [school], Βαθμίδα/Τάξη2 [class], SAP [Material])
+    # — one row per (school, class, book) assignment. We load it DIRECTLY from
+    # its own file (not via _load) because the sheet is named 'Sheet1', which
+    # collides with the International Books workbook's default sheet name.
+    # The lookup powers private-school cross-sell: a list book recommends the
+    # OTHER books on the same school+class list, ranked by sales.
+    dpriv = pd.DataFrame()
+    for _ppath in ("school_books.xlsx",):
+        try:
+            _pef = pd.ExcelFile(_ppath, engine='openpyxl')
+            if 'Sheet1' in _pef.sheet_names:
+                dpriv = pd.read_excel(_pef, sheet_name='Sheet1')
+                dpriv.columns = dpriv.columns.str.strip()
+            break
+        except (FileNotFoundError, OSError):
+            continue
+    # Normalize column names to stable internal names
+    if not dpriv.empty:
+        rename = {}
+        for c in dpriv.columns:
+            cl = str(c).strip()
+            if cl.startswith('Εκπαιδευτήρι'):  rename[c] = '_school'
+            elif cl.startswith('Βαθμίδα') or 'Τάξη' in cl: rename[c] = '_class'
+            elif cl.upper() == 'SAP':            rename[c] = '_sap'
+        dpriv = dpriv.rename(columns=rename)
+        # Coerce SAP to int-like for matching against Material
+        if '_sap' in dpriv.columns:
+            dpriv['_sap'] = pd.to_numeric(dpriv['_sap'], errors='coerce')
+            dpriv = dpriv.dropna(subset=['_sap'])
+            dpriv['_sap'] = dpriv['_sap'].astype('int64')
+        for col in ('_school', '_class'):
+            if col in dpriv.columns:
+                dpriv[col] = dpriv[col].fillna('').astype(str).str.strip()
+    
     if not dp.empty:
         parts = [dp[c].fillna('').astype(str).str.strip() for c in COMPAT_COLS if c in dp.columns]
         if parts:
@@ -5900,12 +5942,14 @@ def load_all_data():
         dint_books[CC] = ''
     if not dgr_school.empty and CC not in dgr_school.columns:
         dgr_school[CC] = ''
+    if not dint_school.empty and CC not in dint_school.columns:
+        dint_school[CC] = ''
     
-    return dp, dm, dh, ds, db, dl, dv, dper, dstat, dair, dfloor, dgaming, dsda, dmda, ddt, dgr_books, dint_books, dgr_school, available_sheets
+    return dp, dm, dh, ds, db, dl, dv, dper, dstat, dair, dfloor, dgaming, dsda, dmda, ddt, dgr_books, dint_books, dgr_school, dpriv, dint_school, available_sheets
 
 try:
 
-    df_products, df_music, df_history, df_slots, df_books, df_laptops, df_vacuums, df_peripherals, df_stationery, df_air, df_floor, df_gaming, df_sda, df_mda, df_desktops, df_greek_books, df_int_books, df_school_books, sheets_loaded = load_all_data()
+    df_products, df_music, df_history, df_slots, df_books, df_laptops, df_vacuums, df_peripherals, df_stationery, df_air, df_floor, df_gaming, df_sda, df_mda, df_desktops, df_greek_books, df_int_books, df_school_books, df_private_school, df_int_school, sheets_loaded = load_all_data()
     compat_cols_found = [c for c in COMPAT_COLS if c in df_products.columns]
 except Exception as e:
     st.error(f"🚨 Error loading data: {e}")
@@ -9309,7 +9353,7 @@ def run_books_v2_engine(trigger, df_pool, df_history, category_key):
 # ═════════════════════════════════════════════════════════════
 # v28.30 — GREEK SCHOOL BOOKS ENGINE
 # ═════════════════════════════════════════════════════════════
-def run_school_books_engine(trigger, df_school_pool, df_stationery_pool, df_history, df_greek_books=None):
+def run_school_books_engine(trigger, df_school_pool, df_stationery_pool, df_history, df_greek_books=None, df_private_school=None, df_int_school=None):
     """Σχολικά Βιβλία recommender.
     
     Layout:
@@ -9388,6 +9432,81 @@ def run_school_books_engine(trigger, df_school_pool, df_stationery_pool, df_hist
                  f"Προσανατολισμός: {t_orientation or '∅'}"))
     
     used_materials = {tm} if tm is not None else set()
+    
+    # ──────────────────────────────────────────────────────────
+    # STEP 0.5 — PRIVATE-SCHOOL CURRICULUM LIST (v28.30.21)
+    # ──────────────────────────────────────────────────────────
+    # If the trigger's Material (SAP) appears on a private-school curriculum
+    # list, build a companion pool of the OTHER books on the SAME school+class
+    # list(s). These take priority in the SCHOOL slots (slots 1-4 and the
+    # overflow), because a parent buying a private-school list book almost
+    # certainly needs the rest of that school's class list.
+    #
+    # Rules:
+    #   * Only books that are SCHOOL BOOKS / HELPERS (resolved from the Greek
+    #     School Books + International School Books catalogs). Never kids' books
+    #     or other types — the kids'-book pool is untouched.
+    #   * A list book that belongs to MULTIPLE schools/classes is matched by
+    #     sales only (we still surface it, ranked by sales) rather than pinning
+    #     a single school — handled naturally since the pool is sales-ranked.
+    private_list_pool = pd.DataFrame()
+    trigger_in_private_list = False
+    if (df_private_school is not None and not df_private_school.empty
+            and tm is not None and {'_sap', '_school', '_class'}.issubset(df_private_school.columns)):
+        try:
+            tm_int = int(tm)
+        except (TypeError, ValueError):
+            tm_int = None
+        if tm_int is not None:
+            trig_rows = df_private_school[df_private_school['_sap'] == tm_int]
+            if not trig_rows.empty:
+                trigger_in_private_list = True
+                # All (school, class) pairs this trigger belongs to
+                trig_pairs = set(zip(trig_rows['_school'], trig_rows['_class']))
+                # Find every OTHER SAP sharing at least one of those pairs
+                pair_mask = df_private_school.apply(
+                    lambda r: (r['_school'], r['_class']) in trig_pairs, axis=1)
+                companion_saps = set(df_private_school[pair_mask]['_sap'].unique())
+                companion_saps.discard(tm_int)
+                
+                # Resolve those SAPs to catalog rows (school books / helpers
+                # only) from the Greek School Books + International School Books
+                # catalogs. This guarantees we never pull a kids' book here.
+                resolve_frames = []
+                if df_school_pool is not None and not df_school_pool.empty:
+                    resolve_frames.append(df_school_pool)
+                if df_int_school is not None and not df_int_school.empty:
+                    resolve_frames.append(df_int_school)
+                if resolve_frames:
+                    cat = pd.concat(resolve_frames, ignore_index=True, sort=False)
+                    cat['_mat_i'] = pd.to_numeric(cat['Material'], errors='coerce')
+                    private_list_pool = cat[cat['_mat_i'].isin(companion_saps)].copy()
+                    # De-dup (a SAP can be in both sheets) — keep first
+                    private_list_pool = private_list_pool.drop_duplicates(subset=['_mat_i'])
+                    # Exclude the trigger itself
+                    private_list_pool = private_list_pool[private_list_pool['_mat_i'] != tm_int]
+                    # Rank purely by sales (multi-school/class books fall out
+                    # naturally to top-sellers, per spec)
+                    private_list_pool['_sales'] = (
+                        private_list_pool['Sum of Sales'].apply(_safe_num)
+                        if 'Sum of Sales' in private_list_pool.columns else 0.0)
+                    if 'AVAILABILITY' in private_list_pool.columns:
+                        private_list_pool['_avail'] = private_list_pool['AVAILABILITY'].apply(
+                            lambda v: SB_S_AVAIL_BONUS if str(v).strip() == 'Άμεσα Διαθέσιμο' else 0)
+                    else:
+                        private_list_pool['_avail'] = 0
+                    private_list_pool['Final_Score'] = private_list_pool['_sales'] + private_list_pool['_avail']
+                    private_list_pool['_tier_label'] = 'Private-school list (same school+class)'
+                    private_list_pool = private_list_pool.sort_values(
+                        '_sales', ascending=False).reset_index(drop=True)
+        if trigger_in_private_list:
+            schools = sorted({s for s, _ in trig_pairs if s})
+            classes = sorted({c for _, c in trig_pairs if c})
+            diag.append(("   Private-school list", "",
+                         f"Trigger on list — schools: {schools[:3]}"
+                         f"{'…' if len(schools) > 3 else ''} | classes: {classes[:3]}"
+                         f"{'…' if len(classes) > 3 else ''} | "
+                         f"companion books: {len(private_list_pool)}"))
     
     # ──────────────────────────────────────────────────────────
     # STEP 1 — SCHOOL-BOOK CANDIDATE POOL (multi-tier filter)
@@ -10089,6 +10208,14 @@ def run_school_books_engine(trigger, df_school_pool, df_stationery_pool, df_hist
                 f"⚙ Summer + young class: no ΒΙΒΛΙΑ ΔΙΑΚΟΠΩΝ found in catalog "
                 f"(feature ready; add holiday books to surface them)")
     
+    # v28.30.21 — PRIVATE-SCHOOL LIST is handled via dedicated PRIVATE_LIST
+    # slots in the layout below (not prepended to primary), because the
+    # private-list books — especially from International School Books — lack
+    # the _subjects/_classes/_orientation columns the school picker's
+    # subject-diversity machinery expects. The dedicated picker ranks purely
+    # by sales and bypasses that machinery. The KIDS' BOOK pool is untouched.
+    private_list_count = len(private_list_pool) if (trigger_in_private_list and not private_list_pool.empty) else 0
+    
     # ── Dynamic layout based on primary pool size ──
     # v28.30.15 — BOOKS-ONLY. The middle "extra" slots that previously held
     # stationery now hold KIDS' TRADE BOOKS (age-appropriate best-sellers)
@@ -10158,10 +10285,33 @@ def run_school_books_engine(trigger, df_school_pool, df_stationery_pool, df_hist
     
     alloc_notes = [
         "=== STEP 3: SLOT ALLOCATION ===",
-        f"Plan: {' '.join(s[:5] for s in base_plan)}",
     ]
+    
+    # v28.30.21 — PRIVATE-SCHOOL LIST substitution. When the trigger is on a
+    # private-school list, the leading SCHOOL slots become PRIVATE_LIST slots
+    # (filled from the same school+class companion books, sales-ranked). We
+    # replace as many leading SCHOOL_PRIMARY/SECONDARY slots as we have list
+    # books for — but NEVER the KIDS_BOOK slots (kids' logic is untouched).
+    # If the list runs short, the remaining leading slots stay school books.
+    if private_list_count > 0:
+        n_to_replace = min(private_list_count, base_plan.count('SCHOOL_PRIMARY') + base_plan.count('SCHOOL_SECONDARY'))
+        replaced = 0
+        new_plan = []
+        for slot in base_plan:
+            if slot in ('SCHOOL_PRIMARY', 'SCHOOL_SECONDARY') and replaced < n_to_replace:
+                new_plan.append('PRIVATE_LIST')
+                replaced += 1
+            else:
+                new_plan.append(slot)
+        base_plan = new_plan
+        fill_notes.append(
+            f"⚙ Private-school list: {replaced} slot(s) filled from the same "
+            f"school+class list (sales-ranked); kids' slots preserved")
+    
+    alloc_notes.append(f"Plan: {' '.join(s[:5] for s in base_plan)}")
     slot_notes[3] = alloc_notes
     diag.append(("3. Slot Plan", f"{len(base_plan)} slots",
+                 f"{base_plan.count('PRIVATE_LIST')} private-list + "
                  f"{base_plan.count('SCHOOL_PRIMARY')} primary + "
                  f"{base_plan.count('KIDS_BOOK')} kids + "
                  f"{base_plan.count('SCHOOL_SECONDARY')} secondary"))
@@ -10169,10 +10319,12 @@ def run_school_books_engine(trigger, df_school_pool, df_stationery_pool, df_hist
     primary_list   = list(primary_pool.iterrows())   if not primary_pool.empty   else []
     secondary_list = list(secondary_pool.iterrows()) if not secondary_pool.empty else []
     kids_list      = list(kids_books_pool.iterrows()) if not kids_books_pool.empty else []
+    private_list   = list(private_list_pool.iterrows()) if not private_list_pool.empty else []
     stat_list      = []   # stationery retired in this engine
     primary_consumed   = set()
     secondary_consumed = set()
     kids_consumed      = set()
+    private_consumed   = set()
     
     # v28.30.7 — Diversity sets per phase.
     # Primary phase: no diversity tracking (same-subject companions WANTED).
@@ -10254,6 +10406,18 @@ def run_school_books_engine(trigger, df_school_pool, df_stationery_pool, df_hist
                                  enforce_diversity=False, used_subjects_set=None)
             return row
     
+    # v28.30.21 — Private-school list picker. Pulls the same school+class
+    # companion books (sales-ranked), de-duped against already-shown books.
+    def _next_private_list():
+        for i, (_, row) in enumerate(private_list):
+            if i in private_consumed: continue
+            mat = row.get('Material', None)
+            if mat in used_materials:
+                private_consumed.add(i); continue
+            private_consumed.add(i)
+            return row
+        return None
+    
     # v28.30.15 — Kids' trade-book picker. Pulls age-appropriate best-selling
     # books from the kids_books_pool (sorted by sales). De-dups against books
     # already shown. No theme/hierarchy logic — these are trade books, ranked
@@ -10278,7 +10442,14 @@ def run_school_books_engine(trigger, df_school_pool, df_stationery_pool, df_hist
         row = None
         picked_from = None
         
-        if slot_type in ('SCHOOL_PRIMARY', 'SCHOOL_SECONDARY'):
+        if slot_type == 'PRIVATE_LIST':
+            row = _next_private_list()
+            picked_from = 'private_list'
+            if row is None:
+                # List exhausted — fall back to normal school books
+                row = _next_school('SCHOOL_PRIMARY')
+                picked_from = 'school (private-list exhausted)'
+        elif slot_type in ('SCHOOL_PRIMARY', 'SCHOOL_SECONDARY'):
             row = _next_school(slot_type)
             picked_from = 'school'
             if row is None:
@@ -10299,7 +10470,11 @@ def run_school_books_engine(trigger, df_school_pool, df_stationery_pool, df_hist
             continue
         
         # Slot_Role label downstream
-        if picked_from.startswith('kids'):
+        if picked_from.startswith('private_list'):
+            role = 'School Book (private-school list)'
+            label = str(row.get('_tier_label', '') or '')
+            tier_note = f" [{label}]" if label else ''
+        elif picked_from.startswith('kids'):
             role = 'Kids Book (age-appropriate)'
             label = str(row.get('_tier_label', '') or '')
             tier_note = f" [{label}]" if label else ''
@@ -22065,7 +22240,7 @@ elif active_cluster in BOOKS_V2_CLUSTERS:
 # 7-10 with stationery overflow if exhausted).
 elif active_cluster == "Greek School Books":
     recs, diag, slot_notes, full_candidates = run_school_books_engine(
-        trigger, df_school_books, df_stationery, df_history, df_books)
+        trigger, df_school_books, df_stationery, df_history, df_books, df_private_school, df_int_school)
     slot_diag = []
 else:
     # Final fallback — preserved for any non-books cluster that ends up
