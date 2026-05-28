@@ -103,7 +103,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v28.30.28 — Language Learning: helper-ordering NameError fix
+        🟢 Engine v28.30.29 — Language Learning: drop teacher's editions + display fix
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -6258,6 +6258,26 @@ def _ll_infer_kids_lang(title):
         return 'es'
     return 'en'
 
+def _ll_is_teacher_book(row):
+    """True if a book is a TEACHER'S edition (should NOT be shown to students).
+    Uses the 'Μαθητής/Καθηγητής' column primarily, plus title markers as a
+    backstop. Books marked for BOTH (Μαθητής;Καθηγητής) are kept (student-usable)."""
+    # Column signal: pure teacher (Καθηγητής/Καθηγητές) with no Μαθητής → exclude
+    mk = str(row.get('Μαθητής/Καθηγητής', '') or '').strip().lower()
+    if mk:
+        has_teacher = ('καθηγητ' in mk)
+        has_student = ('μαθητ' in mk)
+        if has_teacher and not has_student:
+            return True
+    # Title markers (catch rows where the column is blank)
+    title = str(row.get('Title', '') or '').lower()
+    teacher_markers = ("teacher's", "teachers book", "teacher book", "teacher's book",
+                       "t's book", "βιβλίο καθηγητή", "βιβλίο εκπαιδευτικού",
+                       "teacher's guide", "teacher guide", "teacher's manual")
+    if any(m in title for m in teacher_markers):
+        return True
+    return False
+
 # ───── Sidebar base styling ─────
 st.sidebar.markdown("""
 <style>
@@ -9674,6 +9694,12 @@ def run_lang_learning_engine(trigger, df_int_school, df_kids_books):
             same_series = same_series[same_series.apply(_level_match, axis=1)]
         series_pool = same_series[same_series['_mat_i'] != (int(tm) if tm is not None else -1)].copy()
         series_pool = series_pool.drop_duplicates(subset=['_mat_i'])
+        # v28.30.29 — never recommend teacher's editions to students
+        _n_teacher = 0
+        if not series_pool.empty:
+            _n_before = len(series_pool)
+            series_pool = series_pool[~series_pool.apply(_ll_is_teacher_book, axis=1)].copy()
+            _n_teacher = _n_before - len(series_pool)
         # Sales rank
         if 'Sum of Sales' in series_pool.columns:
             _s = pd.to_numeric(series_pool['Sum of Sales'].astype('object'),
@@ -9684,7 +9710,8 @@ def run_lang_learning_engine(trigger, df_int_school, df_kids_books):
         series_pool['_tier_label'] = f"Same series · same level ({t_series})"
         series_pool = series_pool.sort_values('_sales', ascending=False).reset_index(drop=True)
         s1_notes.append(f"Series '{t_series}' + level '{t_level or t_class}': "
-                        f"{len(series_pool)} companion book(s)")
+                        f"{len(series_pool)} companion book(s)"
+                        + (f" (excluded {_n_teacher} teacher's edition(s))" if _n_teacher else ""))
     else:
         s1_notes.append("No series on trigger — skipping series companions")
     slot_notes[1] = s1_notes
@@ -9787,6 +9814,7 @@ def run_lang_learning_engine(trigger, df_int_school, df_kids_books):
 
         row_copy = row.copy()
         row_copy['Slot_Position'] = slot_idx
+        row_copy['Assigned_Slot'] = slot_idx   # diagnostic display expects this
         row_copy['Slot_Role'] = role
         row_copy['Item_Rank'] = 1
         if 'Final_Score' not in row_copy.index or pd.isna(row_copy.get('Final_Score', None)):
