@@ -103,7 +103,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v28.30.13 — School Books: age-safe stationery + summer holiday books
+        🟢 Engine v28.30.15 — School Books: books-only + age-appropriate kids' books
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -3881,6 +3881,9 @@ SB_VERY_YOUNG_ITEM_BLOCKLIST = (
     'χαρακας', 'διαβητης', 'μοιρογνωμονιο',  # technical drawing tools
     'μηχανικο μολυβ',# mechanical pencils (choke/fine tip)
     'κοπιδι', 'φαλτσετα',  # craft knives
+    'επαγγελματικ',  # "professional" art supplies — not for preschoolers
+    'fine 2.0', 'fineliner', 'fine liner',  # fine-tip technical markers
+    'board και fine',  # dual-tip board/fineliner marker sets
 )
 
 # v28.30.13 — Holiday/vacation activity books (ΒΙΒΛΙΑ ΔΙΑΚΟΠΩΝ). In summer
@@ -3894,6 +3897,66 @@ SB_HOLIDAY_ELIGIBLE_CLASSES = {
 }
 # Northern-hemisphere school summer window (Greece): June, July, August.
 SB_SUMMER_MONTHS = {6, 7, 8}
+
+# v28.30.15 — Kids' trade books (from the 'Greek Books' sheet) as cross-sell
+# for younger school-book triggers. We show age-appropriate best-sellers
+# using the 'Προτεινόμενη Ηλικία' (recommended age) field. Only for triggers
+# up to ~12yo (Δημοτικό + Προσχολική); high school stays school-books only.
+SB_KIDS_BOOKS_MAX_AGE_CLASSES = {
+    "Παιδικός Σταθμός", "Προνήπιο", "Νηπιαγωγείο",
+    "Α' Δημοτικού", "Β' Δημοτικού", "Γ' Δημοτικού",
+    "Δ' Δημοτικού", "Ε' Δημοτικού", "ΣΤ' Δημοτικού",
+    "Α' Γυμνασίου",   # ~12yo — include first year of γυμνάσιο
+}
+# Map a class to the child's approximate age band (min, max) in years, used
+# to filter trade books by 'Προτεινόμενη Ηλικία'.
+SB_CLASS_TO_AGE_BAND = {
+    "Παιδικός Σταθμός": (2, 4),
+    "Προνήπιο":         (4, 5),
+    "Νηπιαγωγείο":      (5, 6),
+    "Α' Δημοτικού":     (6, 7),
+    "Β' Δημοτικού":     (7, 8),
+    "Γ' Δημοτικού":     (8, 9),
+    "Δ' Δημοτικού":     (9, 10),
+    "Ε' Δημοτικού":     (10, 11),
+    "ΣΤ' Δημοτικού":    (11, 12),
+    "Α' Γυμνασίου":     (12, 13),
+    "Β' Γυμνασίου":     (13, 14),
+    "Γ' Γυμνασίου":     (14, 15),
+    "Α' Λυκείου":       (15, 16),
+    "Β' Λυκείου":       (16, 17),
+    "Γ' Λυκείου":       (17, 18),
+}
+
+def _sb_parse_age_range(v):
+    """Parse a 'Προτεινόμενη Ηλικία' value into (min_age, max_age).
+    Handles 'N+ ετών', 'N - M', 'N έως M ετών', 'N+', bare 'N'.
+    Returns None if unparseable / placeholder."""
+    if v is None:
+        return None
+    s = str(v).strip().lower()
+    if s in ('-', 'none', 'nan', ''):
+        return None
+    s = s.replace('ετών', '').replace('έτη', '').replace('έως', '-').replace('εως', '-').strip()
+    # "N+" (optionally with trailing text)
+    m = re.match(r'^(\d+)\s*\+', s)
+    if m:
+        return (int(m.group(1)), 99)
+    # "N - M"
+    m = re.match(r'^(\d+)\s*-\s*(\d+)', s)
+    if m:
+        return (int(m.group(1)), int(m.group(2)))
+    # bare "N"
+    m = re.match(r'^(\d+)$', s)
+    if m:
+        return (int(m.group(1)), int(m.group(1)))
+    return None
+
+def _sb_age_overlaps(rng, lo, hi):
+    """True if an age range (min,max) overlaps the target window [lo, hi]."""
+    if rng is None:
+        return False
+    return rng[0] <= hi and rng[1] >= lo
 
 
 # v28.30.2 — Τόμος / Τεύχος / Μέρος detection.
@@ -4087,6 +4150,58 @@ def _sb_series_key(base_title):
         'γενικης', 'και', 'των', 'τησ', 'της', 'στοιχεια',
     }
     return frozenset(t for t in tokens if t and t not in NOISE and len(t) >= 3)
+
+# v28.30.14 — Kids' stationery theme/brand matching. Young children care that
+# their supplies share a character/theme (a Unicorn gum wants a Unicorn pencil,
+# not a generic one). We extract a theme token from a stationery item's title
+# and bias the selection so, once a themed item is picked, sibling slots prefer
+# the same theme. Token list curated from the retailer's Θέμα + Brand facets.
+SB_KIDS_THEME_KEYWORDS = {
+    # theme token : tuple of accent-stripped lowercase title substrings
+    'unicorn':      ('unicorn', 'μονοκερ'),
+    'frozen':       ('frozen', 'ελσα', 'elsa', 'anna'),
+    'barbie':       ('barbie', 'μπαρμπι'),
+    'bluey':        ('bluey',),
+    'cars':         ('cars', 'mcqueen'),
+    'disney':       ('disney', 'ντισνε'),
+    'dora':         ('dora', 'ντορα'),
+    'dragonball':   ('dragon ball', 'dragonball'),
+    'gabby':        ('gabby', 'gabbys'),
+    'hellokitty':   ('hello kitty', 'hellokitty'),
+    'stitch':       ('lilo', 'stitch'),
+    'littleprince': ('little prince', 'μικρος πριγκιπ', 'μικρος πριγκηπ'),
+    'marvel':       ('marvel', 'avengers', 'spiderman', 'spider man', 'ironman'),
+    'mymelody':     ('my melody', 'mymelody'),
+    'onepiece':     ('one piece', 'onepiece', 'luffy'),
+    'pawpatrol':    ('paw patrol', 'pawpatrol'),
+    'peppa':        ('peppa',),
+    'santoro':      ('santoro', 'gorjuss'),
+    'sonic':        ('sonic',),
+    'squishmallows':('squishmallows', 'squishmallow'),
+    'supermario':   ('super mario', 'supermario', 'mario'),
+    'yeti':         ('γετι', 'yeti'),
+    'mrmen':        ('μικροι κυριοι', 'μικρες κυριες', 'mr men', 'little miss'),
+    'olympiacos':   ('ολυμπιακος',),
+    'panathinaikos':('παναθηναικος',),
+    'rene':         ('rene', 'ρενε'),
+    # generic themes (Θέμα facet)
+    'animals':      ('ζωακι', 'ζωα ', 'animal'),
+    'princess':     ('πριγκιπισσ', 'princess'),
+    'superhero':    ('σουπερ ηρω', 'superhero', 'super hero'),
+    'vehicles':     ('οχημα', 'αυτοκινητ', 'vehicle', 'truck'),
+    'football':     ('ποδοσφαιρ', 'football', 'αθλημα'),
+}
+
+def _sb_kids_theme_tokens(title):
+    """Return the set of kids' theme/brand tokens present in a title."""
+    if not title:
+        return frozenset()
+    s = _sb_strip_accents_upper(str(title)).lower()
+    out = set()
+    for token, needles in SB_KIDS_THEME_KEYWORDS.items():
+        if any(nd in s for nd in needles):
+            out.add(token)
+    return frozenset(out)
 
 def _sb_orient_compatible(row_orient_value, trigger_tokens):
     """Decide whether a row is orientation-compatible with the trigger.
@@ -9194,7 +9309,7 @@ def run_books_v2_engine(trigger, df_pool, df_history, category_key):
 # ═════════════════════════════════════════════════════════════
 # v28.30 — GREEK SCHOOL BOOKS ENGINE
 # ═════════════════════════════════════════════════════════════
-def run_school_books_engine(trigger, df_school_pool, df_stationery_pool, df_history):
+def run_school_books_engine(trigger, df_school_pool, df_stationery_pool, df_history, df_greek_books=None):
     """Σχολικά Βιβλία recommender.
     
     Layout:
@@ -9628,69 +9743,61 @@ def run_school_books_engine(trigger, df_school_pool, df_stationery_pool, df_hist
                  f"T1={len(tier1)} T2={len(tier2)} T3={len(tier3)} T4={len(tier4)} T5={len(tier5)} T6={len(tier6)} | stage={'older' if is_older_stage else 'younger'}"))
     
     # ──────────────────────────────────────────────────────────
-    # STEP 2 — STATIONERY POOL (age-targeted)
+    # STEP 2 — KIDS' TRADE-BOOKS POOL (age-targeted)
     # ──────────────────────────────────────────────────────────
-    st_notes = ["=== STEP 2: STATIONERY POOL (age-targeted) ==="]
+    # v28.30.15 — DIRECTION CHANGE: stationery removed from this engine
+    # (its logic is preserved in docs/stationery_slot_logic.md for a future
+    # dedicated slot). This engine is now BOOKS-ONLY. For younger triggers
+    # (up to ~12yo: Δημοτικό/Προσχολική + Α' Γυμνασίου), we additionally
+    # surface age-appropriate best-selling KIDS' TRADE BOOKS (from the
+    # 'Greek Books' catalog) using the 'Προτεινόμενη Ηλικία' field. High
+    # school triggers stay school-books only (no kids-book pool).
+    st_notes = ["=== STEP 2: KIDS' TRADE-BOOKS POOL (age-targeted) ==="]
+    stat_pool = pd.DataFrame()   # legacy name kept empty (stationery retired here)
+    kids_books_pool = pd.DataFrame()
     
-    stat_pool = pd.DataFrame()
-    if df_stationery_pool is not None and not df_stationery_pool.empty:
-        stage_hierarchies = SB_STAGE_TO_STATIONERY.get(t_stage, [])
-        if not stage_hierarchies:
-            st_notes.append(f"⚠ No stationery hierarchies configured for stage '{t_stage}' — using default '{SB_DEFAULT_STAGE}'")
-            stage_hierarchies = SB_STAGE_TO_STATIONERY.get(SB_DEFAULT_STAGE, [])
+    show_kids_books = bool(t_classes) and any(
+        c in SB_KIDS_BOOKS_MAX_AGE_CLASSES for c in t_classes)
+    
+    if show_kids_books and df_greek_books is not None and not df_greek_books.empty:
+        # Determine the child's age window from the trigger class(es)
+        age_bands = [SB_CLASS_TO_AGE_BAND[c] for c in t_classes if c in SB_CLASS_TO_AGE_BAND]
+        if age_bands:
+            age_lo = min(b[0] for b in age_bands)
+            age_hi = max(b[1] for b in age_bands)
+        else:
+            age_lo, age_hi = 3, 12   # safe default for "younger"
         
-        st_notes.append(f"Stage '{t_stage}' → age-appropriate hierarchies "
-                        f"(in priority order): {len(stage_hierarchies)}")
-        st_notes.append(f"  {', '.join(stage_hierarchies[:8])}{'…' if len(stage_hierarchies) > 8 else ''}")
-        
-        stat_pool = df_stationery_pool[df_stationery_pool['Hierarchy'].isin(stage_hierarchies)].copy()
-        st_notes.append(f"Pool after hierarchy filter: {len(stat_pool)} candidates")
-        
-        # v28.30.13 — Very-young item-safety filter (≤ ~7yo). Remove craft
-        # items unsuitable for little kids (acrylic/oil paint, charcoal, india
-        # ink, solvent clay, mechanical pencils, craft knives, technical tools)
-        # even though their hierarchy is age-listed.
-        if is_very_young and not stat_pool.empty and 'Title' in stat_pool.columns:
-            def _very_young_safe(title):
-                s = _sb_strip_accents_upper(str(title)).lower()
-                return not any(bad in s for bad in SB_VERY_YOUNG_ITEM_BLOCKLIST)
-            before_n = len(stat_pool)
-            stat_pool = stat_pool[stat_pool['Title'].apply(_very_young_safe)].copy()
-            removed_n = before_n - len(stat_pool)
-            if removed_n > 0:
-                st_notes.append(f"Very-young safety filter (≤7yo): removed {removed_n} "
-                                f"unsuitable items (acrylics/charcoal/solvent clay/etc.)")
-        
-        if not stat_pool.empty:
-            # Score = priority(hierarchy) × tier_weight + sales (in-stock tiebreaker).
-            # Priority weight gives top-of-list hierarchies a multi-million-point
-            # head-start; sales determines ranking WITHIN a hierarchy. Combined,
-            # we visit hierarchies in user-curated order, picking the best-seller
-            # within each.
-            stat_pool['_priority'] = stat_pool['Hierarchy'].apply(
-                lambda h: _sb_get_stationery_priority(h, t_stage))
-            stat_pool['_sales'] = stat_pool['Sum of Sales'].apply(_safe_num) if 'Sum of Sales' in stat_pool.columns else 0.0
-            if 'AVAILABILITY' in stat_pool.columns:
-                stat_pool['_avail'] = stat_pool['AVAILABILITY'].apply(
-                    lambda v: SB_STAT_S_AVAIL_BONUS if str(v).strip() == 'Άμεσα Διαθέσιμο' else 0)
-            else:
-                stat_pool['_avail'] = 0
-            
-            # To "visit each hierarchy in order then go best-seller", we sort
-            # primarily by priority (desc), then by sales (desc) within. The
-            # slot filler then does round-robin across hierarchies so we don't
-            # stack 6 notebooks back-to-back.
-            stat_pool['Final_Score'] = (
-                stat_pool['_priority'] * SB_STAT_S_HIER_PRIORITY
-                + stat_pool['_sales']
-                + stat_pool['_avail']
-            )
-            stat_pool = stat_pool.sort_values(['_priority', '_sales'], ascending=[False, False])
+        gb = df_greek_books.copy()
+        age_col = 'Προτεινόμενη Ηλικία' if 'Προτεινόμενη Ηλικία' in gb.columns else None
+        if age_col:
+            gb['_age_range'] = gb[age_col].apply(_sb_parse_age_range)
+            kids_books_pool = gb[gb['_age_range'].apply(
+                lambda r: _sb_age_overlaps(r, age_lo, age_hi))].copy()
+            st_notes.append(f"Child age window from class: {age_lo}-{age_hi} years")
+            st_notes.append(f"Kids' books with age overlapping window: {len(kids_books_pool)}")
+            if not kids_books_pool.empty:
+                kids_books_pool['_sales'] = (kids_books_pool['Sum of Sales'].apply(_safe_num)
+                                             if 'Sum of Sales' in kids_books_pool.columns else 0.0)
+                if 'AVAILABILITY' in kids_books_pool.columns:
+                    kids_books_pool['_avail'] = kids_books_pool['AVAILABILITY'].apply(
+                        lambda v: SB_S_AVAIL_BONUS if str(v).strip() == 'Άμεσα Διαθέσιμο' else 0)
+                else:
+                    kids_books_pool['_avail'] = 0
+                kids_books_pool['Final_Score'] = kids_books_pool['_sales'] + kids_books_pool['_avail']
+                kids_books_pool['_tier_label'] = 'Kids book (age-appropriate best-seller)'
+                kids_books_pool = kids_books_pool.sort_values('_sales', ascending=False).reset_index(drop=True)
+                st_notes.append(f"Top kids' book: {str(kids_books_pool.iloc[0].get('Title',''))[:50]}")
+        else:
+            st_notes.append("⚠ 'Προτεινόμενη Ηλικία' column not found in Greek Books")
+    elif not show_kids_books:
+        st_notes.append(f"Kids' books OFF (trigger class older than ~12yo) — school books only")
     else:
-        st_notes.append("⚠ Stationery sheet not loaded")
+        st_notes.append("⚠ Greek Books catalog not provided")
     
     slot_notes[2] = st_notes
-    diag.append(("2. Stationery Pool", len(stat_pool), f"Stage='{t_stage}'"))
+    diag.append(("2. Kids' Books Pool", len(kids_books_pool),
+                 f"show_kids_books={show_kids_books}"))
     
     # ──────────────────────────────────────────────────────────
     # STEP 3 — SLOT ALLOCATION
@@ -9921,68 +10028,71 @@ def run_school_books_engine(trigger, df_school_pool, df_stationery_pool, df_hist
                 f"(feature ready; add holiday books to surface them)")
     
     # ── Dynamic layout based on primary pool size ──
+    # v28.30.15 — BOOKS-ONLY. The middle "extra" slots that previously held
+    # stationery now hold KIDS' TRADE BOOKS (age-appropriate best-sellers)
+    # when available (younger triggers). When no kids' books are available
+    # (e.g. high school, or empty pool), those slots fall back to more
+    # school books so the carousel always fills with books.
     n_primary_avail = len(primary_pool)
     # Number of NON-sibling helpers in primary pool — used to decide whether
     # the scarce-helpers fallback applies (sibling presence overrides it).
     n_helpers_in_primary = n_primary_avail - series_companion_count
+    has_kids_books = (not kids_books_pool.empty)
+    # The "extra" book slots (previously stationery): KIDS_BOOK if available,
+    # else more SCHOOL books.
+    EXTRA = 'KIDS_BOOK' if has_kids_books else ('SCHOOL_PRIMARY' if not should_phase_split else 'SCHOOL_SECONDARY')
+    N_EXTRA = STAT_SLOTS   # keep the 3-slot middle band by default
+    
     if should_phase_split:
-        # v28.30.9 — Scarce-helpers layout for TEXTBOOK triggers only.
-        # When the best helper publisher has fewer than 3 same-subject
-        # helpers, the carousel leads with Βιβλία Οργανισμού (cross-subject
-        # Διόφαντος textbooks) instead of helpers; the available helpers
-        # (0, 1, or 2) move to the overflow section after stationery.
-        # Helper triggers keep the standard 3-6 primary + stat + secondary
-        # layout (with deficit fill from secondary when primary < 3).
-        # v28.30.10 — When SERIES SIBLINGS exist, the scarce-helpers fallback
-        # is bypassed: siblings are stronger evidence of "this companion
-        # belongs at the front" than any helper-publisher heuristic.
+        # OLDER stage (Γυμνάσιο/Λύκειο). High school → no kids books, so the
+        # EXTRA band is school books. Α' Γυμνασίου (≤12yo) MAY have kids books.
         if (trigger_is_textbook
                 and series_companion_count == 0
                 and n_helpers_in_primary < 3):
-            n_boost = 4 if n_helpers_in_primary <= 1 else 3   # "less than 2" → 4; "less than 3" → 3
-            n_overflow_primary   = n_helpers_in_primary       # all available helpers in overflow
-            n_overflow_secondary = TOTAL_SLOTS - n_boost - STAT_SLOTS - n_overflow_primary
+            n_boost = 4 if n_helpers_in_primary <= 1 else 3
+            n_overflow_primary   = n_helpers_in_primary
+            n_overflow_secondary = TOTAL_SLOTS - n_boost - N_EXTRA - n_overflow_primary
             base_plan = (
                 ['SCHOOL_SECONDARY']   * n_boost
-                + ['STATIONERY']       * STAT_SLOTS
+                + [EXTRA]              * N_EXTRA
                 + ['SCHOOL_PRIMARY']   * n_overflow_primary
                 + ['SCHOOL_SECONDARY'] * n_overflow_secondary
             )
             fill_notes.append(
-                f"⚙ Scarce-helpers layout (textbook trigger, {n_helpers_in_primary} helper(s), no series sibling): "
-                f"{n_boost} textbooks front + {STAT_SLOTS} stationery + "
-                f"{n_overflow_primary} helper(s) + {n_overflow_secondary} textbooks overflow")
+                f"⚙ Scarce-helpers layout (textbook, {n_helpers_in_primary} helper(s)): "
+                f"{n_boost} textbooks + {N_EXTRA} {EXTRA.lower()} + "
+                f"{n_overflow_primary} helper(s) + {n_overflow_secondary} textbooks")
         else:
-            # Standard dynamic layout (3-6 primary + stat + remaining secondary)
             n_primary_slots = min(max(n_primary_avail, PRIMARY_MIN), PRIMARY_MAX)
-            n_secondary_slots = TOTAL_SLOTS - n_primary_slots - STAT_SLOTS
+            n_secondary_slots = TOTAL_SLOTS - n_primary_slots - N_EXTRA
             base_plan = (
                 ['SCHOOL_PRIMARY']   * n_primary_slots
-                + ['STATIONERY']     * STAT_SLOTS
+                + [EXTRA]            * N_EXTRA
                 + ['SCHOOL_SECONDARY'] * n_secondary_slots
             )
             fill_notes.append(
-                f"⚙ Dynamic layout: {n_primary_slots} primary + {STAT_SLOTS} stationery + "
-                f"{n_secondary_slots} secondary (cap on primary = {PRIMARY_MAX})")
+                f"⚙ Dynamic layout: {n_primary_slots} school + {N_EXTRA} {EXTRA.lower()} + "
+                f"{n_secondary_slots} school-overflow (cap on primary = {PRIMARY_MAX})")
     else:
-        # v28.30.12 — Early elementary (Ε' Δημοτικού and below + preschool):
-        # stationery moves to slots 3-7 (5 stationery slots up front after
-        # 2 school books), since young kids' baskets are stationery-heavy
-        # (crayons, notebooks, coloring). Remaining slots 8-10 are school books.
-        # ΣΤ' Δημοτικού and older keep the standard 3-3-4 layout.
-        if is_early_elementary:
+        # YOUNGER stage (Δημοτικό/Προσχολική) — kids' books available.
+        # v28.30.15 — early elementary previously had 5 stationery slots in
+        # 3-7; now those become 5 KIDS_BOOK slots (age-appropriate trade books).
+        if is_early_elementary and has_kids_books:
             base_plan = (
-                ['SCHOOL_PRIMARY'] * 2     # slots 1-2: school books
-                + ['STATIONERY']   * 5     # slots 3-7: stationery
+                ['SCHOOL_PRIMARY'] * 2     # slots 1-2: school books for the class
+                + ['KIDS_BOOK']    * 5     # slots 3-7: age-appropriate kids' trade books
                 + ['SCHOOL_PRIMARY'] * 3   # slots 8-10: more school books
             )
+            fill_notes.append("⚙ Early-elementary books-only layout: 2 school + 5 kids' books + 3 school")
         else:
-            # Younger (ΣΤ' Δημοτικού) or no-split: original 3-3-4 layout
+            # Standard younger layout: 3 school + 3 extra + 4 school
             base_plan = (
                 ['SCHOOL_PRIMARY'] * 3
-                + ['STATIONERY']   * 3
-                + ['SCHOOL_PRIMARY'] * 4
+                + [EXTRA]          * N_EXTRA
+                + ['SCHOOL_PRIMARY'] * (TOTAL_SLOTS - 3 - N_EXTRA)
             )
+            fill_notes.append(f"⚙ Younger books-only layout: 3 school + {N_EXTRA} {EXTRA.lower()} + "
+                              f"{TOTAL_SLOTS - 3 - N_EXTRA} school")
     
     alloc_notes = [
         "=== STEP 3: SLOT ALLOCATION ===",
@@ -9991,14 +10101,16 @@ def run_school_books_engine(trigger, df_school_pool, df_stationery_pool, df_hist
     slot_notes[3] = alloc_notes
     diag.append(("3. Slot Plan", f"{len(base_plan)} slots",
                  f"{base_plan.count('SCHOOL_PRIMARY')} primary + "
-                 f"{base_plan.count('STATIONERY')} stat + "
+                 f"{base_plan.count('KIDS_BOOK')} kids + "
                  f"{base_plan.count('SCHOOL_SECONDARY')} secondary"))
     
     primary_list   = list(primary_pool.iterrows())   if not primary_pool.empty   else []
     secondary_list = list(secondary_pool.iterrows()) if not secondary_pool.empty else []
-    stat_list      = list(stat_pool.iterrows())      if not stat_pool.empty      else []
+    kids_list      = list(kids_books_pool.iterrows()) if not kids_books_pool.empty else []
+    stat_list      = []   # stationery retired in this engine
     primary_consumed   = set()
     secondary_consumed = set()
+    kids_consumed      = set()
     
     # v28.30.7 — Diversity sets per phase.
     # Primary phase: no diversity tracking (same-subject companions WANTED).
@@ -10015,12 +10127,6 @@ def run_school_books_engine(trigger, df_school_pool, df_stationery_pool, df_hist
         fill_notes.append(
             f"⚙ Subject diversity ON (younger stage '{t_stage}'): "
             f"each school slot picks a different subject")
-    
-    # For stationery: track used materials AND used hierarchies, so we
-    # round-robin across hierarchies before repeating one (avoids 3 notebooks
-    # back to back).
-    stat_used_materials = set()
-    stat_used_hierarchies_in_round = set()
     
     def _next_from(rows, consumed, enforce_diversity, used_subjects_set):
         """Generic pool consumer.
@@ -10086,24 +10192,23 @@ def run_school_books_engine(trigger, df_school_pool, df_stationery_pool, df_hist
                                  enforce_diversity=False, used_subjects_set=None)
             return row
     
+    # v28.30.15 — Kids' trade-book picker. Pulls age-appropriate best-selling
+    # books from the kids_books_pool (sorted by sales). De-dups against books
+    # already shown. No theme/hierarchy logic — these are trade books, ranked
+    # purely by sales within the child's age window.
+    def _next_kids_book():
+        for i, (_, row) in enumerate(kids_list):
+            if i in kids_consumed: continue
+            mat = row.get('Material', None)
+            if mat in used_materials:
+                kids_consumed.add(i); continue
+            kids_consumed.add(i)
+            return row
+        return None
+    
     def _next_stationery():
-        """Round-robin across hierarchies so we don't stack same-hierarchy
-        items. Once each hierarchy has been visited (within the available
-        pool), reset the round and start picking the next-best from each."""
-        nonlocal stat_used_hierarchies_in_round
-        for round_pass in range(3):  # safety cap — at most 3 round-robin passes
-            for _, row in stat_list:
-                mat = row.get('Material', None)
-                if mat in stat_used_materials: continue
-                h = row.get('Hierarchy', '')
-                if h in stat_used_hierarchies_in_round:
-                    continue   # save for the next round
-                # Accept
-                stat_used_materials.add(mat)
-                stat_used_hierarchies_in_round.add(h)
-                return row
-            # End of round — reset hierarchy tracking and try again
-            stat_used_hierarchies_in_round = set()
+        """Retired in this engine (books-only). Always returns None so any
+        legacy fallback path degrades to school/kids books."""
         return None
     
     all_recs = []
@@ -10115,26 +10220,31 @@ def run_school_books_engine(trigger, df_school_pool, df_stationery_pool, df_hist
             row = _next_school(slot_type)
             picked_from = 'school'
             if row is None:
-                # Both school pools exhausted — fall back to stationery
-                row = _next_stationery()
-                picked_from = 'stationery (school exhausted)'
-        else:  # STATIONERY
-            row = _next_stationery()
-            picked_from = 'stationery'
+                # School pools exhausted — try a kids' book to fill
+                row = _next_kids_book()
+                picked_from = 'kids (school exhausted)'
+        else:  # KIDS_BOOK
+            row = _next_kids_book()
+            picked_from = 'kids'
             if row is None:
-                # Stationery exhausted — try a school book to fill the slot.
-                # Prefer secondary (cross-subject) for overflow position;
-                # primary (same-subject) for front position.
+                # Kids' books exhausted — fall back to school books.
                 fallback_type = 'SCHOOL_SECONDARY' if slot_idx > 3 else 'SCHOOL_PRIMARY'
                 row = _next_school(fallback_type)
-                picked_from = 'school (stationery exhausted)'
+                picked_from = 'school (kids exhausted)'
         
         if row is None:
-            fill_notes.append(f"Slot {slot_idx}: EMPTY — both pools exhausted")
+            fill_notes.append(f"Slot {slot_idx}: EMPTY — pools exhausted")
             continue
         
         # Slot_Role label downstream
-        if picked_from.startswith('school'):
+        if picked_from.startswith('kids'):
+            role = 'Kids Book (age-appropriate)'
+            label = str(row.get('_tier_label', '') or '')
+            tier_note = f" [{label}]" if label else ''
+            age_val = str(row.get('Προτεινόμενη Ηλικία', '') or '')
+            if age_val and age_val not in ('-', 'nan', 'none'):
+                tier_note += f" (ηλικία {age_val})"
+        elif picked_from.startswith('school'):
             # Use the slot_type to determine the role label so the carousel
             # reflects the dynamic primary/secondary boundary.
             if slot_type == 'SCHOOL_PRIMARY':
@@ -10142,7 +10252,6 @@ def run_school_books_engine(trigger, df_school_pool, df_stationery_pool, df_hist
             elif slot_type == 'SCHOOL_SECONDARY':
                 role = 'School Book (overflow)'
             else:
-                # Stationery slot that fell back to school — label by position
                 role = 'School Book' if slot_idx <= 3 else 'School Book (overflow)'
             # v28.30.2 — Read the tier label directly from the row (stored
             # during _score_tier). Robust across both older-stage and
@@ -10160,8 +10269,8 @@ def run_school_books_engine(trigger, df_school_pool, df_stationery_pool, df_hist
             except (TypeError, ValueError):
                 pass
         else:
-            role = 'Stationery (age-targeted)'
-            tier_note = f" [{row.get('Hierarchy', '')}]"
+            role = 'Book'
+            tier_note = ''
         
         row_copy = row.copy()
         row_copy['Assigned_Slot'] = slot_idx
@@ -21894,7 +22003,7 @@ elif active_cluster in BOOKS_V2_CLUSTERS:
 # 7-10 with stationery overflow if exhausted).
 elif active_cluster == "Greek School Books":
     recs, diag, slot_notes, full_candidates = run_school_books_engine(
-        trigger, df_school_books, df_stationery, df_history)
+        trigger, df_school_books, df_stationery, df_history, df_greek_books)
     slot_diag = []
 else:
     # Final fallback — preserved for any non-books cluster that ends up
