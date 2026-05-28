@@ -103,7 +103,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v28.30.21 — School Books: private-school curriculum list cross-sell
+        🟢 Engine v28.30.23 — School Books: separate Ιδιωτικά Σχολεία category
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -5988,6 +5988,11 @@ L1_CATEGORIES = [
         "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 19.5A2.5 2.5 0 0 1 6.5 17H20'/%3E%3Cpath d='M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z'/%3E%3C/svg%3E",
     },
     {
+        "key": "Private Schools",
+        "label": "Ιδιωτικά\nΣχολεία",
+        "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 21h18M5 21V8l7-5 7 5v13'/%3E%3Cpath d='M9 21v-6h6v6'/%3E%3C/svg%3E",
+    },
+    {
         "key": "Telephony",
         "label": "Τηλεφωνία,\nTablets &\nWearables",
         "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='5' y='2' width='14' height='20' rx='2' ry='2'/%3E%3Cline x1='12' y1='18' x2='12.01' y2='18'/%3E%3C/svg%3E",
@@ -6046,6 +6051,10 @@ L2_CHILDREN = {
          "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3Cline x1='2' y1='12' x2='22' y2='12'/%3E%3Cpath d='M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z'/%3E%3C/svg%3E"},
         {"key": "Greek School Books", "label": "Σχολικά\nΒιβλία",
          "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M22 10v6M2 10l10-5 10 5-10 5z'/%3E%3Cpath d='M6 12v5c3 3 9 3 12 0v-5'/%3E%3C/svg%3E"},
+    ],
+    "Private Schools": [
+        {"key": "Private School Books", "label": "Λίστες\nΙδιωτικών",
+         "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 21h18M5 21V8l7-5 7 5v13'/%3E%3Cpath d='M9 21v-6h6v6'/%3E%3C/svg%3E"},
     ],
     "Telephony": [
         {"key": "Smartphones", "label": "Smart-\nphones",
@@ -7240,6 +7249,89 @@ else:
                     sel = st.sidebar.selectbox("", titles, label_visibility="collapsed", key="sb_sel")
                     if sel:
                         trigger = sb_pool[sb_pool['Title'] == sel].iloc[0]
+
+
+    elif active_cluster == "Private School Books":
+        # v28.30.22 — Private-school curriculum lists. The user picks a school,
+        # then a class; the dropdown shows the books on that school+class list
+        # (resolved to catalog rows from Greek School Books + International
+        # School Books). Selecting one runs the normal school-books engine,
+        # which detects the private-list membership and cross-sells the rest.
+        if df_private_school is None or df_private_school.empty:
+            sheets_str = ", ".join(sheets_loaded) if sheets_loaded else "(none)"
+            st.sidebar.warning(
+                "Private-school list ('school_books.xlsx', Sheet1) is empty or missing.\n\n"
+                f"**Sheets loaded**: {sheets_str}\n\n"
+                "Make sure `school_books.xlsx` is committed alongside the other workbooks."
+            )
+            st.stop()
+        # Build a catalog to resolve SAP → Title/sales (school books + helpers only)
+        _resolve_frames = []
+        if df_school_books is not None and not df_school_books.empty:
+            _resolve_frames.append(df_school_books)
+        if df_int_school is not None and not df_int_school.empty:
+            _resolve_frames.append(df_int_school)
+        if not _resolve_frames:
+            st.sidebar.warning("No school-book catalog loaded to resolve the private-school list.")
+            st.stop()
+        _cat = pd.concat(_resolve_frames, ignore_index=True, sort=False)
+        _cat['_mat_i'] = pd.to_numeric(_cat['Material'], errors='coerce')
+        _cat_sales = (_cat.set_index('_mat_i')['Sum of Sales'].to_dict()
+                      if 'Sum of Sales' in _cat.columns else {})
+        _cat_title = _cat.dropna(subset=['_mat_i']).drop_duplicates('_mat_i').set_index('_mat_i')['Title'].to_dict()
+
+        priv = df_private_school.copy()
+        # 1) School filter
+        schools = sorted([s for s in priv['_school'].dropna().unique() if str(s).strip()])
+        st.sidebar.markdown('<p class="sidebar-section">Επιλέξτε Σχολείο</p>', unsafe_allow_html=True)
+        sel_school = st.sidebar.selectbox("", ['— Επιλέξτε —'] + schools,
+                                          label_visibility="collapsed", key="ps_school")
+        if sel_school and sel_school != '— Επιλέξτε —':
+            priv = priv[priv['_school'] == sel_school]
+            # 2) Class filter
+            classes = sorted([c for c in priv['_class'].dropna().unique() if str(c).strip()])
+            st.sidebar.markdown('<p class="sidebar-section">Επιλέξτε Τάξη</p>', unsafe_allow_html=True)
+            sel_class = st.sidebar.selectbox("", ['— Επιλέξτε —'] + classes,
+                                             label_visibility="collapsed", key="ps_class")
+            if sel_class and sel_class != '— Επιλέξτε —':
+                priv = priv[priv['_class'] == sel_class]
+                # Resolve this school+class list's SAPs to titles, sales-ranked
+                list_saps = list(dict.fromkeys(priv['_sap'].tolist()))  # preserve, de-dup
+                rows = []
+                for sap in list_saps:
+                    title = _cat_title.get(sap)
+                    if not title or (isinstance(title, float) and pd.isna(title)):
+                        continue  # only books that exist in the school-book catalogs
+                    sales = _cat_sales.get(sap, 0)
+                    try: sales = float(sales)
+                    except (TypeError, ValueError): sales = 0.0
+                    rows.append((sap, str(title), sales))
+                rows.sort(key=lambda r: r[2], reverse=True)  # sales desc
+                st.sidebar.markdown('<p class="sidebar-section">Επιλέξτε Βιβλίο της λίστας</p>', unsafe_allow_html=True)
+                if rows:
+                    disp = {f"{t}": sap for sap, t, s in rows}
+                    sel_title = st.sidebar.selectbox("", list(disp.keys()),
+                                                     label_visibility="collapsed", key="ps_book")
+                    if sel_title:
+                        sap = disp[sel_title]
+                        # Pull the full catalog row for this SAP as the trigger
+                        trow = _cat[_cat['_mat_i'] == sap]
+                        if not trow.empty:
+                            trigger = trow.iloc[0].copy()
+                            # v28.30.22 — Stamp the selected class onto the
+                            # trigger so the engine's downstream class/stage
+                            # logic (kids' books, school fallback) works even
+                            # for International School Books rows that lack a
+                            # populated Τάξη_sales. Maps the private-list class
+                            # label to the engine's class vocabulary when it
+                            # matches a known Greek class; otherwise leaves the
+                            # raw label (engine treats unknown as 'younger').
+                            if 'Τάξη_sales' not in trigger.index or not str(trigger.get('Τάξη_sales','')).strip() or str(trigger.get('Τάξη_sales','')).strip() in ('0','nan','-'):
+                                trigger['Τάξη_sales'] = sel_class
+                            trigger['_private_school'] = sel_school
+                            trigger['_private_class'] = sel_class
+                else:
+                    st.sidebar.info("Κανένα σχολικό βιβλίο/βοήθημα δεν βρέθηκε σε αυτή τη λίστα.")
 
 
     elif active_cluster == "PS5 Console":
@@ -22242,6 +22334,14 @@ elif active_cluster == "Greek School Books":
     recs, diag, slot_notes, full_candidates = run_school_books_engine(
         trigger, df_school_books, df_stationery, df_history, df_books, df_private_school, df_int_school)
     slot_diag = []
+
+# v28.30.22 — Private School Books cluster: same engine; the trigger is a
+# book from a private-school curriculum list. The engine detects the list
+# membership by Material and cross-sells the same school+class list.
+elif active_cluster == "Private School Books":
+    recs, diag, slot_notes, full_candidates = run_school_books_engine(
+        trigger, df_school_books, df_stationery, df_history, df_books, df_private_school, df_int_school)
+    slot_diag = []
 else:
     # Final fallback — preserved for any non-books cluster that ends up
     # routing through here. Should not normally be reached.
@@ -22453,6 +22553,14 @@ with st.expander("⚙️ System Diagnostics"):
                               'Τάξη_sales','Μάθημα_sales','Εκδότης_sales',
                               'Συγγραφέας_sales','Σειρά βιβλίου_sales',
                               'Γλώσσα Γραφής_sales','Εξώφυλλο_sales',
+                              'Sum of Sales','LIST PRICE','AVAILABILITY']
+    elif active_cluster == "Private School Books":
+        # v28.30.22 — private-school list trigger. Trigger may come from Greek
+        # School Books (_sales cols) or International School Books (plain cols);
+        # show both flavors of the key fields plus bibliographic context.
+        attr_keys_to_show = ['Material','Title','Level 2','Hierarchy',
+                              'Τάξη_sales','Μάθημα_sales','Εκδότης_sales',
+                              'Συγγραφέας','Εκδότης',
                               'Sum of Sales','LIST PRICE','AVAILABILITY']
     elif active_cluster == "Laptops":
         attr_keys_to_show = ['Material','Title','Level 1','Level 2','Hierarchy','Κατασκευαστής','Μοντέλο','Προτεινόμενη χρήση','Μέγεθος οθόνης','Θύρες','LIST PRICE']
