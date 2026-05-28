@@ -103,7 +103,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v28.30.9 — School Books: scarce-helpers textbook fallback
+        🟢 Engine v28.30.10 — School Books: series companions first
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -9175,6 +9175,10 @@ def run_school_books_engine(trigger, df_school_pool, df_stationery_pool, df_hist
     t_orient_raw = trigger.get('Προσανατολισμός_catalog', '')
     t_orientation = _sb_parse_multi_value(t_orient_raw)
     
+    # v28.30.10 — Trigger's volume / τεύχος / μέρος info (for series-companion detection).
+    t_title = str(trigger.get('Title', ''))
+    t_tomos_rank, t_tomos_base = _sb_extract_volume(t_title)
+    
     diag.append(("0. Trigger", "", f"Cluster: Greek School Books"))
     diag.append(("   Trigger (attrs)", "", 
                  f"Publisher: '{t_publisher_raw}' | Class: {t_classes or '∅'} | "
@@ -9452,6 +9456,19 @@ def run_school_books_engine(trigger, df_school_pool, df_stationery_pool, df_hist
             t['_avail'] = 0
         t['Final_Score'] = tier_base + t['_sales'] + t['_avail']
         t['_tier_label'] = tier_label
+        # v28.30.10 — Always compute τόμος metadata. Previously this only
+        # happened inside _sort_with_tomos (gated by tomos_sort_tiers), so
+        # T3/T4/T6 rows never got _tomos_base. The series-companion logic
+        # later needs this to be set on all rows in school_pool.
+        if 'Title' in t.columns:
+            vols = t['Title'].apply(_sb_extract_volume)
+            t['_tomos_rank'] = vols.apply(lambda v: v[0])
+            t['_tomos_base'] = vols.apply(lambda v: v[1])
+            t['_has_tomos']  = vols.apply(lambda v: v[0] is not None)
+        else:
+            t['_tomos_rank'] = None
+            t['_tomos_base'] = ''
+            t['_has_tomos']  = False
         return t.sort_values('Final_Score', ascending=False)
     
     def _sort_with_tomos(t):
@@ -9460,12 +9477,10 @@ def run_school_books_engine(trigger, df_school_pool, df_stationery_pool, df_hist
         stay together), and within each group sorted by τόμος rank ASC
         (Α' before Β' before Γ'). Groups are ordered by max sales DESC so
         the best-selling series leads."""
-        if t.empty or 'Title' not in t.columns: return t
+        if t.empty or '_tomos_base' not in t.columns: return t
         t = t.copy()
-        vols = t['Title'].apply(_sb_extract_volume)
-        t['_tomos_rank'] = vols.apply(lambda v: v[0] if v[0] is not None else 999)
-        t['_tomos_base'] = vols.apply(lambda v: v[1])
-        t['_has_tomos']  = vols.apply(lambda v: v[0] is not None)
+        # Rank-for-sort: NaN → 999 to push non-τόμος items to the bottom
+        t['_tomos_rank_sort'] = t['_tomos_rank'].apply(lambda v: v if v is not None and pd.notna(v) else 999)
         
         # Per-base-group max sales — drives which τόμος series leads
         if 'Sum of Sales' in t.columns:
@@ -9481,7 +9496,7 @@ def run_school_books_engine(trigger, df_school_pool, df_stationery_pool, df_hist
         # within group, Α' before Β' before Γ'. Non-τόμος items fall back
         # to Final_Score order.
         t = t.sort_values(
-            ['_has_tomos', '_group_max_sales', '_tomos_base', '_tomos_rank', 'Final_Score'],
+            ['_has_tomos', '_group_max_sales', '_tomos_base', '_tomos_rank_sort', 'Final_Score'],
             ascending=[False, False, True, True, False],
             na_position='last',
         )
@@ -9681,8 +9696,44 @@ def run_school_books_engine(trigger, df_school_pool, df_stationery_pool, df_hist
         if not is_older_stage:
             fill_notes.append(f"⚙ Phase split OFF (younger stage '{t_stage}' — single pool)")
     
+    # v28.30.10 — SERIES COMPANIONS at the front.
+    # When the trigger is part of a multi-volume series (Τεύχος Α/Β/Γ,
+    # Μέρος, τόμος), pull the other volumes of the SAME series from anywhere
+    # in school_pool and prepend them to primary. They take priority over
+    # generic helpers because the customer almost certainly wants the
+    # companion volume of the book they're looking at.
+    # Match criteria: same _tomos_base + same publisher + has its own volume marker.
+    # Sort: by tomos_rank ascending (Α before Β before Γ).
+    series_companion_count = 0
+    if (t_tomos_base and t_tomos_rank is not None
+            and not school_pool.empty
+            and '_tomos_base' in school_pool.columns):
+        sp_has_tomos = school_pool.get('_has_tomos', pd.Series([False] * len(school_pool), index=school_pool.index)).fillna(False).astype(bool)
+        sp_same_base = school_pool['_tomos_base'] == t_tomos_base
+        sp_same_pub_for_series = school_pool['_pub_norm'] == (t_publisher or '')
+        series_mask = sp_has_tomos & sp_same_base & sp_same_pub_for_series
+        series_rows = school_pool[series_mask]
+        if not series_rows.empty:
+            # Sort siblings by τόμος rank (Α=1 → Β=2 → Γ=3 ...)
+            series_rows = series_rows.sort_values('_tomos_rank', na_position='last').reset_index(drop=True)
+            series_companion_count = len(series_rows)
+            # De-dup: remove these rows from primary and secondary first
+            if not primary_pool.empty and 'Material' in primary_pool.columns:
+                primary_pool = primary_pool[~primary_pool['Material'].isin(series_rows['Material'])].reset_index(drop=True)
+            if not secondary_pool.empty and 'Material' in secondary_pool.columns:
+                secondary_pool = secondary_pool[~secondary_pool['Material'].isin(series_rows['Material'])].reset_index(drop=True)
+            # Prepend siblings to primary so they fill the FIRST slots
+            primary_pool = pd.concat([series_rows, primary_pool], ignore_index=True)
+            fill_notes.append(
+                f"⚙ Series companions: trigger is τόμος-rank {t_tomos_rank} of "
+                f"'{t_tomos_base[:60]}{'…' if len(t_tomos_base) > 60 else ''}' → "
+                f"{series_companion_count} sibling volume(s) prepended to primary")
+    
     # ── Dynamic layout based on primary pool size ──
     n_primary_avail = len(primary_pool)
+    # Number of NON-sibling helpers in primary pool — used to decide whether
+    # the scarce-helpers fallback applies (sibling presence overrides it).
+    n_helpers_in_primary = n_primary_avail - series_companion_count
     if should_phase_split:
         # v28.30.9 — Scarce-helpers layout for TEXTBOOK triggers only.
         # When the best helper publisher has fewer than 3 same-subject
@@ -9691,9 +9742,14 @@ def run_school_books_engine(trigger, df_school_pool, df_stationery_pool, df_hist
         # (0, 1, or 2) move to the overflow section after stationery.
         # Helper triggers keep the standard 3-6 primary + stat + secondary
         # layout (with deficit fill from secondary when primary < 3).
-        if trigger_is_textbook and n_primary_avail < 3:
-            n_boost = 4 if n_primary_avail <= 1 else 3   # "less than 2" → 4; "less than 3" → 3
-            n_overflow_primary   = n_primary_avail        # all available helpers in overflow
+        # v28.30.10 — When SERIES SIBLINGS exist, the scarce-helpers fallback
+        # is bypassed: siblings are stronger evidence of "this companion
+        # belongs at the front" than any helper-publisher heuristic.
+        if (trigger_is_textbook
+                and series_companion_count == 0
+                and n_helpers_in_primary < 3):
+            n_boost = 4 if n_helpers_in_primary <= 1 else 3   # "less than 2" → 4; "less than 3" → 3
+            n_overflow_primary   = n_helpers_in_primary       # all available helpers in overflow
             n_overflow_secondary = TOTAL_SLOTS - n_boost - STAT_SLOTS - n_overflow_primary
             base_plan = (
                 ['SCHOOL_SECONDARY']   * n_boost
@@ -9702,7 +9758,7 @@ def run_school_books_engine(trigger, df_school_pool, df_stationery_pool, df_hist
                 + ['SCHOOL_SECONDARY'] * n_overflow_secondary
             )
             fill_notes.append(
-                f"⚙ Scarce-helpers layout (textbook trigger, {n_primary_avail} helper(s)): "
+                f"⚙ Scarce-helpers layout (textbook trigger, {n_helpers_in_primary} helper(s), no series sibling): "
                 f"{n_boost} textbooks front + {STAT_SLOTS} stationery + "
                 f"{n_overflow_primary} helper(s) + {n_overflow_secondary} textbooks overflow")
         else:
