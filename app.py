@@ -103,7 +103,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v28.30.23 — School Books: separate Ιδιωτικά Σχολεία category
+        🟢 Engine v28.30.24 — School Books: robust private-school list loader
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -5884,23 +5884,59 @@ def load_all_data():
     # many private-school lists reference. Used to resolve private-list SAPs.
     dint_school = _load('International School Books')
     
-    # ── v28.30.21: Private-school curriculum lists from "school_books.xlsx".
-    # Sheet1 = raw (Εκπαιδευτήριo2 [school], Βαθμίδα/Τάξη2 [class], SAP [Material])
-    # — one row per (school, class, book) assignment. We load it DIRECTLY from
-    # its own file (not via _load) because the sheet is named 'Sheet1', which
-    # collides with the International Books workbook's default sheet name.
-    # The lookup powers private-school cross-sell: a list book recommends the
-    # OTHER books on the same school+class list, ranked by sales.
+    # ── v28.30.21: Private-school curriculum lists.
+    # Source file holds a sheet with (school, class, SAP) — one row per
+    # (school, class, book) assignment. We load it ROBUSTLY:
+    #   1) Try several filename variants directly.
+    #   2) If that fails, scan EVERY opened workbook for a sheet whose columns
+    #      match the private-school signature (a school col + class col + SAP),
+    #      since the sheet may be named 'Sheet1' (colliding with IntBooks) or
+    #      the file renamed. This makes the feature resilient to how the file
+    #      is committed to the repo.
+    def _looks_like_private_list(cols):
+        cl = [str(c).strip() for c in cols]
+        has_school = any(c.startswith('Εκπαιδευτήρι') for c in cl)
+        has_class  = any(c.startswith('Βαθμίδα') or 'Τάξη' in c for c in cl)
+        has_sap    = any(c.upper() == 'SAP' for c in cl)
+        return has_school and has_class and has_sap
+    
     dpriv = pd.DataFrame()
-    for _ppath in ("school_books.xlsx",):
+    _priv_candidates = (
+        "school_books.xlsx", "School_Books.xlsx", "school books.xlsx",
+        "School Books.xlsx", "Recommendations GitHub SchoolBooks.xlsx",
+        "Recommendations GitHub School Books.xlsx", "private_school_books.xlsx",
+    )
+    for _ppath in _priv_candidates:
         try:
             _pef = pd.ExcelFile(_ppath, engine='openpyxl')
-            if 'Sheet1' in _pef.sheet_names:
-                dpriv = pd.read_excel(_pef, sheet_name='Sheet1')
-                dpriv.columns = dpriv.columns.str.strip()
-            break
         except (FileNotFoundError, OSError):
             continue
+        # Find the sheet whose columns match the private-school signature
+        for _sh in _pef.sheet_names:
+            try:
+                _try = pd.read_excel(_pef, sheet_name=_sh, nrows=3)
+            except Exception:
+                continue
+            if _looks_like_private_list(_try.columns):
+                dpriv = pd.read_excel(_pef, sheet_name=_sh)
+                dpriv.columns = dpriv.columns.str.strip()
+                break
+        if not dpriv.empty:
+            break
+    # Fallback: scan all workbooks we already opened for a matching sheet
+    if dpriv.empty:
+        for _ef in {id(e): e for e in sheet_source.values()}.values():
+            for _sh in _ef.sheet_names:
+                try:
+                    _try = pd.read_excel(_ef, sheet_name=_sh, nrows=3)
+                except Exception:
+                    continue
+                if _looks_like_private_list(_try.columns):
+                    dpriv = pd.read_excel(_ef, sheet_name=_sh)
+                    dpriv.columns = dpriv.columns.str.strip()
+                    break
+            if not dpriv.empty:
+                break
     # Normalize column names to stable internal names
     if not dpriv.empty:
         rename = {}
@@ -5988,11 +6024,6 @@ L1_CATEGORIES = [
         "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 19.5A2.5 2.5 0 0 1 6.5 17H20'/%3E%3Cpath d='M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z'/%3E%3C/svg%3E",
     },
     {
-        "key": "Private Schools",
-        "label": "Ιδιωτικά\nΣχολεία",
-        "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 21h18M5 21V8l7-5 7 5v13'/%3E%3Cpath d='M9 21v-6h6v6'/%3E%3C/svg%3E",
-    },
-    {
         "key": "Telephony",
         "label": "Τηλεφωνία,\nTablets &\nWearables",
         "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='5' y='2' width='14' height='20' rx='2' ry='2'/%3E%3Cline x1='12' y1='18' x2='12.01' y2='18'/%3E%3C/svg%3E",
@@ -6051,9 +6082,7 @@ L2_CHILDREN = {
          "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3Cline x1='2' y1='12' x2='22' y2='12'/%3E%3Cpath d='M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z'/%3E%3C/svg%3E"},
         {"key": "Greek School Books", "label": "Σχολικά\nΒιβλία",
          "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M22 10v6M2 10l10-5 10 5-10 5z'/%3E%3Cpath d='M6 12v5c3 3 9 3 12 0v-5'/%3E%3C/svg%3E"},
-    ],
-    "Private Schools": [
-        {"key": "Private School Books", "label": "Λίστες\nΙδιωτικών",
+        {"key": "Private School Books", "label": "Ιδιωτικά\nΣχολεία",
          "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 21h18M5 21V8l7-5 7 5v13'/%3E%3Cpath d='M9 21v-6h6v6'/%3E%3C/svg%3E"},
     ],
     "Telephony": [
@@ -7260,9 +7289,12 @@ else:
         if df_private_school is None or df_private_school.empty:
             sheets_str = ", ".join(sheets_loaded) if sheets_loaded else "(none)"
             st.sidebar.warning(
-                "Private-school list ('school_books.xlsx', Sheet1) is empty or missing.\n\n"
+                "Private-school list not found.\n\n"
+                "Expected a workbook (e.g. `school_books.xlsx`) with a sheet whose "
+                "columns are **Εκπαιδευτήριο**, **Βαθμίδα/Τάξη**, and **SAP**.\n\n"
                 f"**Sheets loaded**: {sheets_str}\n\n"
-                "Make sure `school_books.xlsx` is committed alongside the other workbooks."
+                "Commit that file to the repo (any sheet name is fine — it's "
+                "auto-detected by its columns)."
             )
             st.stop()
         # Build a catalog to resolve SAP → Title/sales (school books + helpers only)
