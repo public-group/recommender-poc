@@ -103,7 +103,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v28.30.10 — School Books: series companions first
+        🟢 Engine v28.30.11 — School Books: fuzzy series matching
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -4009,6 +4009,32 @@ def _sb_orient_tokens(orient_value):
             if needle in s:
                 out.add(token)
     return out
+
+def _sb_series_key(base_title):
+    """Normalize a τόμος base-title into a fuzzy series key (set of word
+    stems) for sibling matching. Catalog titles for the same series are
+    formatted inconsistently ("...Θετικών Σπουδών - - Λύσεις των ασκήσεων"
+    vs "...Θετικών Σπουδών, Λύσεις Ασκήσεων 22-0283" vs "Φυσική Γ' Λυκείου
+    22-0282"), so an exact base match misses real siblings.
+    
+    We reduce to a bag of significant word stems: strip accents, lowercase,
+    drop catalog codes (22-0282), numbers, punctuation, and noise words
+    (λύσεις, ασκήσεων, τεύχος, σπουδών, class markers, etc.). What remains is
+    the subject + any distinguishing words (e.g. {φυσικ-ish tokens, θετικ})."""
+    if not base_title:
+        return frozenset()
+    s = _sb_strip_accents_upper(str(base_title)).lower()
+    s = re.sub(r'\d+[-–]\d+', ' ', s)   # catalog codes "22-0282"
+    s = re.sub(r'\d+', ' ', s)
+    s = re.sub(r'[^\wά-ωα-ω\s]', ' ', s, flags=re.UNICODE)
+    tokens = set(s.split())
+    NOISE = {
+        'λυσεις', 'ασκησεων', 'ασκησεωσ', 'τευχος', 'τομος', 'μερος',
+        'βοηθημα', 'προσανατολισμου', 'προσανατολισμος', 'σπουδων',
+        'λυκειου', 'λυκειο', 'γυμνασιου', 'δημοτικου', 'γενικου',
+        'γενικης', 'και', 'των', 'τησ', 'της', 'στοιχεια',
+    }
+    return frozenset(t for t in tokens if t and t not in NOISE and len(t) >= 3)
 
 def _sb_orient_compatible(row_orient_value, trigger_tokens):
     """Decide whether a row is orientation-compatible with the trigger.
@@ -9698,20 +9724,51 @@ def run_school_books_engine(trigger, df_school_pool, df_stationery_pool, df_hist
     
     # v28.30.10 — SERIES COMPANIONS at the front.
     # When the trigger is part of a multi-volume series (Τεύχος Α/Β/Γ,
-    # Μέρος, τόμος), pull the other volumes of the SAME series from anywhere
-    # in school_pool and prepend them to primary. They take priority over
-    # generic helpers because the customer almost certainly wants the
-    # companion volume of the book they're looking at.
-    # Match criteria: same _tomos_base + same publisher + has its own volume marker.
-    # Sort: by tomos_rank ascending (Α before Β before Γ).
+    # Μέρος, τόμος), pull the other volumes of the SAME series and prepend
+    # them to primary. They take priority over generic helpers because the
+    # customer almost certainly wants the companion volume.
+    #
+    # v28.30.11 — Fuzzy series matching. Catalog titles for one series are
+    # formatted inconsistently, so an exact base-title match misses real
+    # siblings. We instead match on a normalized "series key" (set of subject
+    # + distinguishing word stems) + same publisher + same class + same
+    # orientation. A candidate is a sibling if its key shares the trigger's
+    # subject token(s) and (when both have orientation) the orientation
+    # tokens agree. The trigger itself is excluded by Material id.
     series_companion_count = 0
-    if (t_tomos_base and t_tomos_rank is not None
+    t_series_key = _sb_series_key(t_tomos_base) if t_tomos_base else frozenset()
+    if (t_tomos_rank is not None and t_series_key
             and not school_pool.empty
             and '_tomos_base' in school_pool.columns):
         sp_has_tomos = school_pool.get('_has_tomos', pd.Series([False] * len(school_pool), index=school_pool.index)).fillna(False).astype(bool)
-        sp_same_base = school_pool['_tomos_base'] == t_tomos_base
         sp_same_pub_for_series = school_pool['_pub_norm'] == (t_publisher or '')
-        series_mask = sp_has_tomos & sp_same_base & sp_same_pub_for_series
+        # Same class as trigger
+        if t_classes:
+            t_cls_set_series = set(t_classes)
+            sp_same_cls_series = school_pool['_classes'].apply(
+                lambda lst: isinstance(lst, list) and bool(set(lst) & t_cls_set_series))
+        else:
+            sp_same_cls_series = pd.Series([True] * len(school_pool), index=school_pool.index)
+        # Orientation agreement (token-based; empty trigger orientation = no constraint)
+        if t_orient_tokens:
+            sp_orient_series = school_pool['_orientation'].apply(
+                lambda v: _sb_orient_compatible(v, t_orient_tokens))
+        else:
+            sp_orient_series = pd.Series([True] * len(school_pool), index=school_pool.index)
+        # Series-key overlap: candidate's key must contain ALL of the trigger's
+        # NON-orientation tokens (i.e. the subject). We compute per-row key
+        # and test subset on the subject-bearing tokens.
+        # Trigger subject tokens = series key minus orientation-ish tokens.
+        orient_word_stems = {'θετικων', 'ανθρωπιστικων', 'οικονομιας', 'πληροφορικης', 'υγειας'}
+        t_subject_tokens = frozenset(tok for tok in t_series_key if tok not in orient_word_stems)
+        def _series_key_match(base):
+            cand_key = _sb_series_key(base)
+            if not cand_key: return False
+            # Require all trigger subject tokens present in candidate
+            return t_subject_tokens.issubset(cand_key)
+        sp_key_match = school_pool['_tomos_base'].apply(_series_key_match)
+        
+        series_mask = sp_has_tomos & sp_same_pub_for_series & sp_same_cls_series & sp_orient_series & sp_key_match
         series_rows = school_pool[series_mask]
         if not series_rows.empty:
             # Sort siblings by τόμος rank (Α=1 → Β=2 → Γ=3 ...)
@@ -9725,8 +9782,8 @@ def run_school_books_engine(trigger, df_school_pool, df_stationery_pool, df_hist
             # Prepend siblings to primary so they fill the FIRST slots
             primary_pool = pd.concat([series_rows, primary_pool], ignore_index=True)
             fill_notes.append(
-                f"⚙ Series companions: trigger is τόμος-rank {t_tomos_rank} of "
-                f"'{t_tomos_base[:60]}{'…' if len(t_tomos_base) > 60 else ''}' → "
+                f"⚙ Series companions: trigger is τόμος-rank {t_tomos_rank}, "
+                f"series-key {sorted(t_subject_tokens)} → "
                 f"{series_companion_count} sibling volume(s) prepended to primary")
     
     # ── Dynamic layout based on primary pool size ──
