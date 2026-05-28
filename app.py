@@ -103,7 +103,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v28.30.26 — School Books: pandas-3 Arrow dtype fix (float64 scoring)
+        🟢 Engine v28.30.27 — New cluster: foreign-language learning (series + age-scaled kids)
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -6055,6 +6055,8 @@ L2_CHILDREN = {
          "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M22 10v6M2 10l10-5 10 5-10 5z'/%3E%3Cpath d='M6 12v5c3 3 9 3 12 0v-5'/%3E%3C/svg%3E"},
         {"key": "Private School Books", "label": "Ιδιωτικά\nΣχολεία",
          "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 21h18M5 21V8l7-5 7 5v13'/%3E%3Cpath d='M9 21v-6h6v6'/%3E%3C/svg%3E"},
+        {"key": "Language Learning", "label": "Ξενόγλωσσα\nΕκμάθηση",
+         "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m5 8 6 6M4 14l6-6 2-3M2 5h12M7 2h1M22 22l-5-10-5 10M14 18h6'/%3E%3C/svg%3E"},
     ],
     "Telephony": [
         {"key": "Smartphones", "label": "Smart-\nphones",
@@ -7335,6 +7337,87 @@ else:
                             trigger['_private_class'] = sel_class
                 else:
                     st.sidebar.info("Κανένα σχολικό βιβλίο/βοήθημα δεν βρέθηκε σε αυτή τη λίστα.")
+
+
+    elif active_cluster == "Language Learning":
+        # v28.30.27 — Foreign-language learning books from the International
+        # School Books sheet. Filter by language → level → series, then pick a
+        # book. The engine then surfaces same-series/same-level companions and
+        # age-scaled International Kids books.
+        if df_int_school is None or df_int_school.empty:
+            sheets_str = ", ".join(sheets_loaded) if sheets_loaded else "(none)"
+            st.sidebar.warning(
+                "Sheet 'International School Books' is empty or missing.\n\n"
+                f"**Sheets loaded**: {sheets_str}\n\n"
+                "Make sure `Recommendations GitHub Books.xlsx` includes that sheet."
+            )
+            st.stop()
+        ll_pool = df_int_school.copy()
+        # Restrict to actual language-learning hierarchies (exclude dictionaries,
+        # encyclopedias, undergraduate, IB, etc. that aren't course material).
+        if 'Hierarchy' in ll_pool.columns:
+            hu = ll_pool['Hierarchy'].fillna('').astype(str).str.upper()
+            lang_mask = hu.str.contains('ΓΛΩΣΣΑ') | hu.str.contains('READERS') | (hu == 'ELT')
+            if lang_mask.any():
+                ll_pool = ll_pool[lang_mask].copy()
+
+        # 1) Language filter (Γλώσσα Γραφής → canonical)
+        if 'Γλώσσα Γραφής' in ll_pool.columns:
+            ll_pool['_canon_lang'] = ll_pool['Γλώσσα Γραφής'].apply(_ll_canon_lang)
+            LANG_LABELS = {'en': 'Αγγλικά', 'fr': 'Γαλλικά', 'de': 'Γερμανικά',
+                           'es': 'Ισπανικά', 'it': 'Ιταλικά', 'el': 'Ελληνικά'}
+            lang_counts = ll_pool['_canon_lang'].dropna().value_counts()
+            lang_items = [(f"{LANG_LABELS.get(code, code)} ({cnt})", code)
+                          for code, cnt in lang_counts.items() if code in LANG_LABELS]
+            if lang_items:
+                st.sidebar.markdown('<p class="sidebar-section">Γλώσσα Εκμάθησης</p>', unsafe_allow_html=True)
+                lang_opts = [it[0] for it in lang_items]
+                lang_disp = {it[0]: it[1] for it in lang_items}
+                sel_lang_disp = st.sidebar.selectbox("", lang_opts, label_visibility="collapsed", key="ll_lang")
+                sel_lang = lang_disp.get(sel_lang_disp)
+                if sel_lang:
+                    ll_pool = ll_pool[ll_pool['_canon_lang'] == sel_lang]
+
+        # 2) Level filter (Επίπεδο)
+        if 'Επίπεδο' in ll_pool.columns:
+            lc = ll_pool['Επίπεδο'].fillna('').astype(str).str.strip()
+            lc = lc[(lc != '') & (lc.str.lower() != 'nan') & (lc != '0')]
+            if len(lc) > 0:
+                lvl_counts = lc.value_counts().head(40)
+                lvl_items = [(f"{name} ({cnt})", name) for name, cnt in lvl_counts.items()]
+                st.sidebar.markdown('<p class="sidebar-section">Επίπεδο (προαιρετικό)</p>', unsafe_allow_html=True)
+                lvl_opts = ['Όλα τα επίπεδα'] + [it[0] for it in lvl_items]
+                lvl_disp = {it[0]: it[1] for it in lvl_items}
+                sel_lvl_disp = st.sidebar.selectbox("", lvl_opts, label_visibility="collapsed", key="ll_level")
+                if sel_lvl_disp != 'Όλα τα επίπεδα':
+                    ll_pool = ll_pool[ll_pool['Επίπεδο'].fillna('').astype(str).str.strip()
+                                      == lvl_disp.get(sel_lvl_disp, sel_lvl_disp)]
+
+        # 3) Series filter (Σειρά βιβλίου)
+        if 'Σειρά βιβλίου' in ll_pool.columns:
+            sc = ll_pool['Σειρά βιβλίου'].fillna('').astype(str).str.strip()
+            sc = sc[(sc != '') & (sc.str.lower() != 'nan')]
+            if len(sc) > 0:
+                ser_counts = sc.value_counts().head(60)
+                ser_items = [(f"{name} ({cnt})", name) for name, cnt in ser_counts.items()]
+                st.sidebar.markdown('<p class="sidebar-section">Σειρά βιβλίου (προαιρετικό)</p>', unsafe_allow_html=True)
+                ser_opts = ['Όλες οι σειρές'] + [it[0] for it in ser_items]
+                ser_disp = {it[0]: it[1] for it in ser_items}
+                sel_ser_disp = st.sidebar.selectbox("", ser_opts, label_visibility="collapsed", key="ll_series")
+                if sel_ser_disp != 'Όλες οι σειρές':
+                    ll_pool = ll_pool[ll_pool['Σειρά βιβλίου'].fillna('').astype(str).str.strip()
+                                      == ser_disp.get(sel_ser_disp, sel_ser_disp)]
+
+        # 4) Book selection (sales-ranked)
+        st.sidebar.markdown('<p class="sidebar-section">Επιλέξτε Βιβλίο Εκμάθησης</p>', unsafe_allow_html=True)
+        if not ll_pool.empty:
+            if 'Sum of Sales' in ll_pool.columns:
+                ll_pool = ll_pool.sort_values('Sum of Sales', ascending=False, na_position='last')
+            titles = ll_pool['Title'].dropna().unique()
+            if len(titles) > 0:
+                sel = st.sidebar.selectbox("", titles, label_visibility="collapsed", key="ll_sel")
+                if sel:
+                    trigger = ll_pool[ll_pool['Title'] == sel].iloc[0]
 
 
     elif active_cluster == "PS5 Console":
@@ -9443,6 +9526,293 @@ def run_books_v2_engine(trigger, df_pool, df_history, category_key):
         return recs_df, diag, slot_notes, recs_df
     else:
         return pd.DataFrame(), diag, slot_notes, pd.DataFrame()
+
+
+# ═════════════════════════════════════════════════════════════
+# v28.30.27 — FOREIGN LANGUAGE LEARNING ENGINE
+# ═════════════════════════════════════════════════════════════
+# Trigger: a foreign-language *learning* book from the International School
+# Books sheet (English/French/German/Spanish/Italian course books, readers,
+# exam prep, etc.). Recommendation logic:
+#   Slots 1..N : OTHER books from the SAME SERIES (Σειρά βιβλίου) AND the SAME
+#                LEVEL (Επίπεδο/Τάξη) as the trigger — the bundle bought
+#                together for that specific level. Ranked by sales.
+#   Remaining  : INTERNATIONAL KIDS BOOKS (Books sheet, Level 2 =
+#                'International Kids Books'), filtered by an AGE band that is
+#                SCALED to the learning book's level, and with WRITING LANGUAGE
+#                matching the learning book's language. If no kids' books match
+#                the language, fall back to English kids' books (English only as
+#                a fallback). Ranked by sales within the age window.
+
+LL_TOTAL_SLOTS = 10
+LL_SERIES_MAX  = 6     # cap same-series companions so kids' books always appear
+LL_S_AVAIL_BONUS = 2
+
+# Level (Επίπεδο / Τάξη) → kids'-book age band (min, max). Scales the kids'
+# books to the learner's level: pre-junior → toddlers, proficiency → teens.
+LL_LEVEL_AGE = {
+    'pre-junior': (3, 6), 'pre junior': (3, 6), 'pre-a1': (4, 6), 'pre a1': (4, 6),
+    'junior': (6, 8), 'junior a': (6, 7), 'junior b': (7, 8),
+    'a class': (6, 7), 'b class': (7, 8), 'c class': (8, 9), 'd class': (9, 10), 'e class': (10, 11),
+    'a1': (7, 9), 'a1-a2': (7, 9), 'a1+': (8, 9), 'a1.1': (7, 8), 'a1.2': (8, 9),
+    'a2': (8, 10), 'a2+': (9, 10), 'a2.1': (8, 9), 'a2.2': (9, 10), 'a senior': (8, 9),
+    'b1': (10, 11), 'b1+': (11, 12), 'b1-b2': (10, 12), 'pre-lower': (11, 12), 'pre lower': (11, 12),
+    'b2': (12, 13), 'b2+': (12, 13), 'lower': (12, 13),
+    'c1': (13, 15), 'c1-c2': (13, 16), 'c2': (14, 16),
+    'advanced': (14, 16), 'proficiency': (15, 17),
+    'ielts': (15, 17), 'toefl': (15, 17), 'toeic': (15, 17), 'gmat': (16, 18),
+}
+LL_DEFAULT_AGE = (6, 9)   # generic young-learner band when level is unknown
+
+# Normalize a raw 'Γλώσσα Γραφής' value to a canonical language token.
+LL_LANG_CANON = {
+    'αγγλικά': 'en', 'αγγλικα': 'en', 'αγγλική': 'en', 'english': 'en', 'en': 'en',
+    'γαλλικά': 'fr', 'γαλλικα': 'fr', 'french': 'fr', 'français': 'fr',
+    'γερμανικά': 'de', 'γερμανικα': 'de', 'german': 'de', 'deutsch': 'de',
+    'ισπανικά': 'es', 'ισπανικα': 'es', 'spanish': 'es', 'español': 'es',
+    'ιταλικά': 'it', 'ιταλικα': 'it', 'italian': 'it',
+    'ελληνικά': 'el', 'ελληνικα': 'el', 'greek': 'el',
+}
+
+def _ll_canon_lang(raw):
+    """Canonical language token (en/fr/de/es/it/el) from a Γλώσσα Γραφής cell.
+    Handles semicolon-joined multi-language values — returns the first
+    non-Greek language (the target learning language), else the first token."""
+    s = str(raw or '').strip().lower()
+    if not s or s == 'nan':
+        return None
+    parts = [p.strip() for p in s.split(';') if p.strip()]
+    canon = [LL_LANG_CANON.get(p) for p in parts]
+    canon = [c for c in canon if c]
+    # Prefer a non-Greek target language (the language being learned)
+    for c in canon:
+        if c != 'el':
+            return c
+    return canon[0] if canon else None
+
+def _ll_level_to_age(level_str, klass_str):
+    """Map a learning-book level/class to a kids'-book (age_lo, age_hi) band."""
+    for src in (level_str, klass_str):
+        s = str(src or '').strip().lower()
+        if not s or s == 'nan':
+            continue
+        # exact token match on any ;/, separated part
+        for part in re.split(r'[;,]', s):
+            p = part.strip()
+            if p in LL_LEVEL_AGE:
+                return LL_LEVEL_AGE[p]
+        # substring fallback (longest key first to avoid 'a1' matching 'a1-a2')
+        for k in sorted(LL_LEVEL_AGE, key=len, reverse=True):
+            if k in s:
+                return LL_LEVEL_AGE[k]
+    return LL_DEFAULT_AGE
+
+def _ll_infer_kids_lang(title):
+    """Infer the writing language of an International Kids book from its title.
+    The catalog is almost entirely English (Latin script); we detect Greek
+    script and a few obvious French/German/Spanish markers, else default 'en'."""
+    s = str(title or '')
+    if not s.strip():
+        return 'en'
+    greek = len(re.findall(r'[Α-Ωα-ωάέήίόύώϊϋΐΰ]', s))
+    latin = len(re.findall(r'[A-Za-z]', s))
+    if greek > latin:
+        return 'el'
+    low = ' ' + s.lower() + ' '
+    if any(m in low for m in (' der ', ' das ', ' und ', ' für ', ' ein ', ' ich ')):
+        return 'de'
+    if any(m in low for m in (' le ', ' la ', ' les ', ' un ', ' une ', ' petit ', ' grand ')):
+        return 'fr'
+    if any(m in low for m in (' el ', ' los ', ' las ', ' una ', ' niño ')):
+        return 'es'
+    return 'en'
+
+
+def run_lang_learning_engine(trigger, df_int_school, df_kids_books):
+    """Ξενόγλωσσα Εκμάθηση recommender (foreign-language learning books)."""
+    diag = []
+    slot_notes = {1: [], 2: [], 3: [], 4: []}
+
+    def _safe_num(v):
+        try:
+            if v is None or pd.isna(v):
+                return 0.0
+            return float(v)
+        except (TypeError, ValueError):
+            return 0.0
+
+    import numpy as _np
+
+    # ── STEP 0 — Trigger attributes ──────────────────────────────
+    tm = trigger.get('Material', None)
+    tt = str(trigger.get('Title', ''))
+    t_series  = str(trigger.get('Σειρά βιβλίου', '') or '').strip()
+    t_level   = str(trigger.get('Επίπεδο', '') or '').strip()
+    t_class   = str(trigger.get('Τάξη', '') or '').strip()
+    t_lang_raw = trigger.get('Γλώσσα Γραφής', '')
+    t_lang    = _ll_canon_lang(t_lang_raw) or 'en'
+    t_age_lo, t_age_hi = _ll_level_to_age(t_level, t_class)
+
+    used_materials = {tm} if tm is not None else set()
+
+    diag.append(("0. Trigger", "", "Cluster: Foreign Language Learning"))
+    diag.append(("   Trigger (attrs)", "",
+                 f"Series: '{t_series or '∅'}' | Level: '{t_level or '∅'}' | "
+                 f"Class: '{t_class or '∅'}' | Lang: {t_lang} | "
+                 f"Kids age band: {t_age_lo}-{t_age_hi}"))
+
+    # ── STEP 1 — SAME-SERIES + SAME-LEVEL companions ─────────────
+    series_pool = pd.DataFrame()
+    s1_notes = ["=== STEP 1: SAME-SERIES + SAME-LEVEL POOL ==="]
+    if df_int_school is not None and not df_int_school.empty and t_series:
+        cat = df_int_school.copy()
+        cat['_mat_i'] = pd.to_numeric(cat['Material'], errors='coerce')
+        # Same series (exact, case-insensitive)
+        ser_norm = cat['Σειρά βιβλίου'].astype(str).str.strip().str.lower()
+        same_series = cat[ser_norm == t_series.lower()].copy()
+        # Same level: match on Επίπεδο OR Τάξη (whichever the trigger has)
+        def _level_match(row):
+            rl = str(row.get('Επίπεδο', '') or '').strip().lower()
+            rc = str(row.get('Τάξη', '') or '').strip().lower()
+            if t_level and rl:
+                return rl == t_level.lower()
+            if t_class and rc:
+                return rc == t_class.lower()
+            # If trigger has no level info, accept the whole series
+            return not (t_level or t_class)
+        if t_level or t_class:
+            same_series = same_series[same_series.apply(_level_match, axis=1)]
+        series_pool = same_series[same_series['_mat_i'] != (int(tm) if tm is not None else -1)].copy()
+        series_pool = series_pool.drop_duplicates(subset=['_mat_i'])
+        # Sales rank
+        if 'Sum of Sales' in series_pool.columns:
+            _s = pd.to_numeric(series_pool['Sum of Sales'].astype('object'),
+                               errors='coerce').fillna(0.0)
+            series_pool['_sales'] = _np.asarray(_s, dtype='float64')
+        else:
+            series_pool['_sales'] = 0.0
+        series_pool['_tier_label'] = f"Same series · same level ({t_series})"
+        series_pool = series_pool.sort_values('_sales', ascending=False).reset_index(drop=True)
+        s1_notes.append(f"Series '{t_series}' + level '{t_level or t_class}': "
+                        f"{len(series_pool)} companion book(s)")
+    else:
+        s1_notes.append("No series on trigger — skipping series companions")
+    slot_notes[1] = s1_notes
+
+    # ── STEP 2 — INTERNATIONAL KIDS BOOKS (age-scaled + language) ─
+    kids_pool = pd.DataFrame()
+    s2_notes = ["=== STEP 2: INTERNATIONAL KIDS BOOKS (age-scaled, language-matched) ==="]
+    if df_kids_books is not None and not df_kids_books.empty:
+        ik = df_kids_books.copy()
+        if 'Level 2' in ik.columns:
+            l2 = ik['Level 2'].astype(str).str.strip().str.lower()
+            ik = ik[l2 == 'international kids books'].copy()
+        s2_notes.append(f"International Kids Books rows: {len(ik)}")
+        # Parse age (reuse the school-books parser) and apply the scaled window
+        ik['_age'] = ik['Ηλικία'].apply(_sb_parse_age_range) if 'Ηλικία' in ik.columns else None
+        WLO, WHI = t_age_lo - 2, t_age_hi + 1
+        def _age_ok(r):
+            if r is None:
+                return False
+            return WLO <= r[0] <= WHI and r[1] >= t_age_lo
+        age_mask = ik['_age'].apply(_age_ok)
+        ik_age = ik[age_mask].copy()
+        s2_notes.append(f"Age-scaled window [{WLO}-{WHI}] (level → age {t_age_lo}-{t_age_hi}): "
+                        f"{len(ik_age)} books")
+        # Language: infer kids-book language, match to trigger language;
+        # fall back to English ONLY if no matching-language kids books.
+        ik_age['_klang'] = ik_age['Title'].apply(_ll_infer_kids_lang)
+        lang_match = ik_age[ik_age['_klang'] == t_lang].copy()
+        if len(lang_match) >= 1:
+            kids_pool = lang_match
+            s2_notes.append(f"Language match ({t_lang}): {len(kids_pool)} books")
+        else:
+            kids_pool = ik_age[ik_age['_klang'] == 'en'].copy()
+            s2_notes.append(f"No {t_lang} kids' books → English fallback: {len(kids_pool)} books")
+        # Sales rank within the age window
+        if not kids_pool.empty:
+            if 'Sum of Sales' in kids_pool.columns:
+                _s = pd.to_numeric(kids_pool['Sum of Sales'].astype('object'),
+                                   errors='coerce').fillna(0.0)
+                kids_pool['_sales'] = _np.asarray(_s, dtype='float64')
+            else:
+                kids_pool['_sales'] = 0.0
+            kids_pool['_tier_label'] = f"International kids book (age {t_age_lo}-{t_age_hi})"
+            kids_pool = kids_pool.sort_values('_sales', ascending=False).reset_index(drop=True)
+    slot_notes[2] = s2_notes
+
+    # ── STEP 3 — SLOT ALLOCATION ─────────────────────────────────
+    n_series = min(len(series_pool), LL_SERIES_MAX)
+    n_kids = LL_TOTAL_SLOTS - n_series
+    plan = ['SERIES'] * n_series + ['KIDS'] * n_kids
+    slot_notes[3] = ["=== STEP 3: SLOT ALLOCATION ===",
+                     f"Plan: {n_series} series + {n_kids} kids"]
+    diag.append(("3. Slot Plan", f"{LL_TOTAL_SLOTS} slots",
+                 f"{n_series} same-series + {n_kids} kids' books"))
+
+    # ── STEP 4 — FILL ────────────────────────────────────────────
+    fill_notes = ["=== STEP 4: SLOT FILLING ==="]
+    series_iter = list(series_pool.iterrows()) if not series_pool.empty else []
+    kids_iter   = list(kids_pool.iterrows())   if not kids_pool.empty   else []
+    si = {'i': 0}
+    ki = {'i': 0}
+
+    def _next_series():
+        while si['i'] < len(series_iter):
+            _, row = series_iter[si['i']]; si['i'] += 1
+            if row.get('Material', None) in used_materials:
+                continue
+            return row
+        return None
+
+    def _next_kids():
+        while ki['i'] < len(kids_iter):
+            _, row = kids_iter[ki['i']]; ki['i'] += 1
+            if row.get('Material', None) in used_materials:
+                continue
+            return row
+        return None
+
+    all_recs = []
+    for slot_idx, slot_type in enumerate(plan, start=1):
+        if slot_type == 'SERIES':
+            row = _next_series()
+            picked = 'series'
+            if row is None:
+                row = _next_kids(); picked = 'kids (series exhausted)'
+        else:
+            row = _next_kids()
+            picked = 'kids'
+            if row is None:
+                row = _next_series(); picked = 'series (kids exhausted)'
+        if row is None:
+            fill_notes.append(f"Slot {slot_idx}: EMPTY — pools exhausted")
+            continue
+        if picked.startswith('series'):
+            role = 'Same series · same level'
+        else:
+            role = 'International kids book'
+        label = str(row.get('_tier_label', '') or '')
+        tier_note = f" [{label}]" if label else ''
+
+        row_copy = row.copy()
+        row_copy['Slot_Position'] = slot_idx
+        row_copy['Slot_Role'] = role
+        row_copy['Item_Rank'] = 1
+        if 'Final_Score' not in row_copy.index or pd.isna(row_copy.get('Final_Score', None)):
+            row_copy['Final_Score'] = _safe_num(row_copy.get('_sales', 0))
+        all_recs.append(row_copy)
+        used_materials.add(row_copy.get('Material', None))
+        fill_notes.append(f"Slot {slot_idx} ({slot_type}) ← {picked}: "
+                          f"{str(row.get('Title', ''))[:50]}{tier_note}")
+
+    slot_notes[4] = fill_notes
+    diag.append(("4. Slots Filled", len(all_recs), f"{len(all_recs)} of {LL_TOTAL_SLOTS}"))
+
+    if not all_recs:
+        return pd.DataFrame(), diag, slot_notes, pd.DataFrame()
+    recs_df = pd.DataFrame(all_recs).reset_index(drop=True)
+    return recs_df, diag, slot_notes, recs_df
 
 
 # ═════════════════════════════════════════════════════════════
@@ -22373,6 +22743,13 @@ elif active_cluster == "Private School Books":
     recs, diag, slot_notes, full_candidates = run_school_books_engine(
         trigger, df_school_books, df_stationery, df_history, df_books, df_private_school, df_int_school)
     slot_diag = []
+
+# v28.30.27 — Foreign Language Learning cluster: same-series + same-level
+# companions, then age-scaled, language-matched International Kids books.
+elif active_cluster == "Language Learning":
+    recs, diag, slot_notes, full_candidates = run_lang_learning_engine(
+        trigger, df_int_school, df_books)
+    slot_diag = []
 else:
     # Final fallback — preserved for any non-books cluster that ends up
     # routing through here. Should not normally be reached.
@@ -22593,6 +22970,12 @@ with st.expander("⚙️ System Diagnostics"):
                               'Τάξη_sales','Μάθημα_sales','Εκδότης_sales',
                               'Συγγραφέας','Εκδότης',
                               'Sum of Sales','LIST PRICE','AVAILABILITY']
+    elif active_cluster == "Language Learning":
+        # v28.30.27 — foreign-language learning book attributes.
+        attr_keys_to_show = ['Material','Title','Level 2','Hierarchy',
+                              'Σειρά βιβλίου','Επίπεδο','Τάξη','Δεξιότητες',
+                              'Εξέταση','Γλώσσα Γραφής','Γλώσσα Εκμάθησης',
+                              'Τύπος προϊόντος','Sum of Sales','LIST PRICE','AVAILABILITY']
     elif active_cluster == "Laptops":
         attr_keys_to_show = ['Material','Title','Level 1','Level 2','Hierarchy','Κατασκευαστής','Μοντέλο','Προτεινόμενη χρήση','Μέγεθος οθόνης','Θύρες','LIST PRICE']
     elif active_cluster == "Desktops":
