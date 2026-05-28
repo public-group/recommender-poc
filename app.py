@@ -103,7 +103,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v28.30.24 — School Books: robust private-school list loader
+        🟢 Engine v28.30.25 — School Books: private-school lists from Ιδιωτικό Σχολείο column
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -5780,9 +5780,8 @@ def get_desktop_accessory_budget(logic_key, tier):
 EXCEL_FILES = [
     "Recommendations GitHub.xlsx",
     "Recommendations GitHub Home.xlsx",
-    "Recommendations GitHub Books.xlsx",      # v28.29 — Greek Books + School Books
+    "Recommendations GitHub Books.xlsx",      # v28.29 — Greek Books + School Books + Intl School Books (with Ιδιωτικό Σχολείο column)
     "Recommendations GitHub IntBooks.xlsx",   # v28.29 — International Books (Sheet1)
-    "school_books.xlsx",                       # v28.30.21 — private-school curriculum lists
 ]
 
 @st.cache_data(ttl=600)
@@ -5884,76 +5883,48 @@ def load_all_data():
     # many private-school lists reference. Used to resolve private-list SAPs.
     dint_school = _load('International School Books')
     
-    # ── v28.30.21: Private-school curriculum lists.
-    # Source file holds a sheet with (school, class, SAP) — one row per
-    # (school, class, book) assignment. We load it ROBUSTLY:
-    #   1) Try several filename variants directly.
-    #   2) If that fails, scan EVERY opened workbook for a sheet whose columns
-    #      match the private-school signature (a school col + class col + SAP),
-    #      since the sheet may be named 'Sheet1' (colliding with IntBooks) or
-    #      the file renamed. This makes the feature resilient to how the file
-    #      is committed to the repo.
-    def _looks_like_private_list(cols):
-        cl = [str(c).strip() for c in cols]
-        has_school = any(c.startswith('Εκπαιδευτήρι') for c in cl)
-        has_class  = any(c.startswith('Βαθμίδα') or 'Τάξη' in c for c in cl)
-        has_sap    = any(c.upper() == 'SAP' for c in cl)
-        return has_school and has_class and has_sap
-    
+    # ── v28.30.25: Private-school curriculum lists are embedded IN the
+    # International School Books sheet itself: column 'Ιδιωτικό Σχολείο' holds
+    # the school(s) (semicolon-joined for multi-school), and 'Τάξη4' holds the
+    # class(es) (also semicolon-joined). We explode those into a tidy
+    # (school, class, SAP) table — one row per (school, class, book) — so the
+    # engine's private-list cross-sell works without any external file.
     dpriv = pd.DataFrame()
-    _priv_candidates = (
-        "school_books.xlsx", "School_Books.xlsx", "school books.xlsx",
-        "School Books.xlsx", "Recommendations GitHub SchoolBooks.xlsx",
-        "Recommendations GitHub School Books.xlsx", "private_school_books.xlsx",
-    )
-    for _ppath in _priv_candidates:
-        try:
-            _pef = pd.ExcelFile(_ppath, engine='openpyxl')
-        except (FileNotFoundError, OSError):
-            continue
-        # Find the sheet whose columns match the private-school signature
-        for _sh in _pef.sheet_names:
-            try:
-                _try = pd.read_excel(_pef, sheet_name=_sh, nrows=3)
-            except Exception:
-                continue
-            if _looks_like_private_list(_try.columns):
-                dpriv = pd.read_excel(_pef, sheet_name=_sh)
-                dpriv.columns = dpriv.columns.str.strip()
-                break
-        if not dpriv.empty:
-            break
-    # Fallback: scan all workbooks we already opened for a matching sheet
-    if dpriv.empty:
-        for _ef in {id(e): e for e in sheet_source.values()}.values():
-            for _sh in _ef.sheet_names:
-                try:
-                    _try = pd.read_excel(_ef, sheet_name=_sh, nrows=3)
-                except Exception:
-                    continue
-                if _looks_like_private_list(_try.columns):
-                    dpriv = pd.read_excel(_ef, sheet_name=_sh)
-                    dpriv.columns = dpriv.columns.str.strip()
-                    break
-            if not dpriv.empty:
-                break
-    # Normalize column names to stable internal names
-    if not dpriv.empty:
-        rename = {}
-        for c in dpriv.columns:
-            cl = str(c).strip()
-            if cl.startswith('Εκπαιδευτήρι'):  rename[c] = '_school'
-            elif cl.startswith('Βαθμίδα') or 'Τάξη' in cl: rename[c] = '_class'
-            elif cl.upper() == 'SAP':            rename[c] = '_sap'
-        dpriv = dpriv.rename(columns=rename)
-        # Coerce SAP to int-like for matching against Material
-        if '_sap' in dpriv.columns:
-            dpriv['_sap'] = pd.to_numeric(dpriv['_sap'], errors='coerce')
-            dpriv = dpriv.dropna(subset=['_sap'])
-            dpriv['_sap'] = dpriv['_sap'].astype('int64')
-        for col in ('_school', '_class'):
-            if col in dpriv.columns:
-                dpriv[col] = dpriv[col].fillna('').astype(str).str.strip()
+    if dint_school is not None and not dint_school.empty:
+        _SCHOOL_COL = 'Ιδιωτικό Σχολείο'
+        # Class column: prefer 'Τάξη4' (fully populated for school rows),
+        # fall back to 'Τάξη' / 'Τάξη10' / 'Τάξη18'.
+        _class_col = next((c for c in ('Τάξη4', 'Τάξη', 'Τάξη10', 'Τάξη18')
+                           if c in dint_school.columns), None)
+        if _SCHOOL_COL in dint_school.columns and _class_col and 'Material' in dint_school.columns:
+            _src = dint_school[[_SCHOOL_COL, _class_col, 'Material']].copy()
+            _src.columns = ['_school_raw', '_class_raw', '_sap']
+            # Keep only rows that actually have a school assignment
+            _src = _src[_src['_school_raw'].notna()
+                        & (_src['_school_raw'].astype(str).str.strip() != '')
+                        & (_src['_school_raw'].astype(str).str.strip().str.lower() != 'nan')]
+            if not _src.empty:
+                _src['_sap'] = pd.to_numeric(_src['_sap'], errors='coerce')
+                _src = _src.dropna(subset=['_sap'])
+                _src['_sap'] = _src['_sap'].astype('int64')
+                # Explode semicolon-joined schools and classes into rows
+                def _split(v):
+                    s = str(v).strip()
+                    if not s or s.lower() == 'nan':
+                        return ['']
+                    return [p.strip() for p in s.split(';') if p.strip()] or ['']
+                rows = []
+                for _, r in _src.iterrows():
+                    schools = _split(r['_school_raw'])
+                    classes = _split(r['_class_raw'])
+                    for sc in schools:
+                        for cl in classes:
+                            rows.append((sc, cl, int(r['_sap'])))
+                dpriv = pd.DataFrame(rows, columns=['_school', '_class', '_sap'])
+                dpriv['_school'] = dpriv['_school'].fillna('').astype(str).str.strip()
+                dpriv['_class'] = dpriv['_class'].fillna('').astype(str).str.strip()
+                # Drop rows with no school
+                dpriv = dpriv[dpriv['_school'] != ''].reset_index(drop=True)
     
     if not dp.empty:
         parts = [dp[c].fillna('').astype(str).str.strip() for c in COMPAT_COLS if c in dp.columns]
@@ -7289,12 +7260,12 @@ else:
         if df_private_school is None or df_private_school.empty:
             sheets_str = ", ".join(sheets_loaded) if sheets_loaded else "(none)"
             st.sidebar.warning(
-                "Private-school list not found.\n\n"
-                "Expected a workbook (e.g. `school_books.xlsx`) with a sheet whose "
-                "columns are **Εκπαιδευτήριο**, **Βαθμίδα/Τάξη**, and **SAP**.\n\n"
-                f"**Sheets loaded**: {sheets_str}\n\n"
-                "Commit that file to the repo (any sheet name is fine — it's "
-                "auto-detected by its columns)."
+                "No private-school assignments found.\n\n"
+                "These are read from the **International School Books** sheet — "
+                "specifically the **Ιδιωτικό Σχολείο** column (school) and the "
+                "**Τάξη4** column (class). Make sure that sheet is committed with "
+                "those columns populated.\n\n"
+                f"**Sheets loaded**: {sheets_str}"
             )
             st.stop()
         # Build a catalog to resolve SAP → Title/sales (school books + helpers only)
