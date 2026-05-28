@@ -103,7 +103,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v28.30.25 — School Books: private-school lists from Ιδιωτικό Σχολείο column
+        🟢 Engine v28.30.26 — School Books: pandas-3 Arrow dtype fix (float64 scoring)
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -9581,16 +9581,26 @@ def run_school_books_engine(trigger, df_school_pool, df_stationery_pool, df_hist
                     # Exclude the trigger itself
                     private_list_pool = private_list_pool[private_list_pool['_mat_i'] != tm_int]
                     # Rank purely by sales (multi-school/class books fall out
-                    # naturally to top-sellers, per spec)
-                    private_list_pool['_sales'] = (
-                        private_list_pool['Sum of Sales'].apply(_safe_num)
-                        if 'Sum of Sales' in private_list_pool.columns else 0.0)
-                    if 'AVAILABILITY' in private_list_pool.columns:
-                        private_list_pool['_avail'] = private_list_pool['AVAILABILITY'].apply(
-                            lambda v: SB_S_AVAIL_BONUS if str(v).strip() == 'Άμεσα Διαθέσιμο' else 0)
+                    # naturally to top-sellers, per spec).
+                    # v28.30.26 — force plain float64 (not Arrow-backed) so the
+                    # subsequent add doesn't raise on pandas 3.x / pyarrow.
+                    import numpy as _np
+                    if 'Sum of Sales' in private_list_pool.columns:
+                        _s = pd.to_numeric(
+                            private_list_pool['Sum of Sales'].astype('object'),
+                            errors='coerce').fillna(0.0)
+                        private_list_pool['_sales'] = _np.asarray(_s, dtype='float64')
                     else:
-                        private_list_pool['_avail'] = 0
-                    private_list_pool['Final_Score'] = private_list_pool['_sales'] + private_list_pool['_avail']
+                        private_list_pool['_sales'] = 0.0
+                    if 'AVAILABILITY' in private_list_pool.columns:
+                        _av = private_list_pool['AVAILABILITY'].astype('object').apply(
+                            lambda v: float(SB_S_AVAIL_BONUS) if str(v).strip() == 'Άμεσα Διαθέσιμο' else 0.0)
+                        private_list_pool['_avail'] = _np.asarray(_av, dtype='float64')
+                    else:
+                        private_list_pool['_avail'] = 0.0
+                    private_list_pool['Final_Score'] = (
+                        private_list_pool['_sales'].to_numpy(dtype='float64')
+                        + private_list_pool['_avail'].to_numpy(dtype='float64'))
                     private_list_pool['_tier_label'] = 'Private-school list (same school+class)'
                     private_list_pool = private_list_pool.sort_values(
                         '_sales', ascending=False).reset_index(drop=True)
@@ -9889,13 +9899,22 @@ def run_school_books_engine(trigger, df_school_pool, df_stationery_pool, df_hist
     def _score_tier(t, tier_base, tier_label):
         if t.empty: return t
         t = t.copy()
-        t['_sales'] = t['Sum of Sales'].apply(_safe_num) if 'Sum of Sales' in t.columns else 0.0
-        if 'AVAILABILITY' in t.columns:
-            t['_avail'] = t['AVAILABILITY'].apply(
-                lambda v: SB_S_AVAIL_BONUS if str(v).strip() == 'Άμεσα Διαθέσιμο' else 0)
+        # v28.30.26 — force plain float64 (avoid Arrow add error on pandas 3.x)
+        import numpy as _np
+        if 'Sum of Sales' in t.columns:
+            _s = pd.to_numeric(t['Sum of Sales'].astype('object'), errors='coerce').fillna(0.0)
+            t['_sales'] = _np.asarray(_s, dtype='float64')
         else:
-            t['_avail'] = 0
-        t['Final_Score'] = tier_base + t['_sales'] + t['_avail']
+            t['_sales'] = 0.0
+        if 'AVAILABILITY' in t.columns:
+            _av = t['AVAILABILITY'].astype('object').apply(
+                lambda v: float(SB_S_AVAIL_BONUS) if str(v).strip() == 'Άμεσα Διαθέσιμο' else 0.0)
+            t['_avail'] = _np.asarray(_av, dtype='float64')
+        else:
+            t['_avail'] = 0.0
+        t['Final_Score'] = (float(tier_base)
+                            + t['_sales'].to_numpy(dtype='float64')
+                            + t['_avail'].to_numpy(dtype='float64'))
         t['_tier_label'] = tier_label
         # v28.30.10 — Always compute τόμος metadata. Previously this only
         # happened inside _sort_with_tomos (gated by tomos_sort_tiers), so
@@ -10050,17 +10069,26 @@ def run_school_books_engine(trigger, df_school_pool, df_stationery_pool, df_hist
             st_notes.append(f"Age-matched kids' books: {len(tier_a)}; "
                             f"untagged kids' books (fallback): {len(tier_b)}")
             if not kids_books_pool.empty:
-                kids_books_pool['_sales'] = (kids_books_pool['Sum of Sales'].apply(_safe_num)
-                                             if 'Sum of Sales' in kids_books_pool.columns else 0.0)
-                if 'AVAILABILITY' in kids_books_pool.columns:
-                    kids_books_pool['_avail'] = kids_books_pool['AVAILABILITY'].apply(
-                        lambda v: SB_S_AVAIL_BONUS if str(v).strip() == 'Άμεσα Διαθέσιμο' else 0)
+                # v28.30.26 — force plain float64 (avoid Arrow add error on pandas 3.x)
+                import numpy as _np
+                if 'Sum of Sales' in kids_books_pool.columns:
+                    _s = pd.to_numeric(kids_books_pool['Sum of Sales'].astype('object'),
+                                       errors='coerce').fillna(0.0)
+                    kids_books_pool['_sales'] = _np.asarray(_s, dtype='float64')
                 else:
-                    kids_books_pool['_avail'] = 0
+                    kids_books_pool['_sales'] = 0.0
+                if 'AVAILABILITY' in kids_books_pool.columns:
+                    _av = kids_books_pool['AVAILABILITY'].astype('object').apply(
+                        lambda v: float(SB_S_AVAIL_BONUS) if str(v).strip() == 'Άμεσα Διαθέσιμο' else 0.0)
+                    kids_books_pool['_avail'] = _np.asarray(_av, dtype='float64')
+                else:
+                    kids_books_pool['_avail'] = 0.0
                 # PURE top-selling WITHIN each tier: age-matched books first
                 # (tier 0), then untagged kids' books (tier 1); sales-ranked
                 # within each tier.
-                kids_books_pool['Final_Score'] = kids_books_pool['_sales'] + kids_books_pool['_avail']
+                kids_books_pool['Final_Score'] = (
+                    kids_books_pool['_sales'].to_numpy(dtype='float64')
+                    + kids_books_pool['_avail'].to_numpy(dtype='float64'))
                 kids_books_pool['_tier_label'] = 'Kids book (top-selling for age)'
                 kids_books_pool = kids_books_pool.sort_values(
                     ['_age_tier', '_sales'], ascending=[True, False]).reset_index(drop=True)
