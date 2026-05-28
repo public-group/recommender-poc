@@ -103,7 +103,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v28.30.11 — School Books: fuzzy series matching
+        🟢 Engine v28.30.12 — School Books: subject-specific helpers + early-elementary layout
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -3842,6 +3842,18 @@ def _sb_get_stationery_priority(hierarchy, stage):
 # (Δημοτικό, Προσχολική) follow the "cover all subjects" pattern where each
 # subject typically maps to one book.
 SB_OLDER_STAGES = {"Γυμνάσιο", "Λύκειο"}
+
+# v28.30.12 — "Early elementary" = 5th grade (Ε' Δημοτικού) and below, plus
+# preschool. For these young children the carousel leads with school books
+# in slots 1-2, then moves stationery up to slots 3-7 (per user spec), since
+# young kids' purchases are heavily stationery-driven (crayons, notebooks,
+# coloring) and the parent is usually buying supplies alongside the one book.
+# ΣΤ' Δημοτικού is intentionally EXCLUDED — it follows the standard layout.
+SB_EARLY_ELEMENTARY_CLASSES = {
+    "Προνήπιο", "Νηπιαγωγείο",
+    "Α' Δημοτικού", "Β' Δημοτικού", "Γ' Δημοτικού",
+    "Δ' Δημοτικού", "Ε' Δημοτικού",
+}
 
 
 # v28.30.2 — Τόμος / Τεύχος / Μέρος detection.
@@ -9300,6 +9312,9 @@ def run_school_books_engine(trigger, df_school_pool, df_stationery_pool, df_hist
     #   * Younger stages (Δημοτικό/Προσχολική): keep different-subjects-led
     #     logic (cover all the kid's subjects), with same-publisher preference.
     is_older_stage = (t_stage in SB_OLDER_STAGES)
+    # v28.30.12 — early-elementary flag (Ε' Δημοτικού and below + preschool)
+    is_early_elementary = bool(t_classes) and any(
+        c in SB_EARLY_ELEMENTARY_CLASSES for c in t_classes)
     SB_S_SAME_SUBJECT     = 80_000   # v28.30.1 — same-subject bonus
     SB_S_AUTHOR_OVERLAP   = 60_000   # v28.30.4 — companion-volume signal
     SB_S_ORIENT_OVERLAP   = 40_000   # v28.30.4 — orientation match
@@ -9372,10 +9387,25 @@ def run_school_books_engine(trigger, df_school_pool, df_stationery_pool, df_hist
             # Aggregate total sales of matching helpers per publisher; the
             # winner is the top-selling publisher for this subject's helpers.
             best_helper_pub = ''
+            # v28.30.12 — A genuine subject helper covers just 1-2 subjects.
+            # All-in-one "λυσάρι" books tag 8-10 subjects and would hijack
+            # best_helper_pub via bulk sales even though they aren't a
+            # subject-specific helper. We exclude helpers covering more than
+            # SB_MAX_HELPER_SUBJECTS subjects from both the publisher race
+            # AND the tier masks.
+            SB_MAX_HELPER_SUBJECTS = 3
+            def _is_focused_helper(lst):
+                try:
+                    n = len([s for s in lst if s])
+                    return 1 <= n <= SB_MAX_HELPER_SUBJECTS
+                except Exception:
+                    return False
             if t_subjects:
                 t_sub_set = set(t_subjects)
-                helper_mask_sub = m_helper & m_same_cls & pool['_subjects'].apply(
-                    lambda lst: bool(lst) and bool(set(lst) & t_sub_set))
+                helper_mask_sub = (m_helper & m_same_cls
+                                   & pool['_subjects'].apply(
+                                        lambda lst: bool(lst) and bool(set(lst) & t_sub_set))
+                                   & pool['_subjects'].apply(_is_focused_helper))
                 # Prefer orientation match when available
                 if t_orientation:
                     helper_mask_sub_ori = helper_mask_sub & m_orient
@@ -9395,9 +9425,12 @@ def run_school_books_engine(trigger, df_school_pool, df_stationery_pool, df_hist
             m_best_helper_pub = pd.Series([False] * len(pool), index=pool.index)
             if best_helper_pub:
                 m_best_helper_pub = (pool['_pub_norm'] == best_helper_pub)
+            # v28.30.12 — Also require the helper be subject-FOCUSED (≤3 subjects)
+            # so an all-in-one λυσάρι from the same publisher doesn't sneak in.
+            m_focused = pool['_subjects'].apply(_is_focused_helper)
             
-            tier1_mask = m_helper & m_best_helper_pub & m_same_cls & m_same_sub & m_orient            # best-pub helpers + orientation
-            tier2_mask = m_helper & m_best_helper_pub & m_same_cls & m_same_sub & (~tier1_mask)        # best-pub helpers (any orientation)
+            tier1_mask = m_helper & m_best_helper_pub & m_focused & m_same_cls & m_same_sub & m_orient            # best-pub focused helpers + orientation
+            tier2_mask = m_helper & m_best_helper_pub & m_focused & m_same_cls & m_same_sub & (~tier1_mask)        # best-pub focused helpers (any orientation)
             tier3_mask = m_textbook & m_same_pub & m_same_cls & m_diff_sub & (~tier1_mask) & (~tier2_mask)  # Διόφαντος cross-subject textbooks
             tier4_mask = m_textbook & m_same_cls & m_diff_sub & (~tier1_mask) & (~tier2_mask) & (~tier3_mask)  # any-pub cross-subject textbooks
             # Deep fallback only if the best-publisher pool exhausted: any helpers
@@ -9831,13 +9864,24 @@ def run_school_books_engine(trigger, df_school_pool, df_stationery_pool, df_hist
                 f"⚙ Dynamic layout: {n_primary_slots} primary + {STAT_SLOTS} stationery + "
                 f"{n_secondary_slots} secondary (cap on primary = {PRIMARY_MAX})")
     else:
-        # Younger or no-split: original 3-3-4 layout, all SCHOOL_PRIMARY
-        # (younger has no secondary pool — primary IS the school_pool)
-        base_plan = (
-            ['SCHOOL_PRIMARY'] * 3
-            + ['STATIONERY']   * 3
-            + ['SCHOOL_PRIMARY'] * 4
-        )
+        # v28.30.12 — Early elementary (Ε' Δημοτικού and below + preschool):
+        # stationery moves to slots 3-7 (5 stationery slots up front after
+        # 2 school books), since young kids' baskets are stationery-heavy
+        # (crayons, notebooks, coloring). Remaining slots 8-10 are school books.
+        # ΣΤ' Δημοτικού and older keep the standard 3-3-4 layout.
+        if is_early_elementary:
+            base_plan = (
+                ['SCHOOL_PRIMARY'] * 2     # slots 1-2: school books
+                + ['STATIONERY']   * 5     # slots 3-7: stationery
+                + ['SCHOOL_PRIMARY'] * 3   # slots 8-10: more school books
+            )
+        else:
+            # Younger (ΣΤ' Δημοτικού) or no-split: original 3-3-4 layout
+            base_plan = (
+                ['SCHOOL_PRIMARY'] * 3
+                + ['STATIONERY']   * 3
+                + ['SCHOOL_PRIMARY'] * 4
+            )
     
     alloc_notes = [
         "=== STEP 3: SLOT ALLOCATION ===",
