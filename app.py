@@ -103,7 +103,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v28.30.15 — School Books: books-only + age-appropriate kids' books
+        🟢 Engine v28.30.17 — School Books: pure top-selling kids' books for age
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -9371,6 +9371,11 @@ def run_school_books_engine(trigger, df_school_pool, df_stationery_pool, df_hist
     # v28.30.10 — Trigger's volume / τεύχος / μέρος info (for series-companion detection).
     t_title = str(trigger.get('Title', ''))
     t_tomos_rank, t_tomos_base = _sb_extract_volume(t_title)
+    # v28.30.16 — orientation tokens hoisted here (was only set inside the
+    # phase-split block, but the series-companion block uses it for ALL
+    # triggers — younger triggers skip phase split and previously hit a
+    # NameError on t_orient_tokens).
+    t_orient_tokens = _sb_orient_tokens(t_orientation)
     
     diag.append(("0. Trigger", "", f"Cluster: Greek School Books"))
     diag.append(("   Trigger (attrs)", "", 
@@ -9767,15 +9772,37 @@ def run_school_books_engine(trigger, df_school_pool, df_stationery_pool, df_hist
             age_hi = max(b[1] for b in age_bands)
         else:
             age_lo, age_hi = 3, 12   # safe default for "younger"
+        child_age = (age_lo + age_hi) / 2.0
         
         gb = df_greek_books.copy()
         age_col = 'Προτεινόμενη Ηλικία' if 'Προτεινόμενη Ηλικία' in gb.columns else None
         if age_col:
             gb['_age_range'] = gb[age_col].apply(_sb_parse_age_range)
-            kids_books_pool = gb[gb['_age_range'].apply(
-                lambda r: _sb_age_overlaps(r, age_lo, age_hi))].copy()
-            st_notes.append(f"Child age window from class: {age_lo}-{age_hi} years")
-            st_notes.append(f"Kids' books with age overlapping window: {len(kids_books_pool)}")
+            # v28.30.16 — Tight age matching. A book's RECOMMENDED MINIMUM age
+            # must be appropriate for THIS child — i.e. within a window around
+            # the child's age band: [age_lo - 2, age_hi + 1]. This stops a
+            # "4+" best-seller from dominating every class (a 10yo shouldn't be
+            # shown a 4+ picture book just because it overlaps and sells well).
+            # We also require the book's range to actually cover the child
+            # (max_age >= age_lo), so "3-6" doesn't show for a 10yo.
+            MIN_WINDOW_LO = age_lo - 2
+            MIN_WINDOW_HI = age_hi + 1
+            def _age_appropriate(rng):
+                if rng is None:
+                    return False
+                bmin, bmax = rng
+                # book's min age must be near the child's band
+                if not (MIN_WINDOW_LO <= bmin <= MIN_WINDOW_HI):
+                    return False
+                # book's range must cover the child (not end before they start)
+                if bmax < age_lo:
+                    return False
+                return True
+            gb['_age_ok'] = gb['_age_range'].apply(_age_appropriate)
+            kids_books_pool = gb[gb['_age_ok']].copy()
+            st_notes.append(f"Child age window from class: {age_lo}-{age_hi} years "
+                            f"(book min-age accepted in {MIN_WINDOW_LO}-{MIN_WINDOW_HI})")
+            st_notes.append(f"Age-appropriate kids' books: {len(kids_books_pool)}")
             if not kids_books_pool.empty:
                 kids_books_pool['_sales'] = (kids_books_pool['Sum of Sales'].apply(_safe_num)
                                              if 'Sum of Sales' in kids_books_pool.columns else 0.0)
@@ -9784,10 +9811,16 @@ def run_school_books_engine(trigger, df_school_pool, df_stationery_pool, df_hist
                         lambda v: SB_S_AVAIL_BONUS if str(v).strip() == 'Άμεσα Διαθέσιμο' else 0)
                 else:
                     kids_books_pool['_avail'] = 0
+                # v28.30.17 — PURE top-selling within the age window. No theme
+                # logic, no proximity weighting — once a book is age-appropriate
+                # (its min-age sits in the acceptance window), it ranks purely
+                # by sales. So the best-selling age-appropriate book leads.
                 kids_books_pool['Final_Score'] = kids_books_pool['_sales'] + kids_books_pool['_avail']
-                kids_books_pool['_tier_label'] = 'Kids book (age-appropriate best-seller)'
-                kids_books_pool = kids_books_pool.sort_values('_sales', ascending=False).reset_index(drop=True)
-                st_notes.append(f"Top kids' book: {str(kids_books_pool.iloc[0].get('Title',''))[:50]}")
+                kids_books_pool['_tier_label'] = 'Kids book (top-selling for age)'
+                kids_books_pool = kids_books_pool.sort_values(
+                    '_sales', ascending=False).reset_index(drop=True)
+                st_notes.append(f"Top kids' book: {str(kids_books_pool.iloc[0].get('Title',''))[:50]} "
+                                f"(pure sales rank within age window)")
         else:
             st_notes.append("⚠ 'Προτεινόμενη Ηλικία' column not found in Greek Books")
     elif not show_kids_books:
@@ -9847,7 +9880,6 @@ def run_school_books_engine(trigger, df_school_pool, df_stationery_pool, df_hist
         # Empty trigger orientation (e.g. Διόφαντος core textbooks) skips the
         # filter; Γενικής Παιδείας books are accepted by any specialist trigger
         # since the general subjects apply to all tracks.
-        t_orient_tokens = _sb_orient_tokens(t_orientation)
         if t_orient_tokens:
             sp_orient_ok = school_pool['_orientation'].apply(
                 lambda v: _sb_orient_compatible(v, t_orient_tokens))
