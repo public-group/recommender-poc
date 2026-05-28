@@ -103,7 +103,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v28.30.29 — Language Learning: drop teacher's editions + display fix
+        🟢 Engine v28.30.30 — Language Learning: fix Student's Book wrongly dropped as teacher
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -6269,12 +6269,18 @@ def _ll_is_teacher_book(row):
         has_student = ('μαθητ' in mk)
         if has_teacher and not has_student:
             return True
-    # Title markers (catch rows where the column is blank)
+    # Title markers (catch rows where the column is blank). Use word-boundary
+    # aware checks so "Studen[t's Book]" / "Student's" never false-positive.
     title = str(row.get('Title', '') or '').lower()
-    teacher_markers = ("teacher's", "teachers book", "teacher book", "teacher's book",
-                       "t's book", "βιβλίο καθηγητή", "βιβλίο εκπαιδευτικού",
-                       "teacher's guide", "teacher guide", "teacher's manual")
+    # Strong, unambiguous teacher markers
+    teacher_markers = ("teacher's book", "teachers book", "teacher book",
+                       "teacher's guide", "teacher guide", "teacher's manual",
+                       "teacher's edition", "teacher's resource",
+                       "βιβλίο καθηγητή", "βιβλίο εκπαιδευτικού")
     if any(m in title for m in teacher_markers):
+        return True
+    # "T's Book" only counts as teacher when it is NOT part of "Student's Book"
+    if "t's book" in title and "student's book" not in title and "studen" not in title:
         return True
     return False
 
