@@ -103,7 +103,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v28.30.12 — School Books: subject-specific helpers + early-elementary layout
+        🟢 Engine v28.30.13 — School Books: age-safe stationery + summer holiday books
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -3704,16 +3704,17 @@ SB_CLASS_TO_STAGE = {
 #                 post-its, presentation folders, bookmarks)
 SB_STAGE_TO_STATIONERY = {
     "Προσχολική": [
-        "ΧΡΩΜΑΤΙΣΤΑ ΜΟΛΥΒΙΑ",
+        # v28.30.13 — Curated for ages 4-6. Only safe, large-format, washable,
+        # non-toxic craft items. NO acrylics/oils/charcoal/india-ink (those
+        # surface via the item-level blocklist below), NO sharp tools.
         "ΚΗΡΟΜΠΟΓΙΕΣ-ΠΑΣΤΕΛ",
-        "ΧΡΩΜΑΤΑ ΖΩΓΡΑΦΙΚΗΣ",
-        "ΠΗΛΟΣ-ΠΛΑΣΤΕΛΙΝΗ",
-        "ΠΙΝΕΛΑ",
-        "ΑΥΤΟΚΟΛΛΗΤΑ-STICKERS",
-        "ΨΑΛΙΔΙΑ",
+        "ΧΡΩΜΑΤΙΣΤΑ ΜΟΛΥΒΙΑ",
         "ΜΑΡΚΑΔΟΡΟΙ",
-        "ΚΟΛΛΕΣ",
+        "ΑΥΤΟΚΟΛΛΗΤΑ-STICKERS",
         "ΜΠΛΟΚ-ΧΑΡΤΙΑ",
+        "ΧΡΩΜΑΤΑ ΖΩΓΡΑΦΙΚΗΣ",        # kept, but item-blocklist removes acrylics/oils
+        "ΠΗΛΟΣ-ΠΛΑΣΤΕΛΙΝΗ",          # kept, but item-blocklist removes solvent clay
+        "ΚΟΛΛΕΣ",
         "ACCESSORIES ΧΕΙΡΟΤΕΧΝΙΑΣ",
     ],
     "Δημοτικό": [
@@ -3854,6 +3855,45 @@ SB_EARLY_ELEMENTARY_CLASSES = {
     "Α' Δημοτικού", "Β' Δημοτικού", "Γ' Δημοτικού",
     "Δ' Δημοτικού", "Ε' Δημοτικού",
 }
+
+# v28.30.13 — "Very young" = up to ~7 years old (preschool + Α'/Β' Δημοτικού).
+# For these children, certain craft items in otherwise age-listed hierarchies
+# are unsafe or unsuitable (acrylic/oil paints, charcoal, india ink, solvent
+# air-dry clay, fine-tip technical pens). We blocklist them by title keyword.
+SB_VERY_YOUNG_CLASSES = {
+    "Παιδικός Σταθμός", "Προνήπιο", "Νηπιαγωγείο",
+    "Α' Δημοτικού", "Β' Δημοτικού",
+}
+# Accent-stripped, lowercased substrings that disqualify a stationery item
+# for very young kids. Matched against the item Title.
+SB_VERY_YOUNG_ITEM_BLOCKLIST = (
+    'ακρυλικ',       # acrylic paints
+    'λαδιου', 'λαδι',# oil paint
+    'καρβουνο',      # charcoal
+    'σινικη',        # india ink
+    'μελανη',        # ink
+    'τεμπερα',       # tempera (powder/professional)
+    'ακουαρελα',     # watercolor pans aimed at older kids (keep finger/wash paints)
+    'κιμωλια λαδ',   # oil chalk/pastel sticks (keep regular crayons)
+    'πινελα ακρυλ',  # acrylic brushes
+    'das',           # DAS solvent air-dry clay (keep play dough/πλαστελίνη)
+    'στεγνωνει με τον αερα',  # air-dry solvent clay descriptor
+    'χαρακας', 'διαβητης', 'μοιρογνωμονιο',  # technical drawing tools
+    'μηχανικο μολυβ',# mechanical pencils (choke/fine tip)
+    'κοπιδι', 'φαλτσετα',  # craft knives
+)
+
+# v28.30.13 — Holiday/vacation activity books (ΒΙΒΛΙΑ ΔΙΑΚΟΠΩΝ). In summer
+# these are the natural cross-sell for young kids (preschool → Ε' Δημοτικού).
+# Detected by hierarchy/series/title keyword.
+SB_HOLIDAY_BOOK_KEYWORDS = ('βιβλια διακοπων', 'βιβλιο διακοπων', 'διακοπες', 'διακοπων')
+SB_HOLIDAY_ELIGIBLE_CLASSES = {
+    "Παιδικός Σταθμός", "Προνήπιο", "Νηπιαγωγείο",
+    "Α' Δημοτικού", "Β' Δημοτικού", "Γ' Δημοτικού",
+    "Δ' Δημοτικού", "Ε' Δημοτικού",
+}
+# Northern-hemisphere school summer window (Greece): June, July, August.
+SB_SUMMER_MONTHS = {6, 7, 8}
 
 
 # v28.30.2 — Τόμος / Τεύχος / Μέρος detection.
@@ -9315,6 +9355,14 @@ def run_school_books_engine(trigger, df_school_pool, df_stationery_pool, df_hist
     # v28.30.12 — early-elementary flag (Ε' Δημοτικού and below + preschool)
     is_early_elementary = bool(t_classes) and any(
         c in SB_EARLY_ELEMENTARY_CLASSES for c in t_classes)
+    # v28.30.13 — very-young flag (≤ ~7yo: preschool + Α'/Β' Δημοτικού) for
+    # stationery item-safety filtering; and summer flag for holiday books.
+    is_very_young = bool(t_classes) and any(
+        c in SB_VERY_YOUNG_CLASSES for c in t_classes)
+    is_holiday_eligible = bool(t_classes) and any(
+        c in SB_HOLIDAY_ELIGIBLE_CLASSES for c in t_classes)
+    import datetime as _dt
+    is_summer = _dt.date.today().month in SB_SUMMER_MONTHS
     SB_S_SAME_SUBJECT     = 80_000   # v28.30.1 — same-subject bonus
     SB_S_AUTHOR_OVERLAP   = 60_000   # v28.30.4 — companion-volume signal
     SB_S_ORIENT_OVERLAP   = 40_000   # v28.30.4 — orientation match
@@ -9598,6 +9646,21 @@ def run_school_books_engine(trigger, df_school_pool, df_stationery_pool, df_hist
         stat_pool = df_stationery_pool[df_stationery_pool['Hierarchy'].isin(stage_hierarchies)].copy()
         st_notes.append(f"Pool after hierarchy filter: {len(stat_pool)} candidates")
         
+        # v28.30.13 — Very-young item-safety filter (≤ ~7yo). Remove craft
+        # items unsuitable for little kids (acrylic/oil paint, charcoal, india
+        # ink, solvent clay, mechanical pencils, craft knives, technical tools)
+        # even though their hierarchy is age-listed.
+        if is_very_young and not stat_pool.empty and 'Title' in stat_pool.columns:
+            def _very_young_safe(title):
+                s = _sb_strip_accents_upper(str(title)).lower()
+                return not any(bad in s for bad in SB_VERY_YOUNG_ITEM_BLOCKLIST)
+            before_n = len(stat_pool)
+            stat_pool = stat_pool[stat_pool['Title'].apply(_very_young_safe)].copy()
+            removed_n = before_n - len(stat_pool)
+            if removed_n > 0:
+                st_notes.append(f"Very-young safety filter (≤7yo): removed {removed_n} "
+                                f"unsuitable items (acrylics/charcoal/solvent clay/etc.)")
+        
         if not stat_pool.empty:
             # Score = priority(hierarchy) × tier_weight + sales (in-stock tiebreaker).
             # Priority weight gives top-of-list hierarchies a multi-million-point
@@ -9818,6 +9881,44 @@ def run_school_books_engine(trigger, df_school_pool, df_stationery_pool, df_hist
                 f"⚙ Series companions: trigger is τόμος-rank {t_tomos_rank}, "
                 f"series-key {sorted(t_subject_tokens)} → "
                 f"{series_companion_count} sibling volume(s) prepended to primary")
+    
+    # v28.30.13 — SUMMER HOLIDAY BOOKS (ΒΙΒΛΙΑ ΔΙΑΚΟΠΩΝ).
+    # In summer (Jun-Aug) for young kids (preschool → Ε' Δημοτικού), holiday
+    # activity books are the natural cross-sell. We detect them by hierarchy /
+    # series / title keyword across the full catalog (same class), and prepend
+    # them to the primary pool so they lead the school slots. Degrades to a
+    # no-op when no such books exist in the catalog (current state).
+    holiday_book_count = 0
+    if (is_summer and is_holiday_eligible and not school_pool.empty
+            and 'Material' in school_pool.columns):
+        def _is_holiday_book(row):
+            for col in ('Hierarchy', 'Σειρά βιβλίου_sales', 'Title'):
+                v = _sb_strip_accents_upper(str(row.get(col, ''))).lower()
+                if any(kw in v for kw in SB_HOLIDAY_BOOK_KEYWORDS):
+                    return True
+            return False
+        hol_mask = school_pool.apply(_is_holiday_book, axis=1)
+        holiday_rows = school_pool[hol_mask]
+        if not holiday_rows.empty:
+            # Sort by sales desc (best-selling holiday book leads)
+            if 'Sum of Sales' in holiday_rows.columns:
+                holiday_rows = holiday_rows.copy()
+                holiday_rows['_hsales'] = holiday_rows['Sum of Sales'].apply(_safe_num)
+                holiday_rows = holiday_rows.sort_values('_hsales', ascending=False)
+            holiday_book_count = len(holiday_rows)
+            # De-dup from primary + secondary, then prepend to primary
+            if not primary_pool.empty and 'Material' in primary_pool.columns:
+                primary_pool = primary_pool[~primary_pool['Material'].isin(holiday_rows['Material'])].reset_index(drop=True)
+            if not secondary_pool.empty and 'Material' in secondary_pool.columns:
+                secondary_pool = secondary_pool[~secondary_pool['Material'].isin(holiday_rows['Material'])].reset_index(drop=True)
+            primary_pool = pd.concat([holiday_rows, primary_pool], ignore_index=True)
+            fill_notes.append(
+                f"⚙ Summer holiday books (ΒΙΒΛΙΑ ΔΙΑΚΟΠΩΝ): {holiday_book_count} "
+                f"holiday book(s) prepended to primary (summer + young class)")
+        else:
+            fill_notes.append(
+                f"⚙ Summer + young class: no ΒΙΒΛΙΑ ΔΙΑΚΟΠΩΝ found in catalog "
+                f"(feature ready; add holiday books to surface them)")
     
     # ── Dynamic layout based on primary pool size ──
     n_primary_avail = len(primary_pool)
