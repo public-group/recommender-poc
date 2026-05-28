@@ -103,7 +103,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v28.30.30 — Language Learning: fix Student's Book wrongly dropped as teacher
+        🟢 Engine v28.30.31 — Language Learning: same-volume matching (Here We Go 3 ≠ 1/2)
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -6284,6 +6284,23 @@ def _ll_is_teacher_book(row):
         return True
     return False
 
+def _ll_series_volume(title, series):
+    """Extract the volume/level NUMBER that distinguishes books within a series,
+    but ONLY when the number immediately follows the series name
+    (e.g. 'Here We Go 3 Grammar' → 3, 'Access 2- Companion' → 2).
+    Returns int or None. Incidental numbers elsewhere in the title
+    (e.g. 'C2 8 Complete Practice Tests') are deliberately ignored, so series
+    without a clean volume number fall back to Τάξη/Επίπεδο matching."""
+    t = str(title or '')
+    s = str(series or '').strip()
+    if not s:
+        return None
+    # series name (allowing minor case/spacing) immediately followed by a number
+    m = re.search(re.escape(s) + r'\s*0*(\d{1,2})\b', t, flags=re.IGNORECASE)
+    if m:
+        return int(m.group(1))
+    return None
+
 # ───── Sidebar base styling ─────
 st.sidebar.markdown("""
 <style>
@@ -9686,17 +9703,30 @@ def run_lang_learning_engine(trigger, df_int_school, df_kids_books):
         # Same series (exact, case-insensitive)
         ser_norm = cat['Σειρά βιβλίου'].astype(str).str.strip().str.lower()
         same_series = cat[ser_norm == t_series.lower()].copy()
-        # Same level: match on Επίπεδο OR Τάξη (whichever the trigger has)
+        # Trigger's distinguishing signals: Τάξη is the MOST specific level
+        # marker (e.g. Here We Go 1/2/3 all share Επίπεδο 'A1-A2' but differ by
+        # Τάξη A/B/C Class). The volume NUMBER in the title is an extra guard.
+        t_vol = _ll_series_volume(tt, t_series)
         def _level_match(row):
             rl = str(row.get('Επίπεδο', '') or '').strip().lower()
             rc = str(row.get('Τάξη', '') or '').strip().lower()
-            if t_level and rl:
-                return rl == t_level.lower()
+            rv = _ll_series_volume(row.get('Title', ''), t_series)
+            # 1) If both trigger & row have a volume number, it MUST match
+            #    (this is the real "same level/year" guard within a series).
+            if t_vol is not None and rv is not None:
+                if rv != t_vol:
+                    return False
+                # volume matches — accept (same year of the course)
+                return True
+            # 2) Else prefer Τάξη (more granular than Επίπεδο)
             if t_class and rc:
                 return rc == t_class.lower()
-            # If trigger has no level info, accept the whole series
+            # 3) Else fall back to Επίπεδο
+            if t_level and rl:
+                return rl == t_level.lower()
+            # 4) No level info anywhere → accept whole series
             return not (t_level or t_class)
-        if t_level or t_class:
+        if t_level or t_class or t_vol is not None:
             same_series = same_series[same_series.apply(_level_match, axis=1)]
         series_pool = same_series[same_series['_mat_i'] != (int(tm) if tm is not None else -1)].copy()
         series_pool = series_pool.drop_duplicates(subset=['_mat_i'])
