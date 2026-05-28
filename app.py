@@ -103,7 +103,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v28.30.19 — School Books: kids' books from Greek Kids Books catalog
+        🟢 Engine v28.30.20 — School Books: kids' books start after slot 4
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -10137,24 +10137,24 @@ def run_school_books_engine(trigger, df_school_pool, df_stationery_pool, df_hist
                 f"{n_secondary_slots} school-overflow (cap on primary = {PRIMARY_MAX})")
     else:
         # YOUNGER stage (Δημοτικό/Προσχολική) — kids' books available.
-        # v28.30.15 — early elementary previously had 5 stationery slots in
-        # 3-7; now those become 5 KIDS_BOOK slots (age-appropriate trade books).
+        # v28.30.20 — School books occupy slots 1-4; kids' trade books start
+        # AFTER slot 4 (the "rest of the books that aren't school" go later).
         if is_early_elementary and has_kids_books:
             base_plan = (
-                ['SCHOOL_PRIMARY'] * 2     # slots 1-2: school books for the class
-                + ['KIDS_BOOK']    * 5     # slots 3-7: age-appropriate kids' trade books
-                + ['SCHOOL_PRIMARY'] * 3   # slots 8-10: more school books
+                ['SCHOOL_PRIMARY'] * 4     # slots 1-4: school books for the class
+                + ['KIDS_BOOK']    * 5     # slots 5-9: age-appropriate kids' trade books
+                + ['SCHOOL_PRIMARY'] * 1   # slot 10: one more school book
             )
-            fill_notes.append("⚙ Early-elementary books-only layout: 2 school + 5 kids' books + 3 school")
+            fill_notes.append("⚙ Early-elementary books-only layout: 4 school + 5 kids' books + 1 school")
         else:
-            # Standard younger layout: 3 school + 3 extra + 4 school
+            # Standard younger layout: 4 school + extra + remaining school
             base_plan = (
-                ['SCHOOL_PRIMARY'] * 3
+                ['SCHOOL_PRIMARY'] * 4
                 + [EXTRA]          * N_EXTRA
-                + ['SCHOOL_PRIMARY'] * (TOTAL_SLOTS - 3 - N_EXTRA)
+                + ['SCHOOL_PRIMARY'] * (TOTAL_SLOTS - 4 - N_EXTRA)
             )
-            fill_notes.append(f"⚙ Younger books-only layout: 3 school + {N_EXTRA} {EXTRA.lower()} + "
-                              f"{TOTAL_SLOTS - 3 - N_EXTRA} school")
+            fill_notes.append(f"⚙ Younger books-only layout: 4 school + {N_EXTRA} {EXTRA.lower()} + "
+                              f"{TOTAL_SLOTS - 4 - N_EXTRA} school")
     
     alloc_notes = [
         "=== STEP 3: SLOT ALLOCATION ===",
