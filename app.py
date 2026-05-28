@@ -103,7 +103,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v28.30.27 — New cluster: foreign-language learning (series + age-scaled kids)
+        🟢 Engine v28.30.28 — Language Learning: helper-ordering NameError fix
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -6173,6 +6173,91 @@ L2_CHILDREN = {
 # Reverse: L2 key → parent L1 key (used to highlight which L2 is active)
 L2_TO_L1 = {child["key"]: l1 for l1, children in L2_CHILDREN.items() for child in children}
 
+# ═════════════════════════════════════════════════════════════
+# v28.30.27 — FOREIGN LANGUAGE LEARNING — config + helpers
+# (Defined here, BEFORE the sidebar trigger-picker, because the picker uses
+# these at module load time. The engine function itself lives further down.)
+# ═════════════════════════════════════════════════════════════
+LL_TOTAL_SLOTS = 10
+LL_SERIES_MAX  = 6     # cap same-series companions so kids' books always appear
+LL_S_AVAIL_BONUS = 2
+
+# Level (Επίπεδο / Τάξη) → kids'-book age band (min, max). Scales the kids'
+# books to the learner's level: pre-junior → toddlers, proficiency → teens.
+LL_LEVEL_AGE = {
+    'pre-junior': (3, 6), 'pre junior': (3, 6), 'pre-a1': (4, 6), 'pre a1': (4, 6),
+    'junior': (6, 8), 'junior a': (6, 7), 'junior b': (7, 8),
+    'a class': (6, 7), 'b class': (7, 8), 'c class': (8, 9), 'd class': (9, 10), 'e class': (10, 11),
+    'a1': (7, 9), 'a1-a2': (7, 9), 'a1+': (8, 9), 'a1.1': (7, 8), 'a1.2': (8, 9),
+    'a2': (8, 10), 'a2+': (9, 10), 'a2.1': (8, 9), 'a2.2': (9, 10), 'a senior': (8, 9),
+    'b1': (10, 11), 'b1+': (11, 12), 'b1-b2': (10, 12), 'pre-lower': (11, 12), 'pre lower': (11, 12),
+    'b2': (12, 13), 'b2+': (12, 13), 'lower': (12, 13),
+    'c1': (13, 15), 'c1-c2': (13, 16), 'c2': (14, 16),
+    'advanced': (14, 16), 'proficiency': (15, 17),
+    'ielts': (15, 17), 'toefl': (15, 17), 'toeic': (15, 17), 'gmat': (16, 18),
+}
+LL_DEFAULT_AGE = (6, 9)   # generic young-learner band when level is unknown
+
+# Normalize a raw 'Γλώσσα Γραφής' value to a canonical language token.
+LL_LANG_CANON = {
+    'αγγλικά': 'en', 'αγγλικα': 'en', 'αγγλική': 'en', 'english': 'en', 'en': 'en',
+    'γαλλικά': 'fr', 'γαλλικα': 'fr', 'french': 'fr', 'français': 'fr',
+    'γερμανικά': 'de', 'γερμανικα': 'de', 'german': 'de', 'deutsch': 'de',
+    'ισπανικά': 'es', 'ισπανικα': 'es', 'spanish': 'es', 'español': 'es',
+    'ιταλικά': 'it', 'ιταλικα': 'it', 'italian': 'it',
+    'ελληνικά': 'el', 'ελληνικα': 'el', 'greek': 'el',
+}
+
+def _ll_canon_lang(raw):
+    """Canonical language token (en/fr/de/es/it/el) from a Γλώσσα Γραφής cell.
+    Handles semicolon-joined multi-language values — returns the first
+    non-Greek language (the target learning language), else the first token."""
+    s = str(raw or '').strip().lower()
+    if not s or s == 'nan':
+        return None
+    parts = [p.strip() for p in s.split(';') if p.strip()]
+    canon = [LL_LANG_CANON.get(p) for p in parts]
+    canon = [c for c in canon if c]
+    for c in canon:
+        if c != 'el':
+            return c
+    return canon[0] if canon else None
+
+def _ll_level_to_age(level_str, klass_str):
+    """Map a learning-book level/class to a kids'-book (age_lo, age_hi) band."""
+    for src in (level_str, klass_str):
+        s = str(src or '').strip().lower()
+        if not s or s == 'nan':
+            continue
+        for part in re.split(r'[;,]', s):
+            p = part.strip()
+            if p in LL_LEVEL_AGE:
+                return LL_LEVEL_AGE[p]
+        for k in sorted(LL_LEVEL_AGE, key=len, reverse=True):
+            if k in s:
+                return LL_LEVEL_AGE[k]
+    return LL_DEFAULT_AGE
+
+def _ll_infer_kids_lang(title):
+    """Infer the writing language of an International Kids book from its title.
+    The catalog is almost entirely English (Latin script); we detect Greek
+    script and a few obvious French/German/Spanish markers, else default 'en'."""
+    s = str(title or '')
+    if not s.strip():
+        return 'en'
+    greek = len(re.findall(r'[Α-Ωα-ωάέήίόύώϊϋΐΰ]', s))
+    latin = len(re.findall(r'[A-Za-z]', s))
+    if greek > latin:
+        return 'el'
+    low = ' ' + s.lower() + ' '
+    if any(m in low for m in (' der ', ' das ', ' und ', ' für ', ' ein ', ' ich ')):
+        return 'de'
+    if any(m in low for m in (' le ', ' la ', ' les ', ' un ', ' une ', ' petit ', ' grand ')):
+        return 'fr'
+    if any(m in low for m in (' el ', ' los ', ' las ', ' una ', ' niño ')):
+        return 'es'
+    return 'en'
+
 # ───── Sidebar base styling ─────
 st.sidebar.markdown("""
 <style>
@@ -9531,103 +9616,8 @@ def run_books_v2_engine(trigger, df_pool, df_history, category_key):
 # ═════════════════════════════════════════════════════════════
 # v28.30.27 — FOREIGN LANGUAGE LEARNING ENGINE
 # ═════════════════════════════════════════════════════════════
-# Trigger: a foreign-language *learning* book from the International School
-# Books sheet (English/French/German/Spanish/Italian course books, readers,
-# exam prep, etc.). Recommendation logic:
-#   Slots 1..N : OTHER books from the SAME SERIES (Σειρά βιβλίου) AND the SAME
-#                LEVEL (Επίπεδο/Τάξη) as the trigger — the bundle bought
-#                together for that specific level. Ranked by sales.
-#   Remaining  : INTERNATIONAL KIDS BOOKS (Books sheet, Level 2 =
-#                'International Kids Books'), filtered by an AGE band that is
-#                SCALED to the learning book's level, and with WRITING LANGUAGE
-#                matching the learning book's language. If no kids' books match
-#                the language, fall back to English kids' books (English only as
-#                a fallback). Ranked by sales within the age window.
-
-LL_TOTAL_SLOTS = 10
-LL_SERIES_MAX  = 6     # cap same-series companions so kids' books always appear
-LL_S_AVAIL_BONUS = 2
-
-# Level (Επίπεδο / Τάξη) → kids'-book age band (min, max). Scales the kids'
-# books to the learner's level: pre-junior → toddlers, proficiency → teens.
-LL_LEVEL_AGE = {
-    'pre-junior': (3, 6), 'pre junior': (3, 6), 'pre-a1': (4, 6), 'pre a1': (4, 6),
-    'junior': (6, 8), 'junior a': (6, 7), 'junior b': (7, 8),
-    'a class': (6, 7), 'b class': (7, 8), 'c class': (8, 9), 'd class': (9, 10), 'e class': (10, 11),
-    'a1': (7, 9), 'a1-a2': (7, 9), 'a1+': (8, 9), 'a1.1': (7, 8), 'a1.2': (8, 9),
-    'a2': (8, 10), 'a2+': (9, 10), 'a2.1': (8, 9), 'a2.2': (9, 10), 'a senior': (8, 9),
-    'b1': (10, 11), 'b1+': (11, 12), 'b1-b2': (10, 12), 'pre-lower': (11, 12), 'pre lower': (11, 12),
-    'b2': (12, 13), 'b2+': (12, 13), 'lower': (12, 13),
-    'c1': (13, 15), 'c1-c2': (13, 16), 'c2': (14, 16),
-    'advanced': (14, 16), 'proficiency': (15, 17),
-    'ielts': (15, 17), 'toefl': (15, 17), 'toeic': (15, 17), 'gmat': (16, 18),
-}
-LL_DEFAULT_AGE = (6, 9)   # generic young-learner band when level is unknown
-
-# Normalize a raw 'Γλώσσα Γραφής' value to a canonical language token.
-LL_LANG_CANON = {
-    'αγγλικά': 'en', 'αγγλικα': 'en', 'αγγλική': 'en', 'english': 'en', 'en': 'en',
-    'γαλλικά': 'fr', 'γαλλικα': 'fr', 'french': 'fr', 'français': 'fr',
-    'γερμανικά': 'de', 'γερμανικα': 'de', 'german': 'de', 'deutsch': 'de',
-    'ισπανικά': 'es', 'ισπανικα': 'es', 'spanish': 'es', 'español': 'es',
-    'ιταλικά': 'it', 'ιταλικα': 'it', 'italian': 'it',
-    'ελληνικά': 'el', 'ελληνικα': 'el', 'greek': 'el',
-}
-
-def _ll_canon_lang(raw):
-    """Canonical language token (en/fr/de/es/it/el) from a Γλώσσα Γραφής cell.
-    Handles semicolon-joined multi-language values — returns the first
-    non-Greek language (the target learning language), else the first token."""
-    s = str(raw or '').strip().lower()
-    if not s or s == 'nan':
-        return None
-    parts = [p.strip() for p in s.split(';') if p.strip()]
-    canon = [LL_LANG_CANON.get(p) for p in parts]
-    canon = [c for c in canon if c]
-    # Prefer a non-Greek target language (the language being learned)
-    for c in canon:
-        if c != 'el':
-            return c
-    return canon[0] if canon else None
-
-def _ll_level_to_age(level_str, klass_str):
-    """Map a learning-book level/class to a kids'-book (age_lo, age_hi) band."""
-    for src in (level_str, klass_str):
-        s = str(src or '').strip().lower()
-        if not s or s == 'nan':
-            continue
-        # exact token match on any ;/, separated part
-        for part in re.split(r'[;,]', s):
-            p = part.strip()
-            if p in LL_LEVEL_AGE:
-                return LL_LEVEL_AGE[p]
-        # substring fallback (longest key first to avoid 'a1' matching 'a1-a2')
-        for k in sorted(LL_LEVEL_AGE, key=len, reverse=True):
-            if k in s:
-                return LL_LEVEL_AGE[k]
-    return LL_DEFAULT_AGE
-
-def _ll_infer_kids_lang(title):
-    """Infer the writing language of an International Kids book from its title.
-    The catalog is almost entirely English (Latin script); we detect Greek
-    script and a few obvious French/German/Spanish markers, else default 'en'."""
-    s = str(title or '')
-    if not s.strip():
-        return 'en'
-    greek = len(re.findall(r'[Α-Ωα-ωάέήίόύώϊϋΐΰ]', s))
-    latin = len(re.findall(r'[A-Za-z]', s))
-    if greek > latin:
-        return 'el'
-    low = ' ' + s.lower() + ' '
-    if any(m in low for m in (' der ', ' das ', ' und ', ' für ', ' ein ', ' ich ')):
-        return 'de'
-    if any(m in low for m in (' le ', ' la ', ' les ', ' un ', ' une ', ' petit ', ' grand ')):
-        return 'fr'
-    if any(m in low for m in (' el ', ' los ', ' las ', ' una ', ' niño ')):
-        return 'es'
-    return 'en'
-
-
+# (Config constants LL_* and helpers _ll_* are defined earlier, before the
+# sidebar trigger-picker, because that picker uses them at module load time.)
 def run_lang_learning_engine(trigger, df_int_school, df_kids_books):
     """Ξενόγλωσσα Εκμάθηση recommender (foreign-language learning books)."""
     diag = []
