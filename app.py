@@ -103,7 +103,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v28.30.17 — School Books: pure top-selling kids' books for age
+        🟢 Engine v28.30.19 — School Books: kids' books from Greek Kids Books catalog
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -9775,8 +9775,24 @@ def run_school_books_engine(trigger, df_school_pool, df_stationery_pool, df_hist
         child_age = (age_lo + age_hi) / 2.0
         
         gb = df_greek_books.copy()
+        # v28.30.19 — Kids' books come from the 'Books' sheet of
+        # Recommendations_GitHub.xlsx, where Level 2 == 'Greek Kids Books'
+        # (15,814 rows, ~11.5k with a parseable 'Προτεινόμενη Ηλικία').
+        # This is the proper kids'-books catalog (Dog Man, Ημερολόγιο ενός
+        # σπασίκλα, picture books, etc.), not the adult-heavy 'Greek Books'
+        # trade catalog. The caller passes df_books as df_greek_books; we
+        # restrict to the Greek Kids Books Level 2 here.
+        if 'Level 2' in gb.columns:
+            lvl2 = gb['Level 2'].astype(str).str.strip()
+            kids_l2_mask = lvl2.apply(
+                lambda v: _sb_strip_accents_upper(v).lower() == 'greek kids books')
+            gb = gb[kids_l2_mask].copy()
+            st_notes.append(f"Level 2 = 'Greek Kids Books' rows: {len(gb)}")
+        else:
+            st_notes.append("⚠ 'Level 2' column not found — cannot restrict to Greek Kids Books")
+        
         age_col = 'Προτεινόμενη Ηλικία' if 'Προτεινόμενη Ηλικία' in gb.columns else None
-        if age_col:
+        if age_col and not gb.empty:
             gb['_age_range'] = gb[age_col].apply(_sb_parse_age_range)
             # v28.30.16 — Tight age matching. A book's RECOMMENDED MINIMUM age
             # must be appropriate for THIS child — i.e. within a window around
@@ -9799,10 +9815,26 @@ def run_school_books_engine(trigger, df_school_pool, df_stationery_pool, df_hist
                     return False
                 return True
             gb['_age_ok'] = gb['_age_range'].apply(_age_appropriate)
-            kids_books_pool = gb[gb['_age_ok']].copy()
+            # v28.30.18 — Two tiers within the kids' category:
+            #   Tier A: age-appropriate (min-age in the acceptance window)
+            #   Tier B: kids'-category books with NO/odd age tag — still
+            #           legitimate children's books (being in the category is
+            #           itself a kid signal), ranked AFTER the age-matched ones.
+            # This keeps the pool deep enough to fill 5 slots even when few
+            # kids' books carry a 'Προτεινόμενη Ηλικία' value.
+            gb['_has_age'] = gb['_age_range'].apply(lambda r: r is not None)
+            tier_a = gb[gb['_age_ok']].copy()
+            tier_b = gb[~gb['_age_ok']].copy()   # includes no-age + out-of-window
+            # Keep tier_b to no-age only (don't pull clearly wrong ages like
+            # an 16+ teen book into a preschool list)
+            tier_b = tier_b[~tier_b['_has_age']].copy()
+            tier_a['_age_tier'] = 0
+            tier_b['_age_tier'] = 1
+            kids_books_pool = pd.concat([tier_a, tier_b], ignore_index=True)
             st_notes.append(f"Child age window from class: {age_lo}-{age_hi} years "
                             f"(book min-age accepted in {MIN_WINDOW_LO}-{MIN_WINDOW_HI})")
-            st_notes.append(f"Age-appropriate kids' books: {len(kids_books_pool)}")
+            st_notes.append(f"Age-matched kids' books: {len(tier_a)}; "
+                            f"untagged kids' books (fallback): {len(tier_b)}")
             if not kids_books_pool.empty:
                 kids_books_pool['_sales'] = (kids_books_pool['Sum of Sales'].apply(_safe_num)
                                              if 'Sum of Sales' in kids_books_pool.columns else 0.0)
@@ -9811,16 +9843,14 @@ def run_school_books_engine(trigger, df_school_pool, df_stationery_pool, df_hist
                         lambda v: SB_S_AVAIL_BONUS if str(v).strip() == 'Άμεσα Διαθέσιμο' else 0)
                 else:
                     kids_books_pool['_avail'] = 0
-                # v28.30.17 — PURE top-selling within the age window. No theme
-                # logic, no proximity weighting — once a book is age-appropriate
-                # (its min-age sits in the acceptance window), it ranks purely
-                # by sales. So the best-selling age-appropriate book leads.
+                # PURE top-selling WITHIN each tier: age-matched books first
+                # (tier 0), then untagged kids' books (tier 1); sales-ranked
+                # within each tier.
                 kids_books_pool['Final_Score'] = kids_books_pool['_sales'] + kids_books_pool['_avail']
                 kids_books_pool['_tier_label'] = 'Kids book (top-selling for age)'
                 kids_books_pool = kids_books_pool.sort_values(
-                    '_sales', ascending=False).reset_index(drop=True)
-                st_notes.append(f"Top kids' book: {str(kids_books_pool.iloc[0].get('Title',''))[:50]} "
-                                f"(pure sales rank within age window)")
+                    ['_age_tier', '_sales'], ascending=[True, False]).reset_index(drop=True)
+                st_notes.append(f"Top kids' book: {str(kids_books_pool.iloc[0].get('Title',''))[:50]}")
         else:
             st_notes.append("⚠ 'Προτεινόμενη Ηλικία' column not found in Greek Books")
     elif not show_kids_books:
@@ -22035,7 +22065,7 @@ elif active_cluster in BOOKS_V2_CLUSTERS:
 # 7-10 with stationery overflow if exhausted).
 elif active_cluster == "Greek School Books":
     recs, diag, slot_notes, full_candidates = run_school_books_engine(
-        trigger, df_school_books, df_stationery, df_history, df_greek_books)
+        trigger, df_school_books, df_stationery, df_history, df_books)
     slot_diag = []
 else:
     # Final fallback — preserved for any non-books cluster that ends up
