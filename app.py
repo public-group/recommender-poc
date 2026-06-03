@@ -103,7 +103,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v28.32 — Αφυγραντήρες & Ιονιστές: seasonal comfort slots (summer fans / winter heaters) + per-tier budget caps
+        🟢 Engine v28.33 — PlayStation Games: genre-aware gear + same-genre discovery (sales × title-parsed genre)
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -3505,6 +3505,222 @@ def ps5_is_multi_controller_bundle(title):
 
 
 # ═════════════════════════════════════════════════════════════
+# 🟢 GAMING — PLAYSTATION GAMES CONFIGURATION (v28.33)
+# ═════════════════════════════════════════════════════════════
+# Trigger detection: products in the Gaming sheet with Hierarchy = 'PS5 GAMES'
+# (1 137 raw rows). The customer has picked a *game* (not a console) and we
+# cross-sell the gear, services and follow-up games that go with it.
+#
+# ── RECOMMENDATION DEPTH: SALES × TITLE-PARSED GENRE/FRANCHISE (hybrid) ──
+# Data investigation showed PS5 GAMES rows carry NO structured spec columns
+# at all — every attribute column (Κατηγορία, Προτεινόμενη χρήση, Μοντέλο…)
+# is empty for games. The only populated fields are Title, Sum of Sales,
+# LIST PRICE, AVAILABILITY and Hierarchy. So a "fully spec-based" engine is
+# impossible and a "sales-only" engine would ignore what the game actually is.
+# The engine therefore derives its spec layer from the TITLE:
+#   • genre   — franchise→genre map + keyword fallback (PSG_FRANCHISE_GENRE)
+#   • franchise — for dedup (don't re-recommend the trigger's own series)
+# and combines it with the sales signal:
+#       score = Sum of Sales  + availability  + genre-relevance boosts
+# Genre then ROUTES the two "genre-gear" slots (racing→wheel+pedals,
+# sports/fighting/family→2nd controller, shooter/rpg/horror/action→headset)
+# and FILTERS the two same-genre discovery slots.
+#
+# ── DATA-GROUNDED SLOT CHANGES vs the original hand-written list ──
+# The original wishlist had three slots the catalog can't honour:
+#   • "Funko Pop matching franchise" — GAMING FIGURINES is ~100% Nintendo
+#     Amiibo (Zelda/Splatoon/Mario); there are no PlayStation-franchise
+#     figurines, so a franchise match would almost always miss. Dropped.
+#   • "T-shirt / mug matching franchise" — no merchandise hierarchy exists
+#     in the Gaming sheet at all. Dropped.
+#   • "External SSD for storage expansion" — there is no external-SSD SKU in
+#     any Gaming hierarchy. Replaced with a PS5 VARIOUS ACCESSORIES slot
+#     (PlayStation Portal / HD Camera / stands — the real attach products).
+# What remains is everything the data can actually fill, plus genre routing.
+
+PSG_GAME_TRIGGER_HIERARCHIES = {'PS5 GAMES'}
+
+# Franchise / keyword → genre. Ordered, MOST-SPECIFIC FIRST (first hit wins).
+# Validated against all 1 137 PS5 GAMES: every top-40 seller routes to a genre
+# and each genre holds ≥17 SKUs — plenty for two same-genre discovery slots.
+PSG_FRANCHISE_GENRE = [
+    (r'just dance|hatsune miku|taiko|theatrhythm|fortnite festival|\bsing\b', 'music'),
+    (r'civilization|sid meier|total war|company of heroes|anno \d|tropico|frostpunk|crusader kings|age of (?:mythology|empires)|jagged alliance|stellaris', 'strategy'),
+    (r"gran turismo|need for speed|\bf1®?\b|formula 1|\bwrc\b|\bdirt\b|\bgrid\b|hot wheels|test drive|assetto|motogp|moto gp|\bride [45]\b|\bride 6\b|the crew|nascar|monster truck|lego 2k drive|supercross|monster energy|wreckfest|truck simulator|driveclub", 'racing'),
+    (r'ea sports fc|\bfifa\b|nba 2k|wwe 2k|\bpga\b|madden|\bnhl\b|efootball|\bpes\b|\brugby\b|cricket \d|tennis world|matchpoint|top spin|football manager|\bufc \d|mlb the show|nba live|pro evolution', 'sports'),
+    (r'tekken|street fighter|\bsf6\b|mortal kombat|dragon ball|guilty gear|naruto|granblue fantasy versus|king of fighters|injustice|soulcalibur|virtua fighter|under night|fatal fury|invincible vs|\bmk1\b|hunter x hunter|2xko|\bgarou\b', 'fighting'),
+    (r'call of duty|battlefield|\bdoom\b|borderlands|far cry|rainbow six|\bdestiny\b|overwatch|\bapex\b|counter.?strike|killzone|wolfenstein|sniper elite|metro exodus|back 4 blood|the finals|delta force|helldivers|space marine|gears of war|gears reloaded|\bcod\b|earth defense', 'shooter'),
+    (r'resident evil|silent hill|dead space|outlast|alan wake|until dawn|the callisto|five nights|dead island|evil within|amnesia|layers of fear|little nightmares|phasmophobia|\bfobia\b|pneumata|directive 8020|cronos.*new dawn|the chant|daymare|tormented souls|\broutine\b|s\.t\.a\.l\.k\.e\.r|stalker 2', 'horror'),
+    (r'final fantasy|elden ring|\bpersona\b|dragon quest|witcher|cyberpunk|baldur|diablo|monster hunter|kingdom hearts|tales of|yakuza|like a dragon|dragon age|elder scrolls|\bnioh\b|dark souls|lords of the fallen|metaphor|sand land|granblue fantasy relink|atelier|\bys [ivx]|star ocean|octopath|expedition 33|clair obscur|avowed|lies of p|khazan|starfield|kingdom come|fantasian|visions of mana|eiyuden|unicorn overlord|stranger of paradise|forspoken|wo long|stellar blade|black myth|the first berserker|dragon.?s dogma|tactics ogre|valkyrie elysium|soul hackers|suikoden', 'rpg'),
+    (r'astro bot|crash bandicoot|sackboy|rayman|\bsonic\b|\blego\b|spyro|ratchet|\bkena\b|it takes two|split fiction|minecraft|\bkirby\b|super mario|donkey kong|overcooked|moving out|unravel|nickelodeon|paw patrol|\bbluey\b|smurfs|\bdisney\b|\bpixar\b|spongebob|crash team|prince of persia|psychonauts|a hat in time|sea of stars|cuphead|nobody saves|\bstitch\b', 'platformer'),
+    (r'spider.?man|god of war|horizon|assassin|grand theft auto|\bgta\b|ghost of|the last of us|\btlou\b|uncharted|hogwarts|star wars|tomb raider|death stranding|\bsifu\b|crimson desert|\bsaros\b|days gone|ghostwire|returnal|\bcontrol\b|hitman|watch dogs|red dead|\bmafia\b|just cause|saints row|dying light|\bjedi\b|indiana jones|alone in the dark|robocop|mad max|metal gear|\bmgs\b|a plague tale|avatar.*pandora|skull and bones|dynasty warriors|evil west|ninja gaiden|life is strange|pragmata|hello neighbor|the lost crown|gotham knights|suicide squad|lords of the ring|gollum|blades of fire|atomfall|rise of the ronin', 'action_adventure'),
+]
+PSG_GENRE_KW = [
+    (r'\bracing\b|\brally\b', 'racing'),
+    (r'football|soccer|basketball|baseball|hockey|\bgolf\b|\bsports\b', 'sports'),
+    (r'\bhorror\b|survival horror|\bzombie\b', 'horror'),
+    (r'\brpg\b|role.?playing|\bjrpg\b', 'rpg'),
+    (r'\bshooter\b|\bfps\b', 'shooter'),
+    (r'\badventure\b', 'action_adventure'),
+]
+
+# Greek display label per genre (for diagnostics / copy).
+PSG_GENRE_LABEL = {
+    'racing': 'Racing', 'sports': 'Sports', 'fighting': 'Fighting',
+    'shooter': 'Shooter', 'horror': 'Horror', 'rpg': 'RPG',
+    'action_adventure': 'Action / Adventure', 'platformer': 'Platformer / Co-op',
+    'music': 'Music / Rhythm', 'strategy': 'Strategy', 'unknown': 'Γενικό',
+}
+
+# Genre → ordered accessory hierarchies for the two "genre-gear" slots.
+# Slot 1 takes index 0, slot 2 takes index 1. Racing is the only genre that
+# maps to wheel+pedals; everything else uses the two universal upsells
+# (headset for audio-immersion genres, controller for couch-multiplayer genres).
+PSG_GENRE_GEAR = {
+    'racing':           ['STEERING WHEELS',  'PS5 DRIVING ACCESSORIES'],
+    'sports':           ['PS5 CONTROLLERS',  'PS5 HEADSETS'],
+    'fighting':         ['PS5 CONTROLLERS',  'PS5 HEADSETS'],
+    'platformer':       ['PS5 CONTROLLERS',  'PS5 HEADSETS'],
+    'music':            ['PS5 CONTROLLERS',  'PS5 HEADSETS'],
+    'shooter':          ['PS5 HEADSETS',     'PS5 CONTROLLERS'],
+    'rpg':              ['PS5 HEADSETS',     'PS5 CONTROLLERS'],
+    'horror':           ['PS5 HEADSETS',     'PS5 CONTROLLERS'],
+    'action_adventure': ['PS5 HEADSETS',     'PS5 CONTROLLERS'],
+    'strategy':         ['PS5 HEADSETS',     'PS5 CONTROLLERS'],
+    'unknown':          ['PS5 HEADSETS',     'PS5 CONTROLLERS'],
+}
+
+# 10-slot plan. logic_key drives the per-slot scoring branch in the engine.
+#   GENRE_GEAR_LOGIC  — hierarchy chosen dynamically from PSG_GENRE_GEAR
+#   CONTROLLER/HEADSET/CABLE/ACCESSORY_LOGIC — fixed-hierarchy gear (capped)
+#   PREPAID_LOGIC     — PlayStation Plus / wallet top-up
+#   PSG_GAME_GENRE    — same-genre game discovery (genre filter on)
+#   PSG_GAME_TOP      — blockbuster discovery (no genre filter)
+PSG_SLOTS = [
+    (1,  'Gear Είδους #1',     ['__GENRE_GEAR_0__'],          'GENRE_GEAR_LOGIC'),
+    (2,  'Gear Είδους #2',     ['__GENRE_GEAR_1__'],          'GENRE_GEAR_LOGIC'),
+    (3,  'Χειριστήριο PS5',    ['PS5 CONTROLLERS'],           'CONTROLLER_LOGIC'),
+    (4,  'Gaming Headset',     ['PS5 HEADSETS'],              'HEADSET_LOGIC'),
+    (5,  'PlayStation Plus',   ['PREPAID CARDS'],             'PREPAID_LOGIC'),
+    (6,  'Αξεσουάρ PS5',       ['PS5 VARIOUS ACCESSORIES'],   'ACCESSORY_LOGIC'),
+    (7,  'Game Ίδιου Είδους',  ['PS5 GAMES'],                 'PSG_GAME_GENRE'),
+    (8,  'Δεύτερο Game Είδους',['PS5 GAMES'],                 'PSG_GAME_GENRE'),
+    (9,  'Top Seller Game',    ['PS5 GAMES'],                 'PSG_GAME_TOP'),
+    (10, 'Φόρτιση & Καλώδια',  ['PS5 CABLES & CHARGERS'],     'CABLE_LOGIC'),
+]
+
+PSG_MARKETING_COPY = {
+    'Gear Είδους #1':      'Φτιαγμένο για το είδος που παίζεις.',
+    'Gear Είδους #2':      'Αναβάθμισε την εμπειρία σου.',
+    'Χειριστήριο PS5':     'Έξτρα DualSense — co-op κάθε στιγμή.',
+    'Gaming Headset':      'Καθαρός ήχος & επικοινωνία in-game.',
+    'PlayStation Plus':    'Online παιχνίδι, δωρεάν τίτλοι & πίστωση.',
+    'Αξεσουάρ PS5':        'Αναβάθμισε το PS5 setup σου.',
+    'Game Ίδιου Είδους':   'Αν σου άρεσε αυτό, θα λατρέψεις κι αυτό.',
+    'Δεύτερο Game Είδους': 'Ακόμα ένας τίτλος στο αγαπημένο σου είδος.',
+    'Top Seller Game':     'Το παιχνίδι που ξεχωρίζει αυτή τη στιγμή.',
+    'Φόρτιση & Καλώδια':   'Πάντα φορτισμένο, πάντα έτοιμο.',
+}
+
+# Fallback fill maps (slot couldn't be filled by its primary hierarchy).
+PSG_HIERARCHY_TO_ROLE = {
+    'PS5 CONTROLLERS':         'Έξτρα Χειριστήριο',
+    'PS5 GAMES':               'Παιχνίδι PS5',
+    'PS5 HEADSETS':            'Gaming Headset',
+    'PS5 CABLES & CHARGERS':   'Φόρτιση & Καλώδια',
+    'PS5 VARIOUS ACCESSORIES': 'Αξεσουάρ PS5',
+    'STEERING WHEELS':         'Τιμονιέρα',
+    'PS5 DRIVING ACCESSORIES': 'Racing Αξεσουάρ',
+    'PREPAID CARDS':           'PlayStation Plus',
+}
+PSG_HIERARCHY_TO_MARKETING = {
+    'PS5 CONTROLLERS':         'Έξτρα DualSense για co-op παιχνίδια.',
+    'PS5 GAMES':               'Νέος τίτλος για τη συλλογή σου.',
+    'PS5 HEADSETS':            'Καθαρός ήχος για in-game επικοινωνία.',
+    'PS5 CABLES & CHARGERS':   'Κράτα το χειριστήριο πάντα φορτισμένο.',
+    'PS5 VARIOUS ACCESSORIES': 'Αναβάθμισε το PS5 setup σου.',
+    'STEERING WHEELS':         'Πραγματική racing εμπειρία.',
+    'PS5 DRIVING ACCESSORIES': 'Πετάλια & μοχλός για το τιμόνι σου.',
+    'PREPAID CARDS':           'Πίστωση για games & PlayStation Plus.',
+}
+
+# Modest budget ceilings (over-cap → −30 000). Game triggers are €20-80, so
+# unlike the console engine we use a single, sensible ceiling per gear type.
+PSG_BUDGET = {
+    'controller': 110, 'headset': 200, 'cable': 60,
+    'accessory': 260, 'steering': 460, 'driving': 200, 'prepaid': 60,
+}
+
+# Hierarchies that span platforms — need a title-based PS5 filter.
+PSG_CROSSPLATFORM_HIERARCHIES = {'STEERING WHEELS', 'PREPAID CARDS'}
+
+
+def _psg_classify_genre(title):
+    """Map a game title to a genre token using franchise patterns first,
+    then a keyword fallback. Returns 'unknown' when nothing matches."""
+    if not title:
+        return 'unknown'
+    t = str(title).lower()
+    for pat, genre in PSG_FRANCHISE_GENRE:
+        if re.search(pat, t):
+            return genre
+    for pat, genre in PSG_GENRE_KW:
+        if re.search(pat, t):
+            return genre
+    return 'unknown'
+
+
+def _psg_extract_franchise(title):
+    """Coarse franchise key for dedup so we never recommend two titles from
+    the trigger's own series (e.g. trigger Spider-Man 2 → drop all Spider-Man,
+    trigger EA Sports FC26 → drop all EA Sports FC / FIFA)."""
+    if not title:
+        return ''
+    t = str(title).lower()
+    # Strongest franchise signals first.
+    FRANCHISE_KEYS = [
+        (r'ea sports fc|\bfifa\b', 'ea_fc'),
+        (r'\bnba 2k', 'nba2k'), (r'\bwwe 2k', 'wwe2k'),
+        (r'spider.?man', 'spiderman'), (r'god of war', 'gow'),
+        (r'\bhorizon\b', 'horizon'), (r'assassin', 'assassins_creed'),
+        (r'grand theft auto|\bgta\b', 'gta'), (r'ghost of', 'ghost_of'),
+        (r'the last of us|\btlou\b', 'tlou'), (r'\buncharted\b', 'uncharted'),
+        (r'resident evil', 'resident_evil'), (r'final fantasy', 'final_fantasy'),
+        (r'gran turismo', 'gran_turismo'), (r'\bf1®?\b|formula 1', 'f1'),
+        (r'need for speed', 'nfs'), (r'call of duty|\bcod\b', 'cod'),
+        (r'battlefield', 'battlefield'), (r'elden ring', 'elden_ring'),
+        (r'dragon ball', 'dragon_ball'), (r'tekken', 'tekken'),
+        (r'street fighter|\bsf6\b', 'street_fighter'), (r'mortal kombat|\bmk1\b', 'mortal_kombat'),
+        (r'\bgran turismo\b', 'gran_turismo'), (r'hogwarts', 'hogwarts'),
+        (r'crash bandicoot|crash team', 'crash'), (r'astro bot', 'astro_bot'),
+        (r'\blego\b', 'lego'), (r'metal gear|\bmgs\b', 'metal_gear'),
+        (r'\bratchet\b', 'ratchet'), (r'silent hill', 'silent_hill'),
+        (r'monster hunter', 'monster_hunter'), (r'\bnioh\b', 'nioh'),
+        (r'gears of war|gears reloaded', 'gears'), (r'starfield', 'starfield'),
+        (r'death stranding', 'death_stranding'), (r'just dance', 'just_dance'),
+        (r'ninja gaiden', 'ninja_gaiden'), (r'lies of p', 'lies_of_p'),
+        (r'\bufc \d', 'ufc'), (r'split fiction', 'split_fiction'),
+        (r'crimson desert', 'crimson_desert'), (r'stellar blade', 'stellar_blade'),
+        (r'black myth', 'black_myth'), (r'\bsaros\b', 'saros'),
+    ]
+    for pat, key in FRANCHISE_KEYS:
+        if re.search(pat, t):
+            return key
+    # Fallback: first two distinctive words (drops platform/edition modifiers).
+    txt = re.sub(r'[^a-z0-9\s]', ' ', t)
+    skip = {'ps5', 'ps4', 'edition', 'day', 'one', 'deluxe', 'premium', 'standard',
+            'the', 'of', 'and', 'a', 'code', 'in', 'box', 'game', 'greek', 'version',
+            'lenticular', 'remaster', 'remastered', 'collection', 'hd', 'vol'}
+    words = [w for w in txt.split() if len(w) >= 3 and w not in skip]
+    return '_'.join(words[:2]) if words else t[:8]
+
+
+def _psg_genre_gear_hierarchies(genre):
+    """Ordered accessory hierarchies for the two genre-gear slots."""
+    return PSG_GENRE_GEAR.get(genre, PSG_GENRE_GEAR['unknown'])
+
+
+# ═════════════════════════════════════════════════════════════
 # 🟢 GAMING — NINTENDO SWITCH 2 CONFIGURATION (v28.8)
 # ═════════════════════════════════════════════════════════════
 # Trigger detection: products in the Gaming sheet with Hierarchy =
@@ -6325,6 +6541,8 @@ L2_CHILDREN = {
          "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='4' y='3' width='16' height='18' rx='2'/%3E%3Cline x1='9' y1='3' x2='9' y2='21'/%3E%3Ccircle cx='15' cy='8' r='1.5'/%3E%3Ccircle cx='15' cy='14' r='1.5'/%3E%3C/svg%3E"},
         {"key": "Nintendo Switch 2", "label": "Switch 2",
          "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='6' y='4' width='12' height='16' rx='1'/%3E%3Crect x='3' y='6' width='3' height='12' rx='1'/%3E%3Crect x='18' y='6' width='3' height='12' rx='1'/%3E%3Ccircle cx='4.5' cy='10' r='0.5'/%3E%3Ccircle cx='19.5' cy='14' r='0.5'/%3E%3C/svg%3E"},
+        {"key": "PlayStation Games", "label": "PS5\nGames",
+         "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='4' width='18' height='14' rx='2'/%3E%3Cpath d='M7 8v6M4 11h6'/%3E%3Ccircle cx='16' cy='10' r='1'/%3E%3Ccircle cx='19' cy='13' r='1'/%3E%3Ccircle cx='16' cy='13' r='1'/%3E%3Cpath d='M8 21h8'/%3E%3C/svg%3E"},
     ],
 }
 
@@ -7821,6 +8039,39 @@ else:
                 st.sidebar.markdown('<p class="sidebar-section">Επιλέξτε Nintendo Switch 2</p>', unsafe_allow_html=True)
                 sel = st.sidebar.selectbox("", ns2_consoles['Title'].unique(), label_visibility="collapsed", key="ns2_sel")
                 trigger = ns2_consoles[ns2_consoles['Title']==sel].iloc[0] if sel else None
+
+
+    elif active_cluster == "PlayStation Games":
+        # Trigger pool: PS5 GAMES from the Gaming sheet (1 137 raw rows).
+        # The dropdown is sales-sorted (top sellers first) and de-duplicated by
+        # Material, so the most relevant titles surface immediately while the
+        # searchable selectbox still exposes the full catalogue.
+        if df_gaming is None or df_gaming.empty:
+            sheets_str = ", ".join(sheets_loaded) if sheets_loaded else "(none)"
+            st.sidebar.warning(
+                "Sheet 'Gaming' is empty or missing.\n\n"
+                f"**Sheets loaded**: {sheets_str}\n\n"
+                "Make sure the Home workbook (`Recommendations GitHub Home.xlsx`) "
+                "is committed alongside the main one."
+            )
+        else:
+            hier_upper = df_gaming['Hierarchy'].fillna('').astype(str).str.upper().str.strip()
+            psg_trigger_hiers = {h.upper().strip() for h in PSG_GAME_TRIGGER_HIERARCHIES}
+            ps5_games = df_gaming[hier_upper.isin(psg_trigger_hiers)].copy()
+
+            # De-dupe: highest-sales row per Material, then sort the dropdown by
+            # sales so the demo lands on real top sellers (Resident Evil:
+            # Requiem, EA Sports FC26, GTA V, …) instead of long-tail SKUs.
+            if not ps5_games.empty and 'Sum of Sales' in ps5_games.columns:
+                ps5_games = ps5_games.sort_values('Sum of Sales', ascending=False)
+                ps5_games = ps5_games.drop_duplicates(subset=['Material'], keep='first')
+
+            if ps5_games.empty:
+                st.sidebar.warning("Δεν βρέθηκαν PS5 Games στο sheet Gaming.")
+            else:
+                st.sidebar.markdown('<p class="sidebar-section">Επιλέξτε PlayStation Game</p>', unsafe_allow_html=True)
+                sel = st.sidebar.selectbox("", ps5_games['Title'].tolist(), label_visibility="collapsed", key="psg_sel")
+                trigger = ps5_games[ps5_games['Title']==sel].iloc[0] if sel else None
 
 
 # ───── Compatibility shim: rest of app expects `active_cluster` as a string ─────
@@ -22986,6 +23237,341 @@ def run_ns2_console_engine(trigger, df_gaming, df_history):
 
 
 # ═══════════════════════════════════════════════════════════════
+# 🟢 PLAYSTATION GAMES ENGINE (v28.33)
+# ═══════════════════════════════════════════════════════════════
+# Trigger = a PS5 game. See the PlayStation Games config block for the full
+# design rationale. In short: PS5 GAMES carry no structured specs, so the
+# engine derives genre + franchise from the TITLE and combines that with the
+# sales signal. Genre routes the two "genre-gear" slots and filters the two
+# same-genre discovery slots; the trigger's own franchise is excluded from
+# every game slot so we never recommend its sequels back to the customer.
+#
+#   Slots 1-2 : genre gear (racing→wheel+pedals, sports/fighting/family→2nd
+#               controller, shooter/rpg/horror/action→headset)
+#   Slot  3   : DualSense controller (capped so we never show 3 controllers)
+#   Slot  4   : gaming headset (capped)
+#   Slot  5   : PlayStation Plus / wallet top-up
+#   Slot  6   : PS5 various accessory (Portal / HD Camera / stand …)
+#   Slots 7-8 : same-genre game discovery (different franchises)
+#   Slot  9   : top-seller blockbuster discovery (any genre)
+#   Slot 10   : charging dock / cable
+# A fallback pass guarantees all 10 slots fill even when a primary hierarchy
+# is empty or family-saturated.
+
+def run_ps_games_engine(trigger, df_gaming, df_history):
+    diag, slot_notes, all_recs = [], {}, []
+
+    if df_gaming is None or df_gaming.empty:
+        diag.append(("0. Data", 0, "Sheet 'Gaming' is empty or missing"))
+        return pd.DataFrame(), diag, slot_notes, pd.DataFrame()
+
+    tm     = trigger['Material']
+    tt     = str(trigger.get('Title', ''))
+    tprice = parse_euro_price(trigger.get('LIST PRICE', 0))
+
+    genre            = _psg_classify_genre(tt)
+    trigger_franch   = _psg_extract_franchise(tt)
+    gear_hiers       = _psg_genre_gear_hierarchies(genre)
+    genre_label      = PSG_GENRE_LABEL.get(genre, genre)
+
+    diag.append((
+        "0. Trigger",
+        f"€{tprice:.0f} · Genre={genre_label}",
+        f"Franchise='{trigger_franch}' · Gear=[{gear_hiers[0]} → {gear_hiers[1]}]",
+    ))
+
+    # ── Candidate pool ──
+    pool_full = df_gaming.copy()
+    pool_full['Sales_30'] = pd.to_numeric(pool_full.get('Sum of Sales', 0), errors='coerce').fillna(0)
+    pool_full['_p']       = pool_full['LIST PRICE'].apply(parse_euro_price)
+    pool_full = pool_full.drop_duplicates(subset=['Material'], keep='first')
+    pool_full = pool_full[pool_full['Material'] != tm].copy()
+
+    used_materials  = {tm}
+    used_franchises = {trigger_franch} if trigger_franch else set()
+
+    # Family caps prevent redundant duplicate gear across slots.
+    def _psg_family(hier):
+        h = str(hier).upper().strip()
+        return {
+            'PS5 CONTROLLERS':         ('controller', 2),
+            'PS5 HEADSETS':            ('headset',    2),
+            'STEERING WHEELS':         ('wheel',      1),
+            'PS5 DRIVING ACCESSORIES': ('driving',    1),
+        }.get(h, (None, 99))
+    fam_count = {}
+
+    def _psg_title_sig(t):
+        txt = re.sub(r'[^a-zA-Z0-9\sα-ωΑ-Ωά-ώΆ-Ώ]', ' ', str(t))
+        skip = {'sony', 'για', 'gaming', 'wireless', 'wired', 'edition', 'pack',
+                'with', 'ps5', 'ps4', 'usb', 'controller', 'and', 'the'}
+        words = [w.lower() for w in txt.split() if len(w) >= 3 and w.lower() not in skip]
+        return tuple(words[:2])
+    used_sigs = set()
+
+    def _psg_score_gear(pool, logic_key, role_notes):
+        """Sales + availability + Sony first-party + over-cap penalty, with a
+        per-logic cap drawn from PSG_BUDGET. Returns the scored pool."""
+        pool = pool.copy()
+        pool['Final_Score'] = pool['Sales_30'].astype(float)
+        if 'AVAILABILITY' in pool.columns:
+            avail = pool['AVAILABILITY'].fillna('').astype(str).str.strip() == 'Άμεσα Διαθέσιμο'
+            pool.loc[avail, 'Final_Score'] += 1500
+            unavail = pool['AVAILABILITY'].fillna('').astype(str).str.contains(
+                'Μη Διαθέσιμο|Εξαντλημένο|Εξαντλήθηκε', regex=True, na=False
+            )
+            pool.loc[unavail, 'Final_Score'] -= 50000
+        # Budget cap
+        cap = {
+            'CONTROLLER_LOGIC': PSG_BUDGET['controller'],
+            'HEADSET_LOGIC':    PSG_BUDGET['headset'],
+            'CABLE_LOGIC':      PSG_BUDGET['cable'],
+            'ACCESSORY_LOGIC':  PSG_BUDGET['accessory'],
+        }.get(logic_key)
+        if cap is not None and '_p' in pool.columns:
+            over = pool['_p'] > cap
+            pool.loc[over, 'Final_Score'] -= 30000
+            if over.any():
+                role_notes.append(f"💶 Budget cap €{cap}: −30000 to {int(over.sum())} items")
+        # Sony first-party boost (not for prepaid/steering — cross-platform)
+        if logic_key not in ('PREPAID_LOGIC',):
+            brand = pool['Κατασκευαστής'].fillna('').astype(str).str.upper().str.strip()
+            title = pool['Title'].fillna('').astype(str)
+            sony = (brand == 'SONY') | title.str.contains(r'\bSony\b|\bPlayStation\b', case=False, na=False, regex=True)
+            if sony.any():
+                pool.loc[sony, 'Final_Score'] += 4000
+                role_notes.append(f"🏷 Sony first-party boost: +4000 to {int(sony.sum())} items")
+        return pool
+
+    # ── Resolve the dynamic genre-gear hierarchies onto the slot list ──
+    active_slots = []
+    for slot_num, role, hierarchies, logic_key in PSG_SLOTS:
+        h = hierarchies
+        if hierarchies == ['__GENRE_GEAR_0__']:
+            h = [gear_hiers[0]]
+        elif hierarchies == ['__GENRE_GEAR_1__']:
+            h = [gear_hiers[1]]
+        active_slots.append((slot_num, role, h, logic_key))
+
+    for slot_num, role, hierarchies, logic_key in active_slots:
+        notes = [f"Logic: {logic_key} · Genre: {genre_label}"]
+
+        # ── Family-cap skip for gear slots ──
+        prim_hier = hierarchies[0]
+        fam_key, fam_cap = _psg_family(prim_hier)
+        if fam_key is not None and fam_count.get(fam_key, 0) >= fam_cap:
+            msg = f"Skipped: {fam_key} already at cap ({fam_cap}) — fallback will fill"
+            diag.append((f"Slot {slot_num} ({role})", 0, msg))
+            slot_notes[slot_num] = notes + ["⊘ " + msg]
+            continue
+
+        hiers_upper = {x.upper().strip() for x in hierarchies}
+        hier_col = pool_full['Hierarchy'].fillna('').astype(str).str.upper().str.strip()
+        pool = pool_full[hier_col.isin(hiers_upper)].copy()
+        pool = pool[~pool['Material'].isin(used_materials)]
+
+        # ── Cross-platform PS5 title filter ──
+        if any(x in PSG_CROSSPLATFORM_HIERARCHIES for x in hiers_upper):
+            ps5_mask = pool['Title'].fillna('').astype(str).apply(lambda s: bool(PS5_TITLE_PATTERN.search(s)))
+            if ps5_mask.any():
+                dropped = int((~ps5_mask).sum())
+                pool = pool[ps5_mask]
+                if dropped:
+                    notes.append(f"🎯 PS5-compat filter: kept {len(pool)}, dropped {dropped}")
+
+        if pool.empty:
+            diag.append((f"Slot {slot_num} ({role})", 0, "Empty pool (hierarchy missing / filtered out)"))
+            slot_notes[slot_num] = notes + ["⚠ No products in: " + ", ".join(hierarchies)]
+            continue
+
+        # ════════════ GAME SLOTS ════════════
+        if logic_key in ('PSG_GAME_GENRE', 'PSG_GAME_TOP'):
+            pool['_genre']  = pool['Title'].apply(_psg_classify_genre)
+            pool['_franch'] = pool['Title'].apply(_psg_extract_franchise)
+            # Never recommend the trigger's franchise or one already used.
+            pool = pool[~pool['_franch'].isin(used_franchises)]
+            # Same-genre filter (only when the trigger genre is known).
+            if logic_key == 'PSG_GAME_GENRE' and genre != 'unknown':
+                same = pool[pool['_genre'] == genre]
+                if not same.empty:
+                    pool = same
+                    notes.append(f"🎮 Same-genre filter ({genre_label}): {len(pool)} candidates")
+                else:
+                    notes.append(f"🎮 No same-genre title left → broadening to top sellers")
+            pool['Final_Score'] = pool['Sales_30'].astype(float)
+            if 'AVAILABILITY' in pool.columns:
+                avail = pool['AVAILABILITY'].fillna('').astype(str).str.strip() == 'Άμεσα Διαθέσιμο'
+                pool.loc[avail, 'Final_Score'] += 1500
+                unavail = pool['AVAILABILITY'].fillna('').astype(str).str.contains(
+                    'Μη Διαθέσιμο|Εξαντλημένο|Εξαντλήθηκε', regex=True, na=False)
+                pool.loc[unavail, 'Final_Score'] -= 50000
+
+        # ════════════ PREPAID ════════════
+        elif logic_key == 'PREPAID_LOGIC':
+            pool['Final_Score'] = pool['Sales_30'].astype(float)
+            title = pool['Title'].fillna('').astype(str)
+            ps_mask  = title.str.contains('PlayStation|Playstation', case=False, na=False, regex=True)
+            fut_mask = title.str.contains('FUT Points|FIFA', case=False, na=False, regex=True)
+            pool.loc[ps_mask, 'Final_Score'] += 5000
+            pool.loc[fut_mask, 'Final_Score'] -= 5000
+            if 'AVAILABILITY' in pool.columns:
+                avail = pool['AVAILABILITY'].fillna('').astype(str).str.strip() == 'Άμεσα Διαθέσιμο'
+                pool.loc[avail, 'Final_Score'] += 1500
+            over = pool['_p'] > PSG_BUDGET['prepaid']
+            pool.loc[over, 'Final_Score'] -= 30000
+            notes.append(f"🎮 PlayStation card priority: PS +5000 ({int(ps_mask.sum())}), FIFA-FUT −5000 ({int(fut_mask.sum())})")
+
+        # ════════════ STEERING / DRIVING (genre gear, racing) ════════════
+        elif logic_key == 'GENRE_GEAR_LOGIC':
+            pool = _psg_score_gear(pool, logic_key, notes)
+            if prim_hier.upper().strip() == 'STEERING WHEELS':
+                over = pool['_p'] > PSG_BUDGET['steering']
+                pool.loc[over, 'Final_Score'] -= 30000
+            elif prim_hier.upper().strip() == 'PS5 DRIVING ACCESSORIES':
+                over = pool['_p'] > PSG_BUDGET['driving']
+                pool.loc[over, 'Final_Score'] -= 30000
+
+        # ════════════ FIXED GEAR (controller / headset / accessory / cable) ════════════
+        else:
+            pool = _psg_score_gear(pool, logic_key, notes)
+            if logic_key == 'HEADSET_LOGIC':
+                title = pool['Title'].fillna('').astype(str)
+                wireless = title.str.contains('Wireless|Ασύρμ|Bluetooth', case=False, na=False, regex=True)
+                pool.loc[wireless, 'Final_Score'] += 2500
+                notes.append(f"📡 Wireless preference: +2500 to {int(wireless.sum())} items")
+            elif logic_key == 'CABLE_LOGIC':
+                title = pool['Title'].fillna('').astype(str)
+                dock = title.str.contains('Charger|Charging|Φόρτισης|Dock', case=False, na=False, regex=True)
+                pool.loc[dock, 'Final_Score'] += 4000
+                notes.append(f"🔌 Charger/Dock priority: +4000 to {int(dock.sum())} items")
+
+        # ── Dedup near-identical product names already used ──
+        if not pool.empty:
+            sig_mask = pool['Title'].fillna('').astype(str).apply(lambda s: _psg_title_sig(s) not in used_sigs)
+            if sig_mask.any():
+                pool = pool[sig_mask]
+
+        if pool.empty:
+            diag.append((f"Slot {slot_num} ({role})", 0, "Empty after scoring/dedup"))
+            slot_notes[slot_num] = notes
+            continue
+
+        pool = pool.sort_values(['Final_Score', 'Sales_30'], ascending=[False, False])
+        chosen = pool.iloc[0]
+        rc = chosen.copy()
+        rc['Assigned_Slot']  = slot_num
+        rc['Slot_Role']      = role
+        rc['Marketing_Copy'] = PSG_MARKETING_COPY.get(role, "Ιδανική επιλογή για το PS5 σου.")
+        all_recs.append(rc)
+
+        used_materials.add(chosen['Material'])
+        used_sigs.add(_psg_title_sig(chosen['Title']))
+        if fam_key is not None:
+            fam_count[fam_key] = fam_count.get(fam_key, 0) + 1
+        if logic_key in ('PSG_GAME_GENRE', 'PSG_GAME_TOP'):
+            fr = _psg_extract_franchise(chosen['Title'])
+            if fr:
+                used_franchises.add(fr)
+        slot_notes[slot_num] = notes
+        diag.append((
+            f"Slot {slot_num} ({role})", 1,
+            f"€{float(chosen.get('_p', 0)):.0f} · sales={float(chosen.get('Sales_30', 0)):.0f} · "
+            f"score={float(chosen.get('Final_Score', 0)):.0f} · {str(chosen.get('Title', ''))[:55]}",
+        ))
+
+    # ═══════════════════════════════════════════════════════════════
+    # ── FALLBACK FILL: guarantee all 10 slots are populated ──
+    # Pull the next-best eligible Gaming-sheet product into any empty slot,
+    # skipping saturated families and (for games) used franchises.
+    # ═══════════════════════════════════════════════════════════════
+    filled = {int(r['Assigned_Slot']) for r in all_recs} if all_recs else set()
+    empty_slots = sorted(s for s, _, _, _ in active_slots if s not in filled)
+
+    if empty_slots:
+        eligible = set()
+        for _, _, hiers, _ in active_slots:
+            eligible.update(h.upper().strip() for h in hiers)
+        eligible.discard('__GENRE_GEAR_0__'); eligible.discard('__GENRE_GEAR_1__')
+
+        fb_col = pool_full['Hierarchy'].fillna('').astype(str).str.upper().str.strip()
+        fb = pool_full[fb_col.isin(eligible)].copy()
+        fb = fb[~fb['Material'].isin(used_materials)]
+
+        # Cross-platform PS5 title filter for steering/prepaid in the fallback.
+        if not fb.empty:
+            fbh = fb['Hierarchy'].fillna('').astype(str).str.upper().str.strip()
+            cross = fbh.isin(PSG_CROSSPLATFORM_HIERARCHIES)
+            if cross.any():
+                ps5t = fb['Title'].fillna('').astype(str).apply(lambda s: bool(PS5_TITLE_PATTERN.search(s)))
+                fb = fb[~cross | ps5t]
+
+        if not fb.empty:
+            fb['Final_Score'] = fb['Sales_30'].astype(float)
+            if 'AVAILABILITY' in fb.columns:
+                avail = fb['AVAILABILITY'].fillna('').astype(str).str.strip() == 'Άμεσα Διαθέσιμο'
+                fb.loc[avail, 'Final_Score'] += 1500
+                unavail = fb['AVAILABILITY'].fillna('').astype(str).str.contains(
+                    'Μη Διαθέσιμο|Εξαντλημένο|Εξαντλήθηκε', regex=True, na=False)
+                fb.loc[unavail, 'Final_Score'] -= 50000
+            fb = fb.sort_values(['Final_Score', 'Sales_30'], ascending=[False, False])
+
+            diag.append(("── Fallback pass ──", len(empty_slots),
+                         f"{len(empty_slots)} empty slot(s) from {len(fb)} eligible products"))
+
+            for slot_num in empty_slots:
+                if fb.empty:
+                    diag.append((f"Slot {slot_num} (Fallback)", 0, "Fallback pool exhausted"))
+                    continue
+                # Filter out saturated families, used sigs and used franchises.
+                def _ok(r):
+                    h = str(r.get('Hierarchy', '')).upper().strip()
+                    fk, fc = _psg_family(h)
+                    if fk is not None and fam_count.get(fk, 0) >= fc:
+                        return False
+                    if _psg_title_sig(r['Title']) in used_sigs:
+                        return False
+                    if h == 'PS5 GAMES' and _psg_extract_franchise(r['Title']) in used_franchises:
+                        return False
+                    return True
+                mask = fb.apply(_ok, axis=1)
+                cand = fb[mask]
+                chosen = cand.iloc[0] if not cand.empty else fb.iloc[0]
+
+                chosen_hier = str(chosen.get('Hierarchy', '')).upper().strip()
+                orig_role = next((r for s, r, _, _ in active_slots if s == slot_num), '')
+                rc = chosen.copy()
+                rc['Assigned_Slot']  = slot_num
+                rc['Slot_Role']      = PSG_HIERARCHY_TO_ROLE.get(chosen_hier, 'Πρόσθετο PS5')
+                rc['Marketing_Copy'] = PSG_HIERARCHY_TO_MARKETING.get(chosen_hier, 'Πρόταση για το PS5 setup σου.')
+                all_recs.append(rc)
+
+                used_materials.add(chosen['Material'])
+                used_sigs.add(_psg_title_sig(chosen['Title']))
+                fk, _ = _psg_family(chosen_hier)
+                if fk is not None:
+                    fam_count[fk] = fam_count.get(fk, 0) + 1
+                if chosen_hier == 'PS5 GAMES':
+                    fr = _psg_extract_franchise(chosen['Title'])
+                    if fr:
+                        used_franchises.add(fr)
+                fb = fb[fb['Material'] != chosen['Material']]
+                diag.append((
+                    f"Slot {slot_num} (fallback → {chosen_hier})", 1,
+                    f"was: {orig_role} · €{float(chosen.get('_p', 0)):.0f} · "
+                    f"sales={float(chosen.get('Sales_30', 0)):.0f} · {str(chosen.get('Title', ''))[:50]}",
+                ))
+                slot_notes[slot_num] = (slot_notes.get(slot_num) or []) + [
+                    f"↻ Fallback fill: {PSG_HIERARCHY_TO_ROLE.get(chosen_hier, '?')} ({chosen_hier})"
+                ]
+
+    recs_df = pd.DataFrame(all_recs) if all_recs else pd.DataFrame()
+    if not recs_df.empty:
+        recs_df = recs_df.sort_values('Assigned_Slot').reset_index(drop=True)
+        recs_df['Draft_Score'] = recs_df['Assigned_Slot']
+    return recs_df, diag, slot_notes, recs_df
+
+
+# ═══════════════════════════════════════════════════════════════
 # 🟢 VINYL & TURNTABLES ENGINE
 # ═══════════════════════════════════════════════════════════════
 
@@ -23325,6 +23911,14 @@ elif active_cluster == "PS5 Console":
     slot_diag = []
 elif active_cluster == "Nintendo Switch 2":
     recs, diag, slot_notes, full_candidates = run_ns2_console_engine(trigger, df_gaming, df_history)
+    slot_diag = []
+elif active_cluster == "PlayStation Games":
+    # Trigger = a PS5 game. Sales × title-parsed genre/franchise hybrid: genre
+    # routes the two gear slots (racing→wheel+pedals, sports/fighting→2nd
+    # controller, shooter/rpg/horror/action→headset) and filters the two
+    # same-genre discovery slots; the trigger's own franchise is excluded so
+    # we never re-recommend its sequels. Lives entirely in the Gaming sheet.
+    recs, diag, slot_notes, full_candidates = run_ps_games_engine(trigger, df_gaming, df_history)
     slot_diag = []
 elif active_cluster == "Wearables":
     recs, diag, slot_notes, full_candidates = run_wearables_engine(trigger, df_products, df_history)
