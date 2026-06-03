@@ -103,7 +103,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v28.38 — PlayStation Games: collector merch (no kid toys), strict series-match, racing wheel leads + shifter, no dup peripherals
+        🟢 Engine v28.39 — PlayStation Games: no-merch case promotes 2nd game to slot 4, fills slots 5-7 by sales (what people buy)
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -23842,35 +23842,64 @@ def run_ps_games_engine(trigger, df_gaming, df_history, df_books=None):
                 ]
 
     # ═══════════════════════════════════════════════════════════════
-    # ── COMPACTION: among slots 2-6, put the most relevant accessory in the
-    #    earliest accessory position (genre gear first — e.g. a racing wheel —
-    #    then by sales), so a low-value leftover (disc drive / microphone) never
-    #    sits above the hero accessory. Real merch and games keep their slots;
-    #    only accessory-filled positions are reordered among themselves.
+    # ── Re-order slots 2-7 once the slots are resolved ──
     # ═══════════════════════════════════════════════════════════════
     if all_recs:
-        ACC_HIERS = {h.upper() for h in PSG_ACCESSORY_FALLBACK_HIERARCHIES}
-        ACC_HIERS |= {gear_hiers[0].upper().strip(), gear_hiers[1].upper().strip()}
+        gear_hi    = {gear_hiers[0].upper().strip(), gear_hiers[1].upper().strip()}
         gear_order = {gear_hiers[0].upper().strip(): 0, gear_hiers[1].upper().strip(): 1}
         recs_by_slot = {int(r['Assigned_Slot']): r for r in all_recs}
-        acc_positions, acc_items = [], []
-        for s in (2, 3, 4, 5, 6):
-            r = recs_by_slot.get(s)
-            if r is None:
-                continue
-            if str(r.get('Hierarchy', '')).upper().strip() in ACC_HIERS:
-                acc_positions.append(s)
-                acc_items.append(r)
-        if len(acc_positions) >= 2:
-            def _acc_prio(r):
-                h = str(r.get('Hierarchy', '')).upper().strip()
-                return (gear_order.get(h, 9), -float(r.get('Sales_30', 0)))
-            acc_items_sorted = sorted(acc_items, key=_acc_prio)
-            for pos, item in zip(sorted(acc_positions), acc_items_sorted):
-                h = str(item.get('Hierarchy', '')).upper().strip()
-                item['Assigned_Slot']  = pos
+
+        def _set_role(item):
+            h = str(item.get('Hierarchy', '')).upper().strip()
+            if h == 'PS5 GAMES':
+                item['Slot_Role']      = 'Δεύτερο Game Είδους'
+                item['Marketing_Copy'] = PSG_MARKETING_COPY.get('Δεύτερο Game Είδους', 'Ακόμα ένας τίτλος στο είδος σου.')
+            else:
                 item['Slot_Role']      = PSG_HIERARCHY_TO_ROLE.get(h, 'Αξεσουάρ PS5')
                 item['Marketing_Copy'] = PSG_HIERARCHY_TO_MARKETING.get(h, 'Αναβάθμισε το PS5 setup σου.')
+
+        if len(used_merch_mats) == 0:
+            # ── NO-MERCH REPACK (user-directed) ──
+            # No series merch exists for this game, so slots 2-7 are gear + a
+            # second game + filler accessories. Lay them out as:
+            #   2-3 → the two genre hero accessories (highest-attach gear)
+            #   4   → the 2nd same-genre game (so a game shows *before* slot 7)
+            #   5-7 → the remaining accessories ranked purely by SALES
+            #         ("what people buy" — their attach-rate is unknown)
+            region = [recs_by_slot[s] for s in (2, 3, 4, 5, 6, 7) if s in recs_by_slot]
+            def _hh(r): return str(r.get('Hierarchy', '')).upper().strip()
+            gear_items = [r for r in region if _hh(r) in gear_hi]
+            game_items = [r for r in region if _hh(r) == 'PS5 GAMES']
+            acc_items  = [r for r in region if _hh(r) not in gear_hi and _hh(r) != 'PS5 GAMES']
+            gear_items.sort(key=lambda r: (gear_order.get(str(r.get('Hierarchy', '')).upper().strip(), 9),
+                                           -float(r.get('Sales_30', 0))))
+            game_items.sort(key=lambda r: -float(r.get('Sales_30', 0)))
+            acc_items.sort(key=lambda r: -float(r.get('Sales_30', 0)))
+            ordered = gear_items[:2]                       # slots 2-3: hero gear
+            if game_items:
+                ordered.append(game_items[0])              # slot 4: 2nd genre game
+            ordered += acc_items                           # slots 5-7: accessories by sales
+            ordered += gear_items[2:] + game_items[1:]     # any leftovers
+            for sl, item in zip((2, 3, 4, 5, 6, 7), ordered[:6]):
+                item['Assigned_Slot'] = sl
+                _set_role(item)
+        else:
+            # ── Merch / partial-merch case: only reorder accessory-filled
+            #    positions among 2-6 (genre gear first, then sales); merch and
+            #    games keep their slots. ──
+            ACC_HIERS = {h.upper() for h in PSG_ACCESSORY_FALLBACK_HIERARCHIES} | gear_hi
+            acc_positions, acc_items = [], []
+            for s in (2, 3, 4, 5, 6):
+                r = recs_by_slot.get(s)
+                if r is not None and str(r.get('Hierarchy', '')).upper().strip() in ACC_HIERS:
+                    acc_positions.append(s)
+                    acc_items.append(r)
+            if len(acc_positions) >= 2:
+                acc_items.sort(key=lambda r: (gear_order.get(str(r.get('Hierarchy', '')).upper().strip(), 9),
+                                              -float(r.get('Sales_30', 0))))
+                for pos, item in zip(sorted(acc_positions), acc_items):
+                    item['Assigned_Slot'] = pos
+                    _set_role(item)
 
     recs_df = pd.DataFrame(all_recs) if all_recs else pd.DataFrame()
     if not recs_df.empty:
