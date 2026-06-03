@@ -103,7 +103,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v28.36 — PlayStation Games: merch search across cards/LEGO/figures (FIFA→Panini), slot 2 back-filled last, no chairs
+        🟢 Engine v28.37 — PlayStation Games: merch slots diversify by type (cards → board game → LEGO), series-match only
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -3769,6 +3769,30 @@ def _psg_merch_search_regex(title, franchise_key):
     if not words:
         return None
     return r'\b' + re.escape(words[0]) + r'\b'
+
+
+def _psg_merch_type(row):
+    """Coarse merch *type* used to diversify the three merch slots so they don't
+    all show near-identical products (e.g. three Panini card packs). Returns a
+    bucket like 'cards', 'lego', 'boardgame', 'figure', 'plush', 'mug', …"""
+    l2 = str(row.get('Level 2', '')).strip().lower()
+    h  = str(row.get('Hierarchy', '')).strip().lower()
+    t  = str(row.get('Title', '')).lower()
+    if 'lego' in l2 or 'lego' in t:                                   return 'lego'
+    if 'puzzle' in t or 'παζλ' in t:                                  return 'puzzle'
+    if 'monopoly' in t or 'jenga' in t or 'trivial' in t or 'επιτραπ' in h or 'board game' in t:
+        return 'boardgame'
+    if any(k in t for k in ('λούτριν', 'plush', 'beanie')):           return 'plush'
+    if any(k in t for k in ('μπρελ', 'keychain', 'keyring')):         return 'keychain'
+    if any(k in t for k in ('funko', 'tubbz', 'φιγούρα', 'figure', 'amiibo',
+                            'playset', 'κούκλα', 'hasbro', 'minix', 'banpresto')):
+        return 'figure'
+    if any(k in t for k in ('κάρτες', 'cards', 'adrenalyn', 'αυτοκόλλητ',
+                            'sticker', 'panini', 'trading')):         return 'cards'
+    if any(k in t for k in ('κούπα', 'mug', 'ποτήρι', 'glass')):      return 'mug'
+    if any(k in t for k in ('μπλούζα', 't-shirt', 'tshirt', 'hoodie', 'φούτερ')):
+        return 'apparel'
+    return l2 or 'other'
 
 
 # Hierarchies that span platforms — need a title-based PS5 filter.
@@ -23448,6 +23472,7 @@ def run_ps_games_engine(trigger, df_gaming, df_history, df_books=None):
             if 'AVAILABILITY' in sm.columns:
                 av = sm['AVAILABILITY'].fillna('').astype(str).str.strip() == 'Άμεσα Διαθέσιμο'
                 sm.loc[av, 'Final_Score'] += 500
+            sm['_mtype'] = sm.apply(_psg_merch_type, axis=1)
             series_merch = sm.sort_values(['Final_Score', 'Sales_30'], ascending=[False, False])
     diag.append(("0a. Merch", len(merch_pool),
                  f"Pop-Culture merch pool · series-matched={len(series_merch)} (regex='{series_regex}')"))
@@ -23456,6 +23481,7 @@ def run_ps_games_engine(trigger, df_gaming, df_history, df_books=None):
     used_franchises = {trigger_franch} if trigger_franch else set()
     used_sigs       = set()
     used_merch_mats = set()
+    used_merch_types = set()
 
     def _psg_family(hier):
         h = str(hier).upper().strip()
@@ -23521,6 +23547,13 @@ def run_ps_games_engine(trigger, df_gaming, df_history, df_books=None):
                 diag.append((f"Slot {slot_num} ({role})", 0, msg))
                 slot_notes[slot_num] = notes + ["⊘ " + msg]
                 continue  # left empty → accessory fallback fills it
+            # Variety: heavily de-prioritise a merch TYPE already shown in an
+            # earlier merch slot, so the three slots vary (e.g. card pack →
+            # LEGO → board game) instead of three near-identical Panini packs.
+            cand = cand.copy()
+            cand['_vscore'] = cand['Final_Score'] - cand['_mtype'].apply(
+                lambda mt: 1e9 if mt in used_merch_types else 0.0)
+            cand = cand.sort_values(['_vscore', 'Sales_30'], ascending=[False, False])
             chosen = cand.iloc[0]
             chosen_hier = str(chosen.get('Hierarchy', '')).upper().strip()
             rc = chosen.copy()
@@ -23530,7 +23563,8 @@ def run_ps_games_engine(trigger, df_gaming, df_history, df_books=None):
             all_recs.append(rc)
             used_materials.add(chosen['Material'])
             used_merch_mats.add(chosen['Material'])
-            slot_notes[slot_num] = notes + [f"🎯 Series match '{series_regex}'"]
+            used_merch_types.add(chosen.get('_mtype', 'other'))
+            slot_notes[slot_num] = notes + [f"🎯 Series match '{series_regex}' · type={chosen.get('_mtype','?')}"]
             diag.append((
                 f"Slot {slot_num} ({role})", 1,
                 f"€{float(chosen.get('_p', 0)):.0f} · sales={float(chosen.get('Sales_30', 0)):.0f} · "
