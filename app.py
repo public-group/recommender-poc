@@ -103,7 +103,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v28.31 — Αφυγραντήρες & Ιονιστές: Air-Treatment cross-sell (humidity monitor + clean-air upgrade)
+        🟢 Engine v28.32 — Αφυγραντήρες & Ιονιστές: seasonal comfort slots (summer fans / winter heaters) + per-tier budget caps
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -1037,47 +1037,87 @@ DH_CLEAN_AIR_HIERARCHIES = ['Καθαριστές Αέρα', 'Ιονιστές']
 # Tuned to the observed ranges (dehum €53-598 med 229; purifier €99-1149 med 319).
 DH_TIER_THRESHOLDS = {'Mid': 150, 'Premium': 350}
 
-# (priority_rank, role_label, hierarchies, logic_key, max_in_round_1, max_total)
-# Round-1 sum = 10 → with all pools non-empty every slot is filled in round 1;
-# the max_total>1 pools (hygrometer, clean-air, dehum, weather-gadget) absorb
-# overflow in later rounds whenever a thinner pool runs dry — so the carousel
-# always reaches 10 even for the tiny Ιονιστές trigger.
+# ── Season control ─────────────────────────────────────────────────────────
+# Auto-detected from the current month (SUMMER = May–Oct, WINTER = Nov–Apr),
+# exactly like the Climatism engine. Set DH_SEASON_OVERRIDE to 'SUMMER' or
+# 'WINTER' to force a season (useful for demos — preview winter slots in June).
+DH_SEASON_OVERRIDE = None   # None | 'SUMMER' | 'WINTER'
+DH_SUMMER_MONTHS = {5, 6, 7, 8, 9, 10}
+
+# (priority_rank, role_label, hierarchies, logic_key, max_in_round_1, max_total,
+#  budget_category)  — budget_category keys into DH_BUDGET (see below).
 #
-# Slot philosophy (the ORDER below is the round-robin priority):
-#   1. Υγρόμετρο / Θερμόμετρο   — high-attach cheap monitor (LEADS, per decision)
-#   2. Καθαριστής Αέρα / Ιονιστής — clean-air sibling (UPGRADE for combo triggers)
-#   3. Αφυγραντήρας             — humidity-control complement / alternative scale
-#   4. Αερόθερμο                — winter co-purchase (heat + humidity control)
-#   5. Ηλεκτρική Κουβέρτα       — cozy seasonal attach
-#   6. Θερμάστρα Ηλεκτρική      — spot heating companion
-#   7. Ανεμιστήρας Δαπέδου      — air circulation (boosts dehumidifier reach)
-#   8. Ανεμιστήρας Επιτραπέζιος — small air-movement attach
-#   9. Μετεωρολογικός Σταθμός   — weather-station mop-up (non-hygrometer gadgets)
-#  10. Φορητό Κλιματιστικό      — premium climate cross-sell / overflow
-DH_PRIORITY = [
+# Both seasons share the 4-item AIR-TREATMENT CORE (humidity monitor, clean-air
+# sibling, dehumidifier, weather station) — those are relevant year-round. The
+# COMFORT slots differ:
+#   • SUMMER → fans + portable AC (NO heaters / electric blankets)
+#   • WINTER → heaters + electric blanket (NO fans / portable AC); the
+#              dehumidifier is given extra depth (winter = condensation/mould
+#              season on cold walls)
+# Round-1 sum = 7 distinct slots in each list; the max_total>1 pools absorb the
+# remaining 3 slots in later rounds, so the carousel always reaches 10 even
+# after the budget caps prune a pool.
+DH_SUMMER_PRIORITY = [
     (1,  'Υγρόμετρο',
-         ['WEATHER GADGETS'],            'DH_HYGROMETER',       1, 2),
+         ['WEATHER GADGETS'],            'DH_HYGROMETER',     1, 1, 'monitor'),
     (2,  'Καθαριστής Αέρα',
-         DH_CLEAN_AIR_HIERARCHIES,       'DH_CLEAN_AIR',        1, 2),
+         DH_CLEAN_AIR_HIERARCHIES,       'DH_CLEAN_AIR',      1, 2, 'clean_air'),
     (3,  'Αφυγραντήρας',
-         ['Αφυγραντήρες'],               'DH_DEHUM',            1, 2),
+         ['Αφυγραντήρες'],               'DH_DEHUM',          1, 2, 'dehum'),
+    (4,  'Ανεμιστήρας Δαπέδου',
+         ['Ανεμιστήρες Δαπέδου'],        'DH_SALES',          1, 3, 'fan'),
+    (5,  'Φορητό Κλιματιστικό',
+         ['Φορητά Κλιματιστικά'],        'DH_SALES',          1, 1, 'portable_ac'),
+    (6,  'Ανεμιστήρας Επιτραπέζιος',
+         ['Ανεμιστήρες Επιτραπέζιοι'],   'DH_SALES',          1, 2, 'fan'),
+    (7,  'Μετεωρολογικός Σταθμός',
+         ['WEATHER GADGETS'],            'DH_GADGET_GENERIC', 1, 1, 'monitor'),
+]
+
+DH_WINTER_PRIORITY = [
+    (1,  'Υγρόμετρο',
+         ['WEATHER GADGETS'],            'DH_HYGROMETER',     1, 1, 'monitor'),
+    (2,  'Καθαριστής Αέρα',
+         DH_CLEAN_AIR_HIERARCHIES,       'DH_CLEAN_AIR',      1, 2, 'clean_air'),
+    (3,  'Αφυγραντήρας',
+         ['Αφυγραντήρες'],               'DH_DEHUM',          1, 3, 'dehum'),
     (4,  'Αερόθερμο',
-         ['Αερόθερμα'],                  'DH_HEATING',          1, 1),
+         ['Αερόθερμα'],                  'DH_HEATING',        1, 2, 'heating'),
     (5,  'Ηλεκτρική Κουβέρτα',
-         ['Ηλεκτρικές Κουβέρτες'],       'DH_SALES',            1, 1),
+         ['Ηλεκτρικές Κουβέρτες'],       'DH_SALES',          1, 1, 'blanket'),
     (6,  'Θερμάστρα',
-         ['Θερμάστρες Ηλεκτρικές'],      'DH_HEATING',          1, 1),
-    (7,  'Ανεμιστήρας Δαπέδου',
-         ['Ανεμιστήρες Δαπέδου'],        'DH_SALES',            1, 1),
-    (8,  'Ανεμιστήρας Επιτραπέζιος',
-         ['Ανεμιστήρες Επιτραπέζιοι'],   'DH_SALES',            1, 1),
-    (9,  'Μετεωρολογικός Σταθμός',
-         ['WEATHER GADGETS'],            'DH_GADGET_GENERIC',   1, 2),
-    (10, 'Φορητό Κλιματιστικό',
-         ['Φορητά Κλιματιστικά'],        'DH_SALES',            1, 1),
+         ['Θερμάστρες Ηλεκτρικές'],      'DH_HEATING',        1, 1, 'heating'),
+    (7,  'Μετεωρολογικός Σταθμός',
+         ['WEATHER GADGETS'],            'DH_GADGET_GENERIC', 1, 1, 'monitor'),
 ]
 
 DH_SLOT_TARGET = 10
+
+# ── Budget table ────────────────────────────────────────────────────────────
+# Per-tier, per-category HARD price caps (€). A companion priced above the cap
+# for the trigger's tier is dropped before scoring, so a €240 dehumidifier
+# never surfaces a €1.149 purifier or a €798 tower fan, while a premium €450
+# trigger is still allowed its premium companions. Caps are deliberately
+# generous on clean_air (the clean-air slot can be a genuine UPGRADE) and tight
+# on fans/blankets (pure low-ticket attach). Tune freely — this is the single
+# knob for "what price makes sense to suggest".
+#
+# Trigger tiers:  Entry < €150  |  Mid €150–350  |  Premium > €350
+DH_BUDGET = {
+    'Entry': {
+        'monitor': 45,  'clean_air': 230,  'dehum': 200,  'fan': 90,
+        'heating': 80,  'blanket': 60,     'portable_ac': 360,
+    },
+    'Mid': {
+        'monitor': 60,  'clean_air': 500,  'dehum': 420,  'fan': 190,
+        'heating': 140, 'blanket': 95,     'portable_ac': 540,
+    },
+    'Premium': {
+        'monitor': 100, 'clean_air': 1250, 'dehum': 700,  'fan': 480,
+        'heating': 260, 'blanket': 150,    'portable_ac': 950,
+    },
+}
+DH_TIER_NAMES = ['Entry', 'Mid', 'Premium']   # index by _dh_price_tier() result
 
 # Static fallback copy (per-role). The engine ALSO overrides slot-2/3 copy
 # dynamically based on trigger type (combo-dehumidifier → "upgrade", purifier
@@ -1103,7 +1143,6 @@ DH_S_PRICE_ONE_OFF    =   70_000   # ±1 price tier
 DH_S_TANK_NEAR        =   60_000   # Dehum↔dehum: water-tank bucket within ±1
 DH_S_TANK_DIFF        =   25_000   # Dehum↔dehum: deliberately different tank (alt scale)
 DH_S_COMBO_REDUNDANT  = -120_000   # Soft nudge: clean-air item when trigger already combos
-DH_S_HYGRO_CAP        =       60   # Price cap (€) for the hygrometer slot
 DH_S_SALES_FACTOR     =      0.5   # Sales tiebreaker weight
 
 
@@ -14121,7 +14160,8 @@ def _dh_marketing(role_label: str, trigger_type: str, trigger_is_combo: bool) ->
 def _dh_build_hygrometer_pool(c_pool, notes):
     """WEATHER GADGETS filtered to thermometer/hygrometer titles (excludes
     full weather stations). Cheap high-attach monitor — ranked by in-stock then
-    sales, with a hard price cap so a €50 station never sneaks in here."""
+    sales. The price ceiling is applied centrally via the budget table
+    ('monitor' category) before this builder runs."""
     if c_pool.empty:
         return c_pool
     pool = c_pool.copy()
@@ -14131,9 +14171,7 @@ def _dh_build_hygrometer_pool(c_pool, notes):
     if pool.empty:
         notes.append("  ⚠ No hygrometer-type titles in WEATHER GADGETS")
         return pool
-    # Hard price cap (€60) — these should be inexpensive monitors.
-    pool = pool[pool['_p'] <= DH_S_HYGRO_CAP]
-    notes.append(f"  Hygrometer pool: {len(pool)} (≤€{DH_S_HYGRO_CAP})")
+    notes.append(f"  Hygrometer pool: {len(pool)}")
     pool['Final_Score'] = 0.0
     if 'AVAILABILITY' in pool.columns:
         pool.loc[pool['AVAILABILITY'] == 'Άμεσα Διαθέσιμο', 'Final_Score'] += DH_S_AVAILABILITY
@@ -14142,17 +14180,27 @@ def _dh_build_hygrometer_pool(c_pool, notes):
 
 
 def _dh_build_gadget_generic_pool(c_pool, notes):
-    """Any WEATHER GADGET (weather stations included) — sales-ranked mop-up for
-    the late slot, so the monitor family can contribute a 2nd, different item."""
+    """WEATHER GADGETS that are NOT bare thermo/hygrometers — i.e. actual
+    weather stations — so the 'Μετεωρολογικός Σταθμός' slot matches its label
+    (the cheap hygrometers already lead at slot 1). Sales-ranked. If no true
+    stations survive the budget cap, falls back to any remaining gadget so the
+    slot can still be filled."""
     if c_pool.empty:
         return c_pool
     pool = c_pool.copy()
-    pool['Final_Score'] = 0.0
-    if 'AVAILABILITY' in pool.columns:
-        pool.loc[pool['AVAILABILITY'] == 'Άμεσα Διαθέσιμο', 'Final_Score'] += DH_S_AVAILABILITY
-    pool['Final_Score'] += pool['Sales_Tiebreaker'].fillna(0) * DH_S_SALES_FACTOR
-    notes.append(f"  Weather-gadget generic pool: {len(pool)}")
-    return pool.sort_values('Final_Score', ascending=False)
+    title_l = pool['Title'].fillna('').astype(str)
+    hygro_mask = title_l.str.contains(r'υγρ|υγρασ|θερμόμετρ|hygro', case=False, na=False)
+    stations = pool[~hygro_mask].copy()
+    if stations.empty:
+        notes.append("  No dedicated weather stations after cap — using any gadget")
+        stations = pool.copy()
+    else:
+        notes.append(f"  Weather-station pool: {len(stations)} (hygrometers excluded)")
+    stations['Final_Score'] = 0.0
+    if 'AVAILABILITY' in stations.columns:
+        stations.loc[stations['AVAILABILITY'] == 'Άμεσα Διαθέσιμο', 'Final_Score'] += DH_S_AVAILABILITY
+    stations['Final_Score'] += stations['Sales_Tiebreaker'].fillna(0) * DH_S_SALES_FACTOR
+    return stations.sort_values('Final_Score', ascending=False)
 
 
 # ── Pool builder: clean-air sibling (slot 2) ───────────────────────────────
@@ -14280,9 +14328,13 @@ def run_dehumidifier_engine(trigger, df_air, df_history):
 
     Hybrid scoring (availability + sales + price-tier proximity, with brand
     affinity / combo-awareness / water-tank proximity layered on). The humidity
-    monitor leads at slot 1. Round-robin loop over DH_PRIORITY fills 10 slots,
-    skipping empty pools and over-filling survivors so the carousel never
-    under-fills — even for the tiny Ιονιστές trigger (3 SKUs)."""
+    monitor leads at slot 1. The comfort slots are SEASONAL — fans + portable AC
+    in summer, heaters + electric blanket in winter (the air-treatment core is
+    shown year-round). Per-tier budget caps drop price-inappropriate companions.
+    Round-robin loop fills 10 slots, skipping empty pools and over-filling
+    survivors so the carousel never under-fills — even for the tiny Ιονιστές
+    trigger (3 SKUs)."""
+    import datetime
     diag = []
     slot_notes = {}
     all_recs = []
@@ -14292,6 +14344,7 @@ def run_dehumidifier_engine(trigger, df_air, df_history):
     thier = str(trigger.get('Hierarchy', ''))
     tprice = parse_euro_price(trigger.get('LIST PRICE', 0))
     ttier = _dh_price_tier(tprice)
+    tier_name = DH_TIER_NAMES[ttier]
     trigger_type = _dh_trigger_type(thier)
     trigger_is_combo = _dh_is_combo(tt)
     # Brand: dehumidifiers carry Κατασκευαστής; purifiers/ionisers don't → parse Title.
@@ -14303,10 +14356,24 @@ def run_dehumidifier_engine(trigger, df_air, df_history):
     tbrand = (_tb_col or _dh_parse_brand(tt)).upper().strip()
     t_tank = _dh_parse_water_tank(trigger.get('Χωρητικότητα\xa0δοχείου\xa0νερού ≡', ''))
 
+    # ── Season → which comfort slots to show ──────────────────────────────
+    if DH_SEASON_OVERRIDE in ('SUMMER', 'WINTER'):
+        season = DH_SEASON_OVERRIDE
+        season_src = 'override'
+    else:
+        season = 'SUMMER' if datetime.datetime.now().month in DH_SUMMER_MONTHS else 'WINTER'
+        season_src = f"month={datetime.datetime.now().month}"
+    priority = DH_SUMMER_PRIORITY if season == 'SUMMER' else DH_WINTER_PRIORITY
+
     diag.append(("0. Trigger",
                  f"{tbrand or '—'} €{tprice:.0f}",
                  f"type={trigger_type} | combo={trigger_is_combo} | "
-                 f"price_tier={ttier} | tank≈{t_tank:.1f}L"))
+                 f"tier={tier_name} | tank≈{t_tank:.1f}L"))
+    diag.append(("0b. Season",
+                 season,
+                 f"({season_src}) → "
+                 f"{'fans + portable AC' if season == 'SUMMER' else 'heaters + electric blanket'}, "
+                 f"no {'heaters/blankets' if season == 'SUMMER' else 'fans/portable AC'}"))
 
     if df_air is None or df_air.empty:
         diag.append(("ERROR", 0, "Air sheet is empty — engine cannot run"))
@@ -14320,7 +14387,7 @@ def run_dehumidifier_engine(trigger, df_air, df_history):
 
     # ── Pre-build & score every pool ──────────────────────────────────────
     pools = {}  # rank → (role_label, scored_df, logic_key, max_r1, max_total, notes)
-    for rank, role_label, hiers, logic_key, max_r1, max_total in DH_PRIORITY:
+    for rank, role_label, hiers, logic_key, max_r1, max_total, budget_cat in priority:
         notes = [f"=== Priority {rank}: {role_label} ({logic_key}) "
                  f"| max_round_1={max_r1} | max_total={max_total if max_total else '∞'} ==="]
 
@@ -14328,8 +14395,17 @@ def run_dehumidifier_engine(trigger, df_air, df_history):
         base_pool = c[c['Hierarchy'].fillna('').astype(str).str.strip().isin(hier_set)].copy()
         notes.append(f"  Base pool size: {len(base_pool)} (hierarchies={hiers})")
 
+        # ── Budget cap: drop price-inappropriate companions for this tier ──
+        cap = DH_BUDGET.get(tier_name, {}).get(budget_cat)
+        if cap is not None and not base_pool.empty:
+            before = len(base_pool)
+            base_pool = base_pool[base_pool['_p'] <= cap]
+            notes.append(f"  Budget cap [{budget_cat} @ {tier_name}]: ≤€{cap} "
+                         f"→ {len(base_pool)}/{before} survive")
+
         if base_pool.empty:
-            notes.append("  ⚠ Hierarchy not present — slot will be filled from other pools")
+            notes.append("  ⚠ Pool empty (missing hierarchy or all over budget) "
+                         "— slot will be filled from other pools")
             pools[rank] = (role_label, pd.DataFrame(), logic_key, max_r1, max_total, notes)
             continue
 
