@@ -103,7 +103,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v28.41 — Δίσκοι Βινυλίου (LP): books-style series logic — artist=σειρά, γεμίζει με άλμπουμ ίδιου καλλιτέχνη (dedup pressings) και μετά ίδιο είδος, 10 βινύλια
+        🟢 Engine v28.43 — Δίσκοι Βινυλίου (LP): slots 1-3 ίδιος καλλιτέχνης · 4-7 discovery (ίδιο είδος) · 8-10 ίδιος καλλιτέχνης · dedup pressings · fix: Final_Score στον πίνακα
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -23983,12 +23983,12 @@ def run_ps_games_engine(trigger, df_gaming, df_history, df_books=None):
 
 def run_vinyl_record_engine(trigger, df_music, df_products=None, df_peripherals=None, df_books=None, df_history=None):
     """Trigger = a vinyl LP. ALL 10 slots are vinyl records, using the books
-    SERIES-engine logic with ARTIST as the 'series':
-      P1 SAME ARTIST  (= series)    → other LPs by this artist, deduped across
-                                       pressings by canonical album, by Sales.
-      P2 SAME GENRE   (= discovery) → fills the remainder when the artist's
-                                       catalogue is < 10, other artists, by Sales.
-      P3 TOP LP backfill            → guarantees 10 filled slots.
+    SERIES-engine logic with ARTIST as the 'series', in a banded layout:
+      slots 1-3  SAME ARTIST  (= series head)  — by Sales, pressings deduped
+      slots 4-7  SAME GENRE   (= discovery)     — other artists, same genre
+      slots 8-10 SAME ARTIST  (= series tail)   — deeper catalogue
+      spill/backfill → more discovery, then top LPs (guarantees 10).
+    Bands degrade gracefully with no gaps when the artist catalogue is shallow.
     """
     diag, slot_notes, all_recs = [], {}, []
     MAX = 10
@@ -24080,6 +24080,10 @@ def run_vinyl_record_engine(trigger, df_music, df_products=None, df_peripherals=
             rc['Assigned_Slot']  = slot
             rc['Slot_Position']  = slot
             rc['Slot_Role']      = role
+            # Final_Score is required by the shared render/diagnostic table.
+            # Use the popularity signal that drove the pick (sales), so the
+            # column is meaningful rather than a placeholder.
+            rc['Final_Score']    = float(row.get('Sales_30', 0) or 0)
             rc['Marketing_Copy'] = VINYLREC_MARKETING_COPY.get(role, "Ιδανική επιλογή.")
             all_recs.append(rc)
             used_mats.add(row['_mat'])
@@ -24087,37 +24091,52 @@ def run_vinyl_record_engine(trigger, df_music, df_products=None, df_peripherals=
             n += 1
         return n
 
-    # ── PRIORITY 1: SAME ARTIST (= series) ──
-    p1 = 0
+    # ── SLOT LAYOUT ──────────────────────────────────────────────────────
+    #   slots 1-3   → same artist (the "series" head)
+    #   slots 4-7   → DISCOVERY: same genre, different artists
+    #   slots 8-10  → resume same artist (deeper catalogue)
+    #   then spill  → more discovery, then top-LP backfill (guarantee 10)
+    # Bands degrade gracefully (no gaps): if the artist has < 3 albums the
+    # discovery band simply starts earlier; positions are filled sequentially.
+    ARTIST_HEAD = 3   # slots 1-3
+    DISCOVERY   = 4   # slots 4-7
+
+    # Build the two pools once. _take() re-checks the used sets on every call,
+    # so the same sorted pool can be drawn from again later for the 8-10 band.
     if artist_is_real:
-        ap = music[(music['_artist_n'] == _art_cf) & (~music['_mat'].isin(used_mats))].copy()
-        # Standalone-style ranking (the books default): Sales, then newest, then
-        # format affinity, then in-stock — best-selling pressing represents album.
+        ap = music[music['_artist_n'] == _art_cf].copy()
+        # Standalone-style ranking (books default): Sales, newest, format, stock.
         ap = ap.sort_values(['Sales_30', '_year', '_fmt', '_avail'], ascending=False)
-        p1 = _take(ap, 'Ίδιος Καλλιτέχνης', MAX)
-    slot_notes[1] = [f"=== P1 SAME ARTIST ({tartist or 'n/a'}) ===", f"Filled {p1} slots"]
-    diag.append(("1. Same Artist (series)", p1, f"Filled {p1} slots"))
+    else:
+        ap = pd.DataFrame(columns=music.columns)
 
-    # ── PRIORITY 2: SAME GENRE (= discovery) ──
-    p2 = 0
-    if len(all_recs) < MAX:
-        if _gen_cf:
-            gmask = (music['_genre_n'] == _gen_cf)            # clean Είδος preferred
-        elif _hier_cf:
-            gmask = (music['_hier_n'] == _hier_cf)            # fallback to Hierarchy
-        else:
-            gmask = pd.Series(False, index=music.index)
-        gp = music[gmask & (music['_artist_n'] != _art_cf) & (~music['_mat'].isin(used_mats))].copy()
-        gp = gp.sort_values(['Sales_30', '_year', '_avail'], ascending=False)
-        p2 = _take(gp, 'Ίδιο Είδος', MAX - len(all_recs))
-    diag.append(("2. Same Genre (discovery)", p2, f"Filled {p2} slots"))
+    if _gen_cf:
+        gmask = (music['_genre_n'] == _gen_cf)            # clean Είδος preferred
+    elif _hier_cf:
+        gmask = (music['_hier_n'] == _hier_cf)            # fallback to Hierarchy
+    else:
+        gmask = pd.Series(False, index=music.index)
+    gp = music[gmask & (music['_artist_n'] != _art_cf)].copy()
+    gp = gp.sort_values(['Sales_30', '_year', '_avail'], ascending=False)
 
-    # ── PRIORITY 3: TOP-SELLING LP backfill (guarantee 10) ──
-    p3 = 0
-    if len(all_recs) < MAX:
-        bp = music[~music['_mat'].isin(used_mats)].copy().sort_values(['Sales_30', '_avail'], ascending=False)
-        p3 = _take(bp, 'Δημοφιλή', MAX - len(all_recs))
-    diag.append(("3. Top-LP backfill", p3, f"Filled {p3} slots"))
+    # slots 1-3 — artist head
+    a_head = _take(ap, 'Ίδιος Καλλιτέχνης', ARTIST_HEAD)
+    # slots 4-7 — discovery band
+    disc   = _take(gp, 'Ίδιο Είδος', DISCOVERY)
+    # slots 8-10 — resume artist catalogue
+    a_tail = _take(ap, 'Ίδιος Καλλιτέχνης', MAX - len(all_recs))
+    # spill — more discovery if the artist ran out
+    disc  += _take(gp, 'Ίδιο Είδος', MAX - len(all_recs))
+    # backfill — top-selling LPs, guarantees 10 filled slots
+    bp = music[~music['_mat'].isin(used_mats)].copy().sort_values(['Sales_30', '_avail'], ascending=False)
+    bf = _take(bp, 'Δημοφιλή', MAX - len(all_recs))
+
+    p_artist = a_head + a_tail
+    slot_notes[1] = [f"=== Layout: 1-3 artist · 4-7 discovery · 8-10 artist ===",
+                     f"Artist '{tartist or 'n/a'}'={p_artist} · Discovery={disc} · Backfill={bf}"]
+    diag.append(("1. Same Artist (series)", p_artist, f"head {a_head} + tail {a_tail}"))
+    diag.append(("2. Same Genre (discovery)", disc, "slots 4-7 + spill"))
+    diag.append(("3. Top-LP backfill", bf, f"Filled {bf} slots"))
 
     recs_df = pd.DataFrame(all_recs) if all_recs else pd.DataFrame()
     if not recs_df.empty:
@@ -24650,6 +24669,8 @@ if not recs.empty:
             # Trigger-aware per-row copy (upgrade vs alternative framing); falls
             # back to the static per-role dict.
             marketing_text = str(r.get('Marketing_Copy', DH_MARKETING_COPY.get(raw_role, "Ιδανική επιλογή!")))
+        elif active_cluster == "Vinyl Records":
+            marketing_text = str(r.get('Marketing_Copy', VINYLREC_MARKETING_COPY.get(raw_role, "Ιδανική επιλογή!")))
         else:
             marketing_text = MARKETING_COPY.get(raw_role, "Μια εξαιρετική επιλογή!")
         
@@ -24675,6 +24696,8 @@ if not recs.empty:
         header_text = "Ολοκλήρωσε το setup σου"
     elif active_cluster == "DehumidifiersIonizers":
         header_text = "Ολοκλήρωσε το υγιεινό σου σπίτι"
+    elif active_cluster == "Vinyl Records":
+        header_text = "Για τη συλλογή σου"
     else:
         header_text = "Συνέχισε την περιπέτεια"
 
