@@ -103,7 +103,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v28.30.31 — Language Learning: same-volume matching (Here We Go 3 ≠ 1/2)
+        🟢 Engine v28.31 — Αφυγραντήρες & Ιονιστές: Air-Treatment cross-sell (humidity monitor + clean-air upgrade)
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -989,6 +989,123 @@ CLIMA_WINTER_SLOTS = [
     (10, 'Μπαταρίες',          ['ΑΛΚΑΛΙΚΕΣ'],          'GENERIC'),
     (11, 'Προστασία Ρεύματος', ['SURGE PROTECTORS'],   'GENERIC'),
 ]
+
+# ═════════════════════════════════════════════════════════════
+# 🟢 DEHUMIDIFIERS & IONIZERS — Αφυγραντήρες / Ιονιστές / Καθαριστές Αέρα
+#    (Air Treatment family — lives entirely in the 'Air' sheet)
+# ─────────────────────────────────────────────────────────────
+# DEPTH DECISION (hybrid, not full-spec, not sales-only):
+#   The Air sheet carries specs + Sum of Sales + LIST PRICE + AVAILABILITY,
+#   so no extra files are needed. BUT the usable specs are thin:
+#     • Τύπος φίλτρου  → 0% populated (no consumable-filter play exists)
+#     • Κατασκευαστής  → populated on Αφυγραντήρες, EMPTY on Καθαριστές/Ιονιστές
+#                        → brand must be parsed from Title for clean-air items
+#     • Παροχή Αέρα / area → mostly empty
+#     • Χωρητικότητα δοχείου νερού → reliable ONLY on dehumidifiers
+#   So the backbone is: availability + sales (intra-pool ranking) + price-tier
+#   proximity (appropriate scale), with 2-3 specs layered on top:
+#     (1) brand affinity (title-parsed where the column is empty)
+#     (2) combo-awareness — 67% of dehumidifiers already bundle an ioniser/
+#         purifier, so the clean-air slot is reframed as an UPGRADE (dedicated
+#         HEPA purifier) rather than a redundant duplicate
+#     (3) water-tank-bucket proximity for dehumidifier↔dehumidifier slots
+#
+# Per product decision: the humidity monitor (Υγρόμετρο) LEADS at slot 1 —
+# cheapest item (median €14), highest logical attach. Trigger scope includes
+# Καθαριστές Αέρα alongside Αφυγραντήρες + Ιονιστές (they are intertwined —
+# most SKUs in this family are combo air-treatment devices).
+#
+# Pattern mirrors run_washing_machine_engine(): pre-build & score every pool,
+# then a round-robin loop with per-pool caps fills exactly 10 slots, silently
+# skipping empty pools and over-filling survivors (always-fill-10 guarantee).
+
+# Trigger hierarchies (what the user can pick as the anchor product).
+DH_TRIGGER_HIERARCHIES = {
+    "Αφυγραντήρες", "Ιονιστές", "Καθαριστές Αέρα",
+}
+
+# 🧪 Optional test-list filter. Leave empty to show ALL air-treatment SKUs in
+# the dropdown (33 dehumidifiers + 14 purifiers + 3 ionizers). Populated with a
+# representative spread: combo dehumidifier (best-seller), plain dehumidifier,
+# premium dehumidifier, dedicated purifier, premium purifier, ionizer.
+DH_TEST_SKUS = set()
+
+# Clean-air sibling hierarchies (purifiers + ionizers share a slot/pool).
+DH_CLEAN_AIR_HIERARCHIES = ['Καθαριστές Αέρα', 'Ιονιστές']
+
+# Price tiers for air-treatment scale-matching (€): Entry / Mid / Premium.
+# Tuned to the observed ranges (dehum €53-598 med 229; purifier €99-1149 med 319).
+DH_TIER_THRESHOLDS = {'Mid': 150, 'Premium': 350}
+
+# (priority_rank, role_label, hierarchies, logic_key, max_in_round_1, max_total)
+# Round-1 sum = 10 → with all pools non-empty every slot is filled in round 1;
+# the max_total>1 pools (hygrometer, clean-air, dehum, weather-gadget) absorb
+# overflow in later rounds whenever a thinner pool runs dry — so the carousel
+# always reaches 10 even for the tiny Ιονιστές trigger.
+#
+# Slot philosophy (the ORDER below is the round-robin priority):
+#   1. Υγρόμετρο / Θερμόμετρο   — high-attach cheap monitor (LEADS, per decision)
+#   2. Καθαριστής Αέρα / Ιονιστής — clean-air sibling (UPGRADE for combo triggers)
+#   3. Αφυγραντήρας             — humidity-control complement / alternative scale
+#   4. Αερόθερμο                — winter co-purchase (heat + humidity control)
+#   5. Ηλεκτρική Κουβέρτα       — cozy seasonal attach
+#   6. Θερμάστρα Ηλεκτρική      — spot heating companion
+#   7. Ανεμιστήρας Δαπέδου      — air circulation (boosts dehumidifier reach)
+#   8. Ανεμιστήρας Επιτραπέζιος — small air-movement attach
+#   9. Μετεωρολογικός Σταθμός   — weather-station mop-up (non-hygrometer gadgets)
+#  10. Φορητό Κλιματιστικό      — premium climate cross-sell / overflow
+DH_PRIORITY = [
+    (1,  'Υγρόμετρο',
+         ['WEATHER GADGETS'],            'DH_HYGROMETER',       1, 2),
+    (2,  'Καθαριστής Αέρα',
+         DH_CLEAN_AIR_HIERARCHIES,       'DH_CLEAN_AIR',        1, 2),
+    (3,  'Αφυγραντήρας',
+         ['Αφυγραντήρες'],               'DH_DEHUM',            1, 2),
+    (4,  'Αερόθερμο',
+         ['Αερόθερμα'],                  'DH_HEATING',          1, 1),
+    (5,  'Ηλεκτρική Κουβέρτα',
+         ['Ηλεκτρικές Κουβέρτες'],       'DH_SALES',            1, 1),
+    (6,  'Θερμάστρα',
+         ['Θερμάστρες Ηλεκτρικές'],      'DH_HEATING',          1, 1),
+    (7,  'Ανεμιστήρας Δαπέδου',
+         ['Ανεμιστήρες Δαπέδου'],        'DH_SALES',            1, 1),
+    (8,  'Ανεμιστήρας Επιτραπέζιος',
+         ['Ανεμιστήρες Επιτραπέζιοι'],   'DH_SALES',            1, 1),
+    (9,  'Μετεωρολογικός Σταθμός',
+         ['WEATHER GADGETS'],            'DH_GADGET_GENERIC',   1, 2),
+    (10, 'Φορητό Κλιματιστικό',
+         ['Φορητά Κλιματιστικά'],        'DH_SALES',            1, 1),
+]
+
+DH_SLOT_TARGET = 10
+
+# Static fallback copy (per-role). The engine ALSO overrides slot-2/3 copy
+# dynamically based on trigger type (combo-dehumidifier → "upgrade", purifier
+# trigger → "alternative", etc.) — see _dh marketing logic in the engine.
+DH_MARKETING_COPY = {
+    "Υγρόμετρο":               "Παρακολούθησε υγρασία & θερμοκρασία — ξέρε πότε να ρυθμίσεις τη συσκευή σου.",
+    "Καθαριστής Αέρα":         "Καθαρός αέρας στο σπίτι — λιγότερη σκόνη, γύρη και αλλεργιογόνα.",
+    "Αφυγραντήρας":            "Έλεγχος υγρασίας — προστασία από μούχλα και υγρασία στους τοίχους.",
+    "Αερόθερμο":               "Γρήγορη θέρμανση — ζεστασιά σε λίγα λεπτά.",
+    "Ηλεκτρική Κουβέρτα":      "Ζεστές νύχτες — άνεση και οικονομία στη θέρμανση.",
+    "Θερμάστρα":               "Στοχευμένη θέρμανση εκεί που τη χρειάζεσαι.",
+    "Ανεμιστήρας Δαπέδου":     "Καλύτερη κυκλοφορία αέρα — βοηθά και τον αφυγραντήρα σου.",
+    "Ανεμιστήρας Επιτραπέζιος": "Δροσιά στο γραφείο ή στο κομοδίνο.",
+    "Μετεωρολογικός Σταθμός":  "Δες θερμοκρασία, υγρασία και πρόγνωση με μια ματιά.",
+    "Φορητό Κλιματιστικό":     "Δροσιά όπου τη χρειάζεσαι — χωρίς εγκατάσταση.",
+}
+
+# Scoring weights (same order of magnitude as the WM / Fridge engines).
+DH_S_AVAILABILITY     =  100_000   # In-stock boost
+DH_S_BRAND_MATCH      =  400_000   # Trigger brand == candidate brand (title-parsed)
+DH_S_PRICE_SAME_TIER  =  200_000   # Same price tier (appropriate companion scale)
+DH_S_PRICE_ONE_OFF    =   70_000   # ±1 price tier
+DH_S_TANK_NEAR        =   60_000   # Dehum↔dehum: water-tank bucket within ±1
+DH_S_TANK_DIFF        =   25_000   # Dehum↔dehum: deliberately different tank (alt scale)
+DH_S_COMBO_REDUNDANT  = -120_000   # Soft nudge: clean-air item when trigger already combos
+DH_S_HYGRO_CAP        =       60   # Price cap (€) for the hygrometer slot
+DH_S_SALES_FACTOR     =      0.5   # Sales tiebreaker weight
+
 
 def get_clima_tier_by_btu(price, btu):
     # Fallback στα 12000 αν δεν βρεθεί BTU
@@ -6135,6 +6252,8 @@ L2_CHILDREN = {
     "Climatism": [
         {"key": "AirUnits", "label": "Κλιματιστικά",
          "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M2 9h20'/%3E%3Cpath d='M2 15h20'/%3E%3Cpath d='M6 4l-2 5 2 5-2 5'/%3E%3Cpath d='M18 4l-2 5 2 5-2 5'/%3E%3Cpath d='M12 4v16'/%3E%3C/svg%3E"},
+        {"key": "DehumidifiersIonizers", "label": "Αφυγραντήρες\n& Ιονιστές",
+         "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 3s5 5.5 5 9a5 5 0 0 1-10 0c0-3.5 5-9 5-9z'/%3E%3Cpath d='M9.5 12.5a2.5 2.5 0 0 0 5 0'/%3E%3C/svg%3E"},
     ],
     "Personal Care": [
         {"key": "Straighteners", "label": "Ισιωτικά\nΜαλλιών",
@@ -6697,6 +6816,28 @@ else:
                 st.sidebar.markdown('<p class="sidebar-section">Επιλέξτε Κλιματιστικό</p>', unsafe_allow_html=True)
                 sel = st.sidebar.selectbox("", ac_units['Title'].unique(), label_visibility="collapsed", key="ac_sel")
                 trigger = ac_units[ac_units['Title']==sel].iloc[0] if sel else None
+
+    elif active_cluster == "DehumidifiersIonizers":
+        # Trigger pool: Αφυγραντήρες + Ιονιστές + Καθαριστές Αέρα — all from the
+        # Air sheet. These three are intertwined (most SKUs are combo
+        # air-treatment devices), so they share one trigger dropdown.
+        if df_air.empty:
+            st.sidebar.warning("Το sheet 'Air' είναι άδειο.")
+        else:
+            hier_clean = df_air['Hierarchy'].fillna('').astype(str).str.strip()
+            air_pool = df_air[hier_clean.isin(DH_TRIGGER_HIERARCHIES)].copy()
+
+            # 🧪 Optional test-list filter (leave DH_TEST_SKUS empty to show all)
+            if DH_TEST_SKUS:
+                mat_clean = air_pool['Material'].astype(str).str.strip().str.replace(r'\.0$', '', regex=True)
+                air_pool = air_pool[mat_clean.isin(DH_TEST_SKUS)]
+
+            if air_pool.empty:
+                st.sidebar.warning("Δεν βρέθηκαν Αφυγραντήρες / Ιονιστές / Καθαριστές Αέρα στο sheet Air.")
+            else:
+                st.sidebar.markdown('<p class="sidebar-section">Επιλέξτε Συσκευή Αέρα</p>', unsafe_allow_html=True)
+                sel = st.sidebar.selectbox("", air_pool['Title'].unique(), label_visibility="collapsed", key="dehum_sel")
+                trigger = air_pool[air_pool['Title']==sel].iloc[0] if sel else None
 
     elif active_cluster == "TVs":
         if df_products.empty: st.stop()
@@ -13874,6 +14015,415 @@ def run_climatism_engine(trigger, df_air, df_products, df_history):
             slot_notes[slot_num] = notes
 
     return pd.DataFrame(all_recs), diag, slot_notes, pd.DataFrame(all_recs)
+
+
+# ═══════════════════════════════════════════════════════════════
+# 🟢 DEHUMIDIFIERS & IONIZERS — helpers (Air Treatment family)
+# ═══════════════════════════════════════════════════════════════
+# Self-contained helpers (brand is parsed from Title because the
+# Κατασκευαστής column is empty on Καθαριστές Αέρα / Ιονιστές). Six pool
+# builders feed a WM-style round-robin engine.
+
+# Known multi-word brands in this family (first-token parsing would split them).
+_DH_MULTIWORD_BRANDS = [
+    'OLIMPIA SPLENDID', 'JURO-PRO', 'JURO PRO', 'PURE CLEAN', 'BERLINGER HAUS',
+]
+# Generic leading tokens that are NOT brands (defensive — title-first-token can
+# occasionally start with a descriptor for weather gadgets / odd SKUs).
+_DH_NON_BRAND_TOKENS = {
+    'ΨΗΦΙΑΚΟ', 'ΨΗΦΙΑΚΟΣ', 'ΜΕΤΕΩΡΟΛΟΓΙΚΟΣ', 'ΘΕΡΜΟΜΕΤΡΟ', 'ΥΓΡΟΜΕΤΡΟ',
+    'ΑΝΕΜΙΣΤΗΡΑΣ', 'ΑΦΥΓΡΑΝΤΗΡΑΣ', 'ΚΑΘΑΡΙΣΤΗΣ', 'ΙΟΝΙΣΤΗΣ', 'ΣΕΤ',
+}
+
+
+def _dh_parse_brand(title: str) -> str:
+    """Uppercase brand from the Title. Handles multi-word brands and skips
+    generic leading descriptors. Returns '' when no plausible brand is found."""
+    t = str(title or '').strip()
+    if not t:
+        return ''
+    up = t.upper()
+    for m in _DH_MULTIWORD_BRANDS:
+        if up.startswith(m):
+            return m
+    first = up.split()[0] if up.split() else ''
+    # Strip stray punctuation
+    first = first.strip('.,&/').strip()
+    if not first or first in _DH_NON_BRAND_TOKENS:
+        return ''
+    return first
+
+
+def _dh_price_tier(price: float) -> int:
+    """0 = Entry (<€150), 1 = Mid (€150-350), 2 = Premium (>€350)."""
+    try:
+        p = float(price)
+    except (TypeError, ValueError):
+        return 0
+    if p >= DH_TIER_THRESHOLDS['Premium']:
+        return 2
+    if p >= DH_TIER_THRESHOLDS['Mid']:
+        return 1
+    return 0
+
+
+def _dh_is_combo(title: str) -> bool:
+    """True when the device already bundles an ioniser / air purifier
+    (e.g. a dehumidifier 'με Ιονιστή' / 'με Καθαριστή Αέρα')."""
+    return bool(re.search(r'ιονιστ|καθαριστ|purif|ioniz', str(title or ''), re.I))
+
+
+def _dh_trigger_type(hierarchy: str) -> str:
+    """Classify the trigger: 'DEHUM' / 'PURIFIER' / 'IONIZER'."""
+    h = str(hierarchy or '').strip().lower()
+    if 'αφυγρα' in h:
+        return 'DEHUM'
+    if 'ιονιστ' in h:
+        return 'IONIZER'
+    return 'PURIFIER'  # 'Καθαριστές Αέρα'
+
+
+def _dh_parse_water_tank(val) -> float:
+    """Parse the 'Χωρητικότητα δοχείου νερού' bucket to a representative litre
+    value. Handles '3.1 - 4 L' (→ 3.55 midpoint), '4.1 L και άνω' (→ 4.1),
+    '2.1 - 3 Lt', '5 L', '8 L'. Returns 0.0 when unparseable."""
+    s = str(val or '').replace('\xa0', ' ').strip().lower()
+    if not s or s in ('nan', 'none'):
+        return 0.0
+    nums = re.findall(r'\d+(?:[.,]\d+)?', s)
+    nums = [float(n.replace(',', '.')) for n in nums]
+    if not nums:
+        return 0.0
+    if len(nums) >= 2:        # range → midpoint
+        return (nums[0] + nums[1]) / 2.0
+    return nums[0]            # single value / "X L και άνω"
+
+
+def _dh_marketing(role_label: str, trigger_type: str, trigger_is_combo: bool) -> str:
+    """Trigger-aware marketing copy for the two 'smart' slots; static copy
+    elsewhere. Reframes the clean-air slot as an UPGRADE (not a duplicate)
+    when the trigger is a combo dehumidifier, and as an ALTERNATIVE when the
+    trigger is itself a purifier/ioniser."""
+    if role_label == 'Καθαριστής Αέρα':
+        if trigger_type in ('PURIFIER', 'IONIZER'):
+            return "Δες κι άλλους καθαριστές αέρα — σύγκρινε ισχύ και κάλυψη χώρου."
+        if trigger_is_combo:
+            return "Αναβάθμισε σε αποκλειστικό καθαριστή αέρα — ισχυρότερος καθαρισμός με φίλτρο HEPA."
+        return "Πρόσθεσε καθαρισμό αέρα — λιγότερη σκόνη, γύρη και αλλεργιογόνα."
+    if role_label == 'Αφυγραντήρας':
+        if trigger_type in ('PURIFIER', 'IONIZER'):
+            return "Συμπλήρωσε με αφυγραντήρα — υγρασία υπό έλεγχο και καθαρός αέρας μαζί."
+        return "Άλλη επιλογή αφυγραντήρα — διαφορετική χωρητικότητα δοχείου και κάλυψη χώρου."
+    return DH_MARKETING_COPY.get(role_label, "Ιδανική επιλογή!")
+
+
+# ── Pool builder: humidity monitor (slot 1) ───────────────────────────────
+def _dh_build_hygrometer_pool(c_pool, notes):
+    """WEATHER GADGETS filtered to thermometer/hygrometer titles (excludes
+    full weather stations). Cheap high-attach monitor — ranked by in-stock then
+    sales, with a hard price cap so a €50 station never sneaks in here."""
+    if c_pool.empty:
+        return c_pool
+    pool = c_pool.copy()
+    title_l = pool['Title'].fillna('').astype(str)
+    hygro_mask = title_l.str.contains(r'υγρ|υγρασ|θερμόμετρ|hygro', case=False, na=False)
+    pool = pool[hygro_mask].copy()
+    if pool.empty:
+        notes.append("  ⚠ No hygrometer-type titles in WEATHER GADGETS")
+        return pool
+    # Hard price cap (€60) — these should be inexpensive monitors.
+    pool = pool[pool['_p'] <= DH_S_HYGRO_CAP]
+    notes.append(f"  Hygrometer pool: {len(pool)} (≤€{DH_S_HYGRO_CAP})")
+    pool['Final_Score'] = 0.0
+    if 'AVAILABILITY' in pool.columns:
+        pool.loc[pool['AVAILABILITY'] == 'Άμεσα Διαθέσιμο', 'Final_Score'] += DH_S_AVAILABILITY
+    pool['Final_Score'] += pool['Sales_Tiebreaker'].fillna(0) * DH_S_SALES_FACTOR
+    return pool.sort_values('Final_Score', ascending=False)
+
+
+def _dh_build_gadget_generic_pool(c_pool, notes):
+    """Any WEATHER GADGET (weather stations included) — sales-ranked mop-up for
+    the late slot, so the monitor family can contribute a 2nd, different item."""
+    if c_pool.empty:
+        return c_pool
+    pool = c_pool.copy()
+    pool['Final_Score'] = 0.0
+    if 'AVAILABILITY' in pool.columns:
+        pool.loc[pool['AVAILABILITY'] == 'Άμεσα Διαθέσιμο', 'Final_Score'] += DH_S_AVAILABILITY
+    pool['Final_Score'] += pool['Sales_Tiebreaker'].fillna(0) * DH_S_SALES_FACTOR
+    notes.append(f"  Weather-gadget generic pool: {len(pool)}")
+    return pool.sort_values('Final_Score', ascending=False)
+
+
+# ── Pool builder: clean-air sibling (slot 2) ───────────────────────────────
+def _dh_build_clean_air_pool(c_pool, tbrand, ttier, trigger_type,
+                              trigger_is_combo, tm, notes):
+    """Καθαριστές Αέρα + Ιονιστές. Brand-affinity (title-parsed) + price-tier
+    proximity + in-stock + sales. Combo-aware: for a combo-dehumidifier trigger
+    the pool is steered toward DEDICATED purifiers that are a genuine upgrade
+    (tier ≥ trigger) and away from bare ionisers (the trigger already ionises)."""
+    if c_pool.empty:
+        return c_pool
+    pool = c_pool[c_pool['Material'] != tm].copy()
+    if pool.empty:
+        return pool
+    pool['Final_Score'] = 0.0
+
+    if 'AVAILABILITY' in pool.columns:
+        pool.loc[pool['AVAILABILITY'] == 'Άμεσα Διαθέσιμο', 'Final_Score'] += DH_S_AVAILABILITY
+    pool['Final_Score'] += pool['Sales_Tiebreaker'].fillna(0) * DH_S_SALES_FACTOR
+
+    # Brand affinity (parsed from Title — Κατασκευαστής is empty here)
+    if tbrand:
+        cand_brand = pool['Title'].fillna('').astype(str).apply(_dh_parse_brand)
+        same_brand = cand_brand == tbrand
+        pool.loc[same_brand, 'Final_Score'] += DH_S_BRAND_MATCH
+        if same_brand.any():
+            notes.append(f"  ✓ Brand affinity ({tbrand}): {int(same_brand.sum())} (+{DH_S_BRAND_MATCH:,})")
+
+    # Price-tier proximity
+    cand_tier = pool['_p'].apply(_dh_price_tier)
+    same_t = cand_tier == ttier
+    near_t = (cand_tier - ttier).abs() == 1
+    pool.loc[same_t, 'Final_Score'] += DH_S_PRICE_SAME_TIER
+    pool.loc[near_t, 'Final_Score'] += DH_S_PRICE_ONE_OFF
+
+    # Combo-dehumidifier trigger → upgrade-steering
+    if trigger_type == 'DEHUM' and trigger_is_combo:
+        is_ionizer = pool['Hierarchy'].fillna('').astype(str).str.strip() == 'Ιονιστές'
+        is_dedicated_upgrade = (~is_ionizer) & (cand_tier >= ttier)
+        pool.loc[is_ionizer, 'Final_Score'] += DH_S_COMBO_REDUNDANT
+        pool.loc[is_dedicated_upgrade, 'Final_Score'] += DH_S_PRICE_SAME_TIER
+        notes.append(f"  ✓ Combo trigger → steer to dedicated purifier upgrade "
+                     f"(demote {int(is_ionizer.sum())} ioniser(s), boost "
+                     f"{int(is_dedicated_upgrade.sum())} upgrade(s))")
+
+    return pool.sort_values('Final_Score', ascending=False)
+
+
+# ── Pool builder: dehumidifier (slot 3) ────────────────────────────────────
+def _dh_build_dehum_pool(c_pool, tbrand, ttier, t_tank, trigger_type, tm, notes):
+    """Αφυγραντήρες. For a purifier/ioniser trigger this is the humidity-control
+    COMPLEMENT (brand + price + sales). For a dehumidifier trigger it surfaces a
+    comparable ALTERNATIVE (water-tank-proximity boost so it reads as a peer)."""
+    if c_pool.empty:
+        return c_pool
+    pool = c_pool[c_pool['Material'] != tm].copy()
+    if pool.empty:
+        return pool
+    pool['Final_Score'] = 0.0
+
+    if 'AVAILABILITY' in pool.columns:
+        pool.loc[pool['AVAILABILITY'] == 'Άμεσα Διαθέσιμο', 'Final_Score'] += DH_S_AVAILABILITY
+    pool['Final_Score'] += pool['Sales_Tiebreaker'].fillna(0) * DH_S_SALES_FACTOR
+
+    # Brand affinity — dehumidifiers DO carry Κατασκευαστής, but parse Title too
+    # for consistency (combo SKUs sometimes list a sub-brand in the title).
+    if tbrand:
+        col_brand = (pool['Κατασκευαστής'].fillna('').astype(str).str.upper().str.strip()
+                     if 'Κατασκευαστής' in pool.columns else pd.Series('', index=pool.index))
+        title_brand = pool['Title'].fillna('').astype(str).apply(_dh_parse_brand)
+        same_brand = (col_brand == tbrand) | (title_brand == tbrand)
+        pool.loc[same_brand, 'Final_Score'] += DH_S_BRAND_MATCH
+        if same_brand.any():
+            notes.append(f"  ✓ Brand affinity ({tbrand}): {int(same_brand.sum())} (+{DH_S_BRAND_MATCH:,})")
+
+    # Price-tier proximity
+    cand_tier = pool['_p'].apply(_dh_price_tier)
+    same_t = cand_tier == ttier
+    near_t = (cand_tier - ttier).abs() == 1
+    pool.loc[same_t, 'Final_Score'] += DH_S_PRICE_SAME_TIER
+    pool.loc[near_t, 'Final_Score'] += DH_S_PRICE_ONE_OFF
+
+    # Water-tank proximity — only meaningful dehumidifier ↔ dehumidifier
+    if trigger_type == 'DEHUM' and t_tank > 0 and 'Χωρητικότητα\xa0δοχείου\xa0νερού ≡' in pool.columns:
+        cand_tank = pool['Χωρητικότητα\xa0δοχείου\xa0νερού ≡'].apply(_dh_parse_water_tank)
+        near_tank = (cand_tank > 0) & ((cand_tank - t_tank).abs() <= 1.0)
+        diff_tank = (cand_tank > 0) & ((cand_tank - t_tank).abs() > 1.0)
+        pool.loc[near_tank, 'Final_Score'] += DH_S_TANK_NEAR
+        pool.loc[diff_tank, 'Final_Score'] += DH_S_TANK_DIFF
+        if near_tank.any():
+            notes.append(f"  ✓ Water-tank proximity (trigger ≈{t_tank:.1f}L): "
+                         f"{int(near_tank.sum())} comparable")
+
+    return pool.sort_values('Final_Score', ascending=False)
+
+
+# ── Pool builder: heating / generic companions (slots 4-8, 10) ─────────────
+def _dh_build_companion_pool(c_pool, ttier, notes, role_label):
+    """Generic companion scoring for heaters, blankets, fans, portable AC:
+    in-stock + sales + a light price-tier proximity so the suggested scale
+    matches the trigger (a €150 dehumidifier buyer isn't shown an €800 fan)."""
+    if c_pool.empty:
+        return c_pool
+    pool = c_pool.copy()
+    pool['Final_Score'] = 0.0
+    if 'AVAILABILITY' in pool.columns:
+        pool.loc[pool['AVAILABILITY'] == 'Άμεσα Διαθέσιμο', 'Final_Score'] += DH_S_AVAILABILITY
+    pool['Final_Score'] += pool['Sales_Tiebreaker'].fillna(0) * DH_S_SALES_FACTOR
+    cand_tier = pool['_p'].apply(_dh_price_tier)
+    same_t = cand_tier == ttier
+    near_t = (cand_tier - ttier).abs() == 1
+    pool.loc[same_t, 'Final_Score'] += DH_S_PRICE_SAME_TIER
+    pool.loc[near_t, 'Final_Score'] += DH_S_PRICE_ONE_OFF
+    notes.append(f"  Companion pool ({role_label}): {len(pool)}")
+    return pool.sort_values('Final_Score', ascending=False)
+
+
+# ═══════════════════════════════════════════════════════════════
+# 🟢 DEHUMIDIFIERS & IONIZERS ENGINE — Αφυγραντήρες / Ιονιστές / Καθαριστές
+# ═══════════════════════════════════════════════════════════════
+
+def run_dehumidifier_engine(trigger, df_air, df_history):
+    """Build exactly 10 cross-sell slots for an air-treatment trigger
+    (Αφυγραντήρες / Ιονιστές / Καθαριστές Αέρα). All pools live in the Air sheet.
+
+    Hybrid scoring (availability + sales + price-tier proximity, with brand
+    affinity / combo-awareness / water-tank proximity layered on). The humidity
+    monitor leads at slot 1. Round-robin loop over DH_PRIORITY fills 10 slots,
+    skipping empty pools and over-filling survivors so the carousel never
+    under-fills — even for the tiny Ιονιστές trigger (3 SKUs)."""
+    diag = []
+    slot_notes = {}
+    all_recs = []
+
+    tm = trigger['Material']
+    tt = str(trigger.get('Title', ''))
+    thier = str(trigger.get('Hierarchy', ''))
+    tprice = parse_euro_price(trigger.get('LIST PRICE', 0))
+    ttier = _dh_price_tier(tprice)
+    trigger_type = _dh_trigger_type(thier)
+    trigger_is_combo = _dh_is_combo(tt)
+    # Brand: dehumidifiers carry Κατασκευαστής; purifiers/ionisers don't → parse Title.
+    # NB: an empty Κατασκευαστής arrives as a float NaN whose str() is 'nan'
+    # (truthy), so normalise it to '' before falling back to the Title parser.
+    _tb_col = str(trigger.get('Κατασκευαστής', '') or '').strip()
+    if _tb_col.lower() in ('', 'nan', 'none'):
+        _tb_col = ''
+    tbrand = (_tb_col or _dh_parse_brand(tt)).upper().strip()
+    t_tank = _dh_parse_water_tank(trigger.get('Χωρητικότητα\xa0δοχείου\xa0νερού ≡', ''))
+
+    diag.append(("0. Trigger",
+                 f"{tbrand or '—'} €{tprice:.0f}",
+                 f"type={trigger_type} | combo={trigger_is_combo} | "
+                 f"price_tier={ttier} | tank≈{t_tank:.1f}L"))
+
+    if df_air is None or df_air.empty:
+        diag.append(("ERROR", 0, "Air sheet is empty — engine cannot run"))
+        return pd.DataFrame(), diag, slot_notes, pd.DataFrame()
+
+    # Base pool: everything in Air except the trigger itself.
+    c = df_air[df_air['Material'] != tm].copy()
+    c['Sales_Tiebreaker'] = pd.to_numeric(c.get('Sum of Sales', 0), errors='coerce').fillna(0)
+    c['_p'] = pd.to_numeric(c.get('LIST PRICE', 0), errors='coerce').fillna(0)
+    diag.append(("1. Base pool", len(c), "Air sheet minus trigger"))
+
+    # ── Pre-build & score every pool ──────────────────────────────────────
+    pools = {}  # rank → (role_label, scored_df, logic_key, max_r1, max_total, notes)
+    for rank, role_label, hiers, logic_key, max_r1, max_total in DH_PRIORITY:
+        notes = [f"=== Priority {rank}: {role_label} ({logic_key}) "
+                 f"| max_round_1={max_r1} | max_total={max_total if max_total else '∞'} ==="]
+
+        hier_set = {h.strip() for h in hiers}
+        base_pool = c[c['Hierarchy'].fillna('').astype(str).str.strip().isin(hier_set)].copy()
+        notes.append(f"  Base pool size: {len(base_pool)} (hierarchies={hiers})")
+
+        if base_pool.empty:
+            notes.append("  ⚠ Hierarchy not present — slot will be filled from other pools")
+            pools[rank] = (role_label, pd.DataFrame(), logic_key, max_r1, max_total, notes)
+            continue
+
+        if logic_key == 'DH_HYGROMETER':
+            scored = _dh_build_hygrometer_pool(base_pool, notes)
+        elif logic_key == 'DH_GADGET_GENERIC':
+            scored = _dh_build_gadget_generic_pool(base_pool, notes)
+        elif logic_key == 'DH_CLEAN_AIR':
+            scored = _dh_build_clean_air_pool(base_pool, tbrand, ttier, trigger_type,
+                                              trigger_is_combo, tm, notes)
+        elif logic_key == 'DH_DEHUM':
+            scored = _dh_build_dehum_pool(base_pool, tbrand, ttier, t_tank,
+                                          trigger_type, tm, notes)
+        else:  # DH_HEATING / DH_SALES
+            scored = _dh_build_companion_pool(base_pool, ttier, notes, role_label)
+
+        pools[rank] = (role_label, scored, logic_key, max_r1, max_total, notes)
+        diag.append((f"Pool {rank} ({role_label})",
+                     len(scored) if scored is not None else 0, logic_key))
+
+    # ── Round-robin fill until 10 slots or all pools exhausted ────────────
+    used_materials = {tm}
+    pool_cursors = {rank: 0 for rank in pools}
+    pool_taken = {rank: 0 for rank in pools}
+    slot_num = 0
+    round_idx = 0
+
+    while slot_num < DH_SLOT_TARGET:
+        progress = False
+        round_idx += 1
+        for rank, (role_label, scored, logic_key, max_r1, max_total, notes) in pools.items():
+            if slot_num >= DH_SLOT_TARGET:
+                break
+            if scored is None or scored.empty:
+                continue
+            if max_total is not None and pool_taken[rank] >= max_total:
+                continue
+
+            take_n = max_r1 if round_idx == 1 else 1
+            if max_total is not None:
+                take_n = min(take_n, max_total - pool_taken[rank])
+
+            cursor = pool_cursors[rank]
+            taken_this_pass = 0
+            while taken_this_pass < take_n and cursor < len(scored) \
+                    and slot_num < DH_SLOT_TARGET:
+                row = scored.iloc[cursor]
+                cursor += 1
+                if row['Material'] in used_materials:
+                    continue
+                slot_num += 1
+                rc = row.copy()
+                rc['Assigned_Slot'] = slot_num
+                rc['Slot_Role'] = role_label
+                rc['Marketing_Copy'] = _dh_marketing(role_label, trigger_type, trigger_is_combo)
+                rc['Item_Rank'] = round_idx
+                all_recs.append(rc)
+                used_materials.add(row['Material'])
+                taken_this_pass += 1
+                pool_taken[rank] += 1
+                progress = True
+
+                if slot_num not in slot_notes:
+                    slot_notes[slot_num] = []
+                slot_notes[slot_num].append(
+                    f"Round {round_idx} | Pool '{role_label}' | "
+                    f"Score: {float(row.get('Final_Score', 0)):,.0f} | "
+                    f"{str(row.get('Title', ''))[:70]}"
+                )
+            pool_cursors[rank] = cursor
+
+        if not progress:
+            diag.append(("Loop", round_idx, "All pools exhausted or capped — stopping"))
+            break
+
+    # ── Pool diagnostics under slot 0 ─────────────────────────────────────
+    pool_diag_notes = []
+    for rank, (role_label, scored, logic_key, max_r1, max_total, notes) in pools.items():
+        pool_diag_notes.extend(notes)
+        cap_note = f" (capped at {max_total})" if max_total is not None else ""
+        pool_diag_notes.append(
+            f"  → consumed {pool_taken[rank]} / "
+            f"{len(scored) if scored is not None else 0} from this pool{cap_note}")
+        pool_diag_notes.append("")
+    slot_notes[0] = pool_diag_notes
+
+    diag.append(("TOTAL", len(all_recs),
+                 f"Filled {slot_num}/{DH_SLOT_TARGET} slots in {round_idx} rounds"))
+
+    if all_recs:
+        recs_df = pd.DataFrame(all_recs)
+        recs_df['Draft_Score'] = recs_df['Assigned_Slot']
+        return recs_df, diag, slot_notes, recs_df
+    return pd.DataFrame(), diag, slot_notes, pd.DataFrame()
 
 
 # ═════════════════════════════════════════════════════════════
@@ -22706,6 +23256,14 @@ elif active_cluster == "Wearables":
 elif active_cluster == "AirUnits":
     recs, diag, slot_notes, full_candidates = run_climatism_engine(trigger, df_air, df_products, df_history)
     slot_diag = [] 
+elif active_cluster == "DehumidifiersIonizers":
+    # Αφυγραντήρες / Ιονιστές / Καθαριστές Αέρα — Air Treatment cross-sell.
+    # All pools (clean-air siblings, humidity monitors, heaters, blankets,
+    # fans, portable AC) live in the Air sheet. Hybrid scoring: availability +
+    # sales + price-tier proximity, with brand affinity, combo-awareness, and
+    # water-tank proximity layered on. Humidity monitor leads at slot 1.
+    recs, diag, slot_notes, full_candidates = run_dehumidifier_engine(trigger, df_air, df_history)
+    slot_diag = []
 elif active_cluster in ("Mouse", "Keyboard", "Gaming Mouse", "Gaming Keyboard"):
     recs, diag, slot_notes, full_candidates = run_peripherals_engine(trigger, df_peripherals, df_history, active_cluster)
     slot_diag = []
@@ -22855,6 +23413,10 @@ if not recs.empty:
         elif active_cluster == "Laptops":
             # Fetches the dynamic text we created, falls back to the dictionary
             marketing_text = str(r.get('Marketing_Copy', LAPTOP_MARKETING_COPY.get(raw_role, "Ιδανική επιλογή!")))
+        elif active_cluster == "DehumidifiersIonizers":
+            # Trigger-aware per-row copy (upgrade vs alternative framing); falls
+            # back to the static per-role dict.
+            marketing_text = str(r.get('Marketing_Copy', DH_MARKETING_COPY.get(raw_role, "Ιδανική επιλογή!")))
         else:
             marketing_text = MARKETING_COPY.get(raw_role, "Μια εξαιρετική επιλογή!")
         
@@ -22878,6 +23440,8 @@ if not recs.empty:
         header_text = "Μαζί με αυτό αγοράζουν"
     elif active_cluster == "Laptops":
         header_text = "Ολοκλήρωσε το setup σου"
+    elif active_cluster == "DehumidifiersIonizers":
+        header_text = "Ολοκλήρωσε το υγιεινό σου σπίτι"
     else:
         header_text = "Συνέχισε την περιπέτεια"
 
