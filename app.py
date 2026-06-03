@@ -103,7 +103,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v28.39 — PlayStation Games: no-merch case promotes 2nd game to slot 4, fills slots 5-7 by sales (what people buy)
+        🟢 Engine v28.40 — Δίσκοι Βινυλίου (LP): trigger=βινύλιο, hybrid sales×specs (ίδιος καλλιτέχνης→είδος) + καθαρισμός/πικάπ/ακουστικά/ηχεία, opportunistic artist merch
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -3265,6 +3265,65 @@ def get_vinyl_tier(price):
     if price >= 280: return 'Premium'
     if price >= 120: return 'Mid'
     return 'Entry'
+
+# ═════════════════════════════════════════════════════════════
+# 🟢 VINYL RECORD (LP) CONFIGURATION — trigger = a vinyl LP
+# ═════════════════════════════════════════════════════════════
+# This is the INVERSE of the turntable engine above. There the trigger is a
+# πικάπ; here the trigger is a Δίσκος Βινυλίου (Music sheet, Level 2 =
+# 'Vinyl (LP)'). DEPTH = HYBRID (sales × 3 specs):
+#   • specs Καλλιτέχνης → Είδος/Hierarchy (genre) → LIST PRICE (gear tier)
+#   • artist/genre are HARD pool filters for the music slots (membership);
+#     Sum of Sales ranks within. Hardware slots are sales-ranked under a soft
+#     price cap so we never surface a €649 deck next to a €20 LP.
+# ASSORTMENT NOTE: no standalone stylus (ΒΕΛΟΝΕΣ ΠΙΚΑΠ empty), anti-static
+# brush, storage crate or turntable mat exist as SKUs — the cleaning kits
+# bundle a brush, so the care idea collapses into kit + protective sleeves.
+#
+# (slot_num, role_label, [hierarchies], logic_key, source)
+#   source ∈ {'music','prod'} — which pool the hierarchies are matched against
+VINYLREC_SLOTS = [
+    (1,  'Ίδιος Καλλιτέχνης',       [],                                       'SAME_ARTIST',     'music'),
+    (2,  'Καθαρισμός & Φροντίδα',   ['MUSIC ACCESSORIES', 'ΠΙΚΑΠ'],           'CARE_KIT',        'prod'),
+    (3,  'Πικάπ',                   ['ΠΙΚΑΠ'],                                'TURNTABLE',       'prod'),
+    (4,  'Ακουστικά',              ['OVERHEAD'],                             'HEADPHONE',       'prod'),
+    (5,  'Ακόμα ένα Βινύλιο',      [],                                       'ARTIST_OR_GENRE', 'music'),
+    (6,  'Σχετικά με τον Καλλιτέχνη',[],                                      'ARTIST_MERCH',    'books'),
+    (7,  'Ανακάλυψε (ίδιο είδος)',  [],                                       'SAME_GENRE',      'music'),
+    (8,  'Ηχεία / Έξοδος Ήχου',     ['ΗΧΕΙΑ ΦΟΡΗΤΟΥ ΗΧΟΥ', 'PC SPEAKERS 2.0', 'MICRO  Hi-Fi', 'ΗΧΕΙΑ HI-FI', 'SOUNDBARS', 'MULTIROOM SPEAKERS'], 'SPEAKERS', 'prod'),
+    (9,  'Προστατευτικές Θήκες',    ['MUSIC ACCESSORIES'],                    'SLEEVES',         'prod'),
+    (10, 'Δες επίσης',             [],                                       'SAME_GENRE',      'music'),
+]
+
+VINYLREC_MARKETING_COPY = {
+    'Ίδιος Καλλιτέχνης':        'Ακόμα ένα άλμπουμ από τον ίδιο καλλιτέχνη.',
+    'Καθαρισμός & Φροντίδα':    'Κράτησε τους δίσκους σου σαν καινούργιους.',
+    'Πικάπ':                    'Το ιδανικό πικάπ για να το ακούσεις.',
+    'Ακουστικά':               'Για προσωπικές, αναλογικές ακροάσεις.',
+    'Ακόμα ένα Βινύλιο':       'Συμπλήρωσε τη συλλογή σου.',
+    'Σχετικά με τον Καλλιτέχνη': 'Δες κι άλλα για τον αγαπημένο σου καλλιτέχνη.',
+    'Ανακάλυψε (ίδιο είδος)':   'Top βινύλιο από το ίδιο είδος.',
+    'Ηχεία / Έξοδος Ήχου':      'Η σωστή έξοδος ήχου για το setup σου.',
+    'Προστατευτικές Θήκες':     'Προστάτευσε τα εξώφυλλα από τη φθορά.',
+    'Δες επίσης':              'Κι άλλες προτάσεις στο ίδιο είδος.',
+}
+
+# Soft price caps for the 3 hardware slots, tiered off the LP's own price.
+# A premium pressing (≥€35) signals a buyer willing to spend a bit more on gear.
+VINYLREC_GEAR_CAPS = {
+    'Entry': {'turntable_cap': 200, 'headphone_cap': 90,  'speaker_cap': 150},
+    'Mid':   {'turntable_cap': 320, 'headphone_cap': 160, 'speaker_cap': 300},
+}
+def get_lp_gear_tier(price):
+    return 'Mid' if (price or 0) >= 35 else 'Entry'
+
+# Test SKUs: 7 LPs spanning genres (Classic Rock / Pop-Electronica / Metal /
+# Alternative / Jazz / Greek) and €20–€50, each with ≥7 same-artist siblings.
+# Taylor Swift + The Beatles also have artist books (slot 6 exercises merch).
+VINYLREC_TEST_SKUS = {'2050948', '2076784', '1275170', '304880', '1268656', '727981', '1985473'}
+
+# Artist names too generic / non-specific to attempt cross-category book match.
+VINYLREC_ARTIST_STOPWORDS = {'various', 'various artists', 'va', 'soundtrack', 'ost', ''}
 
 # ═════════════════════════════════════════════════════════════
 # 🟢 GAMING — PS5 CONSOLE CONFIGURATION (v28.5: 3-tier + bundle-aware)
@@ -6725,6 +6784,8 @@ L2_CHILDREN = {
          "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='8' width='14' height='10' rx='1.5'/%3E%3Ccircle cx='10' cy='13' r='2.5'/%3E%3Cpath d='M17 11l4-2v8l-4-2'/%3E%3Cline x1='6' y1='22' x2='14' y2='22'/%3E%3C/svg%3E"},
         {"key": "Turntables", "label": "Πικάπ",
          "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3Ccircle cx='12' cy='12' r='2'/%3E%3Cline x1='17' y1='4' x2='14' y2='11'/%3E%3Ccircle cx='17' cy='4' r='1'/%3E%3C/svg%3E"},
+        {"key": "Vinyl Records", "label": "Δίσκοι\\nΒινυλίου",
+         "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3Ccircle cx='12' cy='12' r='5.5'/%3E%3Ccircle cx='12' cy='12' r='1' fill='%23ff5e00'/%3E%3C/svg%3E"},
     ],
     "Gaming": [
         {"key": "PS5 Console", "label": "PS5\nConsole",
@@ -7344,6 +7405,21 @@ else:
                 st.sidebar.markdown('<p class="sidebar-section">Επιλέξτε Πικάπ</p>', unsafe_allow_html=True)
                 sel = st.sidebar.selectbox("", turntables['Title'].unique(), label_visibility="collapsed", key="tt_sel")
                 trigger = turntables[turntables['Title']==sel].iloc[0] if sel else None
+
+    elif active_cluster == "Vinyl Records":
+            if df_music.empty:
+                st.sidebar.warning("Sheet 'Music' is empty or missing.")
+            else:
+                vinyls = df_music[df_music['Level 2'].fillna('').astype(str).str.strip() == 'Vinyl (LP)']
+                v_filtered = vinyls[vinyls['Material'].astype(str).str.strip().str.replace(r'\.0$', '', regex=True).isin(VINYLREC_TEST_SKUS)]
+                if not v_filtered.empty:
+                    vinyls = v_filtered
+                if vinyls.empty:
+                    st.sidebar.warning("Δεν βρέθηκαν Δίσκοι Βινυλίου στο sheet Music.")
+                else:
+                    st.sidebar.markdown('<p class="sidebar-section">Επιλέξτε Δίσκο Βινυλίου</p>', unsafe_allow_html=True)
+                    sel = st.sidebar.selectbox("", vinyls['Title'].unique(), label_visibility="collapsed", key="vinylrec_sel")
+                    trigger = vinyls[vinyls['Title']==sel].iloc[0] if sel else None
 
     
     elif active_cluster == "Robot Vacuums":
@@ -23912,6 +23988,205 @@ def run_ps_games_engine(trigger, df_gaming, df_history, df_books=None):
 # 🟢 VINYL & TURNTABLES ENGINE
 # ═══════════════════════════════════════════════════════════════
 
+def run_vinyl_record_engine(trigger, df_music, df_products, df_peripherals, df_books, df_history):
+    """Trigger = a vinyl LP. Hybrid: artist→genre specs gate the music slots
+    (sales ranks within); sales + soft price cap drive the hardware slots.
+    Always returns 10 filled slots (backfilled by same-genre, then any LP)."""
+    import re as _re
+    diag, slot_notes, all_recs = [], {}, []
+
+    tm      = str(trigger.get('Material', '')).strip()
+    tt      = str(trigger.get('Title', ''))
+    tartist = str(trigger.get('Καλλιτέχνης', '')).strip()
+    tgenre  = str(trigger.get('Είδος', '')).strip()
+    thier   = str(trigger.get('Hierarchy', '')).strip()
+    tprice  = parse_euro_price(trigger.get('LIST PRICE', 0))
+    gtier   = get_lp_gear_tier(tprice)
+    caps    = VINYLREC_GEAR_CAPS[gtier]
+
+    diag.append(("0. Trigger", f"Artist={tartist or '—'} | Genre={tgenre or thier or '—'}",
+                 f"Price=€{tprice:.0f} → gear tier '{gtier}'"))
+
+    # ── Pools ──
+    music = df_music.copy() if df_music is not None and not df_music.empty else pd.DataFrame()
+    if not music.empty:
+        music = music[music['Level 2'].fillna('').astype(str).str.strip() == 'Vinyl (LP)'].copy()
+        music['Sales_30'] = pd.to_numeric(music.get('Sum of Sales', 0), errors='coerce').fillna(0.0)
+        music['_artist_n'] = music['Καλλιτέχνης'].fillna('').astype(str).str.strip().str.casefold()
+        music['_genre_n']  = music['Είδος'].fillna('').astype(str).str.strip().str.casefold()
+        music['_hier_n']   = music['Hierarchy'].fillna('').astype(str).str.strip().str.casefold()
+
+    prod = pd.concat([df_products, df_peripherals], ignore_index=True) \
+        if (df_peripherals is not None and not df_peripherals.empty) else df_products.copy()
+    prod = prod[prod['Material'].astype(str).str.strip() != tm].copy()
+    prod['Sales_30'] = pd.to_numeric(prod.get('Sum of Sales', 0), errors='coerce').fillna(0.0)
+    prod['_p']       = prod['LIST PRICE'].apply(parse_euro_price)
+    prod['_hier_n']  = prod['Hierarchy'].fillna('').astype(str).str.strip().str.upper()
+
+    books = df_books.copy() if df_books is not None and not df_books.empty else pd.DataFrame()
+    if not books.empty:
+        books['Sales_30'] = pd.to_numeric(books.get('Sum of Sales', 0), errors='coerce').fillna(0.0)
+
+    used = {tm}
+    _art_cf = tartist.casefold()
+    _gen_cf = tgenre.casefold()
+    _hier_cf = thier.casefold()
+
+    # ── helpers ──
+    def _avail_rank(df):
+        df = df.copy()
+        df['_avail'] = (df.get('AVAILABILITY', '').astype(str).str.strip() == 'Άμεσα Διαθέσιμο').astype(int)
+        return df
+
+    def _same_artist_pool():
+        if music.empty or not _art_cf or _art_cf in VINYLREC_ARTIST_STOPWORDS:
+            return pd.DataFrame()
+        p = music[(music['_artist_n'] == _art_cf) & (~music['Material'].astype(str).str.strip().isin(used))]
+        return _avail_rank(p).sort_values(['_avail', 'Sales_30'], ascending=False)
+
+    def _same_genre_pool():
+        # Prefer the clean Είδος (genre) field when the trigger has one — the
+        # Hierarchy column has mis-filings (e.g. a Greek-pop LP tagged
+        # 'LP JAZZ'), so genre-matching keeps those out. Only when the trigger
+        # genre is blank do we fall back to the (noisier) Hierarchy.
+        if music.empty:
+            return pd.DataFrame()
+        if _gen_cf:
+            m = (music['_genre_n'] == _gen_cf)
+        elif _hier_cf:
+            m = (music['_hier_n'] == _hier_cf)
+        else:
+            return pd.DataFrame()
+        p = music[m & (music['_artist_n'] != _art_cf) & (~music['Material'].astype(str).str.strip().isin(used))]
+        return _avail_rank(p).sort_values(['_avail', 'Sales_30'], ascending=False)
+
+    def _any_lp_pool():
+        if music.empty:
+            return pd.DataFrame()
+        p = music[~music['Material'].astype(str).str.strip().isin(used)]
+        return _avail_rank(p).sort_values(['_avail', 'Sales_30'], ascending=False)
+
+    def _artist_merch_pool():
+        # Strict whole-phrase, word-boundary match of the FULL artist name in
+        # book titles, restricted to bio/merch hierarchies. Opportunistic:
+        # gracefully empty for most artists (only mega-acts have a book).
+        if books.empty or not tartist or _art_cf in VINYLREC_ARTIST_STOPWORDS or len(tartist) < 4:
+            return pd.DataFrame()
+        pat = _re.compile(r'(?<![\wΑ-Ωα-ωΆ-Ώά-ώ])' + _re.escape(tartist) + r'(?![\wΑ-Ωα-ωΆ-Ώά-ώ])', _re.IGNORECASE)
+        m = books[books['Title'].astype(str).str.contains(pat, na=False)]
+        if m.empty:
+            return pd.DataFrame()
+        bio = m['Hierarchy'].astype(str).str.contains('ΓΝΩΣΕΩΝ|ΛΟΓΟΤΕΧΝΙΑ|ΠΡΟΣΧΟΛΙΚΑ|FUNKO|ΜΟΥΣΙΚ|MUSIC',
+                                                       case=False, na=False)
+        m = m[bio & (~m['Material'].astype(str).str.strip().isin(used))]
+        return _avail_rank(m).sort_values(['_avail', 'Sales_30'], ascending=False)
+
+    def _prod_pool(hierarchies, cap=None):
+        hh = [h.upper() for h in hierarchies]
+        p = prod[prod['_hier_n'].isin(hh) & (~prod['Material'].astype(str).str.strip().isin(used))].copy()
+        if p.empty:
+            return p
+        p = _avail_rank(p)
+        if cap is not None:
+            p['_overcap'] = (p['_p'] > cap).astype(int)   # 1 = penalised (sort last)
+            return p.sort_values(['_overcap', '_avail', 'Sales_30'], ascending=[True, False, False])
+        return p.sort_values(['_avail', 'Sales_30'], ascending=False)
+
+    # ── slot fill ──
+    for slot_num, role, hierarchies, logic_key, source in VINYLREC_SLOTS:
+        notes = [f"Logic: {logic_key}"]
+        pool = pd.DataFrame()
+
+        if logic_key == 'SAME_ARTIST':
+            pool = _same_artist_pool()
+            if pool.empty:
+                pool = _same_genre_pool(); notes.append("No artist sibling → same-genre fallback")
+
+        elif logic_key == 'ARTIST_OR_GENRE':
+            pool = _same_artist_pool()
+            notes.append("Another LP by same artist" if not pool.empty else "Artist exhausted → genre")
+            if pool.empty:
+                pool = _same_genre_pool()
+
+        elif logic_key == 'SAME_GENRE':
+            pool = _same_genre_pool()
+
+        elif logic_key == 'ARTIST_MERCH':
+            pool = _artist_merch_pool()
+            if not pool.empty:
+                notes.append(f"Artist book/merch match for '{tartist}'")
+            else:
+                pool = _same_genre_pool(); notes.append("No artist book → same-genre LP")
+
+        elif logic_key == 'CARE_KIT':
+            # Vinyl-specific cleaning kits only (MUSIC ACCESSORIES kits + the
+            # two Lenco kits filed under ΠΙΚΑΠ). Exclude turntables & sleeves.
+            p = _prod_pool(hierarchies)
+            if not p.empty:
+                tl = p['Title'].astype(str).str.lower()
+                is_kit = tl.str.contains('καθαρισμ|cleaning', na=False)
+                kits = p[is_kit]
+                pool = kits if not kits.empty else p[~tl.str.contains('πικάπ|πικαπ|turntable', na=False)]
+
+        elif logic_key == 'TURNTABLE':
+            p = _prod_pool(hierarchies, cap=caps['turntable_cap'])
+            if not p.empty:
+                tl = p['Title'].astype(str).str.lower()
+                pool = p[~tl.str.contains('καθαρισμ|cleaning|kit', na=False)]  # drop kits filed under ΠΙΚΑΠ
+                notes.append(f"Soft cap €{caps['turntable_cap']} ({gtier})")
+
+        elif logic_key == 'HEADPHONE':
+            pool = _prod_pool(hierarchies, cap=caps['headphone_cap'])
+            if not pool.empty and 'Προτεινόμενη χρήση' in pool.columns:
+                usage = pool['Προτεινόμενη χρήση'].fillna('').astype(str).str.lower()
+                music_use = usage.str.contains('μουσική|music|hi-fi|hifi', na=False)
+                if music_use.any():
+                    pool = pd.concat([pool[music_use], pool[~music_use]])
+                    notes.append("Music-usage headphones first")
+            notes.append(f"Soft cap €{caps['headphone_cap']} ({gtier})")
+
+        elif logic_key == 'SPEAKERS':
+            pool = _prod_pool(hierarchies, cap=caps['speaker_cap'])
+            notes.append(f"Soft cap €{caps['speaker_cap']} ({gtier})")
+
+        elif logic_key == 'SLEEVES':
+            p = _prod_pool(hierarchies)
+            if not p.empty:
+                tl = p['Title'].astype(str).str.lower()
+                sl = p[tl.str.contains('θήκ|θηκ|sleeve|προστατευτ', na=False)]
+                pool = sl if not sl.empty else p[~tl.str.contains('καθαρισμ|cleaning', na=False)]
+
+        # ── guaranteed backfill: same-genre → any LP → any in-stock product ──
+        if pool.empty:
+            pool = _same_genre_pool()
+            if not pool.empty: notes.append("Backfill: same-genre LP")
+        if pool.empty:
+            pool = _any_lp_pool()
+            if not pool.empty: notes.append("Backfill: top-selling LP")
+
+        if pool.empty:
+            diag.append((f"Slot {slot_num} ({role})", 0, "Empty after backfill"))
+            continue
+
+        chosen = pool.iloc[0]
+        rc = chosen.copy()
+        rc['Assigned_Slot']  = slot_num
+        rc['Slot_Position']  = slot_num
+        rc['Slot_Role']      = role
+        rc['Marketing_Copy'] = VINYLREC_MARKETING_COPY.get(role, "Ιδανική επιλογή.")
+        all_recs.append(rc)
+        used.add(str(chosen['Material']).strip())
+        slot_notes[slot_num] = notes
+        diag.append((f"Slot {slot_num} ({role})", 1,
+                     f"{str(chosen.get('Title',''))[:40]} | Sales={chosen.get('Sales_30',0):.0f} | €{chosen.get('_p', chosen.get('LIST PRICE',0)) if pd.notna(chosen.get('_p', None)) else parse_euro_price(chosen.get('LIST PRICE',0)):.0f}"))
+
+    recs_df = pd.DataFrame(all_recs) if all_recs else pd.DataFrame()
+    if not recs_df.empty:
+        recs_df['Draft_Score'] = recs_df['Assigned_Slot']
+        recs_df = recs_df.sort_values('Assigned_Slot').reset_index(drop=True)
+    return recs_df, diag, slot_notes, recs_df
+
+
 def run_vinyl_engine(trigger, df_products, df_peripherals, df_music, df_history):
     diag, slot_notes, all_recs = [], {}, []
     
@@ -24241,6 +24516,15 @@ elif active_cluster == "Projectors":
     slot_diag = []
 elif active_cluster == "Turntables":
     recs, diag, slot_notes, full_candidates = run_vinyl_engine(trigger, df_products, df_peripherals, df_music, df_history)
+    slot_diag = []
+    full_candidates = recs
+elif active_cluster == "Vinyl Records":
+    # Trigger = a vinyl LP (Music sheet, Level 2 = 'Vinyl (LP)'). Inverse of
+    # the turntable engine. Hybrid sales × 3 specs: artist→genre gate the
+    # music slots, sales + soft price caps drive the πικάπ/headphones/speakers
+    # slots. df_books is passed for the opportunistic artist-merch slot.
+    recs, diag, slot_notes, full_candidates = run_vinyl_record_engine(
+        trigger, df_music, df_products, df_peripherals, df_books, df_history)
     slot_diag = []
     full_candidates = recs
 elif active_cluster == "PS5 Console":
