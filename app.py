@@ -103,7 +103,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v28.37 — PlayStation Games: merch slots diversify by type (cards → board game → LEGO), series-match only
+        🟢 Engine v28.38 — PlayStation Games: collector merch (no kid toys), strict series-match, racing wheel leads + shifter, no dup peripherals
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -3706,7 +3706,7 @@ PSG_MERCH_LEVEL2 = {
 PSG_ACCESSORY_FALLBACK_HIERARCHIES = {
     'PS5 CONTROLLERS', 'PS5 HEADSETS', 'PS5 CABLES & CHARGERS',
     'PS5 VARIOUS ACCESSORIES', 'STEERING WHEELS', 'PS5 DRIVING ACCESSORIES',
-    'GAMING AUDIO', 'GAMING MOUSE PADS',
+    'GAMING AUDIO',
     'STREAMING ACCESSORIES', 'VARIOUS GAMING ACCESSORIES',
 }
 
@@ -3747,28 +3747,62 @@ PSG_FRANCHISE_MERCH_REGEX = {
     'death_stranding': r'death stranding', 'just_dance': r'just dance',
     'ninja_gaiden': r'ninja gaiden', 'lies_of_p': r'lies of p',
     'stellar_blade': r'stellar blade', 'black_myth': r'black myth|wukong',
+    # franchises whose merch is named more briefly than the game title — these
+    # need an explicit short-token regex (the conservative title fallback below
+    # requires the full game-name phrase, so it would otherwise miss them):
+    'witcher': r'witcher|\bciri\b|geralt|yennefer', 'sonic': r'sonic',
+    'zelda': r'zelda|\blink\b|ganondorf', 'mario': r'\bmario\b|luigi|yoshi|bowser',
+    'pokemon': r'pokemon|pikachu', 'minecraft': r'minecraft|creeper',
+    'naruto': r'naruto', 'halo': r'\bhalo\b|master chief',
 }
+
+# Collector-grade merch (an adult gamer wants these) vs kids/preschool toys.
+# Used to rank the merch so e.g. a Funko Pop Spider-Man outranks a preschool
+# "Spidey and his Amazing Friends" Hasbro figure or a toddler jigsaw.
+PSG_COLLECTOR_PATTERN = re.compile(
+    r'funko|\bpop!\b|\bpop \b|tubbz|numskull|\bminix\b|banpresto|mcfarlane|'
+    r'\bnendoroid\b|\bfigma\b|diorama|\bstatue\b|άγαλμα|συλλεκτικ|collector|'
+    r'collectible|first 4 figures|good smile|\bbust\b|replica',
+    re.IGNORECASE,
+)
+PSG_KIDS_PATTERN = re.compile(
+    r'hasbro|clementoni|playskool|fisher.?price|giochi preziosi|παιδικό|παιδικο|'
+    r'βρεφικ|νηπι|super things|superthings|stumble guys|skibidi|care bears|'
+    r'paw patrol|\bbluey\b|gabby|\bmattel\b|amazing friends|spidey and his|'
+    r'titan hero|venomversus|web blast|μάσκα|maxi|super color|supercolor|'
+    r'παζλ|puzzle|λαμπάδα|playset σκηνές|χειροτεχνία|σφραγίδ',
+    re.IGNORECASE,
+)
 
 
 def _psg_merch_search_regex(title, franchise_key):
     """Return a regex that identifies the trigger's IP/series in merch titles.
-    Uses the franchise map first; otherwise falls back to the first distinctive
-    word of the title as a word-boundary match (e.g. 'Crimson Desert' →
-    r'\\bcrimson\\b', 'Sonic Superstars' → r'\\bsonic\\b'). Single-word is
-    deliberately lenient so series like 'Sonic' match 'Sonic The Hedgehog'
-    merch, while still being specific enough to gate slot 2."""
+    Uses the curated franchise map first. The title fallback is deliberately
+    CONSERVATIVE: it requires the full multi-word game name as a phrase, so a
+    single common word can't false-match (e.g. 'Crimson Desert' must not match
+    'LEGO Star Wars The Crimson Firehawk'). Single-word titles match only if the
+    word is distinctive (≥5 chars and not a generic word)."""
     if franchise_key in PSG_FRANCHISE_MERCH_REGEX:
         return PSG_FRANCHISE_MERCH_REGEX[franchise_key]
-    base = re.split(r'\s*[-–]\s*ps5', str(title), flags=re.IGNORECASE)[0]
+    base = re.split(r'\s*[-–:]\s*', str(title), maxsplit=1)[0]
+    base = re.split(r'\s*ps5\b', base, flags=re.IGNORECASE)[0]
     base = re.sub(r'[^a-zA-Z0-9\s]', ' ', base).lower()
     skip = {'the', 'of', 'and', 'edition', 'day', 'one', 'deluxe', 'premium',
-            'standard', 'ps5', 'ps4', 'remaster', 'remastered', 'hd', 'game', 'ea'}
-    words = [w for w in base.split() if len(w) >= 4 and w not in skip]
-    if not words:
-        words = [w for w in base.split() if len(w) >= 3 and w not in skip]
-    if not words:
-        return None
-    return r'\b' + re.escape(words[0]) + r'\b'
+            'standard', 'ps5', 'ps4', 'remaster', 'remastered', 'hd', 'game',
+            'ea', 'definitive', 'complete', 'goty', 'ultimate', 'gold'}
+    words = [w for w in base.split() if len(w) >= 3 and w not in skip]
+    if len(words) >= 2:
+        # Require the first two distinctive words to appear in order (a phrase),
+        # which makes the match specific to this game, not a stray adjective.
+        return r'\b' + re.escape(words[0]) + r'\b\W+\b' + re.escape(words[1]) + r'\b'
+    if len(words) == 1 and len(words[0]) >= 5:
+        GENERIC = {'crimson', 'control', 'returnal', 'forspoken', 'starfield',
+                   'avowed', 'concord', 'ghostwire', 'pragmata', 'atomfall'}
+        # (these single-word titles have no merch in the catalog anyway; treating
+        #  generic-looking words conservatively avoids accidental matches)
+        if words[0] not in GENERIC:
+            return r'\b' + re.escape(words[0]) + r'\b'
+    return None
 
 
 def _psg_merch_type(row):
@@ -3853,6 +3887,11 @@ def _psg_extract_franchise(title):
         (r'\bufc \d', 'ufc'), (r'split fiction', 'split_fiction'),
         (r'crimson desert', 'crimson_desert'), (r'stellar blade', 'stellar_blade'),
         (r'black myth', 'black_myth'), (r'\bsaros\b', 'saros'),
+        (r'\bwitcher\b', 'witcher'), (r'\bsonic\b', 'sonic'),
+        (r'zelda|tears of the kingdom|breath of the wild', 'zelda'),
+        (r'super mario|mario kart|\bmario\b', 'mario'),
+        (r'pokemon|pokémon', 'pokemon'), (r'minecraft', 'minecraft'),
+        (r'\bnaruto\b', 'naruto'), (r'\bhalo\b', 'halo'),
     ]
     for pat, key in FRANCHISE_KEYS:
         if re.search(pat, t):
@@ -23462,8 +23501,12 @@ def run_ps_games_engine(trigger, df_gaming, df_history, df_books=None):
     # the trigger's franchise regex matches whichever field actually carries it.
     series_merch = pd.DataFrame()
     if series_regex and not merch_pool.empty:
+        # Match against the Title + a CLEAN series field only. The
+        # 'Ήρωες Παιχνιδιών' column is multi-value and noisy (e.g. a Star Wars
+        # lightsaber tagged "Captain America;Spiderman;…"), so it is NOT used —
+        # it caused off-franchise false matches.
         match_text = merch_pool['Title'].fillna('').astype(str)
-        for col in ['Σειρά', 'Σειρά βιβλίου', 'Εκδοτική Σειρά', 'Ήρωες Παιχνιδιών', 'Ψάχνω για']:
+        for col in ['Σειρά', 'Σειρά βιβλίου']:
             if col in merch_pool.columns:
                 match_text = match_text + ' | ' + merch_pool[col].fillna('').astype(str)
         sm = merch_pool[match_text.str.contains(series_regex, case=False, na=False, regex=True)].copy()
@@ -23472,6 +23515,14 @@ def run_ps_games_engine(trigger, df_gaming, df_history, df_books=None):
             if 'AVAILABILITY' in sm.columns:
                 av = sm['AVAILABILITY'].fillna('').astype(str).str.strip() == 'Άμεσα Διαθέσιμο'
                 sm.loc[av, 'Final_Score'] += 500
+            tt_m = sm['Title'].fillna('').astype(str)
+            # Collector-grade merch (Funko/Tubbz/statues) for the adult gamer →
+            # boost; preschool/kids toys (Hasbro Spidey, Clementoni jigsaws) →
+            # penalise, so the merch slots aren't "too kid-like".
+            coll = tt_m.str.contains(PSG_COLLECTOR_PATTERN, na=False)
+            kids = tt_m.str.contains(PSG_KIDS_PATTERN, na=False)
+            sm.loc[coll, 'Final_Score'] += 50000
+            sm.loc[kids, 'Final_Score'] -= 40000
             sm['_mtype'] = sm.apply(_psg_merch_type, axis=1)
             series_merch = sm.sort_values(['Final_Score', 'Sales_30'], ascending=[False, False])
     diag.append(("0a. Merch", len(merch_pool),
@@ -23640,6 +23691,16 @@ def run_ps_games_engine(trigger, df_gaming, df_history, df_books=None):
                 pool.loc[pool['_p'] > PSG_BUDGET['steering'], 'Final_Score'] -= 30000
             elif ph == 'PS5 DRIVING ACCESSORIES':
                 pool.loc[pool['_p'] > PSG_BUDGET['driving'], 'Final_Score'] -= 30000
+                # Slot 3 is already a steering wheel — don't put a *second* full
+                # wheel right next to it. Prefer complementary gear (shifter /
+                # pedals / handbrake) so the two racing slots aren't redundant.
+                if 'wheel' in fam_count:
+                    title = pool['Title'].fillna('').astype(str)
+                    is_wheel = title.str.contains(r'τιμονιέρα|racing wheel|driving force τιμ',
+                                                  case=False, na=False, regex=True)
+                    pool.loc[is_wheel, 'Final_Score'] -= 60000
+                    if is_wheel.any():
+                        notes.append(f"🏎 Avoiding 2nd wheel: −60000 to {int(is_wheel.sum())} wheel(s) → prefer shifter/pedals")
             elif ph == 'PS5 HEADSETS':
                 title = pool['Title'].fillna('').astype(str)
                 wl = title.str.contains('Wireless|Ασύρμ|Bluetooth', case=False, na=False, regex=True)
@@ -23779,6 +23840,37 @@ def run_ps_games_engine(trigger, df_gaming, df_history, df_books=None):
                 slot_notes[slot_num] = (slot_notes.get(slot_num) or []) + [
                     f"↻ Accessory fallback: {PSG_HIERARCHY_TO_ROLE.get(chosen_hier, '?')} ({chosen_hier})"
                 ]
+
+    # ═══════════════════════════════════════════════════════════════
+    # ── COMPACTION: among slots 2-6, put the most relevant accessory in the
+    #    earliest accessory position (genre gear first — e.g. a racing wheel —
+    #    then by sales), so a low-value leftover (disc drive / microphone) never
+    #    sits above the hero accessory. Real merch and games keep their slots;
+    #    only accessory-filled positions are reordered among themselves.
+    # ═══════════════════════════════════════════════════════════════
+    if all_recs:
+        ACC_HIERS = {h.upper() for h in PSG_ACCESSORY_FALLBACK_HIERARCHIES}
+        ACC_HIERS |= {gear_hiers[0].upper().strip(), gear_hiers[1].upper().strip()}
+        gear_order = {gear_hiers[0].upper().strip(): 0, gear_hiers[1].upper().strip(): 1}
+        recs_by_slot = {int(r['Assigned_Slot']): r for r in all_recs}
+        acc_positions, acc_items = [], []
+        for s in (2, 3, 4, 5, 6):
+            r = recs_by_slot.get(s)
+            if r is None:
+                continue
+            if str(r.get('Hierarchy', '')).upper().strip() in ACC_HIERS:
+                acc_positions.append(s)
+                acc_items.append(r)
+        if len(acc_positions) >= 2:
+            def _acc_prio(r):
+                h = str(r.get('Hierarchy', '')).upper().strip()
+                return (gear_order.get(h, 9), -float(r.get('Sales_30', 0)))
+            acc_items_sorted = sorted(acc_items, key=_acc_prio)
+            for pos, item in zip(sorted(acc_positions), acc_items_sorted):
+                h = str(item.get('Hierarchy', '')).upper().strip()
+                item['Assigned_Slot']  = pos
+                item['Slot_Role']      = PSG_HIERARCHY_TO_ROLE.get(h, 'Αξεσουάρ PS5')
+                item['Marketing_Copy'] = PSG_HIERARCHY_TO_MARKETING.get(h, 'Αναβάθμισε το PS5 setup σου.')
 
     recs_df = pd.DataFrame(all_recs) if all_recs else pd.DataFrame()
     if not recs_df.empty:
