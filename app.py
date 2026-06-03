@@ -103,7 +103,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v28.35 — PlayStation Games: merch series-match on Σειρά/Ήρωες + Title (slots 2/5/6), else accessory fallback
+        🟢 Engine v28.36 — PlayStation Games: merch search across cards/LEGO/figures (FIFA→Panini), slot 2 back-filled last, no chairs
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -3682,20 +3682,31 @@ PSG_MERCH_BOOKS_HIERARCHIES = {
 }
 PSG_MERCH_GAMING_HIERARCHIES = {'GAMING FIGURINES'}
 
-# The authoritative merch source: in the main Books sheet, pop-culture merch is
-# tagged by Level 2 == 'Pop Culture/Merch' (749 rows) — this captures the
-# franchise figures (Numskull Tubbz, Funko Pop!) regardless of the messy
-# per-row Hierarchy values (some are filed under 'LAMPS', some 'FUNKO POP!',
-# some blank). The engine matches the trigger's series against the merch title.
-PSG_MERCH_LEVEL2 = 'Pop Culture/Merch'
+# The merch source: pop-culture/collectible merch in the main Books sheet.
+# franchise merch is spread across several Level 2 buckets, NOT just one:
+#   • 'Pop Culture/Merch'    → Funko Pop! + Numskull Tubbz figures
+#   • 'Board Games & Puzzles' → Panini collectible CARDS & STICKERS (e.g. the
+#                               FIFA 365 / World Cup Panini packs — Hierarchy
+#                               'Collectable Cards'), trading-card games
+#   • 'Lego & Building Sets'  → licensed LEGO sets
+#   • 'Action Figures'        → action figures
+#   • 'Other Toys'            → misc licensed toys
+# The engine matches the trigger's series against the merch title (+ structured
+# Σειρά / Ήρωες columns), so only franchise-matched items ever surface — the
+# broad pool is safe because non-matching board games / kids toys never appear.
+PSG_MERCH_LEVEL2 = {
+    'Pop Culture/Merch', 'Board Games & Puzzles', 'Lego & Building Sets',
+    'Action Figures', 'Other Toys',
+}
 
-# When a merch slot has no series match it falls back to one of these
-# accessory hierarchies (never to a generic/off-franchise collectible).
-# Includes the platform-agnostic gaming gear so 2-3 fallback slots stay varied.
+# When a merch slot has no series match it is BACK-FILLED LAST (after every
+# other slot) with one of these accessory hierarchies — never with a generic
+# off-franchise collectible, and deliberately NO gaming chairs/desks/playseats
+# (too big-ticket to drop into a prime merch slot).
 PSG_ACCESSORY_FALLBACK_HIERARCHIES = {
     'PS5 CONTROLLERS', 'PS5 HEADSETS', 'PS5 CABLES & CHARGERS',
     'PS5 VARIOUS ACCESSORIES', 'STEERING WHEELS', 'PS5 DRIVING ACCESSORIES',
-    'GAMING CHAIRS', 'GAMING AUDIO', 'GAMING MOUSE PADS',
+    'GAMING AUDIO', 'GAMING MOUSE PADS',
     'STREAMING ACCESSORIES', 'VARIOUS GAMING ACCESSORIES',
 }
 
@@ -23409,11 +23420,11 @@ def run_ps_games_engine(trigger, df_gaming, df_history, df_books=None):
     pool_full = pool_full.drop_duplicates(subset=['Material'], keep='first')
     pool_full = pool_full[pool_full['Material'] != tm].copy()
 
-    # ── Merch pool: Books rows with Level 2 == 'Pop Culture/Merch' ──
+    # ── Merch pool: Books rows in any of the PSG_MERCH_LEVEL2 buckets ──
     merch_pool = pd.DataFrame()
     if df_books is not None and not df_books.empty and 'Level 2' in df_books.columns:
         l2 = df_books['Level 2'].fillna('').astype(str).str.strip()
-        merch_pool = df_books[l2 == PSG_MERCH_LEVEL2].copy()
+        merch_pool = df_books[l2.isin(PSG_MERCH_LEVEL2)].copy()
         if not merch_pool.empty:
             merch_pool['Sales_30'] = pd.to_numeric(merch_pool.get('Sum of Sales', 0), errors='coerce').fillna(0)
             merch_pool['_p']       = merch_pool['LIST PRICE'].apply(parse_euro_price)
@@ -23649,7 +23660,14 @@ def run_ps_games_engine(trigger, df_gaming, df_history, df_books=None):
     #    unfilled merch slots (no series match) and any other empty slot.
     # ═══════════════════════════════════════════════════════════════
     filled = {int(r['Assigned_Slot']) for r in all_recs} if all_recs else set()
-    empty_slots = sorted(s for s, _, _, _ in active_slots if s not in filled)
+    empty_slots = [s for s, _, _, _ in active_slots if s not in filled]
+    # User-directed ordering: skip an unmatched merch slot, fill all the real
+    # slots first, then loop back and back-fill the merch slots LAST (slot 2
+    # dead last) so a prime position never grabs the top-selling leftover.
+    merch_slot_nums = {s for s, _, _, lk in active_slots if lk == 'MERCH_LOGIC'}
+    non_merch_empty = sorted(s for s in empty_slots if s not in merch_slot_nums)
+    merch_empty     = sorted((s for s in empty_slots if s in merch_slot_nums), reverse=True)
+    empty_slots = non_merch_empty + merch_empty
 
     if empty_slots:
         # Accessories ONLY — a merch slot with no series match becomes a real
@@ -23682,7 +23700,7 @@ def run_ps_games_engine(trigger, df_gaming, df_history, df_books=None):
                          f"{len(empty_slots)} empty slot(s) from {len(fb)} accessory products"))
 
             hier_count = {}
-            MAX_PER_HIER = 2
+            MAX_PER_HIER = 1
             for slot_num in empty_slots:
                 if fb.empty:
                     diag.append((f"Slot {slot_num} (Fallback)", 0, "Fallback pool exhausted"))
