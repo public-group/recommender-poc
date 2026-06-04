@@ -103,7 +103,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v28.45 — Καφετιέρες: slots 6-10 re-ranked με attachment sales (Βραστήρες 4.1k → Τοστιέρες 3.8k → Φριτέζες 2.2k → Σίδερα 1.9k → Φρυγανιέρες 1.1k) · Φραπέ/Μπρίκι/Βάφλα → backfill (Espresso/Κάψουλας/Φίλτρου) · αφρόγαλα + καθαρισμός (brand-match) + μύλος/θήκη καψουλών (system-match) · Φραπέ · Μπρίκι · Βάφλα/Κρέπα · Φρυγανιέρα
+        🟢 Engine v28.45.1 — Καφετιέρες: fix slots 2-3 (όχι δύο καθαριστικά συνεχόμενα) — 1 care μπροστά, το 2ο care form στο τέλος του carousel · companions με attachment ranking (Espresso/Κάψουλας/Φίλτρου) · αφρόγαλα + καθαρισμός (brand-match) + μύλος/θήκη καψουλών (system-match) · Φραπέ · Μπρίκι · Βάφλα/Κρέπα · Φρυγανιέρα
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -1767,7 +1767,13 @@ COFFEE_TEST_SKUS = {
 # this carousel and stay excluded.
 COFFEE_PRIORITY = [
     (1,  'Συσκευή για Αφρόγαλα',     'CM_FROTHER',        1, 1),
-    (2,  'Καθαρισμός & Αφαλάτωση',   'CM_CARE',           2, 2),
+    # v28.45.1 — care had max_round_1=2, which put TWO cleaning consumables
+    # back-to-back in slots 2-3 (often same brand, €10-17 items) in the
+    # carousel's prime positions. Now ONE care item leads (slot 2) and the
+    # round-robin places the SECOND care form (different type guaranteed by
+    # the diversity cap) at the carousel tail (slot 9-10) — hero up front,
+    # alternative at the end, same pattern as the hair-dryer engine.
+    (2,  'Καθαρισμός & Αφαλάτωση',   'CM_CARE',           1, 2),
     (3,  'Μύλος / Θήκη Καψουλών',    'CM_GRIND_OR_HOLD',  1, 1),
     (4,  'Coffee Extras',            'CM_EXTRAS',         1, 1),
     # ── Companions in attachment-sales order ──
