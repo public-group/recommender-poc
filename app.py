@@ -103,7 +103,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v28.44.2 — Καφετιέρες: hard brand-gate σε φίλτρα νερού · split καθαριστικών (σετ/ταμπλέτες/υγρό) · usefulness gates στα extras · φραπέ+μπρίκι χωρίς tier mirror · in-stock > tier (Espresso/Κάψουλας/Φίλτρου) · αφρόγαλα + καθαρισμός (brand-match) + μύλος/θήκη καψουλών (system-match) · Φραπέ · Μπρίκι · Βάφλα/Κρέπα · Φρυγανιέρα
+        🟢 Engine v28.45 — Καφετιέρες: slots 6-10 re-ranked με attachment sales (Βραστήρες 4.1k → Τοστιέρες 3.8k → Φριτέζες 2.2k → Σίδερα 1.9k → Φρυγανιέρες 1.1k) · Φραπέ/Μπρίκι/Βάφλα → backfill (Espresso/Κάψουλας/Φίλτρου) · αφρόγαλα + καθαρισμός (brand-match) + μύλος/θήκη καψουλών (system-match) · Φραπέ · Μπρίκι · Βάφλα/Κρέπα · Φρυγανιέρα
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -1752,19 +1752,35 @@ COFFEE_TEST_SKUS = {
 # (priority_rank, role_label, logic_key, max_in_round_1, max_total)
 # Hierarchies are resolved inside the engine (pools span SDA + Spare and
 # several are type-filtered slices of Αξεσουάρ Καφέ, not whole hierarchies).
+#
+# v28.45 — companion block re-ranked by ACTUAL co-purchase attachment sales
+# (user-provided basket data, coffee-machine carousel):
+#   Βραστήρες 4,111 · Τοστιέρες 3,807 · Φριτέζες 2,164 · Σίδερα 1,899 ·
+#   Αξεσουάρ Καφέ 1,614 · Φρυγανιέρες 1,132 · Ειδικές Συσκευές 631
+# Slots 1-5 stay the coffee-specific accessory core (Αξεσουάρ Καφέ at 1,614
+# justifies ~4-5 slots given it's the only COFFEE-specific hierarchy);
+# slots 6-10 are the top coffee-relevant attach categories in data order.
+# Φραπέ / Μπρίκι / Βάφλα-Κρέπα don't register in the attach data → demoted
+# to the backfill chain (they only appear when an accessory pool runs dry,
+# e.g. capsule machines whose extras pool empties). Non-kitchen attach
+# categories (HAIR DRYERS, vacuums, scales, climate) are basket noise for
+# this carousel and stay excluded.
 COFFEE_PRIORITY = [
     (1,  'Συσκευή για Αφρόγαλα',     'CM_FROTHER',        1, 1),
-    (2,  'Καθαρισμός & Αφαλάτωση',   'CM_CARE',           2, 3),
+    (2,  'Καθαρισμός & Αφαλάτωση',   'CM_CARE',           2, 2),
     (3,  'Μύλος / Θήκη Καψουλών',    'CM_GRIND_OR_HOLD',  1, 1),
-    (4,  'Coffee Extras',            'CM_EXTRAS',         1, 2),
-    (5,  'Συσκευές Φραπέ',           'CM_FRAPPE',         1, 1),
-    (6,  'Ελληνικός Καφές (Μπρίκι)', 'CM_BRIKI',          1, 1),
-    (7,  'Βαφλιέρα / Κρεπιέρα',      'CM_WAFFLE_CREPE',   1, 1),
-    (8,  'Φρυγανιέρες',              'CM_TOASTER',        1, 1),
+    (4,  'Coffee Extras',            'CM_EXTRAS',         1, 1),
+    # ── Companions in attachment-sales order ──
+    (5,  'Βραστήρες',                'CM_KETTLE',         1, 1),  # attach 4,111
+    (6,  'Τοστιέρες',                'CM_SANDWICH',       1, 1),  # attach 3,807
+    (7,  'Φριτέζες',                 'CM_FRYER',          1, 1),  # attach 2,164
+    (8,  'Σίδερα',                   'CM_IRON',           1, 1),  # attach 1,899
+    (9,  'Φρυγανιέρες',              'CM_TOASTER',        1, 1),  # attach 1,132
     # ── Backfill chain (kick in only when earlier pools run dry) ──
-    (9,  'Βραστήρες',                'CM_KETTLE',         1, 1),
-    (10, 'Τοστιέρες',                'CM_SANDWICH',       1, 1),
-    (11, 'Αξεσουάρ Καφέ (overflow)', 'CM_ACC_OVERFLOW',   1, None),
+    (10, 'Συσκευές Φραπέ',           'CM_FRAPPE',         1, 1),
+    (11, 'Ελληνικός Καφές (Μπρίκι)', 'CM_BRIKI',          1, 1),
+    (12, 'Βαφλιέρα / Κρεπιέρα',      'CM_WAFFLE_CREPE',   1, 1),
+    (13, 'Αξεσουάρ Καφέ (overflow)', 'CM_ACC_OVERFLOW',   1, None),
 ]
 
 COFFEE_SLOT_TARGET = 10
@@ -1778,6 +1794,8 @@ COFFEE_MARKETING_COPY = {
     'Ελληνικός Καφές (Μπρίκι)': "Ο κλασικός ελληνικός — δίπλα στη μηχανή σου.",
     'Βαφλιέρα / Κρεπιέρα':      "Βάφλες & κρέπες — η γλυκιά συνοδεία του καφέ.",
     'Φρυγανιέρες':              "Φρυγανισμένο ψωμί στιγμής — πλήρες πρωινό.",
+    'Φριτέζες':                 "Το πιο δημοφιλές δίδυμο της κουζίνας — γεύμα δίπλα στον καφέ.",
+    'Σίδερα':                   "Ολοκλήρωσε τη ρουτίνα του πρωινού — καφές και φροντίδα.",
     'Βραστήρες':                "Ζεστό νερό άμεσα — τσάι ή στιγμιαίος δίπλα στον καφέ.",
     'Τοστιέρες':                "Ζεστό τοστ για το πρωινό σου.",
     'Αξεσουάρ Καφέ (overflow)': "Ολοκλήρωσε τη γωνιά του καφέ σου.",
@@ -17321,6 +17339,12 @@ def run_coffee_machine_engine(trigger, df_sda, df_spare, df_history):
             scored = _cm_build_companion_pool(wc, tb, ttier, notes)
         elif logic_key == 'CM_TOASTER':
             scored = _cm_build_companion_pool(_sda_hier_slice(['Φρυγανιέρες']), tb, ttier, notes)
+        elif logic_key == 'CM_FRYER':
+            # attach 2,164 — top-3 kitchen co-purchase with coffee machines
+            scored = _cm_build_companion_pool(_sda_hier_slice(['Φριτέζες']), tb, ttier, notes)
+        elif logic_key == 'CM_IRON':
+            # attach 1,899 — household-bundle co-purchase
+            scored = _cm_build_companion_pool(_sda_hier_slice(['Σίδερα']), tb, ttier, notes)
         elif logic_key == 'CM_KETTLE':
             scored = _cm_build_companion_pool(_sda_hier_slice(['Βραστήρες']), tb, ttier, notes)
         elif logic_key == 'CM_SANDWICH':
