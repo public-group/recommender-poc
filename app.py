@@ -103,7 +103,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v28.48 — Στεγνωτήρια: hybrid sales × title-parsed specs (brand · χωρητικότητα kg · price tier) — matched-pair πλυντήριο hero slot 1 + 2ο πλυντήριο bookend · Βάση Σύνδεσης = soft brand penalty (ROLLER universal fallback) · Καλάθι Στεγνώματος = HARD brand lock (μόνο BOSCH/AEG υπάρχουν, model-specific) · σφαιρίδια στεγνωτηρίου + απορρυπαντικά universal · iron-side companions (Σίδερα/Συστήματα/Σιδερώστρες) από SDA · RPM≥1400 premium washer boost · Wi-Fi mirror
+        🟢 Engine v28.48.1 — Στεγνωτήρια: hybrid sales × title-parsed specs (brand · χωρητικότητα kg · price tier) — matched-pair πλυντήριο hero slot 1 + 2ο πλυντήριο bookend · Βάση Σύνδεσης = soft brand penalty (ROLLER universal fallback) · Καλάθι Στεγνώματος = HARD brand lock (μόνο BOSCH/AEG, model-specific) · consumable gate: FragranceDos/TwinDos μόνο σε MIELE triggers + dishwasher-only ταμπλέτες out · σφαιρίδια στεγνωτηρίου + απορρυπαντικά universal · iron-side companions (Σίδερα/Συστήματα/Σιδερώστρες) από SDA · RPM≥1400 premium washer boost · Wi-Fi mirror
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -21785,6 +21785,61 @@ def _dryer_build_washer_pool(c_pool, trigger_specs, trigger_tier, notes):
     return pool.sort_values('Final_Score', ascending=False)
 
 
+def _dryer_gate_consumables(c_pool, trigger_brand, notes):
+    """Compatibility gate for the Σφαιρίδια / Απορρυπαντικά pool — applied
+    AFTER the Είδος subset filter, BEFORE scoring (strict filters before
+    scoring). Two hard rules (v28.48.1):
+
+      1. DISHWASHER-ONLY rows out: the 'ταμπλέτ' keyword also catches
+         MIELE UltraTabs ('Ταμπλέτες καθαρισμού πλυντηρίου ΠΙΑΤΩΝ') — a
+         dishwasher product that has no place in a dryer carousel. Rule:
+         drop rows whose Title mentions 'πιάτων' WITHOUT also mentioning
+         'ρούχων' (the AEG 'Πιάτων και Ρούχων' multi-use cleaners stay).
+
+      2. DISPENSER-SYSTEM consumables are brand-locked: MIELE FA flacons
+         ('Αρωματικό Στεγνωτηρίου') clip into MIELE's FragranceDos slot and
+         MIELE UltraPhase cartridges into TwinDos — neither works in any
+         other machine. They had the top sales in the pool (252/190), so
+         without this gate they hit slot 3 for EVERY trigger brand
+         (CANDY/LG/SAMSUNG included). For non-MIELE triggers they're
+         DROPPED; for MIELE triggers they stay (and legitimately win).
+
+    What remains for non-MIELE triggers: ELECTROLUX EDBALL dryer balls
+    (truly universal — and the most dryer-relevant consumable) + AEG
+    multi-use descalers + generic detergents.
+    """
+    if c_pool.empty:
+        return c_pool
+
+    pool = c_pool.copy()
+    title_lower = pool['Title'].fillna('').astype(str).str.lower()
+    tb = (trigger_brand or '').upper().strip()
+
+    # ── 1. Drop dishwasher-only consumables
+    dish_only = title_lower.str.contains('πιάτων', regex=False) & \
+                ~title_lower.str.contains('ρούχων', regex=False)
+    if dish_only.any():
+        notes.append(f"  ✗ Dropped {dish_only.sum()} dishwasher-only consumables (πιάτων, όχι ρούχων)")
+        pool = pool[~dish_only]
+        title_lower = title_lower[~dish_only]
+
+    # ── 2. Brand-lock dispenser-system consumables (FragranceDos / TwinDos)
+    if 'Κατασκευαστής' in pool.columns:
+        cand_brand = pool['Κατασκευαστής'].fillna('').astype(str).str.upper().str.strip()
+    else:
+        cand_brand = pool['Title'].fillna('').astype(str).str.split().str[0].str.upper()
+    dispenser = title_lower.str.contains('αρωματικό στεγνωτηρίου', regex=False) | \
+                title_lower.str.contains('ultraphase', regex=False)
+    locked_out = dispenser & (cand_brand != tb)
+    if locked_out.any():
+        notes.append(f"  ✗ Brand-locked dispenser consumables (FragranceDos/TwinDos): "
+                     f"dropped {locked_out.sum()} non-'{tb or '—'}' items (fit only their own machines)")
+        pool = pool[~locked_out]
+
+    notes.append(f"  ✓ Consumable compatibility gate: {len(pool)} / {len(c_pool)} rows survive")
+    return pool
+
+
 def _dryer_build_accessory_brand_pool(c_pool, trigger_brand, notes, role_label,
                                        brand_critical=False, brand_lock=False):
     """Score an accessory pool where brand-match is preferred. Same logic as
@@ -21972,7 +22027,16 @@ def run_dryer_engine(trigger, df_mda, df_sda, df_history):
             # (model-specific, no universal brand exists); pedestals →
             # brand-preferred without penalty; consumables + antivib →
             # universal-need scoring.
-            if logic_key == 'DRYER_ACC_STACK':
+            if logic_key == 'DRYER_ACC_CONSUMABLE':
+                # v28.48.1 — compatibility gate BEFORE scoring: dishwasher-only
+                # rows out; MIELE FragranceDos/TwinDos items locked to MIELE.
+                subset = _dryer_gate_consumables(subset, tbrand, notes)
+                if subset.empty:
+                    notes.append(f"  ⚠ Consumable gate emptied the pool — slot backfills")
+                    pools[rank] = (role_label, pd.DataFrame(), logic_key, max_r1, max_total, notes)
+                    continue
+                scored = _wm_build_accessory_universal_pool(subset, tbrand, notes)
+            elif logic_key == 'DRYER_ACC_STACK':
                 scored = _dryer_build_accessory_brand_pool(subset, tbrand, notes,
                                                             role_label, brand_critical=True)
             elif logic_key == 'DRYER_ACC_BASKET':
