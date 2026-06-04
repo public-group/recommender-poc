@@ -103,7 +103,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v28.43 — Δίσκοι Βινυλίου (LP): slots 1-3 ίδιος καλλιτέχνης · 4-7 discovery (ίδιο είδος) · 8-10 ίδιος καλλιτέχνης · dedup pressings · fix: Final_Score στον πίνακα
+        🟢 Engine v28.44 — Καφετιέρες: subtype-aware (Espresso/Κάψουλας/Φίλτρου) · αφρόγαλα + καθαρισμός (brand-match) + μύλος/θήκη καψουλών (system-match) · Φραπέ · Μπρίκι · Βάφλα/Κρέπα · Φρυγανιέρα
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -1688,6 +1688,260 @@ AF_S_RATING_TOP          =   150_000 # Experts Rating = Top Quality / Excellent
 AF_S_RATING_BEST_VALUE   =    80_000 # Experts Rating = Best Value
 AF_S_SUBTYPE_MATCH       =    60_000 # Accessory matches air vs oil subtype
 AF_S_SALES_FACTOR        =       0.5 # Sales tiebreaker weight (kitchen sells less than vacuums)
+
+
+# ═════════════════════════════════════════════════════════════
+# 🟢 COFFEE MACHINES CONFIGURATION (Καφετιέρες — v28.44)
+# ═════════════════════════════════════════════════════════════
+# Trigger detection: products in the SPARE sheet (Home file), Level 2 =
+# 'Coffee Machines', Hierarchy ∈ {Καφετιέρες Espresso, Καφετιέρες Nespresso,
+# Καφετιέρες Φίλτρου}. Συσκευές Φραπέ + Συσκευές Ελληνικού Καφέ share the
+# same Level 2 but act as COMPANION pools (slots 7-8), never as triggers.
+#
+# Recommendation depth — HYBRID (sales × subtype × brand × capsule-system):
+#   • Pure sales would surface a Dolce Gusto capsule rack next to a Vertuo
+#     machine, or a BOSCH TASSIMO cleaner next to a DELONGHI — physically /
+#     functionally wrong. Hard compatibility comes from 3 trigger specs:
+#       1. Subtype (CAPSULE / ESPRESSO / FILTER) — decided from Hierarchy +
+#          'Σύστημα Κάψουλας ≡' + 'Τύπος συσκευής'. Drives slot 4:
+#          capsule machines get a capsule rack, espresso/filter get a grinder.
+#       2. Capsule system (Nespresso Original / Vertuo / Dolce Gusto) —
+#          exact-token match on rack titles; mismatched-system racks are
+#          penalized below the fold.
+#       3. Built-in grinder ('Ενσωματωμένο μύλο άλεσης') — bean-to-cup
+#          machines skip the redundant grinder slot and get coffee beans /
+#          extras instead. 'Ακροφύσιο ατμού ≡' boosts the milk pitcher.
+#   • Brand is a SOFT match (not a hard filter like printer cartridges):
+#     liquid descalers are mostly universal, but a same-brand cleaner
+#     (DELONGHI EcoDecalk → DELONGHI machine) outranks generics, and a
+#     DIFFERENT-brand-specific cleaner (BOSCH TASIMO) is penalized.
+#   • Full multi-spec scoring is NOT needed: companion appliances (Φραπέ,
+#     Μπρίκι, Βάφλα/Κρέπα, Φρυγανιέρα) carry no compatibility constraint —
+#     sales × brand-ecosystem × price-tier suffices there.
+#
+# Slot layout (user spec → mapped to actual catalog availability):
+#   1   Συσκευή για αφρόγαλα (milk frother)              [Αξεσουάρ Καφέ, SDA]
+#   2-3 Καθαρισμός: υγρό αφαλάτωσης / ταμπλέτες / φίλτρο νερού — type
+#       diversity guard forces 2 DIFFERENT care types     [Αξεσουάρ Καφέ]
+#   4   Θήκη καψουλών (capsule) Ή Μύλος άλεσης (espresso/filter)
+#   5   Extras: γαλατιέρα / κόκκοι καφέ / δοχείο / θερμαντήρας φλιτζανιών
+#   6   Συσκευές Φραπέ                                    [Spare]
+#   7   Συσκευές Ελληνικού Καφέ (μπρίκι)                  [Spare]
+#   8   Βαφλιέρα / Κρεπιέρα (Ειδικές Συσκευές)            [SDA]
+#   9   Φρυγανιέρες                                       [SDA]
+#   10  Βραστήρες → Τοστιέρες → accessory overflow (backfill to 10/10)
+#   NOTE: the user's "espresso cups / mugs" and "water filter jug" slots
+#   have NO catalog data (only cup-warmers + mug-trees exist) — those slots
+#   are absorbed by the backfill chain until such SKUs appear in SDA.
+
+COFFEE_TRIGGER_HIERARCHIES = {
+    "Καφετιέρες Espresso", "Καφετιέρες Nespresso", "Καφετιέρες Φίλτρου",
+}
+
+# Test SKUs — 7 representative machines spanning subtype × brand × tier:
+COFFEE_TEST_SKUS = {
+    "1594449",  # DELONGHI Magnifica S ECAM21.117.B €299 — full-auto bean-to-cup (built-in grinder)
+    "1240612",  # DELONGHI Dedica Style EC685.BK €178 — semi-auto espresso (steam nozzle)
+    "1974882",  # IZZY IZ-6017 Sicily €99.89 — budget semi-auto espresso
+    "1239237",  # Nespresso Original Inissia EN80.B (DELONGHI) €89.90 — capsule Original best-seller
+    "1720981",  # Nespresso Vertuo Pop ENV90.B (DELONGHI) €68.89 — capsule Vertuo
+    "1907558",  # BOSCH TKA2M114 MyMoment €39.90 — mainstream filter
+    "1631056",  # SMEG DCF02CREU Retro €219 — premium filter
+}
+
+# (priority_rank, role_label, logic_key, max_in_round_1, max_total)
+# Hierarchies are resolved inside the engine (pools span SDA + Spare and
+# several are type-filtered slices of Αξεσουάρ Καφέ, not whole hierarchies).
+COFFEE_PRIORITY = [
+    (1,  'Συσκευή για Αφρόγαλα',     'CM_FROTHER',        1, 1),
+    (2,  'Καθαρισμός & Αφαλάτωση',   'CM_CARE',           2, 3),
+    (3,  'Μύλος / Θήκη Καψουλών',    'CM_GRIND_OR_HOLD',  1, 1),
+    (4,  'Coffee Extras',            'CM_EXTRAS',         1, 2),
+    (5,  'Συσκευές Φραπέ',           'CM_FRAPPE',         1, 1),
+    (6,  'Ελληνικός Καφές (Μπρίκι)', 'CM_BRIKI',          1, 1),
+    (7,  'Βαφλιέρα / Κρεπιέρα',      'CM_WAFFLE_CREPE',   1, 1),
+    (8,  'Φρυγανιέρες',              'CM_TOASTER',        1, 1),
+    # ── Backfill chain (kick in only when earlier pools run dry) ──
+    (9,  'Βραστήρες',                'CM_KETTLE',         1, 1),
+    (10, 'Τοστιέρες',                'CM_SANDWICH',       1, 1),
+    (11, 'Αξεσουάρ Καφέ (overflow)', 'CM_ACC_OVERFLOW',   1, None),
+]
+
+COFFEE_SLOT_TARGET = 10
+
+COFFEE_MARKETING_COPY = {
+    'Συσκευή για Αφρόγαλα':     "Βελούδινο αφρόγαλα για cappuccino & latte στο σπίτι.",
+    'Καθαρισμός & Αφαλάτωση':   "Κράτα τη μηχανή σου σαν καινούργια — γεύση χωρίς άλατα.",
+    'Μύλος / Θήκη Καψουλών':    "Οργάνωσε τον καφέ σου — πάντα φρέσκος, πάντα έτοιμος.",
+    'Coffee Extras':            "Μικρές προσθήκες που απογειώνουν το τελετουργικό του καφέ.",
+    'Συσκευές Φραπέ':           "Για τους λάτρεις του κρύου — φραπές με τέλειο αφρό.",
+    'Ελληνικός Καφές (Μπρίκι)': "Ο κλασικός ελληνικός — δίπλα στη μηχανή σου.",
+    'Βαφλιέρα / Κρεπιέρα':      "Βάφλες & κρέπες — η γλυκιά συνοδεία του καφέ.",
+    'Φρυγανιέρες':              "Φρυγανισμένο ψωμί στιγμής — πλήρες πρωινό.",
+    'Βραστήρες':                "Ζεστό νερό άμεσα — τσάι ή στιγμιαίος δίπλα στον καφέ.",
+    'Τοστιέρες':                "Ζεστό τοστ για το πρωινό σου.",
+    'Αξεσουάρ Καφέ (overflow)': "Ολοκλήρωσε τη γωνιά του καφέ σου.",
+}
+
+# ── Scoring constants (mirrors the AF_S_* convention) ──
+CM_S_AVAILABILITY        =   100_000  # In-stock boost (Άμεσα Διαθέσιμο)
+CM_S_TYPE_RELEVANT       = 1_500_000  # Accessory matches its pool's intended type
+CM_S_BRAND_MATCH         =   400_000  # Same Κατασκευαστής as trigger (ecosystem)
+CM_S_BRAND_SPECIFIC_MISMATCH = -600_000  # Brand-specific consumable for a DIFFERENT brand (BOSCH TASIMO cleaner → DELONGHI machine)
+CM_S_UNIVERSAL_BOOST     =   120_000  # Generic/universal consumable (BELLA CUCINA, URNEX) — fits anything
+CM_S_SYSTEM_MATCH        =   800_000  # Capsule rack matches trigger's capsule system (Nespresso vs Dolce Gusto)
+CM_S_SYSTEM_MISMATCH     = -900_000  # Capsule rack for a DIFFERENT capsule system — physically incompatible
+CM_S_BEANS_FOR_GRINDER   =   700_000  # Coffee beans boosted when machine takes beans (built-in grinder)
+CM_S_PITCHER_FOR_STEAM   =   500_000  # Milk pitcher boosted when machine has a steam nozzle
+CM_S_PRICE_SAME_TIER     =   200_000  # Companion in same price tier
+CM_S_PRICE_ONE_OFF       =    70_000  # Companion ±1 price tier
+CM_S_SALES_FACTOR        =       0.5  # Sales tiebreaker weight
+CM_TYPE_DIVERSITY_CAP    =         1  # Max items per care-subtype in the CARE pool (forces descaler ≠ tablets ≠ filter)
+
+
+def _cm_norm(text) -> str:
+    """Uppercase + strip Greek tonos/diacritics + \\xa0→space, for
+    accent-insensitive substring matching.
+
+    Python's str.upper() preserves the tonos ('Αφρόγαλα' → 'ΑΦΡΌΓΑΛΑ'), so a
+    naive 'ΑΦΡΟΓΑΛ' substring check fails on most catalog text. Same trap as
+    the school-books engine — mirrors _sb_strip_accents_upper(), but that
+    helper is defined further down the file and module-level config here
+    runs before it, so the coffee engine carries its own copy.
+    """
+    if text is None or (isinstance(text, float) and pd.isna(text)):
+        return ''
+    s = unicodedata.normalize('NFD', str(text).replace('\xa0', ' '))
+    return ''.join(c for c in s if unicodedata.category(c) != 'Mn').upper()
+
+
+def _cm_attr(row, name, default=''):
+    """NBSP-tolerant attribute getter for Spare-sheet trigger rows.
+
+    Spare column headers embed non-breaking spaces INSIDE the name
+    ('Σύστημα\\xa0Κάψουλας ≡') which survive the loader's .str.strip().
+    Compares keys with \\xa0 → ' ' normalization so engine code can use
+    plain-space names.
+    """
+    try:
+        keys = row.index if hasattr(row, 'index') else row.keys()
+    except Exception:
+        return default
+    target = name.replace('\xa0', ' ').strip()
+    for k in keys:
+        if str(k).replace('\xa0', ' ').strip() == target:
+            v = row[k]
+            if pd.isna(v):
+                return default
+            return v
+    return default
+
+
+def _cm_detect_subtype(trigger_row) -> str:
+    """Returns 'CAPSULE' | 'ESPRESSO' | 'FILTER'.
+
+    Hierarchy is the primary signal; 'Σύστημα Κάψουλας ≡' overrides for the
+    capsule machines filed under Καφετιέρες Espresso (Dolce Gusto etc.).
+    ESE pods do NOT make a machine CAPSULE — ESE machines brew like espresso
+    and take ground coffee too. All checks via _cm_norm (accent-insensitive).
+    """
+    hier = _cm_norm(trigger_row.get('Hierarchy', ''))
+    if 'NESPRESSO' in hier:
+        return 'CAPSULE'
+    csys = _cm_norm(_cm_attr(trigger_row, 'Σύστημα Κάψουλας ≡', ''))
+    dtype = _cm_norm(trigger_row.get('Τύπος συσκευής', ''))
+    if 'NESPRESSO' in csys or 'DOLCE' in csys or 'ΚΑΨΟΥΛ' in dtype or 'VERTUO' in dtype:
+        return 'CAPSULE'
+    if 'ΦΙΛΤΡΟΥ' in hier:
+        return 'FILTER'
+    return 'ESPRESSO'
+
+
+def _cm_capsule_system(trigger_row) -> str:
+    """Normalized capsule system token: 'NESPRESSO ORIGINAL' / 'NESPRESSO VERTUO'
+    / 'DOLCE GUSTO' / '' — used for rack title matching."""
+    csys = _cm_norm(_cm_attr(trigger_row, 'Σύστημα Κάψουλας ≡', ''))
+    blob = csys + ' ' + _cm_norm(trigger_row.get('Title', ''))
+    if 'VERTUO' in blob:
+        return 'NESPRESSO VERTUO'
+    if 'DOLCE' in blob:
+        return 'DOLCE GUSTO'
+    if 'NESPRESSO' in blob:
+        return 'NESPRESSO ORIGINAL'
+    return ''
+
+
+def _cm_takes_beans(trigger_row) -> bool:
+    """True for bean-to-cup machines (built-in grinder OR Κόκκους in suitable
+    coffee type) — they get beans instead of a redundant standalone grinder."""
+    if 'ΔΙΑΘΕΤΕΙ' in _cm_norm(_cm_attr(trigger_row, 'Ενσωματωμένο μύλο άλεσης', '')) \
+            and 'ΔΕ ΔΙΑΘΕΤΕΙ' not in _cm_norm(_cm_attr(trigger_row, 'Ενσωματωμένο μύλο άλεσης', '')):
+        return True
+    suit = _cm_norm(_cm_attr(trigger_row, 'Κατάλληλος τύπος καφέ', ''))
+    return 'ΚΟΚΚ' in suit
+
+
+def _cm_has_steam_nozzle(trigger_row) -> bool:
+    noz = _cm_norm(_cm_attr(trigger_row, 'Ακροφύσιο ατμού ≡', ''))
+    frother = _cm_norm(_cm_attr(trigger_row, 'Συσκευή για αφρόγαλα', ''))
+    return ((noz == 'ΔΙΑΘΕΤΕΙ') or (frother == 'ΔΙΑΘΕΤΕΙ'))
+
+
+def _cm_classify_coffee_acc(title: str, eidos: str = '', kategoria: str = '') -> str:
+    """Classify an Αξεσουάρ Καφέ row into a functional type bucket.
+
+    Title is checked FIRST for hard disqualifiers (stray machines + branded
+    capsules live inside the accessory hierarchy), then Είδος/Κατηγορία
+    (populated ~90%), then title keywords as fallback for the unlabelled rows.
+    All matching runs on _cm_norm output (accent-insensitive uppercase).
+    """
+    t = _cm_norm(title)
+    e = _cm_norm(f"{eidos or ''} {kategoria or ''}")
+
+    # Stray machines filed under accessories (ESPRESSOCAP LADY, IRIS pour-over)
+    if 'ΜΗΧΑΝΗ ESPRESSO' in t or 'ΚΑΦΕΤΙΕΡΑ ΦΙΛΤΡΟΥ ΧΕΙΡΟΣ' in t or 'ΜΗΧΑΝΕΣ ESPRESSO' in e:
+        return 'machine'
+    # Branded capsules (TERMOZETA / ILLY Iperespresso / Dolce Gusto refills) —
+    # machine-specific consumables; only safe on a brand/system match.
+    # Guard: rack titles also contain 'Κάψουλες' ('Θήκη για 40 Κάψουλες') —
+    # exclude ΘΗΚΗ/ΒΑΣΗ so racks fall through to the capsule_holder rule.
+    if (('ΚΑΨΟΥΛΕΣ' in t or 'IPERESPRESSO' in t or ('CAP/' in t and 'TEM' in t) or 'NES FREDDO' in t)
+            and 'ΘΗΚ' not in t and 'ΒΑΣΗ' not in t):
+        return 'capsules'
+    if 'ΑΦΡΟΓΑΛ' in e or 'ΑΦΡΟΓΑΛ' in t or 'AEROCCINO' in t:
+        return 'frother'
+    # Storage canisters BEFORE racks: 'αποΘΗΚευσης' contains 'ΘΗΚ' — same
+    # short-substring trap as the "t's book" filter. ΑΠΟΘΗΚ is excluded from
+    # the rack rule below as a second guard.
+    if 'ΔΟΧΕΙΟ' in e or 'ΔΟΧΕΙΟ ΦΥΛΑΞΗΣ' in t or 'ΔΟΧΕΙΟ ΑΠΟΘΗΚΕΥΣΗΣ' in t:
+        return 'storage'
+    if (('ΘΗΚ' in e and 'ΑΠΟΘΗΚ' not in e) or 'ΒΑΣΕΙΣ' in e
+            or (('ΘΗΚΗ' in t or 'ΒΑΣΗ' in t) and 'ΚΑΨΟΥΛ' in t)):
+        return 'capsule_holder'
+    if 'ΜΥΛΟ' in e or 'ΜΥΛΟΣ' in t or 'ΑΛΕΣΗΣ' in t:
+        return 'grinder'
+    if 'ΦΙΛΤΡΟ ΝΕΡΟΥ' in t or 'ΚΑΤΑ ΤΩΝ ΑΛΑΤΩΝ' in t or 'ΦΙΛΤΡΑ' in e or 'ΦΙΛΤΡΟ ΚΑΤΑ' in e:
+        return 'water_filter'
+    if ('ΚΑΘΑΡΙΣΤ' in e or 'ΑΦΑΛΑΤΩΣ' in e or 'ΚΑΘΑΡΙΣ' in t or 'ΑΦΑΛΑΤΩΣ' in t
+            or 'DECALK' in t or 'RINZA' in t or 'ΤΑΜΠΛΕΤΕΣ' in t or 'TABS' in t or 'ΠΑΝΙ' in t):
+        return 'cleaner'
+    if 'ΓΑΛΑΤΙΕΡΑ' in e or 'ΓΑΛΑΤΙΕΡΑ' in t:
+        return 'pitcher'
+    if 'ΚΟΚΚΟΙ' in e or 'ΚΟΚΚΟΙ ΚΑΦΕ' in t:
+        return 'beans'
+    if 'ΘΕΡΜΑΝΤΗΡΑΣ' in e or 'ΘΕΡΜΑΝΤΗΡΑΣ' in t or 'ΨΥΓΕΙΟ ΓΑΛΑΚΤΟΣ' in e or 'ΨΥΓΕΙΟ ΓΑΛΑΚΤΟΣ' in t:
+        return 'cup_warmer'
+    return 'other'
+
+
+def _cm_price_tier(price: float) -> int:
+    """0=Entry(<€60), 1=Mainstream(€60-150), 2=Premium(€150-350), 3=Pro(>€350).
+    Calibrated on the coffee catalog: filters cluster <€60, capsule machines
+    €60-150, semi-auto espresso €100-250, bean-to-cup €300-2000."""
+    if price < 60:    return 0
+    if price < 150:   return 1
+    if price < 350:   return 2
+    return 3
 
 
 # ═════════════════════════════════════════════════════════════
@@ -6464,6 +6718,13 @@ def load_all_data():
     # Fryers engine specifically for the Φούρνοι Μικροκυμάτων (Microwaves)
     # companion slot, since microwaves live in MDA/Cooking not SDA.
     dmda = _load('MDA')
+    # ── v28.44 Spare sheet (Home file): holds the Coffee Machines universe —
+    # Καφετιέρες Espresso (149) / Nespresso (34) / Φίλτρου (80) as TRIGGERS,
+    # plus Συσκευές Φραπέ (22) + Συσκευές Ελληνικού Καφέ (12) as companion
+    # pools. Rich subtype specs: Σύστημα Κάψουλας ≡, Ενσωματωμένο μύλο
+    # άλεσης, Ακροφύσιο ατμού ≡. NOTE: several headers embed \xa0 INSIDE the
+    # name — read them via _cm_attr(), never by literal plain-space key.
+    dspare = _load('Spare')
     # ── IT sheet (Home file): Desktops only — BRAND PC / REFURBISHED /
     # ALLINONE. Persona field (Προτεινόμενη χρήση) is noisy so the engine
     # does its own detection. Used by the Desktops engine.
@@ -6566,11 +6827,11 @@ def load_all_data():
     if not dint_school.empty and CC not in dint_school.columns:
         dint_school[CC] = ''
     
-    return dp, dm, dh, ds, db, dl, dv, dper, dstat, dair, dfloor, dgaming, dsda, dmda, ddt, dgr_books, dint_books, dgr_school, dpriv, dint_school, available_sheets
+    return dp, dm, dh, ds, db, dl, dv, dper, dstat, dair, dfloor, dgaming, dsda, dmda, dspare, ddt, dgr_books, dint_books, dgr_school, dpriv, dint_school, available_sheets
 
 try:
 
-    df_products, df_music, df_history, df_slots, df_books, df_laptops, df_vacuums, df_peripherals, df_stationery, df_air, df_floor, df_gaming, df_sda, df_mda, df_desktops, df_greek_books, df_int_books, df_school_books, df_private_school, df_int_school, sheets_loaded = load_all_data()
+    df_products, df_music, df_history, df_slots, df_books, df_laptops, df_vacuums, df_peripherals, df_stationery, df_air, df_floor, df_gaming, df_sda, df_mda, df_spare, df_desktops, df_greek_books, df_int_books, df_school_books, df_private_school, df_int_school, sheets_loaded = load_all_data()
     compat_cols_found = [c for c in COMPAT_COLS if c in df_products.columns]
 except Exception as e:
     st.error(f"🚨 Error loading data: {e}")
@@ -6745,6 +7006,8 @@ L2_CHILDREN = {
          "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M14 2l-2 5h4l-2-5z'/%3E%3Cpath d='M12 7v12'/%3E%3Cpath d='M8 19h8l-1 3H9l-1-3z'/%3E%3Ccircle cx='12' cy='4' r='0.8'/%3E%3C/svg%3E"},
         {"key": "Air Fryers", "label": "Φριτέζες",
          "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 4h12a1 1 0 0 1 1 1v3H5V5a1 1 0 0 1 1-1z'/%3E%3Crect x='5' y='8' width='14' height='12' rx='2'/%3E%3Ccircle cx='12' cy='14' r='3'/%3E%3Cline x1='8' y1='6' x2='8.01' y2='6'/%3E%3Cline x1='11' y1='6' x2='14' y2='6'/%3E%3C/svg%3E"},
+        {"key": "Coffee Machines", "label": "Καφετιέρες",
+         "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M17 8h2a2 2 0 0 1 2 2v2a2 2 0 0 1-2 2h-2'/%3E%3Cpath d='M4 8h13v7a4 4 0 0 1-4 4H8a4 4 0 0 1-4-4V8z'/%3E%3Cline x1='7' y1='2' x2='7' y2='5'/%3E%3Cline x1='10.5' y1='2' x2='10.5' y2='5'/%3E%3Cline x1='14' y1='2' x2='14' y2='5'/%3E%3C/svg%3E"},
     ],
     "Climatism": [
         {"key": "AirUnits", "label": "Κλιματιστικά",
@@ -7504,6 +7767,36 @@ else:
                 st.sidebar.markdown('<p class="sidebar-section">Επιλέξτε Φριτέζα</p>', unsafe_allow_html=True)
                 sel = st.sidebar.selectbox("", fryers['Title'].unique(), label_visibility="collapsed", key="air_fryer_sel")
                 trigger = fryers[fryers['Title']==sel].iloc[0] if sel else None
+
+    elif active_cluster == "Coffee Machines":
+        # Trigger pool: Καφετιέρες (Espresso / Nespresso / Φίλτρου) from the
+        # SPARE sheet (Home file), Level 2 = 'Coffee Machines'. Συσκευές Φραπέ
+        # and Συσκευές Ελληνικού Καφέ share the Level 2 but are companion
+        # pools, NOT triggers. If COFFEE_TEST_SKUS is non-empty, restrict to
+        # the 7 demo machines (bean-to-cup / semi-auto / capsule Original /
+        # capsule Vertuo / budget & premium filter).
+        if df_spare is None or df_spare.empty:
+            st.sidebar.warning("Sheet 'Spare' is empty or missing.")
+        else:
+            hier_upper = df_spare['Hierarchy'].fillna('').astype(str).str.upper().str.strip()
+            trigger_hiers_upper = {h.upper().strip() for h in COFFEE_TRIGGER_HIERARCHIES}
+            machines = df_spare[hier_upper.isin(trigger_hiers_upper)].copy()
+
+            # 🧪 Optional test-list filter (leave COFFEE_TEST_SKUS empty to show all 263)
+            if COFFEE_TEST_SKUS:
+                mat_clean = machines['Material'].astype(str).str.strip().str.replace(r'\.0$', '', regex=True)
+                machines = machines[mat_clean.isin(COFFEE_TEST_SKUS)]
+
+            # The Spare sheet carries duplicate rows per Material (price
+            # snapshots) — dedup so the dropdown shows each machine once.
+            machines = machines.drop_duplicates(subset=['Material'])
+
+            if machines.empty:
+                st.sidebar.warning("Δεν βρέθηκαν Καφετιέρες στο sheet Spare.")
+            else:
+                st.sidebar.markdown('<p class="sidebar-section">Επιλέξτε Καφετιέρα</p>', unsafe_allow_html=True)
+                sel = st.sidebar.selectbox("", machines['Title'].unique(), label_visibility="collapsed", key="coffee_sel")
+                trigger = machines[machines['Title']==sel].iloc[0] if sel else None
 
     elif active_cluster == "Straighteners":
         # Trigger pool: STRAIGHTENERS (Ισιωτικά Μαλλιών) from the SDA sheet,
@@ -16526,6 +16819,444 @@ def run_air_fryer_engine(trigger, df_sda, df_mda, df_history):
 
 
 # ═══════════════════════════════════════════════════════════════
+# 🟢 COFFEE MACHINES HELPERS — Καφετιέρες (v28.44)
+# ═══════════════════════════════════════════════════════════════
+# Pool builders for the round-robin coffee engine. Config + subtype/
+# classification helpers live in the COFFEE MACHINES CONFIGURATION block
+# near the top of the file (they're needed at sidebar load time).
+#
+# Pools 1-4 are typed slices of Αξεσουάρ Καφέ (SDA); pools 5-6 come from
+# the Spare sheet (Συσκευές Φραπέ / Ελληνικού Καφέ); pools 7-10 are SDA
+# kitchen companions scored with the standard brand × price-tier × sales mix.
+
+def _cm_prep_accessory_frame(df_sda):
+    """Slice + dedup + type-tag the Αξεσουάρ Καφέ hierarchy once; every
+    accessory pool is a type-filter over this frame. The SDA sheet carries
+    duplicate rows per Material (price snapshots) — keep the first."""
+    acc = df_sda[df_sda['Hierarchy'].fillna('').astype(str).str.strip() == 'Αξεσουάρ Καφέ'].copy()
+    if acc.empty:
+        return acc
+    acc = acc.drop_duplicates(subset=['Material'])
+    eidos = acc['Είδος'].fillna('').astype(str) if 'Είδος' in acc.columns else pd.Series([''] * len(acc), index=acc.index)
+    kateg = acc['Κατηγορία'].fillna('').astype(str) if 'Κατηγορία' in acc.columns else pd.Series([''] * len(acc), index=acc.index)
+    acc['_cm_type'] = [
+        _cm_classify_coffee_acc(t, e, k)
+        for t, e, k in zip(acc['Title'].fillna('').astype(str), eidos, kateg)
+    ]
+    # Stray machines filed under accessories are never recommendable here
+    acc = acc[acc['_cm_type'] != 'machine']
+    return acc
+
+
+def _cm_base_score(pool):
+    """Availability + sales — the common floor of every pool's score."""
+    pool['Final_Score'] = 0.0
+    if 'AVAILABILITY' in pool.columns:
+        pool.loc[pool['AVAILABILITY'] == 'Άμεσα Διαθέσιμο', 'Final_Score'] += CM_S_AVAILABILITY
+    pool['Final_Score'] += pool['Sales_Tiebreaker'].fillna(0) * CM_S_SALES_FACTOR
+    return pool
+
+
+def _cm_brand_layer(pool, trigger_brand, notes, label=''):
+    """Soft same-brand ecosystem boost shared by all pools."""
+    if trigger_brand and 'Κατασκευαστής' in pool.columns:
+        same_brand = pool['Κατασκευαστής'].fillna('').astype(str).str.upper().str.strip() == trigger_brand
+        pool.loc[same_brand, 'Final_Score'] += CM_S_BRAND_MATCH
+        if same_brand.any():
+            notes.append(f"  ✓ Brand ecosystem {label}({trigger_brand}): {same_brand.sum()} (+{CM_S_BRAND_MATCH:,})")
+    return pool
+
+
+def _cm_build_frother_pool(acc, trigger_brand, notes):
+    """Slot 1 — standalone milk frothers (Αφρογαλιέρα / Συσκευή για Αφρόγαλα).
+    Brand boost + sales. ~16 SKUs, IZZY/ROHNSON dominate."""
+    pool = acc[acc['_cm_type'] == 'frother'].copy()
+    if pool.empty:
+        notes.append("  ⚠ No frothers in Αξεσουάρ Καφέ")
+        return pool
+    pool = _cm_base_score(pool)
+    pool.loc[:, 'Final_Score'] += CM_S_TYPE_RELEVANT
+    pool = _cm_brand_layer(pool, trigger_brand, notes)
+    notes.append(f"  Pool size: {len(pool)}")
+    return pool.sort_values('Final_Score', ascending=False)
+
+
+# Brands whose cleaners are machine-line-specific — showing them against a
+# DIFFERENT trigger brand is misleading (BOSCH TASIMO cleaner on a DELONGHI).
+# Generic chemistry houses (BELLA CUCINA, URNEX) are universal.
+_CM_BRAND_SPECIFIC_CARE = {'BOSCH', 'SIEMENS', 'DELONGHI', 'JURA', 'KRUPS', 'PHILIPS', 'SAECO', 'SINGER'}
+
+def _cm_build_care_pool(acc, trigger_brand, notes):
+    """Slots 2-3 — descalers, cleaning tablets, water filters.
+
+    Tier A  same-brand consumable          → +CM_S_BRAND_MATCH
+    Tier A' OTHER brand-specific consumable → CM_S_BRAND_SPECIFIC_MISMATCH
+    Tier B  universal/generic consumable    → +CM_S_UNIVERSAL_BOOST
+    The loop's per-type diversity cap (CM_TYPE_DIVERSITY_CAP=1) guarantees
+    the two care slots hold DIFFERENT care types (liquid ≠ tablets ≠ filter).
+    """
+    pool = acc[acc['_cm_type'].isin(['cleaner', 'water_filter'])].copy()
+    if pool.empty:
+        notes.append("  ⚠ No cleaning/descaling items in Αξεσουάρ Καφέ")
+        return pool
+    pool = _cm_base_score(pool)
+    pool.loc[:, 'Final_Score'] += CM_S_TYPE_RELEVANT
+
+    brand_col = pool['Κατασκευαστής'].fillna('').astype(str).str.upper().str.strip()
+    same_brand = brand_col == trigger_brand if trigger_brand else pd.Series(False, index=pool.index)
+    other_specific = brand_col.isin(_CM_BRAND_SPECIFIC_CARE) & ~same_brand
+    universal = ~brand_col.isin(_CM_BRAND_SPECIFIC_CARE)
+
+    pool.loc[same_brand, 'Final_Score'] += CM_S_BRAND_MATCH
+    pool.loc[other_specific, 'Final_Score'] += CM_S_BRAND_SPECIFIC_MISMATCH
+    pool.loc[universal, 'Final_Score'] += CM_S_UNIVERSAL_BOOST
+    if same_brand.any():
+        notes.append(f"  ✓ Same-brand care ({trigger_brand}): {same_brand.sum()} (+{CM_S_BRAND_MATCH:,})")
+    if other_specific.any():
+        notes.append(f"  ✗ Other-brand-specific care penalized: {other_specific.sum()} ({CM_S_BRAND_SPECIFIC_MISMATCH:+,})")
+    if universal.any():
+        notes.append(f"  ✓ Universal care: {universal.sum()} (+{CM_S_UNIVERSAL_BOOST:,})")
+    notes.append(f"  Pool size: {len(pool)}")
+    return pool.sort_values('Final_Score', ascending=False)
+
+
+def _cm_build_grind_or_hold_pool(acc, subtype, capsule_system, takes_beans,
+                                  trigger_brand, notes):
+    """Slot 4 — subtype-dependent:
+
+    CAPSULE  → capsule racks, system-matched: a Dolce Gusto rack physically
+               can't hold Vertuo pods. Exact-system boost / mismatch penalty.
+    ESPRESSO/FILTER without built-in grinder → coffee grinders (Μύλοι Άλεσης).
+    Bean-to-cup (built-in grinder) → EMPTY pool; the redundant grinder slot
+               is absorbed by EXTRAS where beans get CM_S_BEANS_FOR_GRINDER.
+    """
+    if subtype == 'CAPSULE':
+        pool = acc[acc['_cm_type'] == 'capsule_holder'].copy()
+        if pool.empty:
+            notes.append("  ⚠ No capsule racks in Αξεσουάρ Καφέ")
+            return pool
+        pool = _cm_base_score(pool)
+        pool.loc[:, 'Final_Score'] += CM_S_TYPE_RELEVANT
+        titles = pool['Title'].fillna('').astype(str).str.upper()
+        is_nes = titles.str.contains('NESPRESSO', na=False)
+        is_dg  = titles.str.contains('DOLCE', na=False)
+        if capsule_system in ('NESPRESSO ORIGINAL', 'NESPRESSO VERTUO'):
+            pool.loc[is_nes, 'Final_Score'] += CM_S_SYSTEM_MATCH
+            pool.loc[is_dg, 'Final_Score'] += CM_S_SYSTEM_MISMATCH
+            notes.append(f"  ✓ System match {capsule_system}: NESPRESSO racks +{CM_S_SYSTEM_MATCH:,}, DOLCE GUSTO racks {CM_S_SYSTEM_MISMATCH:+,}")
+            if capsule_system == 'NESPRESSO VERTUO':
+                notes.append("  ℹ Vertuo pods are larger than Original — NESPRESSO-labelled racks shown, verify fit when Vertuo-specific racks reach the catalog")
+        elif capsule_system == 'DOLCE GUSTO':
+            pool.loc[is_dg, 'Final_Score'] += CM_S_SYSTEM_MATCH
+            pool.loc[is_nes, 'Final_Score'] += CM_S_SYSTEM_MISMATCH
+            notes.append(f"  ✓ System match DOLCE GUSTO: DG racks +{CM_S_SYSTEM_MATCH:,}, NESPRESSO racks {CM_S_SYSTEM_MISMATCH:+,}")
+        # Unlabelled/universal racks (BELLA CUCINA Βάση) keep base score —
+        # they sit between matched and mismatched, exactly where they belong.
+        notes.append(f"  Pool size: {len(pool)} (capsule racks)")
+        return pool.sort_values('Final_Score', ascending=False)
+
+    # ESPRESSO / FILTER → grinder, unless the machine grinds its own beans
+    if takes_beans:
+        notes.append("  ℹ Bean-to-cup trigger (built-in grinder) — grinder slot skipped, EXTRAS pool carries beans instead")
+        return pd.DataFrame()
+    pool = acc[acc['_cm_type'] == 'grinder'].copy()
+    if pool.empty:
+        notes.append("  ⚠ No grinders in Αξεσουάρ Καφέ")
+        return pool
+    pool = _cm_base_score(pool)
+    pool.loc[:, 'Final_Score'] += CM_S_TYPE_RELEVANT
+    pool = _cm_brand_layer(pool, trigger_brand, notes)
+    notes.append(f"  Pool size: {len(pool)} (grinders)")
+    return pool.sort_values('Final_Score', ascending=False)
+
+
+def _cm_build_extras_pool(acc, subtype, capsule_system, takes_beans,
+                           has_steam, trigger_brand, notes):
+    """Slot 5 (+1 overflow) — pitcher / beans / storage / cup-warmer / capsules.
+
+    Spec-driven nudges:
+      • takes_beans  → Κόκκοι Καφέ +CM_S_BEANS_FOR_GRINDER (consumable the
+        machine actually uses)
+      • has_steam    → Γαλατιέρα +CM_S_PITCHER_FOR_STEAM (frothing pitcher
+        pairs with a steam wand, useless on a filter machine)
+      • branded capsules (TERMOZETA / ILLY Iperespresso) are machine-locked —
+        included ONLY on a same-brand trigger, hard-dropped otherwise.
+    """
+    pool = acc[acc['_cm_type'].isin(['pitcher', 'beans', 'storage', 'cup_warmer', 'capsules'])].copy()
+    if pool.empty:
+        notes.append("  ⚠ No extras in Αξεσουάρ Καφέ")
+        return pool
+
+    # Branded capsules: keep only if their brand matches the trigger brand
+    caps_mask = pool['_cm_type'] == 'capsules'
+    if caps_mask.any():
+        brand_col = pool['Κατασκευαστής'].fillna('').astype(str).str.upper().str.strip()
+        drop_mask = caps_mask & (brand_col != trigger_brand)
+        if drop_mask.any():
+            notes.append(f"  ✗ Dropped {drop_mask.sum()} machine-locked capsule packs (brand ≠ {trigger_brand or '—'})")
+        pool = pool[~drop_mask]
+    if pool.empty:
+        notes.append("  ⚠ Extras pool empty after capsule filtering")
+        return pool
+
+    pool = _cm_base_score(pool)
+    if takes_beans:
+        beans = pool['_cm_type'] == 'beans'
+        pool.loc[beans, 'Final_Score'] += CM_S_BEANS_FOR_GRINDER
+        if beans.any():
+            notes.append(f"  ✓ Bean-to-cup trigger → Κόκκοι Καφέ boost: {beans.sum()} (+{CM_S_BEANS_FOR_GRINDER:,})")
+    else:
+        # Beans are dead weight on a machine that only takes ground/capsules
+        pool = pool[pool['_cm_type'] != 'beans']
+    if has_steam:
+        pitcher = pool['_cm_type'] == 'pitcher'
+        pool.loc[pitcher, 'Final_Score'] += CM_S_PITCHER_FOR_STEAM
+        if pitcher.any():
+            notes.append(f"  ✓ Steam nozzle → Γαλατιέρα boost: {pitcher.sum()} (+{CM_S_PITCHER_FOR_STEAM:,})")
+    pool = _cm_brand_layer(pool, trigger_brand, notes)
+    notes.append(f"  Pool size: {len(pool)}")
+    return pool.sort_values('Final_Score', ascending=False)
+
+
+def _cm_build_companion_pool(c_pool, trigger_brand, trigger_tier, notes):
+    """Slots 6-10 — companion appliances (Φραπέ, Μπρίκι, Βάφλα/Κρέπα,
+    Φρυγανιέρα, Βραστήρας, Τοστιέρα). No compatibility constraint →
+    sales × brand-ecosystem × price-tier, same recipe as the AF engine."""
+    if c_pool.empty:
+        return c_pool
+    pool = c_pool.copy()
+    pool = _cm_base_score(pool)
+    pool = _cm_brand_layer(pool, trigger_brand, notes)
+    if 'LIST PRICE' in pool.columns:
+        prices = pool['LIST PRICE'].apply(parse_euro_price)
+        tiers = prices.apply(_cm_price_tier)
+        same_tier = tiers == trigger_tier
+        near_tier = (tiers - trigger_tier).abs() == 1
+        pool.loc[same_tier, 'Final_Score'] += CM_S_PRICE_SAME_TIER
+        pool.loc[near_tier, 'Final_Score'] += CM_S_PRICE_ONE_OFF
+        if same_tier.any() or near_tier.any():
+            notes.append(f"  ✓ Price-tier match (tier {trigger_tier}): same={same_tier.sum()}, near={near_tier.sum()}")
+    notes.append(f"  Pool size: {len(pool)}")
+    return pool.sort_values('Final_Score', ascending=False)
+
+
+# ═══════════════════════════════════════════════════════════════
+# 🟢 COFFEE MACHINES ENGINE — Καφετιέρες (v28.44)
+# ═══════════════════════════════════════════════════════════════
+
+def run_coffee_machine_engine(trigger, df_sda, df_spare, df_history):
+    """Build up to 10 cross-sell slots for a coffee-machine trigger.
+
+    Round-robin loop through Αφρόγαλα → Καθαρισμός (×2, type-diverse) →
+    Μύλος/Θήκη Καψουλών (subtype-routed) → Extras → Φραπέ → Μπρίκι →
+    Βάφλα/Κρέπα → Φρυγανιέρα, with Βραστήρες → Τοστιέρες → accessory
+    overflow as the backfill chain that guarantees 10/10 filled slots.
+
+    Data sources: Αξεσουάρ Καφέ + kitchen companions from SDA; Συσκευές
+    Φραπέ + Συσκευές Ελληνικού Καφέ from the Spare sheet (same Level 2 as
+    the trigger machines — only the 3 trigger hierarchies are excluded as
+    competitors).
+    """
+    diag = []
+    slot_notes = {}
+    all_recs = []
+
+    # ── Trigger attributes
+    tm = trigger['Material']
+    tb = str(trigger.get('Κατασκευαστής', '')).strip().upper()
+    tprice = parse_euro_price(trigger.get('LIST PRICE', 0))
+    ttier = _cm_price_tier(tprice)
+    tsubtype = _cm_detect_subtype(trigger)
+    tsystem = _cm_capsule_system(trigger)
+    t_beans = _cm_takes_beans(trigger)
+    t_steam = _cm_has_steam_nozzle(trigger)
+
+    diag.append(("0. Trigger", f"{tb} €{tprice:.0f}",
+                 f"Subtype={tsubtype} | System={tsystem or '—'} | Tier={ttier} | "
+                 f"Beans={'✓' if t_beans else '✗'} | Steam={'✓' if t_steam else '✗'}"))
+
+    if df_sda is None or df_sda.empty:
+        diag.append(("ERROR", 0, "SDA sheet is empty — engine cannot run"))
+        return pd.DataFrame(), diag, slot_notes, pd.DataFrame()
+
+    # ── SDA universe minus the trigger itself
+    c_sda = df_sda[df_sda['Material'] != tm].copy()
+
+    # ── Spare universe: drop the trigger + ALL competitor machines (the 3
+    # trigger hierarchies), keep Συσκευές Φραπέ + Συσκευές Ελληνικού Καφέ.
+    trigger_hiers = {h.upper().strip() for h in COFFEE_TRIGGER_HIERARCHIES}
+    if df_spare is not None and not df_spare.empty:
+        c_spare = df_spare[df_spare['Material'] != tm].copy()
+        b4 = len(c_spare)
+        c_spare = c_spare[~c_spare['Hierarchy'].fillna('').astype(str).str.upper().str.strip().isin(trigger_hiers)]
+        c_spare = c_spare.drop_duplicates(subset=['Material'])
+        diag.append(("1. Spare pool", len(c_spare), f"Removed {b4 - len(c_spare)} competitor machines / dupes"))
+    else:
+        c_spare = pd.DataFrame()
+        diag.append(("1. Spare pool", 0, "Spare sheet empty — Φραπέ/Μπρίκι slots will backfill"))
+
+    # ── Sales tiebreaker prep
+    for _df in (c_sda, c_spare):
+        if not _df.empty:
+            if 'Sum of Sales' in _df.columns:
+                _df['Sales_Tiebreaker'] = pd.to_numeric(_df['Sum of Sales'], errors='coerce').fillna(0)
+            else:
+                _df['Sales_Tiebreaker'] = 0
+
+    # ── Type-tagged accessory frame (basis of pools 1-4 + overflow)
+    acc = _cm_prep_accessory_frame(c_sda)
+    diag.append(("2. Αξεσουάρ Καφέ", len(acc),
+                 f"Type mix: {acc['_cm_type'].value_counts().to_dict() if not acc.empty else '—'}"))
+
+    def _sda_hier_slice(hiers):
+        hu = {h.upper().strip() for h in hiers}
+        return c_sda[c_sda['Hierarchy'].fillna('').astype(str).str.upper().str.strip().isin(hu)].drop_duplicates(subset=['Material']).copy()
+
+    def _spare_hier_slice(hiers):
+        if c_spare.empty:
+            return pd.DataFrame()
+        hu = {h.upper().strip() for h in hiers}
+        return c_spare[c_spare['Hierarchy'].fillna('').astype(str).str.upper().str.strip().isin(hu)].copy()
+
+    # ── Build a sorted pool per priority entry
+    pools = {}
+    for rank, role_label, logic_key, max_r1, max_total in COFFEE_PRIORITY:
+        notes = [f"=== Priority {rank}: {role_label} ({logic_key}) "
+                 f"| max_round_1={max_r1} | max_total={max_total if max_total else '∞'} ==="]
+
+        if logic_key == 'CM_FROTHER':
+            scored = _cm_build_frother_pool(acc, tb, notes) if not acc.empty else pd.DataFrame()
+        elif logic_key == 'CM_CARE':
+            scored = _cm_build_care_pool(acc, tb, notes) if not acc.empty else pd.DataFrame()
+        elif logic_key == 'CM_GRIND_OR_HOLD':
+            scored = _cm_build_grind_or_hold_pool(acc, tsubtype, tsystem, t_beans, tb, notes) if not acc.empty else pd.DataFrame()
+        elif logic_key == 'CM_EXTRAS':
+            scored = _cm_build_extras_pool(acc, tsubtype, tsystem, t_beans, t_steam, tb, notes) if not acc.empty else pd.DataFrame()
+        elif logic_key == 'CM_FRAPPE':
+            scored = _cm_build_companion_pool(_spare_hier_slice(['Συσκευές Φραπέ']), tb, ttier, notes)
+        elif logic_key == 'CM_BRIKI':
+            scored = _cm_build_companion_pool(_spare_hier_slice(['Συσκευές Ελληνικού Καφέ']), tb, ttier, notes)
+        elif logic_key == 'CM_WAFFLE_CREPE':
+            wc = _sda_hier_slice(['Ειδικές Συσκευές'])
+            if not wc.empty:
+                eid = wc['Είδος'].fillna('').astype(str) if 'Είδος' in wc.columns else pd.Series([''] * len(wc), index=wc.index)
+                kat = wc['Κατηγορία'].fillna('').astype(str) if 'Κατηγορία' in wc.columns else pd.Series([''] * len(wc), index=wc.index)
+                blob = (eid + ' ' + kat + ' ' + wc['Title'].fillna('').astype(str)).str.upper()
+                wc = wc[blob.str.contains('ΒΑΦΛ|ΚΡΕΠ|WAFFLE|CREPE', regex=True, na=False)]
+                notes.append(f"  Filtered Ειδικές Συσκευές → Βαφλιέρες/Κρεπιέρες: {len(wc)}")
+            scored = _cm_build_companion_pool(wc, tb, ttier, notes)
+        elif logic_key == 'CM_TOASTER':
+            scored = _cm_build_companion_pool(_sda_hier_slice(['Φρυγανιέρες']), tb, ttier, notes)
+        elif logic_key == 'CM_KETTLE':
+            scored = _cm_build_companion_pool(_sda_hier_slice(['Βραστήρες']), tb, ttier, notes)
+        elif logic_key == 'CM_SANDWICH':
+            scored = _cm_build_companion_pool(_sda_hier_slice(['Τοστιέρες']), tb, ttier, notes)
+        elif logic_key == 'CM_ACC_OVERFLOW':
+            # Last-resort backfill: the whole accessory frame, sales-sorted.
+            scored = acc.copy() if not acc.empty else pd.DataFrame()
+            if not scored.empty:
+                scored = _cm_base_score(scored)
+                scored = _cm_brand_layer(scored, tb, notes, label='(overflow) ')
+                scored = scored.sort_values('Final_Score', ascending=False)
+                notes.append(f"  Overflow pool size: {len(scored)}")
+        else:
+            scored = pd.DataFrame()
+
+        pools[rank] = (role_label, scored, logic_key, max_r1, max_total, notes)
+        diag.append((f"Pool {rank} ({role_label})", 0 if scored is None or scored.empty else len(scored), logic_key))
+
+    # ── LOOPING: round-robin fill until target hit or all pools exhausted
+    used_materials = {tm}
+    pool_cursors = {rank: 0 for rank in pools}
+    pool_taken = {rank: 0 for rank in pools}
+    # CARE diversity guard: max CM_TYPE_DIVERSITY_CAP per care type ('cleaner'
+    # vs 'water_filter') so slots 2-3 never show two liquid descalers.
+    pool_type_counts = {rank: {} for rank in pools}
+    slot_num = 0
+    round_idx = 0
+
+    while slot_num < COFFEE_SLOT_TARGET:
+        progress = False
+        round_idx += 1
+        for rank, (role_label, scored, logic_key, max_r1, max_total, notes) in pools.items():
+            if slot_num >= COFFEE_SLOT_TARGET:
+                break
+            if scored is None or scored.empty:
+                continue
+            if max_total is not None and pool_taken[rank] >= max_total:
+                continue
+
+            take_n = max_r1 if round_idx == 1 else 1
+            if max_total is not None:
+                take_n = min(take_n, max_total - pool_taken[rank])
+
+            apply_type_diversity = (logic_key in ('CM_CARE', 'CM_EXTRAS', 'CM_ACC_OVERFLOW'))
+
+            cursor = pool_cursors[rank]
+            taken_this_pass = 0
+            while taken_this_pass < take_n and cursor < len(scored)                   and slot_num < COFFEE_SLOT_TARGET:
+                row = scored.iloc[cursor]
+                cursor += 1
+                if row['Material'] in used_materials:
+                    continue
+                if apply_type_diversity:
+                    row_type = row.get('_cm_type', 'other')
+                    if pool_type_counts[rank].get(row_type, 0) >= CM_TYPE_DIVERSITY_CAP:
+                        continue
+
+                slot_num += 1
+                rc = row.copy()
+                rc['Slot_Position'] = slot_num
+                rc['Assigned_Slot'] = slot_num
+                rc['Slot_Role'] = role_label
+                rc['Marketing_Copy'] = COFFEE_MARKETING_COPY.get(role_label, "Ιδανική επιλογή!")
+                rc['Item_Rank'] = round_idx
+                all_recs.append(rc)
+                used_materials.add(row['Material'])
+                taken_this_pass += 1
+                pool_taken[rank] += 1
+                if apply_type_diversity:
+                    row_type = row.get('_cm_type', 'other')
+                    pool_type_counts[rank][row_type] = pool_type_counts[rank].get(row_type, 0) + 1
+                progress = True
+
+                title_preview = str(row.get('Title', ''))[:70]
+                score_val = float(row.get('Final_Score', 0))
+                type_hint = f" | type={row.get('_cm_type', '')}" if apply_type_diversity else ""
+                if slot_num not in slot_notes:
+                    slot_notes[slot_num] = []
+                slot_notes[slot_num].append(
+                    f"Round {round_idx} | Pool '{role_label}' | "
+                    f"Score: {score_val:,.0f}{type_hint} | {title_preview}"
+                )
+
+            pool_cursors[rank] = cursor
+
+        if not progress:
+            diag.append(("Loop", round_idx, "All pools exhausted or capped — stopping"))
+            break
+
+    # ── Pool diagnostics under slot 0
+    pool_diag_notes = []
+    for rank, (role_label, scored, logic_key, max_r1, max_total, notes) in pools.items():
+        pool_diag_notes.extend(notes)
+        cap_note = f" (capped at {max_total})" if max_total is not None else ""
+        pool_diag_notes.append(
+            f"  → consumed {pool_taken[rank]} / {len(scored) if scored is not None else 0} from this pool{cap_note}"
+        )
+        pool_diag_notes.append("")
+    slot_notes[0] = pool_diag_notes
+
+    diag.append(("TOTAL", len(all_recs), f"Filled {slot_num}/{COFFEE_SLOT_TARGET} slots in {round_idx} rounds"))
+
+    if all_recs:
+        recs_df = pd.DataFrame(all_recs)
+        recs_df['Draft_Score'] = recs_df['Assigned_Slot']
+        return recs_df, diag, slot_notes, recs_df
+    return pd.DataFrame(), diag, slot_notes, pd.DataFrame()
+
+
+# ═══════════════════════════════════════════════════════════════
 # 🟢 SHARED HAIR-CARE IMPULSE HELPER — used by STR / HD / CB engines
 # ═══════════════════════════════════════════════════════════════
 # v28.23 — Defined at the top of STR HELPERS (the first engine in file
@@ -24395,6 +25126,13 @@ elif active_cluster == "Air Fryers":
     # are wired up but will gracefully skip if their data files aren't loaded.
     recs, diag, slot_notes, full_candidates = run_air_fryer_engine(trigger, df_sda, df_mda, df_history)
     slot_diag = []
+elif active_cluster == "Coffee Machines":
+    # Καφετιέρες live in the Spare sheet; coffee accessories + kitchen
+    # companions in SDA; Φραπέ + Μπρίκι companion pools also in Spare.
+    # Subtype (Espresso/Capsule/Filter) routes slot 4, capsule-system
+    # match guards the rack slot, built-in grinder reroutes to beans.
+    recs, diag, slot_notes, full_candidates = run_coffee_machine_engine(trigger, df_sda, df_spare, df_history)
+    slot_diag = []
 elif active_cluster == "Straighteners":
     # Ισιωτικά Μαλλιών + all hair-styling / women's-care / wellness companions
     # live in the SDA sheet (Level 1 = Personal Care + Level 2 = SDA companions).
@@ -24862,6 +25600,18 @@ with st.expander("⚙️ System Diagnostics"):
         attr_keys_to_show = ['Material','Title','Level 2','Hierarchy','Κατασκευαστής','Μοντέλο',
                               'Κατηγορία','Χωρητικότητα.1','Ισχύς ≡','Experts Rating ≡',
                               'Χρώμα','Δυνατότητες','LIST PRICE']
+    elif active_cluster == "Coffee Machines":
+        # Spare-sheet trigger — surface the signals the engine actually
+        # routes on: hierarchy (subtype), capsule system, built-in grinder,
+        # steam nozzle, plus brand/price/sales. NOTE: 'Σύστημα Κάψουλας ≡'
+        # and 'Ακροφύσιο ατμού ≡' headers carry embedded \xa0 — both
+        # spellings listed so the renderer finds whichever the sheet has.
+        attr_keys_to_show = ['Material','Title','Level 2','Hierarchy','Κατασκευαστής','Μοντέλο',
+                              'Τύπος συσκευής','Σύστημα Κάψουλας ≡','Σύστημα\xa0Κάψουλας ≡',
+                              'Ενσωματωμένο μύλο άλεσης','Ακροφύσιο ατμού ≡','Ακροφύσιο\xa0ατμού ≡',
+                              'Κατάλληλος τύπος καφέ','Πίεση (bar) ≡','Πίεση\xa0(bar) ≡',
+                              'Experts Rating ≡','Experts\xa0Rating ≡',
+                              'Sum of Sales','LIST PRICE','AVAILABILITY']
     elif active_cluster == "Straighteners":
         # Personal Care — surface the signals the engine actually uses: brand,
         # color, device-type (multistyler detection), model, price + sales.
