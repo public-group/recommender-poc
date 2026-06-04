@@ -103,7 +103,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v28.45.2 — Καφετιέρες: Vertuo fix — hard drop σε Original/DG θήκες (δεν χωράνε Vertuo pods), μόνο universal βάσεις · system compatibility = hard filter (Espresso/Κάψουλας/Φίλτρου) · αφρόγαλα + καθαρισμός (brand-match) + μύλος/θήκη καψουλών (system-match) · Φραπέ · Μπρίκι · Βάφλα/Κρέπα · Φρυγανιέρα
+        🟢 Engine v28.46 — Εκτυπωτές & Πολυμηχανήματα: spec-gated αναλώσιμα — brand + μοντέλο = HARD filters (direct match στο «Αναλώσιμο υλικό» ή στο «Συμβατό μοντέλο») · persona routing Τεχνολογία (Inkjet/Tank/Laser/Thermal) × Χρώμα Εκτύπωσης (Έγχρωμη/Ασπρόμαυρη) × MFP/Printer · mono = μαύρο μόνο + διπλό χαρτί · laser = χωρίς photo paper + drum + budget συμβατό · thermal = media packs χωρίς μελάνια · tri-color συστήματα → σετ μελανιών
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -1991,6 +1991,304 @@ def _cm_price_tier(price: float) -> int:
     if price < 150:   return 1
     if price < 350:   return 2
     return 3
+
+
+# ═════════════════════════════════════════════════════════════
+# 🟢 PRINTERS CONFIGURATION (Εκτυπωτές & Πολυμηχανήματα — v28.46)
+# ═════════════════════════════════════════════════════════════
+# Trigger detection: products in the SPARE sheet (Home file), Level 2 =
+# 'Printers'. In-scope hierarchies (NOTE the live-data spelling
+# 'MULTIFUCTION' — sic, kept verbatim, same typo as the legacy laptop
+# config): MULTIFUCTION INKJET, MULTIFUCTION LASER A4 MONO/COLOR,
+# LASER A4 MONO/COLOR, INKJET A4/A3, PHOTO PRINTERS, THERMAL PRINTERS.
+# Out of scope for now (specialist B2B gear, no consumable links in
+# catalog): PLOTTER, POS, FLATBED, DOT MATRIX, ΕΚΤΥΠΩΤΕΣ ΕΤΙΚΕΤΩΝ,
+# MOBILE / SHEETFED, PRN 3D BRAND MODEL, PRINTER ACCESSORIES (pool, not
+# trigger).
+#
+# Recommendation depth — SPEC-GATED HYBRID. The deepest spec engine so far:
+#   • Pure sales would put an HP toner next to an Epson tank printer —
+#     physically useless. Consumables are MODEL-LOCKED, so compatibility
+#     is a HARD GATE, sales only ranks within the compatible set.
+#   • Three trigger specs route the entire slot layout:
+#       1. Τεχνολογία εκτύπωσης → INKJET / TANK / LASER / THERMAL.
+#          Tank wins over Inkjet on combo values ('Inkjet;Tank') and on
+#          title markers (EcoTank / Smart Tank / MegaTank) because several
+#          tank models carry a plain 'Inkjet' spec. Thermal absorbs Zink.
+#       2. Χρώμα Εκτύπωσης → Έγχρωμη / Ασπρόμαυρη. Live values are messy
+#          ('Έγχρωμo' with Latin o, 'Απρόμαυρη' typo, 'Έγχρωμη;Ασπρόμαυρη'
+#          combos) — matched on normalized ΕΓΧΡΩΜ / ΑΣΠΡΟΜΑΥΡ|ΑΠΡΟΜΑΥΡ
+#          substrings; a color-CAPABLE machine counts as color.
+#       3. MFP vs single-function (hierarchy MULTIFUCTION* or title
+#          ΠΟΛΥΜΗΧΑΝΗΜΑ/MFP) → office-workflow tilt: MFPs pull the
+#          shredder into the main list and double the plain-paper slots;
+#          single-function printers tilt to photo paper.
+#   • Consumable matching, two layers (validated against live rows):
+#       DIRECT (+3M): the trigger's 'Αναλώσιμο υλικό' field (93% populated)
+#         names exact consumable codes — 'Toner HP (117A)', 'Ink Epson
+#         (103 EcoTank)'. Tokens are matched WORD-BOUNDED against cartridge
+#         Title+Μοντέλο+Material ('103' must NOT substring-match C13T01034).
+#       COMPAT (+2M): trigger model tokens vs the cartridge's semicolon
+#         'Συμβατό μοντέλο' list (now 93%+ populated — the old title-parsing
+#         workaround is gone).
+#       No DIRECT and no COMPAT hit → the cartridge is DROPPED, never
+#       merely demoted (strict filters before scoring, not after).
+#   • Brand is a HARD gate for cartridges ('Συμβατό με.1' / Κατασκευαστής,
+#     with HP↔HEWLETT PACKARD aliasing) and a SOFT boost for papers/media.
+#
+# Slot layout by persona (the user's 10-slot OEM-cartridge spec applies
+# verbatim ONLY to color inkjet — every other tech×color combo reroutes):
+#   COLOR INKJET/TANK: K→C→M→Y inks (tri-color systems collapse C/M/Y into
+#     the multipack, e.g. Canon PG-575 + CL-576) → A4 paper → photo paper →
+#     USB-B cable → πολύπριζο → αρχειοθέτηση → καθαριστικό.
+#   MONO INKJET/TANK (EcoTank M-series): black ink ×2 (std+XL), NO C/M/Y,
+#     extra paper slot.
+#   COLOR LASER: K/C/M/Y toners → drum → copier paper → cable/πολύπριζο/
+#     αρχειοθέτηση/καθαριστικό. NO photo paper (laser ≠ glossy media).
+#   MONO LASER: OEM black toner ×2 → drum → COMPATIBLE budget toner →
+#     copier paper ×2 → office chain (shredder for MFPs).
+#   THERMAL/ZINK: NO ink/toner at all — media packs (KP-36IP, ZINK sheets)
+#     matched by code/keyword → photo paper → cable → office chain.
+
+PRINTER_TRIGGER_HIERARCHIES = {
+    'MULTIFUCTION INKJET',            # sic — live spelling
+    'MULTIFUCTION LASER A4 MONO',
+    'MULTIFUCTION LASER A4 COLOR',
+    'LASER A4 MONO',
+    'LASER A4 COLOR',
+    'INKJET A4',
+    'INKJET A3',
+    'PHOTO PRINTERS',
+    'THERMAL PRINTERS',
+}
+
+# Test SKUs — 8 printers spanning the full tech × color × form matrix:
+PRINTER_TEST_SKUS = {
+    "1953175",  # Epson EcoTank L3271 €189 — TANK color MFP, top seller (Ink 103: 4 bottles + 4-pack in catalog)
+    "1788660",  # HP Smart Tank 580 — TANK color MFP (HP GT-series bottles)
+    "2031862",  # Canon PIXMA TS3750i — CARTRIDGE inkjet color MFP, TRI-COLOR system (PG-575 black + CL-576 color)
+    "1391180",  # Epson EcoTank M2170 — TANK **MONO** MFP (the mono-ink edge case: black 110 bottles only)
+    "1685456",  # HP LaserJet M140w — LASER mono MFP (toner W1500A class)
+    "1622083",  # HP Laser 178nw — LASER COLOR MFP (117A K/C/M/Y, OEM + Office Log compatibles both in catalog)
+    "1920531",  # Brother HL-L2400DW — LASER mono single-function printer (TN-2510)
+    "1718473",  # Canon Selphy CP1500 — THERMAL photo (KP-36IP ink+paper pack, direct-code match)
+}
+
+PR_SLOT_TARGET = 10
+
+PR_MARKETING_COPY = {
+    'Μαύρο Μελάνι':            "Το βασικό αναλώσιμο — πάντα ένα εφεδρικό μαύρο στο συρτάρι.",
+    'Κυανό Μελάνι':            "Ζωντανά χρώματα χωρίς διακοπές — κυανό συμβατό με τον εκτυπωτή σου.",
+    'Ματζέντα Μελάνι':         "Ολοκλήρωσε το σετ χρωμάτων — ματζέντα για πιστές εκτυπώσεις.",
+    'Κίτρινο Μελάνι':          "Κίτρινο μελάνι για πλήρη χρωματική κάλυψη.",
+    'Σετ Μελανιών':            "Πλήρες πακέτο χρωμάτων — οικονομία και ετοιμότητα.",
+    'Μαύρο Toner':             "Toner συμβατό με το μηχάνημά σου — χιλιάδες σελίδες χωρίς άγχος.",
+    'Κυανό Toner':             "Κυανό toner για επαγγελματικές έγχρωμες εκτυπώσεις.",
+    'Ματζέντα Toner':          "Ματζέντα toner — πιστά χρώματα σε κάθε σελίδα.",
+    'Κίτρινο Toner':           "Κίτρινο toner για πλήρη χρωματική απόδοση.",
+    'Σετ Toner':               "Πλήρες σετ toner — οικονομία στη συντήρηση.",
+    'Drum / Τύμπανο':          "Το τύμπανο φθείρεται κι αυτό — κράτα την ποιότητα εκτύπωσης ψηλά.",
+    'Συμβατό Toner (Budget)':  "Οικονομική συμβατή λύση — ίδιες σελίδες, χαμηλότερο κόστος.",
+    'Συμβατό Μελάνι (Budget)': "Οικονομική συμβατή λύση για καθημερινές εκτυπώσεις.",
+    'Thermal Media Pack':      "Το αναλώσιμο του εκτυπωτή σου — χαρτί & μελάνι σε ένα πακέτο.",
+    'Χαρτί Α4':                "Χαρτί Α4 80γρ — το καύσιμο κάθε εκτυπωτή.",
+    'Φωτογραφικό Χαρτί':       "Glossy ή matte — τύπωσε τις αναμνήσεις σου σαν επαγγελματίας.",
+    'Καλώδιο USB-B':           "Σπάνια στη συσκευασία — το καλώδιο που χρειάζεσαι για ενσύρματη σύνδεση.",
+    'Πολύπριζο Ασφαλείας':     "Προστάτεψε εκτυπωτή και υπολογιστή από αυξομειώσεις τάσης.",
+    'Αρχειοθέτηση':            "Οργάνωσε τα έγγραφά σου — κλασέρ και κουτιά αρχείου.",
+    'Καταστροφέας Εγγράφων':   "Ασφαλής καταστροφή ευαίσθητων εγγράφων — ο σύντροφος του γραφείου.",
+    'Καθαρισμός':              "Καθαρές οθόνες και επιφάνειες — φροντίδα για όλο το setup.",
+}
+
+# ── Scoring constants (mirrors the CM_S_* convention) ──
+PR_S_AVAILABILITY  =    300_000  # In-stock boost — outweighs sales gaps, never a compat layer
+PR_S_DIRECT_CODE   =  3_000_000  # Trigger's 'Αναλώσιμο υλικό' names this consumable's code
+PR_S_COMPAT_LIST   =  2_000_000  # Trigger model appears in consumable's 'Συμβατό μοντέλο' list
+PR_S_BRAND_MEDIA   =    400_000  # Same-brand paper/media (soft — paper is cross-compatible)
+PR_S_FORMAT_FIT    =    200_000  # A4 80gr plain / glossy-photo format keywords
+PR_S_SALES_FACTOR  =        0.5  # Sales tiebreaker weight
+
+# HP appears as 'HP' on triggers but 'HEWLETT PACKARD' on several paper /
+# cable rows — alias both directions so the brand gate / boost holds.
+PR_BRAND_ALIASES = {
+    'HP': {'HP', 'HEWLETT PACKARD', 'HEWLETT-PACKARD'},
+    'HEWLETT PACKARD': {'HP', 'HEWLETT PACKARD', 'HEWLETT-PACKARD'},
+}
+
+
+def _pr_brand_family(brand: str) -> set:
+    b = _cm_norm(brand).strip()
+    return PR_BRAND_ALIASES.get(b, {b})
+
+
+# Tokens that appear inside 'Αναλώσιμο υλικό' but are NOT consumable codes —
+# brand names, color words, generic nouns. Anything left that carries a
+# digit is treated as a part code.
+_PR_CODE_STOPWORDS = {
+    'INK', 'TONER', 'DRUM', 'PAGES', 'PAGE', 'XL', 'BK', 'UNIT', 'SERIES',
+    'ECOTANK', 'SMART', 'TANK', 'MEGATANK',
+    'HP', 'CANON', 'EPSON', 'BROTHER', 'LEXMARK', 'XEROX', 'OKI',
+    'KYOCERA', 'RICOH', 'SAMSUNG', 'PANTUM', 'NETUM', 'NIIMBOT', 'XIAOMI',
+    'ΜΑΥΡΟ', 'ΚΥΑΝΟ', 'ΚΙΤΡΙΝΟ', 'ΜΑΤΖΕΝΤΑ', 'BLACK', 'CYAN', 'MAGENTA',
+    'YELLOW', 'ΧΑΡΤΙ', 'ΜΕΛΑΝΙ', 'ΔΟΧΕΙΑ', 'ΔΟΧΕΙΟ',
+}
+
+# Words in 'Αναλώσιμο υλικό' that are pure description for the THERMAL
+# media keyword path (codes have no digits there: 'ZINK', 'Χαρτί').
+_PR_MEDIA_STOPWORDS = {
+    'ΦΩΤΟΓΡΑΦΙΚΟ', 'ΧΑΡΤΙ', 'CANON', 'XIAOMI', 'EPSON', 'ΓΙΑ', 'THE',
+    'INK', 'PAPER',
+}
+
+
+def _pr_tech(trigger_row) -> str:
+    """INKJET / TANK / LASER / THERMAL from 'Τεχνολογία εκτύπωσης'.
+
+    Priority order matters:
+      1. TANK from spec ('Tank', 'Inkjet;Tank') OR title markers (EcoTank /
+         Smart Tank / MegaTank / PIXMA G / Maxify G) — several tank models
+         carry a plain 'Inkjet' spec, and a tank machine MUST route to
+         bottles, not cartridges (the codes differ anyway, but the persona
+         label drives the slot layout).
+      2. LASER ('Laser', 'Laser/LED', 'Έγχρωμος Laser').
+      3. THERMAL ('Thermal', 'Zink', 'Inkjet;Thermal' — thermal wins, those
+         are dye-sub photo units).
+      4. INKJET default.
+    Hierarchy keywords backstop a missing spec (2/220 rows).
+    """
+    spec = _cm_norm(_cm_attr(trigger_row, 'Τεχνολογία εκτύπωσης', ''))
+    title = _cm_norm(trigger_row.get('Title', ''))
+    hier = _cm_norm(trigger_row.get('Hierarchy', ''))
+    blob = spec + ' ' + title
+    if ('TANK' in blob or 'MEGATANK' in blob
+            or 'PIXMA G' in title or 'MAXIFY G' in title):
+        return 'TANK'
+    if 'THERMAL' in spec or 'ZINK' in spec:
+        return 'THERMAL'
+    if 'LASER' in spec:
+        return 'LASER'
+    if 'INKJET' in spec or 'INK-JET' in spec:
+        return 'INKJET'
+    # Spec empty → hierarchy fallback
+    if 'LASER' in hier:
+        return 'LASER'
+    if 'THERMAL' in hier or 'PHOTO' in hier:
+        return 'THERMAL'
+    return 'INKJET'
+
+
+def _pr_is_color(trigger_row, tech: str) -> bool:
+    """True = color-capable. 'Χρώμα Εκτύπωσης' carries combos and typos:
+    'Έγχρωμη;Ασπρόμαυρη' (color-capable → True), 'Έγχρωμo' (Latin o),
+    'Ασπρόμαυρo' (Latin o), 'Απρόμαυρη' (missing σ). Normalized substring
+    checks survive all of them. Fallback chain: hierarchy COLOR/MONO →
+    title → tech default (laser/thermal-receipt mono, inkjet color)."""
+    spec = _cm_norm(_cm_attr(trigger_row, 'Χρώμα Εκτύπωσης', ''))
+    if 'ΕΓΧΡΩΜ' in spec:
+        return True
+    if 'ΑΣΠΡΟΜΑΥΡ' in spec or 'ΑΠΡΟΜΑΥΡ' in spec or 'ΜΟΝΟΧΡΩΜ' in spec:
+        return False
+    hier = _cm_norm(trigger_row.get('Hierarchy', ''))
+    if 'COLOR' in hier:
+        return True
+    if 'MONO' in hier:
+        return False
+    title = _cm_norm(trigger_row.get('Title', ''))
+    if 'ΕΓΧΡΩΜ' in title or 'ΕΧΡΩΜ' in title or 'COLOR' in title:
+        return True
+    if 'ΑΣΠΡΟΜΑΥΡ' in title or 'ΜΟΝΟΧΡΩΜ' in title:
+        return False
+    return tech in ('INKJET', 'TANK')
+
+
+def _pr_is_mfp(trigger_row) -> bool:
+    """Πολυμηχάνημα vs σκέτος εκτυπωτής — drives the office-workflow tilt."""
+    hier = _cm_norm(trigger_row.get('Hierarchy', ''))
+    if 'MULTIF' in hier:
+        return True
+    title = _cm_norm(trigger_row.get('Title', ''))
+    return ('ΠΟΛΥΜΗΧΑΝΗΜΑ' in title or 'MFP' in title
+            or 'ALL-IN-ONE' in title or 'ALL IN ONE' in title)
+
+
+def _pr_consumable_codes(trigger_row) -> set:
+    """Part-code tokens from 'Αναλώσιμο υλικό' — the DIRECT match layer.
+    'Toner HP (87A, 87X)' → {'87A','87X'}; 'Ink Epson (103 EcoTank)' →
+    {'103'}. Only digit-bearing tokens survive (brand/color words are
+    stopworded), and matching downstream is WORD-BOUNDED so '103' can never
+    substring-hit an unrelated C13T-prefixed material code."""
+    s = _cm_norm(_cm_attr(trigger_row, 'Αναλώσιμο υλικό', ''))
+    if not s or s == 'NAN':
+        return set()
+    out = set()
+    for t in re.split(r'[,;/()\s]+', s):
+        t = t.strip('.:-')
+        if len(t) < 2 or t in _PR_CODE_STOPWORDS:
+            continue
+        if any(ch.isdigit() for ch in t):
+            out.add(t)
+    return out
+
+
+def _pr_media_keywords(trigger_row) -> set:
+    """Digit-free media keywords from 'Αναλώσιμο υλικό' for the THERMAL
+    path — 'Φωτογραφικό χαρτί Canon ZINK 2 x 3\"' → {'ZINK'}. Used when
+    code tokens come up empty (Zink/receipt printers)."""
+    s = _cm_norm(_cm_attr(trigger_row, 'Αναλώσιμο υλικό', ''))
+    if not s or s == 'NAN':
+        return set()
+    out = set()
+    for t in re.split(r'[\s(),;/]+', s):
+        t = t.strip('.:-"')
+        if len(t) >= 3 and t not in _PR_MEDIA_STOPWORDS and not any(c.isdigit() for c in t):
+            out.add(t)
+    return out
+
+
+def _pr_model_tokens(trigger_row) -> set:
+    """Model-signature tokens from Μοντέλο + Title for the COMPAT (reverse)
+    layer — matched against the cartridge's semicolon 'Συμβατό μοντέλο'
+    list. Digit-bearing tokens ≥3 chars only ('PIXMA' alone would match
+    every PIXMA cartridge list — 'G3410' is the discriminator)."""
+    out = set()
+    for field in ('Μοντέλο', 'Title'):
+        s = _cm_norm(trigger_row.get(field, ''))
+        for t in re.split(r'[\s/(),;]+', s):
+            t = t.strip('.:-')
+            if len(t) >= 3 and any(c.isdigit() for c in t):
+                out.add(t)
+    return out
+
+
+def _pr_wb_match(tokens, blob: str) -> bool:
+    """Word-bounded any-token match. Validated fix: plain substring made
+    Epson '103' hit 89 cartridges; word-bounded it hits exactly the 5
+    Epson-103 items (K/C/M/Y bottles + 4-pack)."""
+    for t in tokens:
+        if re.search(r'(?<![A-Z0-9])' + re.escape(t) + r'(?![A-Z0-9])', blob):
+            return True
+    return False
+
+
+def _pr_cart_color(row) -> str:
+    """K / C / M / Y / MULTI / OTHER from the cartridge's Χρώμα (+title
+    fallback). Multi-value ('Μαύρο;Κυανό;...'), 'Πολλαπλό' and value-packs
+    all map to MULTI — these are the tri-color / 4-pack SKUs that COLLAPSE
+    the C/M/Y slots on tri-color systems (Canon CL-576)."""
+    c = _cm_norm(row.get('Χρώμα', ''))
+    if not c or c == 'NAN':
+        c = _cm_norm(row.get('Title', ''))
+    if 'ΠΟΛΛΑΠΛ' in c or ';' in c or 'MULTI' in c or 'ΠΑΚΕΤΟ' in c or 'VALUE PACK' in c:
+        return 'MULTI'
+    if 'ΜΑΥΡΟ' in c or 'BLACK' in c:
+        return 'K'
+    if 'ΚΥΑΝΟ' in c or 'CYAN' in c or 'ΓΑΛΑΖΙΟ' in c:
+        return 'C'
+    if 'ΜΑΤΖΕΝΤΑ' in c or 'MAGENTA' in c:
+        return 'M'
+    if 'ΚΙΤΡΙΝΟ' in c or 'YELLOW' in c:
+        return 'Y'
+    return 'OTHER'
 
 
 # ═════════════════════════════════════════════════════════════
@@ -8198,20 +8496,44 @@ else:
                 trigger = monitors[monitors['Title']==sel].iloc[0] if sel else None
 
     elif active_cluster == "Printers":
-        combined = pd.concat([df_products, df_peripherals], ignore_index=True) if not df_peripherals.empty else df_products
-        printer_hiers = {'INKJET', 'MULTIFUNCTION INKJET', 'MULTIFUCTION LASER', 'LASER', 'LASER A4 MONO',
-                         'LASER A4 COLOR', 'LASER A3 MONO', 'LASER A3 COLOR', 'FAX LASER',
-                         'MULTIFUCTION LASER A4 COLOR', 'MULTIFUCTION LASER A4 MONO',
-                         'MULTIFUCTION LASER A3 COLOR', 'MULTIFUCTION LASER A3 MONO'}
-        printers = combined[combined['Hierarchy'].fillna('').astype(str).str.upper().str.strip().isin(printer_hiers)].copy()
-        if printers.empty:
-            printers = combined[combined['Level 2'].fillna('').str.strip().str.lower().isin(['printers', 'εκτυπωτές'])].copy()
-        if printers.empty:
-            st.sidebar.warning("Δεν βρέθηκαν εκτυπωτές.")
+        # v28.46 — Triggers now live in the SPARE sheet (Home file), Level 2 =
+        # 'Printers'. Scope = PRINTER_TRIGGER_HIERARCHIES (incl. the live
+        # 'MULTIFUCTION' spelling); specialist B2B hierarchies (PLOTTER, POS,
+        # FLATBED, ΕΤΙΚΕΤΩΝ...) stay out until they get consumable links.
+        if df_spare is None or df_spare.empty:
+            st.sidebar.warning(
+                "Δεν βρέθηκε πηγή για Εκτυπωτές σε κανένα workbook. "
+                f"Sheets loaded: {', '.join(sheets_loaded)}"
+            )
         else:
-            st.sidebar.markdown('<p class="sidebar-section">Επιλέξτε Εκτυπωτή</p>', unsafe_allow_html=True)
-            sel = st.sidebar.selectbox("", printers['Title'].unique(), label_visibility="collapsed", key="print_sel")
-            trigger = printers[printers['Title']==sel].iloc[0] if sel else None
+            hier_upper = df_spare['Hierarchy'].fillna('').astype(str).str.upper().str.strip() \
+                if 'Hierarchy' in df_spare.columns else pd.Series([''] * len(df_spare), index=df_spare.index)
+            trigger_hiers = {h.upper() for h in PRINTER_TRIGGER_HIERARCHIES}
+            printers = df_spare[hier_upper.isin(trigger_hiers)].copy()
+
+            # Fallback: anything under Level 2 = Printers minus accessories,
+            # so spelling drift in live hierarchy names can't empty the picker.
+            if printers.empty and 'Level 2' in df_spare.columns:
+                l2 = df_spare['Level 2'].fillna('').astype(str).str.strip().str.lower()
+                printers = df_spare[(l2 == 'printers')
+                                    & ~hier_upper.str.contains('ACCESSORIES|ΑΞΕΣΟΥΑΡ', regex=True, na=False)].copy()
+
+            # 🧪 Optional test-list filter (leave PRINTER_TEST_SKUS empty to show all)
+            if PRINTER_TEST_SKUS and not printers.empty:
+                mat_clean = printers['Material'].astype(str).str.strip().str.replace(r'\.0$', '', regex=True)
+                test_hit = printers[mat_clean.isin(PRINTER_TEST_SKUS)]
+                if not test_hit.empty:
+                    printers = test_hit
+
+            if not printers.empty:
+                printers = printers.drop_duplicates(subset=['Material'])
+
+            if printers.empty:
+                st.sidebar.warning("Δεν βρέθηκαν εκτυπωτές στο sheet Spare.")
+            else:
+                st.sidebar.markdown('<p class="sidebar-section">Επιλέξτε Εκτυπωτή / Πολυμηχάνημα</p>', unsafe_allow_html=True)
+                sel = st.sidebar.selectbox("", printers['Title'].unique(), label_visibility="collapsed", key="print_sel")
+                trigger = printers[printers['Title']==sel].iloc[0] if sel else None
 
     elif active_cluster == "Webcam":
         if df_peripherals.empty:
@@ -17504,6 +17826,498 @@ def run_coffee_machine_engine(trigger, df_sda, df_spare, df_history):
 
 
 # ═══════════════════════════════════════════════════════════════
+# 🟢 PRINTERS HELPERS — Εκτυπωτές & Πολυμηχανήματα (v28.46)
+# ═══════════════════════════════════════════════════════════════
+# Pool sources span FOUR frames:
+#   df_spare (Home):       triggers + OEM/compatible inks & toners & drums
+#                          + papers (richest consumable specs: Χρώμα 97%,
+#                          Συμβατό μοντέλο 93%, Συμβατό με.1 brand 99%)
+#   df_peripherals (Main): USB CABLES (USB-B), CLEANING PRODUCTS,
+#                          ΚΑΤΑΣΤΡΟΦΕΙΣ ΕΓΓΡΑΦΩΝ, extra paper hierarchies
+#   df_products (Main):    SURGE PROTECTORS (177 πολύπριζα)
+#   df_stationery (Main):  ΚΛΑΣΕΡ / ΚΟΥΤΙΑ ΑΡΧΕΙΟΥ / ΝΤΟΣΙΕ (αρχειοθέτηση)
+# Papers exist in BOTH Spare and Peripherals — concat + dedup on Material.
+
+_PR_OEM_INK_HIERS    = {'INK CATRIDGES'}                       # sic — live spelling
+_PR_OEM_TONER_HIERS  = {'TONER CATRIDGES'}
+_PR_COMPAT_HIERS     = {'COMPATIBLE TONERS', 'COMPATIBLE INK CARTRIDGES'}
+_PR_DRUM_HIERS       = {'DRUMS CATRIDGES'}
+_PR_PLAIN_PAPER_HIERS = {'COPIERS PAPER'}
+_PR_PHOTO_PAPER_HIERS = {'INKJET PAPER', 'SPECIAL PAPERS', 'THERMAL PAPER'}
+
+
+def _pr_hier_slice(df, hier_set):
+    if df is None or df.empty or 'Hierarchy' not in df.columns:
+        return pd.DataFrame()
+    h = df['Hierarchy'].fillna('').astype(str).str.upper().str.strip()
+    return df[h.isin({x.upper() for x in hier_set})].copy()
+
+
+def _pr_base_score(pool):
+    """Availability + sales tiebreaker. pandas-3.x safe: all arithmetic on
+    plain float64 NumPy arrays (Arrow-backed dtypes refuse mixed adds)."""
+    pool = pool.copy()
+    avail = pool['AVAILABILITY'].fillna('').astype(str).str.contains(
+        'Άμεσα|Αμεσα', regex=True, na=False) if 'AVAILABILITY' in pool.columns \
+        else pd.Series(False, index=pool.index)
+    sales = pd.to_numeric(pool.get('Sum of Sales', 0), errors='coerce').fillna(0.0)
+    score = np.asarray(avail, dtype='float64') * PR_S_AVAILABILITY \
+        + np.asarray(sales, dtype='float64') * PR_S_SALES_FACTOR
+    pool['Final_Score'] = score
+    return pool
+
+
+def _pr_match_consumables(df_spare, hier_set, trigger_brand, codes, mtokens,
+                          notes, label=''):
+    """The core spec gate. Returns ONLY consumables that pass:
+      HARD 1 — brand: 'Συμβατό με.1' (or Κατασκευαστής) ∈ trigger brand
+               family. No cross-brand bleed, ever.
+      HARD 2 — model: DIRECT code hit (word-bounded, vs Title+Μοντέλο+
+               Material) OR COMPAT hit (trigger model tokens vs the
+               semicolon 'Συμβατό μοντέλο' list, normalized). Neither →
+               row dropped — an unmatched cartridge is landfill, no score
+               can redeem it.
+    Scoring inside the survivors: DIRECT 3M > COMPAT 2M, + availability +
+    sales tiebreaker."""
+    pool = _pr_hier_slice(df_spare, hier_set)
+    if pool.empty:
+        notes.append(f"  {label}pool: source hierarchy empty")
+        return pool
+    b4 = len(pool)
+
+    fam = _pr_brand_family(trigger_brand)
+
+    def _norm_col(frame, col):
+        if col in frame.columns:
+            return frame[col].fillna('').astype(str).map(_cm_norm).str.strip()
+        return pd.Series([''] * len(frame), index=frame.index)
+
+    compat_brand = _norm_col(pool, 'Συμβατό με.1')
+    maker = _norm_col(pool, 'Κατασκευαστής')
+    brand_ok = compat_brand.isin(fam) | maker.isin(fam)
+    # Compatible-toner rows: Κατασκευαστής = Office Log etc., the printer
+    # brand lives ONLY in 'Συμβατό με.1' — the isin pair above covers both.
+    pool = pool[brand_ok]
+    notes.append(f"  {label}brand gate ({trigger_brand}): {b4} → {len(pool)}")
+    if pool.empty:
+        return pool
+
+    blob = (pool['Title'].fillna('').astype(str) + ' '
+            + pool.get('Μοντέλο', pd.Series('', index=pool.index)).fillna('').astype(str) + ' '
+            + pool['Material'].fillna('').astype(str)).map(_cm_norm)
+    compat_list = _norm_col(pool, 'Συμβατό μοντέλο')
+
+    direct = blob.apply(lambda s: _pr_wb_match(codes, s)) if codes \
+        else pd.Series(False, index=pool.index)
+    compat = compat_list.apply(lambda s: _pr_wb_match(mtokens, s)) if mtokens \
+        else pd.Series(False, index=pool.index)
+
+    keep = direct | compat
+    dropped = int((~keep).sum())
+    pool = pool[keep].copy()
+    notes.append(f"  {label}model gate: dropped {dropped} brand-matched but "
+                 f"model-incompatible items → {len(pool)}")
+    if pool.empty:
+        return pool
+
+    pool = _pr_base_score(pool)
+    pool['Final_Score'] = (
+        np.asarray(pool['Final_Score'], dtype='float64')
+        + np.asarray(direct[pool.index], dtype='float64') * PR_S_DIRECT_CODE
+        + np.asarray(compat[pool.index], dtype='float64') * PR_S_COMPAT_LIST
+    )
+    pool['_pr_match'] = np.where(direct[pool.index], 'direct',
+                                 np.where(compat[pool.index], 'compat', '—'))
+    return pool.sort_values('Final_Score', ascending=False).drop_duplicates(subset=['Material'])
+
+
+def _pr_split_by_color(pool, notes, label=''):
+    """{K,C,M,Y,MULTI} sub-pools from a matched cartridge frame."""
+    out = {k: pd.DataFrame() for k in ('K', 'C', 'M', 'Y', 'MULTI')}
+    if pool is None or pool.empty:
+        return out
+    tags = pool.apply(_pr_cart_color, axis=1)
+    for key in out:
+        out[key] = pool[tags == key].copy()
+    mix = {k: len(v) for k, v in out.items()}
+    notes.append(f"  {label}color split: {mix} (OTHER dropped: {int((tags=='OTHER').sum())})")
+    return out
+
+
+def _pr_build_thermal_media_pool(df_spare, df_peripherals, trigger_brand,
+                                 codes, media_kw, notes):
+    """Thermal/Zink media: the trigger's own pack (Selphy KP-36IP sits in
+    INK CATRIDGES as an ink+paper bundle; Zink sheets sit in SPECIAL
+    PAPERS) — so we scan consumables + papers across BOTH sheets for a
+    DIRECT code hit or a media keyword hit ('ZINK'). Brand here is a SOFT
+    boost, not a gate: Zink is a licensed cross-brand format and the
+    catalog's 2x3" packs (HP/Xiaomi) feed Canon Zoeminis too."""
+    frames = []
+    for src in (df_spare, df_peripherals):
+        sl = _pr_hier_slice(src, _PR_OEM_INK_HIERS | _PR_PHOTO_PAPER_HIERS)
+        if not sl.empty:
+            frames.append(sl)
+    if not frames:
+        notes.append("  thermal media: no source rows")
+        return pd.DataFrame()
+    pool = pd.concat(frames, ignore_index=True).drop_duplicates(subset=['Material'])
+    blob = pool['Title'].fillna('').astype(str).map(_cm_norm)
+    hit = blob.apply(lambda s: _pr_wb_match(codes, s)) if codes \
+        else pd.Series(False, index=pool.index)
+    if media_kw:
+        hit = hit | blob.apply(lambda s: _pr_wb_match(media_kw, s))
+    pool = pool[hit].copy()
+    notes.append(f"  thermal media: {len(pool)} code/keyword matches")
+    if pool.empty:
+        return pool
+    pool = _pr_base_score(pool)
+    fam = _pr_brand_family(trigger_brand)
+    maker = pool.get('Κατασκευαστής', pd.Series('', index=pool.index)) \
+        .fillna('').astype(str).map(_cm_norm).str.strip()
+    pool['Final_Score'] = (
+        np.asarray(pool['Final_Score'], dtype='float64')
+        + np.asarray(maker.isin(fam), dtype='float64') * PR_S_BRAND_MEDIA
+        + PR_S_DIRECT_CODE  # matched media ranks like a direct consumable
+    )
+    return pool.sort_values('Final_Score', ascending=False)
+
+
+def _pr_build_paper_pool(df_spare, df_peripherals, trigger_brand, kind, notes):
+    """kind='plain' → COPIERS PAPER (A4 80gr boost); kind='photo' →
+    INKJET/SPECIAL/THERMAL papers (glossy/photo boost, ZINK packs excluded
+    — those belong to the thermal media pool, not to an EcoTank). Brand is
+    a soft boost only — paper is universal."""
+    hiers = _PR_PLAIN_PAPER_HIERS if kind == 'plain' else _PR_PHOTO_PAPER_HIERS
+    frames = []
+    for src in (df_spare, df_peripherals):
+        sl = _pr_hier_slice(src, hiers)
+        if not sl.empty:
+            frames.append(sl)
+    if not frames:
+        notes.append(f"  {kind} paper: no source rows")
+        return pd.DataFrame()
+    pool = pd.concat(frames, ignore_index=True).drop_duplicates(subset=['Material'])
+    blob = pool['Title'].fillna('').astype(str).map(_cm_norm)
+    if kind == 'photo':
+        b4 = len(pool)
+        pool = pool[~blob.str.contains('ZINK', na=False)].copy()
+        blob = blob[pool.index]
+        if b4 - len(pool):
+            notes.append(f"  photo paper: excluded {b4 - len(pool)} ZINK packs (thermal-only media)")
+    pool = _pr_base_score(pool)
+    fam = _pr_brand_family(trigger_brand)
+    maker = pool.get('Κατασκευαστής', pd.Series('', index=pool.index)) \
+        .fillna('').astype(str).map(_cm_norm).str.strip()
+    if kind == 'plain':
+        fit = blob.str.contains('A4', na=False) & blob.str.contains('80', na=False)
+    else:
+        fit = blob.str.contains('ΦΩΤΟΓΡΑΦΙΚ|GLOSSY|PHOTO|MATTE', regex=True, na=False)
+    pool['Final_Score'] = (
+        np.asarray(pool['Final_Score'], dtype='float64')
+        + np.asarray(maker.isin(fam), dtype='float64') * PR_S_BRAND_MEDIA
+        + np.asarray(fit, dtype='float64') * PR_S_FORMAT_FIT
+    )
+    notes.append(f"  {kind} paper pool: {len(pool)}")
+    return pool.sort_values('Final_Score', ascending=False)
+
+
+def _pr_build_cable_pool(df_peripherals, notes):
+    """USB CABLES hard-filtered to USB-B (the printer plug). A USB-C or
+    micro-USB cable in this slot is a categorization error, so non-B
+    cables are DROPPED, not demoted — empty pool backfills instead."""
+    pool = _pr_hier_slice(df_peripherals, {'USB CABLES'})
+    if pool.empty:
+        notes.append("  cable: USB CABLES hierarchy empty")
+        return pool
+    blob = pool['Title'].fillna('').astype(str).map(_cm_norm)
+    keep = blob.str.contains('USB-B|USB B |TYPE-B|TYPE B|ΕΚΤΥΠΩΤ|PRINTER',
+                             regex=True, na=False)
+    pool = pool[keep].copy()
+    notes.append(f"  cable: hard USB-B filter → {len(pool)}")
+    if pool.empty:
+        return pool
+    return _pr_base_score(pool).sort_values('Final_Score', ascending=False)
+
+
+def _pr_build_simple_pool(df, hier_set, notes, label):
+    pool = _pr_hier_slice(df, hier_set)
+    if pool.empty:
+        notes.append(f"  {label}: hierarchy empty")
+        return pool
+    pool = _pr_base_score(pool).drop_duplicates(subset=['Material'])
+    notes.append(f"  {label}: {len(pool)}")
+    return pool.sort_values('Final_Score', ascending=False)
+
+
+# ═══════════════════════════════════════════════════════════════
+# 🟢 PRINTERS ENGINE — Εκτυπωτές & Πολυμηχανήματα (v28.46)
+# ═══════════════════════════════════════════════════════════════
+
+def run_printers_engine(trigger, df_spare, df_peripherals, df_products,
+                        df_stationery, df_history):
+    """Build up to 10 cross-sell slots for a printer / MFP trigger.
+
+    Persona = tech (INKJET/TANK/LASER/THERMAL) × color (Έγχρωμη/Ασπρόμαυρη)
+    × form (Πολυμηχάνημα/Εκτυπωτής) → each persona gets its own priority
+    list; pools are spec-gated (brand + model compatibility HARD filters)
+    and the round-robin loop with per-pool caps guarantees variety and
+    10/10 filled slots via the office/paper backfill chain.
+    """
+    diag = []
+    slot_notes = {}
+    all_recs = []
+
+    tm = trigger['Material']
+    tb = str(trigger.get('Κατασκευαστής', '')).strip().upper()
+    tprice = parse_euro_price(trigger.get('LIST PRICE', 0))
+    tech = _pr_tech(trigger)
+    is_color = _pr_is_color(trigger, tech)
+    is_mfp = _pr_is_mfp(trigger)
+    codes = _pr_consumable_codes(trigger)
+    mtokens = _pr_model_tokens(trigger)
+    media_kw = _pr_media_keywords(trigger)
+
+    diag.append(("0. Trigger", f"{tb} €{tprice:.0f}",
+                 f"Tech={tech} | {'Έγχρωμη' if is_color else 'Ασπρόμαυρη'} | "
+                 f"{'Πολυμηχάνημα' if is_mfp else 'Εκτυπωτής'} | "
+                 f"Codes={sorted(codes) or '—'} | ModelTokens={len(mtokens)}"))
+
+    if df_spare is None or df_spare.empty:
+        diag.append(("ERROR", 0, "Spare sheet empty — engine cannot run"))
+        return pd.DataFrame(), diag, slot_notes, pd.DataFrame()
+
+    c_spare = df_spare[df_spare['Material'] != tm].copy()
+    # Competitor printers out of every pool (the consumable hierarchies
+    # never collide with Level 2 = Printers triggers, but belt+braces):
+    if 'Level 2' in c_spare.columns:
+        l2 = c_spare['Level 2'].fillna('').astype(str).str.strip().str.lower()
+        c_spare = c_spare[l2 != 'printers']
+
+    # ── Consumable pools (spec-gated) ──
+    pool_notes = {}
+
+    def _notes(key):
+        pool_notes.setdefault(key, [])
+        return pool_notes[key]
+
+    cart_colors = {k: pd.DataFrame() for k in ('K', 'C', 'M', 'Y', 'MULTI')}
+    drum_pool = pd.DataFrame()
+    budget_pool = pd.DataFrame()
+    media_pool = pd.DataFrame()
+
+    if tech in ('INKJET', 'TANK'):
+        oem = _pr_match_consumables(c_spare, _PR_OEM_INK_HIERS, tb, codes,
+                                    mtokens, _notes('ink'), 'OEM ink ')
+        cart_colors = _pr_split_by_color(oem, _notes('ink'), 'ink ')
+        budget_pool = _pr_match_consumables(c_spare, _PR_COMPAT_HIERS, tb,
+                                            codes, mtokens, _notes('budget'),
+                                            'compat-budget ')
+    elif tech == 'LASER':
+        oem = _pr_match_consumables(c_spare, _PR_OEM_TONER_HIERS, tb, codes,
+                                    mtokens, _notes('toner'), 'OEM toner ')
+        cart_colors = _pr_split_by_color(oem, _notes('toner'), 'toner ')
+        drum_pool = _pr_match_consumables(c_spare, _PR_DRUM_HIERS, tb, codes,
+                                          mtokens, _notes('drum'), 'drum ')
+        budget_pool = _pr_match_consumables(c_spare, _PR_COMPAT_HIERS, tb,
+                                            codes, mtokens, _notes('budget'),
+                                            'compat-budget ')
+    else:  # THERMAL / ZINK — no ink, no toner, media packs instead
+        media_pool = _pr_build_thermal_media_pool(c_spare, df_peripherals, tb,
+                                                  codes, media_kw,
+                                                  _notes('media'))
+
+    # ── Companion pools ──
+    plain_paper = _pr_build_paper_pool(c_spare, df_peripherals, tb, 'plain',
+                                       _notes('paper'))
+    photo_paper = _pr_build_paper_pool(c_spare, df_peripherals, tb, 'photo',
+                                       _notes('photo'))
+    cable_pool = _pr_build_cable_pool(df_peripherals, _notes('cable'))
+    surge_pool = _pr_build_simple_pool(df_products, {'SURGE PROTECTORS'},
+                                       _notes('surge'), 'πολύπριζα')
+    shredder_pool = _pr_build_simple_pool(df_peripherals,
+                                          {'ΚΑΤΑΣΤΡΟΦΕΙΣ ΕΓΓΡΑΦΩΝ'},
+                                          _notes('shredder'), 'καταστροφείς')
+    organizer_pool = _pr_build_simple_pool(df_stationery,
+                                           {'ΚΛΑΣΕΡ', 'ΚΟΥΤΙΑ ΑΡΧΕΙΟΥ', 'ΝΤΟΣΙΕ'},
+                                           _notes('organizer'), 'αρχειοθέτηση')
+    cleaner_pool = _pr_build_simple_pool(df_peripherals, {'CLEANING PRODUCTS'},
+                                         _notes('cleaner'), 'καθαρισμός')
+
+    # ── Persona-routed priority list ──
+    ink_word = 'Μελάνι' if tech in ('INKJET', 'TANK') else 'Toner'
+    pri = []  # (role_label, pool, max_round_1, max_total)
+
+    if tech == 'THERMAL':
+        pri = [
+            ('Thermal Media Pack',   media_pool,     1, 2),
+            ('Φωτογραφικό Χαρτί',    photo_paper,    1, 2),
+            ('Καλώδιο USB-B',        cable_pool,     1, 2),
+            ('Πολύπριζο Ασφαλείας',  surge_pool,     1, 2),
+            ('Αρχειοθέτηση',         organizer_pool, 1, 3),
+            ('Καθαρισμός',           cleaner_pool,   1, 2),
+            ('Χαρτί Α4',             plain_paper,    1, None),
+        ]
+    elif is_color:
+        # The user's canonical 10-slot OEM spec — K/C/M/Y consumables 1-4.
+        # Tri-color systems (Canon PG+CL): C/M/Y pools come back empty and
+        # the MULTI pack is PROMOTED to slot 2 so the carousel still opens
+        # with the complete consumable story instead of three holes.
+        cmy_empty = all(cart_colors[k].empty for k in ('C', 'M', 'Y'))
+        multi_promoted = cmy_empty and not cart_colors['MULTI'].empty
+        pri = [(f'Μαύρο {ink_word}', cart_colors['K'], 1, 1)]
+        if multi_promoted:
+            pri.append((f'Σετ {"Μελανιών" if ink_word == "Μελάνι" else "Toner"}',
+                        cart_colors['MULTI'], 1, 1))
+        else:
+            pri += [
+                (f'Κυανό {ink_word}',    cart_colors['C'], 1, 1),
+                (f'Ματζέντα {ink_word}', cart_colors['M'], 1, 1),
+                (f'Κίτρινο {ink_word}',  cart_colors['Y'], 1, 1),
+            ]
+        if tech == 'LASER':
+            pri.append(('Drum / Τύμπανο', drum_pool, 1, 1))
+            pri.append(('Χαρτί Α4', plain_paper, 1, 2))
+            # NO photo paper on laser — toner can't print glossy stock
+        else:
+            pri.append(('Χαρτί Α4', plain_paper, 1, 2))
+            pri.append(('Φωτογραφικό Χαρτί', photo_paper, 1, 2))
+        pri += [
+            ('Καλώδιο USB-B',       cable_pool,     1, 1),
+            ('Πολύπριζο Ασφαλείας', surge_pool,     1, 1),
+            ('Αρχειοθέτηση',        organizer_pool, 1, 2),
+            ('Καθαρισμός',          cleaner_pool,   1, 1),
+        ]
+        # Backfill chain — value pack (if not promoted), budget compatibles,
+        # office gear; paper overflow is already covered by the ×2 caps.
+        if not multi_promoted:
+            pri.append((f'Σετ {"Μελανιών" if ink_word == "Μελάνι" else "Toner"}',
+                        cart_colors['MULTI'], 1, 1))
+        pri.append((f'Συμβατό {ink_word} (Budget)', budget_pool, 1, 1))
+        pri.append(('Καταστροφέας Εγγράφων', shredder_pool, 1, 1))
+    else:
+        # Ασπρόμαυρη — black consumable only, NO C/M/Y, NO photo paper.
+        # Mono buyers are document-volume buyers: doubled paper slots, the
+        # budget compatible alternative in the main list, and (for MFPs)
+        # the shredder joins the office workflow chain.
+        pri = [(f'Μαύρο {ink_word}', cart_colors['K'], 1, 2)]
+        if tech == 'LASER':
+            pri.append(('Drum / Τύμπανο', drum_pool, 1, 1))
+        pri.append((f'Συμβατό {ink_word} (Budget)', budget_pool, 1, 1))
+        pri.append(('Χαρτί Α4', plain_paper, 1, 2))
+        pri += [
+            ('Καλώδιο USB-B',       cable_pool, 1, 1),
+            ('Πολύπριζο Ασφαλείας', surge_pool, 1, 1),
+        ]
+        if is_mfp:
+            pri.append(('Καταστροφέας Εγγράφων', shredder_pool, 1, 1))
+            pri.append(('Αρχειοθέτηση', organizer_pool, 1, 3))
+        else:
+            pri.append(('Αρχειοθέτηση', organizer_pool, 1, 3))
+            pri.append(('Καταστροφέας Εγγράφων', shredder_pool, 1, 1))
+        pri.append(('Καθαρισμός', cleaner_pool, 1, 2))
+
+    pools = {}
+    for rank, (role_label, scored, max_r1, max_total) in enumerate(pri, start=1):
+        key_guess = {'Thermal Media Pack': 'media', 'Φωτογραφικό Χαρτί': 'photo',
+                     'Χαρτί Α4': 'paper', 'Καλώδιο USB-B': 'cable',
+                     'Πολύπριζο Ασφαλείας': 'surge', 'Αρχειοθέτηση': 'organizer',
+                     'Καθαρισμός': 'cleaner', 'Καταστροφέας Εγγράφων': 'shredder',
+                     'Drum / Τύμπανο': 'drum'}.get(role_label)
+        if key_guess is None:
+            key_guess = 'budget' if 'Budget' in role_label else (
+                'ink' if tech in ('INKJET', 'TANK') else 'toner')
+        notes = [f"=== Priority {rank}: {role_label} | max_round_1={max_r1} "
+                 f"| max_total={max_total if max_total else '∞'} ==="]
+        notes.extend(pool_notes.get(key_guess, []))
+        pools[rank] = (role_label, scored, max_r1, max_total, notes)
+        diag.append((f"Pool {rank} ({role_label})",
+                     0 if scored is None or scored.empty else len(scored),
+                     f"{'Έγχρωμη' if is_color else 'Mono'} {tech}"))
+
+    # ── LOOPING: round-robin fill (same loop contract as the coffee engine) ──
+    used_materials = {tm}
+    pool_cursors = {rank: 0 for rank in pools}
+    pool_taken = {rank: 0 for rank in pools}
+    slot_num = 0
+    round_idx = 0
+
+    while slot_num < PR_SLOT_TARGET:
+        progress = False
+        round_idx += 1
+        for rank, (role_label, scored, max_r1, max_total, notes) in pools.items():
+            if slot_num >= PR_SLOT_TARGET:
+                break
+            if scored is None or scored.empty:
+                continue
+            if max_total is not None and pool_taken[rank] >= max_total:
+                continue
+
+            take_n = max_r1 if round_idx == 1 else 1
+            if max_total is not None:
+                take_n = min(take_n, max_total - pool_taken[rank])
+
+            cursor = pool_cursors[rank]
+            taken_this_pass = 0
+            while taken_this_pass < take_n and cursor < len(scored) \
+                    and slot_num < PR_SLOT_TARGET:
+                row = scored.iloc[cursor]
+                cursor += 1
+                if row['Material'] in used_materials:
+                    continue
+
+                slot_num += 1
+                rc = row.copy()
+                rc['Slot_Position'] = slot_num
+                rc['Assigned_Slot'] = slot_num
+                rc['Slot_Role'] = role_label
+                rc['Marketing_Copy'] = PR_MARKETING_COPY.get(role_label, "Ιδανική επιλογή!")
+                rc['Item_Rank'] = round_idx
+                all_recs.append(rc)
+                used_materials.add(row['Material'])
+                taken_this_pass += 1
+                pool_taken[rank] += 1
+                progress = True
+
+                title_preview = str(row.get('Title', ''))[:70]
+                score_val = float(row.get('Final_Score', 0))
+                match_hint = f" | match={row.get('_pr_match', '')}" if '_pr_match' in row.index else ""
+                if slot_num not in slot_notes:
+                    slot_notes[slot_num] = []
+                slot_notes[slot_num].append(
+                    f"Round {round_idx} | Pool '{role_label}' | "
+                    f"Score: {score_val:,.0f}{match_hint} | {title_preview}"
+                )
+
+            pool_cursors[rank] = cursor
+
+        if not progress:
+            diag.append(("Loop", round_idx, "All pools exhausted or capped — stopping"))
+            break
+
+    pool_diag_notes = [f"Persona: {tech} | {'Έγχρωμη' if is_color else 'Ασπρόμαυρη'} | "
+                       f"{'Πολυμηχάνημα' if is_mfp else 'Εκτυπωτής'}",
+                       f"Αναλώσιμο codes: {sorted(codes) or '—'} | media kw: {sorted(media_kw) or '—'}",
+                       ""]
+    for rank, (role_label, scored, max_r1, max_total, notes) in pools.items():
+        pool_diag_notes.extend(notes)
+        cap_note = f" (capped at {max_total})" if max_total is not None else ""
+        pool_diag_notes.append(
+            f"  → consumed {pool_taken[rank]} / "
+            f"{len(scored) if scored is not None else 0} from this pool{cap_note}")
+        pool_diag_notes.append("")
+    slot_notes[0] = pool_diag_notes
+
+    diag.append(("TOTAL", len(all_recs),
+                 f"Filled {slot_num}/{PR_SLOT_TARGET} slots in {round_idx} rounds"))
+
+    if all_recs:
+        recs_df = pd.DataFrame(all_recs)
+        recs_df['Draft_Score'] = recs_df['Assigned_Slot']
+        return recs_df, diag, slot_notes, recs_df
+    return pd.DataFrame(), diag, slot_notes, pd.DataFrame()
+
+
+# ═══════════════════════════════════════════════════════════════
 # 🟢 SHARED HAIR-CARE IMPULSE HELPER — used by STR / HD / CB engines
 # ═══════════════════════════════════════════════════════════════
 # v28.23 — Defined at the top of STR HELPERS (the first engine in file
@@ -25552,7 +26366,15 @@ elif active_cluster in STATIONERY_CLUSTERS:
         PERIPHERAL_CLUSTER_SLOTS[active_cluster] = stat_slots
     recs, diag, slot_notes, full_candidates = run_peripherals_engine(trigger, combined_stat_books, df_history, active_cluster)
     slot_diag = []
-elif active_cluster in ("Monitors", "Printers", "Webcam", "USB Hub"):
+elif active_cluster == "Printers":
+    # v28.46 — dedicated spec-gated engine (Spare-sheet triggers, hard
+    # brand+model consumable matching, persona-routed slot layouts). The
+    # legacy PRINTER_INKJET_SLOTS / PRINTER_LASER_SLOTS path inside
+    # run_peripherals_engine is no longer routed to.
+    recs, diag, slot_notes, full_candidates = run_printers_engine(
+        trigger, df_spare, df_peripherals, df_products, df_stationery, df_history)
+    slot_diag = []
+elif active_cluster in ("Monitors", "Webcam", "USB Hub"):
     recs, diag, slot_notes, full_candidates = run_peripherals_engine(trigger, df_peripherals, df_history, active_cluster)
     slot_diag = []
 # ─────────────────────────────────────────────────────────────
@@ -25858,6 +26680,15 @@ with st.expander("⚙️ System Diagnostics"):
                               'Ενσωματωμένο μύλο άλεσης','Ακροφύσιο ατμού ≡','Ακροφύσιο\xa0ατμού ≡',
                               'Κατάλληλος τύπος καφέ','Πίεση (bar) ≡','Πίεση\xa0(bar) ≡',
                               'Experts Rating ≡','Experts\xa0Rating ≡',
+                              'Sum of Sales','LIST PRICE','AVAILABILITY']
+    elif active_cluster == "Printers":
+        # v28.46 — surface the four signals the engine routes on: tech,
+        # print color, the consumable-codes field, and MFP markers, plus
+        # brand/price/sales. NBSP variants listed for the ≡ columns.
+        attr_keys_to_show = ['Material','Title','Level 2','Hierarchy','Κατασκευαστής','Μοντέλο',
+                              'Τεχνολογία εκτύπωσης','Χρώμα Εκτύπωσης','Αναλώσιμο υλικό',
+                              'Μέγεθος εκτύπωσης ≡','Μέγεθος\xa0εκτύπωσης ≡','Εκτύπωση Διπλής Όψης',
+                              'Συνδεσιμότητα','Μηνιαίος κύκλος εργασίας',
                               'Sum of Sales','LIST PRICE','AVAILABILITY']
     elif active_cluster == "Straighteners":
         # Personal Care — surface the signals the engine actually uses: brand,
