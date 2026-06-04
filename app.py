@@ -103,7 +103,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v28.46 — Εκτυπωτές & Πολυμηχανήματα: spec-gated αναλώσιμα — brand + μοντέλο = HARD filters (direct match στο «Αναλώσιμο υλικό» ή στο «Συμβατό μοντέλο») · persona routing Τεχνολογία (Inkjet/Tank/Laser/Thermal) × Χρώμα Εκτύπωσης (Έγχρωμη/Ασπρόμαυρη) × MFP/Printer · mono = μαύρο μόνο + διπλό χαρτί · laser = χωρίς photo paper + drum + budget συμβατό · thermal = media packs χωρίς μελάνια · tri-color συστήματα → σετ μελανιών
+        🟢 Engine v28.47 — Σιδέρωμα: hybrid sales × subtype × brand — Σίδερο / Σύστημα Σιδερώματος / Πρέσα ως triggers · σιδερώστρες με subtype routing (stations → μόνο full boards, brand-matched βάσεις) · φίλτρα αλάτων = HARD brand gate (TEFAL↔TEFAL, SINGER↔SINGER) · σιδερόπανο + 2× αποχνουδωτές + 2× steamers + 2× ραπτομηχανές με brand diversity · backfill πρέσα → απλώστρα → overflow για 10/10 slots
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -1990,6 +1990,175 @@ def _cm_price_tier(price: float) -> int:
     if price < 60:    return 0
     if price < 150:   return 1
     if price < 350:   return 2
+    return 3
+
+
+# ═════════════════════════════════════════════════════════════
+# 🟢 IRONING CONFIGURATION (Σιδέρωμα — v28.47)
+# ═════════════════════════════════════════════════════════════
+# Trigger detection: products in the SDA sheet (Home file), Hierarchy ∈
+# {Σίδερα, Συστήματα Σιδερώματος, Πρέσες ατμού}. NOTE: the Πρέσες ατμού
+# hierarchy carries one MISFILED accessory (Φίλτρο Κατά των Αλάτων TEFAL
+# XD9030E0) — title-guarded out of the trigger dropdown and INTO the
+# descaler pool. Συστήματα ατμού (handheld steamers) are a COMPANION pool
+# (slots for steamer A/B), never triggers.
+#
+# Recommendation depth — HYBRID (sales × subtype × brand), NOT pure sales
+# and NOT full multi-spec:
+#   • Pure sales fails twice: (a) the SINGER anti-scale filter would show
+#     against a TEFAL iron — these are machine-specific cartridges, exactly
+#     the printer-cartridge situation → HARD brand-family gate; (b) a €13
+#     tabletop mini board would be eligible next to a 7.5-bar steam
+#     generator that physically needs a full-size board with a boiler rest.
+#   • Full multi-spec is overkill: boards / covers / lint removers carry
+#     almost no structured spec columns — there is nothing deeper to match
+#     on. The trigger side IS spec-rich (Πίεση ατμού, Βολή ατμού, Τύπος
+#     Πλάκας ≡ 139/147) but none of it constrains accessory compatibility
+#     beyond the subtype itself.
+#   • The 3 trigger signals that matter:
+#       1. Subtype IRON / STATION / PRESS (from Hierarchy) — STATION
+#          hard-drops compact/tabletop boards and boosts brand-matched
+#          full boards (BRAUN CareStyle → BRAUN IB3001, STIROPLUS SP →
+#          STIROPLUS PRESTIGE 2 — boards designed with generator rests).
+#       2. Brand (Κατασκευαστής) — HARD gate on descaler filters; SOFT
+#          ecosystem boost on boards / covers / steamers (STIROPLUS
+#          station → STIROPLUS σιδερόπανο).
+#       3. Price tier — proximity boost on the big-ticket companions
+#          (boards, steamers); impulse items (cover, lint, descaler)
+#          skip the tier mirror, same split as the coffee engine.
+#
+# Slot layout (user spec → catalog reality):
+#   User asked boards at 1-2, lint at 5-6, steamers at 7-8, sewing at 9-10
+#   as ADJACENT pairs. Per the non-negotiable variety rule (no two
+#   consecutive same-type items), the pairs are split hero-front /
+#   alternative-tail by the round-robin — same pattern as hair-dryers and
+#   coffee care (v28.45.1): round 1 lays board → descaler → cover → lint →
+#   steamer → sewing (slots 1-6), round 2 lays the B-options (different
+#   brand, guaranteed by the brand-diversity cap) at slots 7-10.
+#   Descaler exists for SINGER + TEFAL only — other brands cleanly skip
+#   the slot (strict filter, no cross-brand bleed) and the backfill chain
+#   (Πρέσα ατμού → Απλώστρα → accessory overflow) tops up to 10/10.
+
+IRONING_TRIGGER_HIERARCHIES = {
+    "Σίδερα", "Συστήματα Σιδερώματος", "Πρέσες ατμού",
+}
+
+# Test SKUs — 7 representative triggers spanning subtype × brand × tier:
+IRONING_TEST_SKUS = {
+    "1553213",  # TEFAL FV6840 €78.9 — bestseller mainstream steam iron (TEFAL descaler gate)
+    "1470954",  # SINGER STI-1730-CRBB €24.9 — budget iron (SINGER filter gate)
+    "1719674",  # PHILIPS AZUR DST8020/20 €129 — premium iron (PHILIPS board boost)
+    "1828433",  # STIROPLUS SP 2022 10 bar €219 — bestseller steam station (STIROPLUS board+cover ecosystem)
+    "1960798",  # BRAUN CareStyle 5 IS5247VI €229 — steam station (BRAUN IB3001 board match)
+    "1984053",  # STIROPLUS SP 2012 €109 — entry steam station
+    "1471064",  # SINGER Divina 2200W €349 — steam press (PRESS subtype routing)
+}
+
+# (priority_rank, role_label, logic_key, max_in_round_1, max_total)
+# Round 1 fills slots 1-6 (one per pool), round 2 fills 7-10 with the
+# B-options of the 2-cap pools; backfill pools only fire when an earlier
+# pool ran dry (e.g. no brand-matched descaler).
+IRONING_PRIORITY = [
+    (1, 'Σιδερώστρα',                 'IR_BOARD',    1, 2),
+    (2, 'Φίλτρο Κατά των Αλάτων',     'IR_DESCALER', 1, 1),
+    (3, 'Σιδερόπανο',                 'IR_COVER',    1, 1),
+    (4, 'Αποχνουδωτής',               'IR_LINT',     1, 2),
+    (5, 'Σύστημα Ατμού (Steamer)',    'IR_STEAMER',  1, 2),
+    (6, 'Ραπτομηχανή',                'IR_SEWING',   1, 2),
+    # ── Backfill chain ──
+    (7, 'Πρέσα Ατμού',                'IR_PRESS',    1, 1),
+    (8, 'Απλώστρα',                   'IR_RACK',     1, 1),
+    (9, 'Φροντίδα Ρούχων (overflow)', 'IR_OVERFLOW', 1, None),
+]
+
+IRONING_SLOT_TARGET = 10
+
+IRONING_MARKETING_COPY = {
+    'Σιδερώστρα':                 "Σταθερή βάση για άψογο σιδέρωμα — η ιδανική σύντροφος του σίδερού σας.",
+    'Φίλτρο Κατά των Αλάτων':     "Προστατέψτε τη συσκευή σας από τα άλατα — ατμός σαν την πρώτη μέρα.",
+    'Σιδερόπανο':                 "Ανανεώστε τη σιδερώστρα σας — καλύτερη ολίσθηση, καλύτερο αποτέλεσμα.",
+    'Αποχνουδωτής':               "Ρούχα σαν καινούργια — αφαιρέστε χνούδια και κόμπους σε δευτερόλεπτα.",
+    'Σύστημα Ατμού (Steamer)':    "Φρεσκάρισμα στο λεπτό — ιδανικό για ευαίσθητα υφάσματα και ταξίδια.",
+    'Ραπτομηχανή':                "Ολοκληρώστε τη γωνιά φροντίδας ρούχων — επιδιορθώσεις και δημιουργίες.",
+    'Πρέσα Ατμού':                "Επαγγελματικό αποτέλεσμα σε μισό χρόνο — η εξέλιξη του σιδερώματος.",
+    'Απλώστρα':                   "Από το πλύσιμο στο σιδέρωμα — πρακτικό στέγνωμα χωρίς κόπο.",
+    'Φροντίδα Ρούχων (overflow)': "Ολοκληρώστε τη φροντίδα των ρούχων σας.",
+}
+
+# ── Scoring constants (mirrors the CM_S_* convention) ──
+IR_S_AVAILABILITY        =   300_000  # In-stock boost — outweighs one tier step
+IR_S_TYPE_RELEVANT       = 1_500_000  # Item matches its pool's intended type
+IR_S_BRAND_MATCH         =   400_000  # Same Κατασκευαστής as trigger (ecosystem)
+IR_S_STATION_BOARD_BRAND =   800_000  # Board brand match for STATION triggers — the
+                                      # closest signal to "system-compatible board"
+                                      # the catalog carries (no structured spec exists)
+IR_S_ENTRY_FIRST         =   250_000  # Sewing machines: entry tier (<€120) leads, per slot spec
+IR_S_PRICE_SAME_TIER     =   200_000  # Big-ticket companion in same price tier
+IR_S_PRICE_ONE_OFF       =    70_000  # Companion ±1 price tier
+IR_S_SALES_FACTOR        =       0.5  # Sales tiebreaker weight
+IR_BRAND_DIVERSITY_CAP   =         1  # Max items per brand inside the 2-cap pools —
+                                      # guarantees option A ≠ option B brand (user spec)
+
+# Brand families whose anti-scale filter cartridges are cross-compatible.
+# Conservative: no cross-marque assumptions until catalog data proves them
+# (TEFAL XD9030E0 fits Tefal generators; SINGER SGΕ-19700 / SGR19400 fit
+# SINGER's own line). Same hard-gate philosophy as printer cartridges.
+_IR_BRAND_FAMILY = {}
+
+def _ir_brand_family(brand: str) -> set:
+    return _IR_BRAND_FAMILY.get(brand, {brand} if brand else set())
+
+
+def _ir_detect_subtype(trigger_row) -> str:
+    """Returns 'IRON' | 'STATION' | 'PRESS' from the trigger Hierarchy.
+    Accent-insensitive via _cm_norm (defined in the coffee config block
+    ABOVE this one — module-level order verified)."""
+    hier = _cm_norm(trigger_row.get('Hierarchy', ''))
+    if 'ΠΡΕΣ' in hier:
+        return 'PRESS'
+    if 'ΣΥΣΤΗΜΑΤΑ ΣΙΔΕΡΩΜΑΤΟΣ' in hier:
+        return 'STATION'
+    return 'IRON'
+
+
+def _ir_classify_acc(title: str) -> str:
+    """Classify a laundry-care row (Σιδερώστρες + Αξεσουάρ hierarchies)
+    into a functional type bucket. Title-driven — these hierarchies carry
+    near-zero structured spec columns. All matching on _cm_norm output.
+
+    ORDER MATTERS (short-substring traps, see "t's book" lesson):
+      • ΣΙΔΕΡΟΠΑΝΟ before the board rule — covers contain ΣΙΔΕΡ
+      • ΕΠΙΤΡΑΠΕΖΙ/COMPACT/SMALL before ΣΙΔΕΡΩΣΤΡ — 'Επιτραπέζια
+        Σιδερώστρα' must land in board_compact, not board
+    """
+    t = _cm_norm(title)
+    if 'ΣΙΔΕΡΟΠΑΝΟ' in t:
+        return 'cover'
+    if 'ΑΠΟΧΝΟΥΔΩΤ' in t:
+        return 'lint'
+    if 'ΑΠΛΩΣΤΡΑ' in t:
+        return 'rack'
+    if 'ΚΑΤΑ ΤΩΝ ΑΛΑΤΩΝ' in t or 'ΑΦΑΛΑΤ' in t:
+        return 'descaler'
+    if 'ΚΑΘΑΡΙΣΤΗΣ ΠΑΠΟΥΤΣΙΩΝ' in t:
+        return 'shoe_care'
+    if 'ΡΟΛΑ ΧΑΡΤΙ' in t:
+        return 'other'
+    if ('ΕΠΙΤΡΑΠΕΖΙ' in t or 'COMPACT' in t or 'SMALL' in t) \
+            and ('ΣΙΔΕΡΩΣΤΡ' in t or 'ΒΑΣΗ ΣΙΔΕΡΩΜΑΤΟΣ' in t or 'IRONING' in t or 'AIRBOARD' in t):
+        return 'board_compact'
+    if 'ΣΙΔΕΡΩΣΤΡ' in t or 'ΒΑΣΗ ΣΙΔΕΡΩΜΑΤΟΣ' in t:
+        return 'board'
+    return 'other'
+
+
+def _ir_price_tier(price: float) -> int:
+    """0=Entry(<€40), 1=Mainstream(€40-120), 2=Premium(€120-300), 3=Pro(>€300).
+    Calibrated on the ironing catalog: budget irons €20-40, mainstream irons
+    €40-100, entry stations €100-250, pro stations/presses €250-550."""
+    if price < 40:    return 0
+    if price < 120:   return 1
+    if price < 300:   return 2
     return 3
 
 
@@ -7421,6 +7590,8 @@ L2_CHILDREN = {
          "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 4h12a1 1 0 0 1 1 1v3H5V5a1 1 0 0 1 1-1z'/%3E%3Crect x='5' y='8' width='14' height='12' rx='2'/%3E%3Ccircle cx='12' cy='14' r='3'/%3E%3Cline x1='8' y1='6' x2='8.01' y2='6'/%3E%3Cline x1='11' y1='6' x2='14' y2='6'/%3E%3C/svg%3E"},
         {"key": "Coffee Machines", "label": "Καφετιέρες",
          "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M17 8h2a2 2 0 0 1 2 2v2a2 2 0 0 1-2 2h-2'/%3E%3Cpath d='M4 8h13v7a4 4 0 0 1-4 4H8a4 4 0 0 1-4-4V8z'/%3E%3Cline x1='7' y1='2' x2='7' y2='5'/%3E%3Cline x1='10.5' y1='2' x2='10.5' y2='5'/%3E%3Cline x1='14' y1='2' x2='14' y2='5'/%3E%3C/svg%3E"},
+        {"key": "Ironing", "label": "Σιδέρωμα",
+         "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 17h18v-3a6 6 0 0 0-6-6H9a4 4 0 0 0-4 4H3v5z'/%3E%3Cpath d='M9 8V6a2 2 0 0 1 2-2h6'/%3E%3Cline x1='7' y1='13.5' x2='7.01' y2='13.5'/%3E%3Cline x1='11' y1='13.5' x2='11.01' y2='13.5'/%3E%3Cline x1='15' y1='13.5' x2='15.01' y2='13.5'/%3E%3C/svg%3E"},
     ],
     "Climatism": [
         {"key": "AirUnits", "label": "Κλιματιστικά",
@@ -8230,6 +8401,42 @@ else:
                 st.sidebar.markdown('<p class="sidebar-section">Επιλέξτε Καφετιέρα</p>', unsafe_allow_html=True)
                 sel = st.sidebar.selectbox("", machines['Title'].unique(), label_visibility="collapsed", key="coffee_sel")
                 trigger = machines[machines['Title']==sel].iloc[0] if sel else None
+
+    elif active_cluster == "Ironing":
+        # Trigger pool: Σίδερα + Συστήματα Σιδερώματος + Πρέσες ατμού from
+        # the SDA sheet. Matching is accent-insensitive (_cm_norm). The
+        # Πρέσες ατμού hierarchy carries one MISFILED accessory (TEFAL
+        # anti-scale filter) — title-guarded out of the dropdown; it joins
+        # the engine's descaler pool instead.
+        if df_sda is None or df_sda.empty:
+            st.sidebar.warning("Sheet 'SDA' is empty or missing.")
+        else:
+            hier_norm = df_sda['Hierarchy'].fillna('').astype(str).map(_cm_norm)
+            trigger_hiers_norm = {_cm_norm(h) for h in IRONING_TRIGGER_HIERARCHIES}
+            irons = df_sda[hier_norm.isin(trigger_hiers_norm)].copy()
+
+            # Misfiled-accessory guard: no ΦΙΛΤΡΟ rows as triggers
+            if not irons.empty:
+                t_norm = irons['Title'].fillna('').astype(str).map(_cm_norm)
+                irons = irons[~t_norm.str.contains('ΦΙΛΤΡΟ', na=False)]
+
+            # 🧪 Optional test-list filter (leave IRONING_TEST_SKUS empty to show all ~150)
+            if IRONING_TEST_SKUS and not irons.empty:
+                mat_clean = irons['Material'].astype(str).str.strip().str.replace(r'\.0$', '', regex=True)
+                test_hit = irons[mat_clean.isin(IRONING_TEST_SKUS)]
+                if not test_hit.empty:
+                    irons = test_hit
+
+            # Dedup price-snapshot rows so the dropdown shows each device once
+            if not irons.empty:
+                irons = irons.drop_duplicates(subset=['Material'])
+
+            if irons.empty:
+                st.sidebar.warning("Δεν βρέθηκαν Σίδερα / Συστήματα Σιδερώματος στο sheet SDA.")
+            else:
+                st.sidebar.markdown('<p class="sidebar-section">Επιλέξτε Σίδερο / Σύστημα Σιδερώματος</p>', unsafe_allow_html=True)
+                sel = st.sidebar.selectbox("", irons['Title'].unique(), label_visibility="collapsed", key="ironing_sel")
+                trigger = irons[irons['Title']==sel].iloc[0] if sel else None
 
     elif active_cluster == "Straighteners":
         # Trigger pool: STRAIGHTENERS (Ισιωτικά Μαλλιών) from the SDA sheet,
@@ -17826,6 +18033,439 @@ def run_coffee_machine_engine(trigger, df_sda, df_spare, df_history):
 
 
 # ═══════════════════════════════════════════════════════════════
+# 🟢 IRONING HELPERS — Σιδέρωμα (v28.47)
+# ═══════════════════════════════════════════════════════════════
+# Pool builders for the round-robin ironing engine. Config + subtype/
+# classification helpers live in the IRONING CONFIGURATION block near the
+# top of the file (needed at sidebar load time).
+#
+# All pools come from the SDA sheet: Σιδερώστρες + Αξεσουάρ hold the
+# type-classified accessory universe (boards / covers / lint / racks /
+# descalers); Συστήματα ατμού, Ραπτομηχανή and Πρέσες ατμού are whole-
+# hierarchy companion pools. One descaler (TEFAL XD9030E0) is misfiled in
+# Πρέσες ατμού and one (SINGER SGR19400) in Αξεσουάρ Καφέ — the descaler
+# pool is built by TITLE hunt across SDA, then hard brand-gated.
+
+def _ir_prep_accessory_frame(c_sda):
+    """Slice + dedup + type-tag the Σιδερώστρες + Αξεσουάρ hierarchies once;
+    board/cover/lint/rack/overflow pools are type-filters over this frame."""
+    hn = c_sda['Hierarchy'].fillna('').astype(str).map(_cm_norm)
+    acc = c_sda[hn.isin({_cm_norm('Σιδερώστρες'), _cm_norm('Αξεσουάρ')})].copy()
+    if acc.empty:
+        return acc
+    acc = acc.drop_duplicates(subset=['Material'])
+    acc['_ir_type'] = acc['Title'].fillna('').astype(str).map(_ir_classify_acc)
+    return acc
+
+
+def _ir_base_score(pool):
+    """Availability + sales — the common floor of every pool's score."""
+    pool['Final_Score'] = 0.0
+    if 'AVAILABILITY' in pool.columns:
+        pool.loc[pool['AVAILABILITY'] == 'Άμεσα Διαθέσιμο', 'Final_Score'] += IR_S_AVAILABILITY
+    pool['Final_Score'] += pool['Sales_Tiebreaker'].fillna(0) * IR_S_SALES_FACTOR
+    return pool
+
+
+def _ir_brand_layer(pool, trigger_brand, notes, boost=IR_S_BRAND_MATCH, label=''):
+    """Same-brand ecosystem boost shared by all pools (boost is the
+    STATION-board value when the caller passes IR_S_STATION_BOARD_BRAND)."""
+    if trigger_brand and 'Κατασκευαστής' in pool.columns:
+        same_brand = pool['Κατασκευαστής'].fillna('').astype(str).str.upper().str.strip() == trigger_brand
+        pool.loc[same_brand, 'Final_Score'] += boost
+        if same_brand.any():
+            notes.append(f"  ✓ Brand ecosystem {label}({trigger_brand}): {same_brand.sum()} (+{boost:,})")
+    return pool
+
+
+def _ir_tier_layer(pool, trigger_tier, notes):
+    """Price-tier proximity for big-ticket companions (boards, steamers)."""
+    if 'LIST PRICE' in pool.columns:
+        tiers = pool['LIST PRICE'].apply(parse_euro_price).apply(_ir_price_tier)
+        same_tier = tiers == trigger_tier
+        near_tier = (tiers - trigger_tier).abs() == 1
+        pool.loc[same_tier, 'Final_Score'] += IR_S_PRICE_SAME_TIER
+        pool.loc[near_tier, 'Final_Score'] += IR_S_PRICE_ONE_OFF
+        if same_tier.any() or near_tier.any():
+            notes.append(f"  ✓ Price-tier match (tier {trigger_tier}): same={same_tier.sum()}, near={near_tier.sum()}")
+    return pool
+
+
+def _ir_build_board_pool(acc, subtype, trigger_brand, trigger_tier, notes):
+    """Slots for Σιδερώστρα ×2 (hero + tail alternative, brand-diverse).
+
+    STATION → HARD drop board_compact: a €13 tabletop mini physically can't
+    host a steam generator's boiler. Brand match gets the STRONG boost —
+    BRAUN IB3001 / PHILIPS GC221 / STIROPLUS PRESTIGE 2 are the boards
+    designed around their own stations' rests, and that pairing is the
+    closest thing to "system-compatible" the catalog can express.
+    IRON / PRESS → both board types eligible, standard brand boost +
+    tier proximity (cheap iron → cheaper board first).
+    """
+    pool = acc[acc['_ir_type'].isin(['board', 'board_compact'])].copy()
+    if pool.empty:
+        notes.append("  ⚠ No ironing boards in Σιδερώστρες/Αξεσουάρ")
+        return pool
+    if subtype == 'STATION':
+        compact = pool['_ir_type'] == 'board_compact'
+        if compact.any():
+            notes.append(f"  ✗ HARD-dropped {compact.sum()} compact/tabletop boards (steam-station trigger needs a full board)")
+        pool = pool[~compact]
+        if pool.empty:
+            notes.append("  ⚠ Board pool empty after compact gating")
+            return pool
+    pool = _ir_base_score(pool)
+    pool.loc[:, 'Final_Score'] += IR_S_TYPE_RELEVANT
+    brand_boost = IR_S_STATION_BOARD_BRAND if subtype == 'STATION' else IR_S_BRAND_MATCH
+    pool = _ir_brand_layer(pool, trigger_brand, notes, boost=brand_boost,
+                           label='(station board) ' if subtype == 'STATION' else '')
+    pool = _ir_tier_layer(pool, trigger_tier, notes)
+    notes.append(f"  Pool size: {len(pool)} | board mix: {pool['_ir_type'].value_counts().to_dict()}")
+    return pool.sort_values('Final_Score', ascending=False)
+
+
+def _ir_build_descaler_pool(c_sda, trigger_brand, notes):
+    """Slot — Φίλτρο Κατά των Αλάτων. HARD brand-family gate, printer-
+    cartridge style: these are machine-specific cartridges (TEFAL XD9030E0
+    fits Tefal generators, SINGER SGΕ-19700/SGR19400 fit SINGER's line).
+    Brands without a filter in the catalog cleanly EMPTY the slot — the
+    backfill chain absorbs it; no cross-brand bleed, ever.
+
+    Built by TITLE hunt across the whole SDA frame because the three
+    filters live in three different hierarchies (Αξεσουάρ, Πρέσες ατμού,
+    Αξεσουάρ Καφέ — the last is a steam-generator filter misfiled with
+    coffee). Coffee-specific descaler chemistry (DECALK liquids, tablets,
+    balls) is excluded by keyword so a hypothetical brand match can never
+    pull a coffee consumable into the ironing carousel.
+    """
+    tnorm = c_sda['Title'].fillna('').astype(str).map(_cm_norm)
+    is_filter = tnorm.str.contains('ΚΑΤΑ ΤΩΝ ΑΛΑΤΩΝ', na=False)
+    is_coffee_chem = tnorm.str.contains('DECALK|ΥΓΡΟ ΑΦΑΛΑΤΩΣΗΣ|ΤΑΜΠΛΕΤΕΣ|ΜΠΙΛΙΕΣ', regex=True, na=False)
+    pool = c_sda[is_filter & ~is_coffee_chem].drop_duplicates(subset=['Material']).copy()
+    if pool.empty:
+        notes.append("  ⚠ No anti-scale filters in SDA")
+        return pool
+    fam = _ir_brand_family(trigger_brand)
+    brand_col = pool['Κατασκευαστής'].fillna('').astype(str).str.upper().str.strip()
+    drop = ~brand_col.isin(fam)
+    if drop.any():
+        notes.append(f"  ✗ HARD-dropped {drop.sum()} machine-specific filters (brand family ≠ {trigger_brand or '—'})")
+    pool = pool[~drop]
+    if pool.empty:
+        notes.append(f"  ⚠ No {trigger_brand or '—'} anti-scale filter in catalog — slot backfills (correct behavior, no cross-brand bleed)")
+        return pool
+    pool = _ir_base_score(pool)
+    pool.loc[:, 'Final_Score'] += IR_S_TYPE_RELEVANT + IR_S_BRAND_MATCH
+    notes.append(f"  ✓ Brand-matched filters ({trigger_brand}): {len(pool)}")
+    return pool.sort_values('Final_Score', ascending=False)
+
+
+def _ir_build_cover_pool(acc, trigger_brand, notes):
+    """Slot — Σιδερόπανο. Impulse item (€9-23): sales × availability with
+    a soft brand boost (STIROPLUS station → STIROPLUS σιδερόπανο). Covers
+    are semi-universal board accessories, so no hard gate — but no tier
+    mirror either."""
+    pool = acc[acc['_ir_type'] == 'cover'].copy()
+    if pool.empty:
+        notes.append("  ⚠ No σιδερόπανα in Σιδερώστρες/Αξεσουάρ")
+        return pool
+    pool = _ir_base_score(pool)
+    pool.loc[:, 'Final_Score'] += IR_S_TYPE_RELEVANT
+    pool = _ir_brand_layer(pool, trigger_brand, notes)
+    notes.append(f"  Pool size: {len(pool)}")
+    return pool.sort_values('Final_Score', ascending=False)
+
+
+def _ir_build_lint_pool(acc, trigger_brand, notes):
+    """Slots — Αποχνουδωτής ×2 (option A + option B, different brand by
+    the loop's brand-diversity cap). Impulse tier — sales-led."""
+    pool = acc[acc['_ir_type'] == 'lint'].copy()
+    if pool.empty:
+        notes.append("  ⚠ No αποχνουδωτές in Αξεσουάρ")
+        return pool
+    pool = _ir_base_score(pool)
+    pool.loc[:, 'Final_Score'] += IR_S_TYPE_RELEVANT
+    pool = _ir_brand_layer(pool, trigger_brand, notes)
+    notes.append(f"  Pool size: {len(pool)} | brands: {pool['Κατασκευαστής'].nunique()}")
+    return pool.sort_values('Final_Score', ascending=False)
+
+
+def _ir_build_steamer_pool(c_sda, trigger_brand, notes):
+    """Slots — Σύστημα Ατμού ×2 (different brand via diversity cap).
+    IMPULSE-style scoring: brand ecosystem + sales + availability, NO tier
+    mirror — handheld steamers are €30-130 add-ons people buy regardless
+    of trigger price. With the mirror ON, a tier-3 trigger (SINGER Divina
+    press €349) pulled the €499 ROWENTA floor steam-cleaner over the
+    8,081-sales TEFAL PURE POP — validated failure case, v28.47."""
+    hn = c_sda['Hierarchy'].fillna('').astype(str).map(_cm_norm)
+    pool = c_sda[hn == _cm_norm('Συστήματα ατμού')].drop_duplicates(subset=['Material']).copy()
+    if pool.empty:
+        notes.append("  ⚠ No Συστήματα ατμού in SDA")
+        return pool
+    pool = _ir_base_score(pool)
+    pool.loc[:, 'Final_Score'] += IR_S_TYPE_RELEVANT
+    pool = _ir_brand_layer(pool, trigger_brand, notes)
+    notes.append("  ℹ Impulse companion — tier mirroring OFF (sales + brand + availability decide)")
+    notes.append(f"  Pool size: {len(pool)} | brands: {pool['Κατασκευαστής'].nunique()}")
+    return pool.sort_values('Final_Score', ascending=False)
+
+
+def _ir_build_sewing_pool(c_sda, notes):
+    """Slots — Ραπτομηχανή ×2: entry level FIRST (user spec), advanced or
+    different brand second. Entry boost (<€120) puts the FIRST AUSTRIA
+    €69.9 ahead of the higher-selling SINGER €169; the brand-diversity cap
+    then makes pick #2 the best-selling SINGER — exactly the
+    'entry → advanced/different brand' progression requested."""
+    hn = c_sda['Hierarchy'].fillna('').astype(str).map(_cm_norm)
+    pool = c_sda[hn == _cm_norm('Ραπτομηχανή')].drop_duplicates(subset=['Material']).copy()
+    if pool.empty:
+        notes.append("  ⚠ No Ραπτομηχανές in SDA")
+        return pool
+    pool = _ir_base_score(pool)
+    pool.loc[:, 'Final_Score'] += IR_S_TYPE_RELEVANT
+    prices = pool['LIST PRICE'].apply(parse_euro_price)
+    entry = prices < 120
+    pool.loc[entry, 'Final_Score'] += IR_S_ENTRY_FIRST
+    if entry.any():
+        notes.append(f"  ✓ Entry-level (<€120) leads: {entry.sum()} (+{IR_S_ENTRY_FIRST:,})")
+    notes.append(f"  Pool size: {len(pool)}")
+    return pool.sort_values('Final_Score', ascending=False)
+
+
+def _ir_build_press_pool(c_sda, subtype, trigger_tier, trigger_brand, notes):
+    """Backfill — Πρέσα Ατμού. Cross-sell upsell for IRON triggers; for
+    PRESS triggers the whole hierarchy is COMPETITORS → pool empties.
+    Title-guards out the misfiled TEFAL anti-scale filter."""
+    if subtype == 'PRESS':
+        notes.append("  ℹ PRESS trigger — Πρέσες ατμού are competitors, pool skipped")
+        return pd.DataFrame()
+    hn = c_sda['Hierarchy'].fillna('').astype(str).map(_cm_norm)
+    pool = c_sda[hn == _cm_norm('Πρέσες ατμού')].drop_duplicates(subset=['Material']).copy()
+    if not pool.empty:
+        tn = pool['Title'].fillna('').astype(str).map(_cm_norm)
+        misfiled = tn.str.contains('ΦΙΛΤΡΟ', na=False)
+        if misfiled.any():
+            notes.append(f"  ✗ Excluded {misfiled.sum()} misfiled accessory rows (ΦΙΛΤΡΟ in Πρέσες ατμού)")
+        pool = pool[~misfiled]
+    if pool.empty:
+        notes.append("  ⚠ No πρέσες ατμού available")
+        return pool
+    pool = _ir_base_score(pool)
+    pool = _ir_brand_layer(pool, trigger_brand, notes)
+    pool = _ir_tier_layer(pool, trigger_tier, notes)
+    notes.append(f"  Pool size: {len(pool)}")
+    return pool.sort_values('Final_Score', ascending=False)
+
+
+# ═══════════════════════════════════════════════════════════════
+# 🟢 IRONING ENGINE — Σιδέρωμα (v28.47)
+# ═══════════════════════════════════════════════════════════════
+
+def run_ironing_engine(trigger, df_sda, df_history):
+    """Build up to 10 cross-sell slots for an ironing trigger (steam iron /
+    steam station / steam press).
+
+    Round 1 lays the hero of each pool across slots 1-6 (Σιδερώστρα →
+    Φίλτρο Αλάτων → Σιδερόπανο → Αποχνουδωτής → Steamer → Ραπτομηχανή);
+    round 2 lays the B-options (different brand, enforced by the brand-
+    diversity cap) of the 2-cap pools at slots 7-10. Backfill chain
+    (Πρέσα → Απλώστρα → laundry-care overflow) guarantees 10/10.
+
+    All data from the SDA sheet (Home file).
+    """
+    diag = []
+    slot_notes = {}
+    all_recs = []
+
+    # ── Trigger attributes
+    tm = trigger['Material']
+    tb = str(trigger.get('Κατασκευαστής', '')).strip().upper()
+    tprice = parse_euro_price(trigger.get('LIST PRICE', 0))
+    ttier = _ir_price_tier(tprice)
+    tsubtype = _ir_detect_subtype(trigger)
+
+    diag.append(("0. Trigger", f"{tb} €{tprice:.0f}",
+                 f"Subtype={tsubtype} | Tier={ttier} | Hierarchy={trigger.get('Hierarchy', '—')}"))
+
+    if df_sda is None or df_sda.empty:
+        diag.append(("ERROR", 0, "SDA sheet is empty — engine cannot run"))
+        return pd.DataFrame(), diag, slot_notes, pd.DataFrame()
+
+    # ── SDA universe minus the trigger + ALL competitor triggers (any
+    # ironing trigger hierarchy — an iron buyer shouldn't see other irons)
+    c_sda = df_sda[df_sda['Material'] != tm].copy()
+    hn = c_sda['Hierarchy'].fillna('').astype(str).map(_cm_norm)
+    trig_norm = {_cm_norm(h) for h in IRONING_TRIGGER_HIERARCHIES} - {_cm_norm('Πρέσες ατμού')}
+    b4 = len(c_sda)
+    c_sda = c_sda[~hn.isin(trig_norm)]
+    diag.append(("1. SDA pool", len(c_sda),
+                 f"Removed {b4 - len(c_sda)} competitor irons/stations (Πρέσες kept for the backfill pool)"))
+
+    # ── Sales tiebreaker prep (pandas-3.x safe: plain float64)
+    if 'Sum of Sales' in c_sda.columns:
+        c_sda['Sales_Tiebreaker'] = pd.to_numeric(c_sda['Sum of Sales'], errors='coerce').fillna(0.0).astype('float64')
+    else:
+        c_sda['Sales_Tiebreaker'] = 0.0
+
+    # ── Type-tagged accessory frame (boards / covers / lint / racks / overflow)
+    acc = _ir_prep_accessory_frame(c_sda)
+    diag.append(("2. Σιδερώστρες+Αξεσουάρ", len(acc),
+                 f"Type mix: {acc['_ir_type'].value_counts().to_dict() if not acc.empty else '—'}"))
+
+    # ── Build a sorted pool per priority entry
+    pools = {}
+    for rank, role_label, logic_key, max_r1, max_total in IRONING_PRIORITY:
+        notes = [f"=== Priority {rank}: {role_label} ({logic_key}) "
+                 f"| max_round_1={max_r1} | max_total={max_total if max_total else '∞'} ==="]
+
+        if logic_key == 'IR_BOARD':
+            scored = _ir_build_board_pool(acc, tsubtype, tb, ttier, notes) if not acc.empty else pd.DataFrame()
+        elif logic_key == 'IR_DESCALER':
+            scored = _ir_build_descaler_pool(c_sda, tb, notes)
+        elif logic_key == 'IR_COVER':
+            scored = _ir_build_cover_pool(acc, tb, notes) if not acc.empty else pd.DataFrame()
+        elif logic_key == 'IR_LINT':
+            scored = _ir_build_lint_pool(acc, tb, notes) if not acc.empty else pd.DataFrame()
+        elif logic_key == 'IR_STEAMER':
+            scored = _ir_build_steamer_pool(c_sda, tb, notes)
+        elif logic_key == 'IR_SEWING':
+            scored = _ir_build_sewing_pool(c_sda, notes)
+        elif logic_key == 'IR_PRESS':
+            scored = _ir_build_press_pool(c_sda, tsubtype, ttier, tb, notes)
+        elif logic_key == 'IR_RACK':
+            scored = acc[acc['_ir_type'] == 'rack'].copy() if not acc.empty else pd.DataFrame()
+            if not scored.empty:
+                scored = _ir_base_score(scored)
+                scored = _ir_brand_layer(scored, tb, notes)
+                scored = scored.sort_values('Final_Score', ascending=False)
+                notes.append(f"  Pool size: {len(scored)} (απλώστρες)")
+            else:
+                notes.append("  ⚠ No απλώστρες in Σιδερώστρες/Αξεσουάρ")
+        elif logic_key == 'IR_OVERFLOW':
+            # Last-resort backfill — leftover laundry-care accessories
+            # (extra covers/racks, shoe cleaner). Descalers are excluded
+            # ENTIRELY: the dedicated hard-gated pool owns that slot, and a
+            # second anti-scale filter in the same carousel is redundant
+            # (validated v28.47: SINGER trigger surfaced both SGR19400 AND
+            # SGΕ-19700 before this guard).
+            scored = acc[~acc['_ir_type'].isin(['board', 'board_compact', 'descaler', 'other'])].copy() if not acc.empty else pd.DataFrame()
+            if not scored.empty:
+                scored = _ir_base_score(scored)
+                scored = _ir_brand_layer(scored, tb, notes, label='(overflow) ')
+                scored = scored.sort_values('Final_Score', ascending=False)
+                notes.append(f"  Overflow pool size: {len(scored)}")
+            else:
+                notes.append("  ⚠ Overflow pool empty")
+        else:
+            scored = pd.DataFrame()
+
+        pools[rank] = (role_label, scored, logic_key, max_r1, max_total, notes)
+        diag.append((f"Pool {rank} ({role_label})", 0 if scored is None or scored.empty else len(scored), logic_key))
+
+    # ── LOOPING: round-robin fill until target hit or all pools exhausted
+    used_materials = {tm}
+    pool_cursors = {rank: 0 for rank in pools}
+    pool_taken = {rank: 0 for rank in pools}
+    # Brand-diversity guard: max IR_BRAND_DIVERSITY_CAP per brand inside
+    # the 2-cap pools — guarantees option A ≠ option B brand (user spec:
+    # 'lint remover option B — different brand', same for steamers/sewing).
+    pool_brand_counts = {rank: {} for rank in pools}
+    compact_boards_taken = 0  # board type-diversity: max 1 compact per carousel
+    slot_num = 0
+    round_idx = 0
+
+    while slot_num < IRONING_SLOT_TARGET:
+        progress = False
+        round_idx += 1
+        for rank, (role_label, scored, logic_key, max_r1, max_total, notes) in pools.items():
+            if slot_num >= IRONING_SLOT_TARGET:
+                break
+            if scored is None or scored.empty:
+                continue
+            if max_total is not None and pool_taken[rank] >= max_total:
+                continue
+
+            take_n = max_r1 if round_idx == 1 else 1
+            if max_total is not None:
+                take_n = min(take_n, max_total - pool_taken[rank])
+
+            apply_brand_diversity = (logic_key in ('IR_BOARD', 'IR_LINT', 'IR_STEAMER', 'IR_SEWING'))
+
+            cursor = pool_cursors[rank]
+            taken_this_pass = 0
+            while taken_this_pass < take_n and cursor < len(scored) \
+                  and slot_num < IRONING_SLOT_TARGET:
+                row = scored.iloc[cursor]
+                cursor += 1
+                if row['Material'] in used_materials:
+                    continue
+                row_brand = str(row.get('Κατασκευαστής', '')).strip().upper()
+                if apply_brand_diversity:
+                    if pool_brand_counts[rank].get(row_brand, 0) >= IR_BRAND_DIVERSITY_CAP:
+                        continue
+                # Compact-board cap: max ONE tabletop/compact board per
+                # carousel — board #2 must be a FULL board ('large or
+                # system-compatible level' per slot spec). Validated
+                # v28.47: a tier-0 budget iron pulled TWO compacts (AFER
+                # mini + LEIFHEIT table base) before this guard.
+                if logic_key == 'IR_BOARD' and row.get('_ir_type', '') == 'board_compact':
+                    if compact_boards_taken >= 1:
+                        continue
+
+                slot_num += 1
+                rc = row.copy()
+                rc['Slot_Position'] = slot_num
+                rc['Assigned_Slot'] = slot_num
+                rc['Slot_Role'] = role_label
+                rc['Marketing_Copy'] = IRONING_MARKETING_COPY.get(role_label, "Ιδανική επιλογή!")
+                rc['Item_Rank'] = round_idx
+                all_recs.append(rc)
+                used_materials.add(row['Material'])
+                taken_this_pass += 1
+                pool_taken[rank] += 1
+                if apply_brand_diversity:
+                    pool_brand_counts[rank][row_brand] = pool_brand_counts[rank].get(row_brand, 0) + 1
+                if logic_key == 'IR_BOARD' and row.get('_ir_type', '') == 'board_compact':
+                    compact_boards_taken += 1
+                progress = True
+
+                title_preview = str(row.get('Title', ''))[:70]
+                score_val = float(row.get('Final_Score', 0))
+                type_hint = f" | type={row.get('_ir_type', '')}" if '_ir_type' in row.index else ""
+                if slot_num not in slot_notes:
+                    slot_notes[slot_num] = []
+                slot_notes[slot_num].append(
+                    f"Round {round_idx} | Pool '{role_label}' | "
+                    f"Score: {score_val:,.0f}{type_hint} | {title_preview}"
+                )
+
+            pool_cursors[rank] = cursor
+
+        if not progress:
+            diag.append(("Loop", round_idx, "All pools exhausted or capped — stopping"))
+            break
+
+    # ── Pool diagnostics under slot 0
+    pool_diag_notes = []
+    for rank, (role_label, scored, logic_key, max_r1, max_total, notes) in pools.items():
+        pool_diag_notes.extend(notes)
+        cap_note = f" (capped at {max_total})" if max_total is not None else ""
+        pool_diag_notes.append(
+            f"  → consumed {pool_taken[rank]} / {len(scored) if scored is not None else 0} from this pool{cap_note}"
+        )
+        pool_diag_notes.append("")
+    slot_notes[0] = pool_diag_notes
+
+    diag.append(("TOTAL", len(all_recs), f"Filled {slot_num}/{IRONING_SLOT_TARGET} slots in {round_idx} rounds"))
+
+    if all_recs:
+        recs_df = pd.DataFrame(all_recs)
+        recs_df['Draft_Score'] = recs_df['Assigned_Slot']
+        return recs_df, diag, slot_notes, recs_df
+    return pd.DataFrame(), diag, slot_notes, pd.DataFrame()
+
+
+# ═══════════════════════════════════════════════════════════════
 # 🟢 PRINTERS HELPERS — Εκτυπωτές & Πολυμηχανήματα (v28.46)
 # ═══════════════════════════════════════════════════════════════
 # Pool sources span FOUR frames:
@@ -26194,6 +26834,14 @@ elif active_cluster == "Coffee Machines":
     # match guards the rack slot, built-in grinder reroutes to beans.
     recs, diag, slot_notes, full_candidates = run_coffee_machine_engine(trigger, df_sda, df_spare, df_history)
     slot_diag = []
+elif active_cluster == "Ironing":
+    # Σίδερα / Συστήματα Σιδερώματος / Πρέσες ατμού — όλα τα triggers,
+    # accessories και companions ζουν στο SDA sheet. Subtype (IRON/STATION/
+    # PRESS) δρομολογεί το board slot (stations → μόνο full boards με
+    # ισχυρό brand match), τα φίλτρα αλάτων περνούν HARD brand gate, και
+    # τα ζεύγη lint/steamer/sewing παίρνουν brand-diversity cap.
+    recs, diag, slot_notes, full_candidates = run_ironing_engine(trigger, df_sda, df_history)
+    slot_diag = []
 elif active_cluster == "Straighteners":
     # Ισιωτικά Μαλλιών + all hair-styling / women's-care / wellness companions
     # live in the SDA sheet (Level 1 = Personal Care + Level 2 = SDA companions).
@@ -26679,6 +27327,19 @@ with st.expander("⚙️ System Diagnostics"):
                               'Τύπος συσκευής','Σύστημα Κάψουλας ≡','Σύστημα\xa0Κάψουλας ≡',
                               'Ενσωματωμένο μύλο άλεσης','Ακροφύσιο ατμού ≡','Ακροφύσιο\xa0ατμού ≡',
                               'Κατάλληλος τύπος καφέ','Πίεση (bar) ≡','Πίεση\xa0(bar) ≡',
+                              'Experts Rating ≡','Experts\xa0Rating ≡',
+                              'Sum of Sales','LIST PRICE','AVAILABILITY']
+    elif active_cluster == "Ironing":
+        # SDA-sheet trigger — surface the signals the engine routes on:
+        # hierarchy (subtype IRON/STATION/PRESS), brand (descaler gate +
+        # board ecosystem), price/tier, plus the steam specs for the human
+        # reviewer (the engine itself doesn't read them — no accessory
+        # carries a matching spec column). NBSP variants for ≡ columns.
+        attr_keys_to_show = ['Material','Title','Level 2','Hierarchy','Κατασκευαστής','Μοντέλο',
+                              'Τύπος συσκευής','Πίεση ατμού ≡','Πίεση\xa0ατμού ≡',
+                              'Βολή ατμού (g/min) ≡','Παραγωγή ατμού ≡','Τύπος Πλάκας ≡',
+                              'Χωρητικότητα δοχείου νερού ≡','Κάθετος ατμός ≡',
+                              'Ενσωματωμένο σύστημα προστασίας από τα άλατα ≡',
                               'Experts Rating ≡','Experts\xa0Rating ≡',
                               'Sum of Sales','LIST PRICE','AVAILABILITY']
     elif active_cluster == "Printers":
