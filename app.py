@@ -103,7 +103,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v28.45.1 — Καφετιέρες: fix slots 2-3 (όχι δύο καθαριστικά συνεχόμενα) — 1 care μπροστά, το 2ο care form στο τέλος του carousel · companions με attachment ranking (Espresso/Κάψουλας/Φίλτρου) · αφρόγαλα + καθαρισμός (brand-match) + μύλος/θήκη καψουλών (system-match) · Φραπέ · Μπρίκι · Βάφλα/Κρέπα · Φρυγανιέρα
+        🟢 Engine v28.45.2 — Καφετιέρες: Vertuo fix — hard drop σε Original/DG θήκες (δεν χωράνε Vertuo pods), μόνο universal βάσεις · system compatibility = hard filter (Espresso/Κάψουλας/Φίλτρου) · αφρόγαλα + καθαρισμός (brand-match) + μύλος/θήκη καψουλών (system-match) · Φραπέ · Μπρίκι · Βάφλα/Κρέπα · Φρυγανιέρα
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -17090,23 +17090,44 @@ def _cm_build_grind_or_hold_pool(acc, subtype, capsule_system, takes_beans,
         if pool.empty:
             notes.append("  ⚠ No capsule racks in Αξεσουάρ Καφέ")
             return pool
+        # v28.45.2 — system compatibility is a HARD filter (strict filters
+        # before scoring): a Dolce Gusto rack can't hold Nespresso pods, and
+        # — user-confirmed — 'Nespresso'-labelled racks are ORIGINAL-sized;
+        # Vertuo's dome pods do NOT fit them. Vertuo therefore keeps only
+        # system-UNLABELLED (universal) racks until Vertuo-specific racks
+        # reach the catalog.
+        titles_norm = pool['Title'].fillna('').astype(str).map(_cm_norm)
+        is_nes = titles_norm.str.contains('NESPRESSO', na=False)
+        is_dg  = titles_norm.str.contains('DOLCE', na=False)
+        is_universal = ~is_nes & ~is_dg
+        if capsule_system == 'NESPRESSO ORIGINAL':
+            drop_mask, match_mask = is_dg, is_nes
+        elif capsule_system == 'DOLCE GUSTO':
+            drop_mask, match_mask = is_nes, is_dg
+        elif capsule_system == 'NESPRESSO VERTUO':
+            drop_mask = is_nes | is_dg
+            match_mask = pd.Series(False, index=pool.index)
+        else:
+            drop_mask = pd.Series(False, index=pool.index)
+            match_mask = pd.Series(False, index=pool.index)
+        if drop_mask.any():
+            notes.append(f"  ✗ HARD-dropped {drop_mask.sum()} system-incompatible racks (system={capsule_system or '—'})")
+        pool = pool[~drop_mask]
+        match_mask = match_mask[~drop_mask]
+        is_universal = is_universal[~drop_mask]
+        if pool.empty:
+            notes.append("  ⚠ No compatible racks for this capsule system — slot backfills")
+            return pool
         pool = _cm_base_score(pool)
         pool.loc[:, 'Final_Score'] += CM_S_TYPE_RELEVANT
-        titles = pool['Title'].fillna('').astype(str).str.upper()
-        is_nes = titles.str.contains('NESPRESSO', na=False)
-        is_dg  = titles.str.contains('DOLCE', na=False)
-        if capsule_system in ('NESPRESSO ORIGINAL', 'NESPRESSO VERTUO'):
-            pool.loc[is_nes, 'Final_Score'] += CM_S_SYSTEM_MATCH
-            pool.loc[is_dg, 'Final_Score'] += CM_S_SYSTEM_MISMATCH
-            notes.append(f"  ✓ System match {capsule_system}: NESPRESSO racks +{CM_S_SYSTEM_MATCH:,}, DOLCE GUSTO racks {CM_S_SYSTEM_MISMATCH:+,}")
-            if capsule_system == 'NESPRESSO VERTUO':
-                notes.append("  ℹ Vertuo pods are larger than Original — NESPRESSO-labelled racks shown, verify fit when Vertuo-specific racks reach the catalog")
-        elif capsule_system == 'DOLCE GUSTO':
-            pool.loc[is_dg, 'Final_Score'] += CM_S_SYSTEM_MATCH
-            pool.loc[is_nes, 'Final_Score'] += CM_S_SYSTEM_MISMATCH
-            notes.append(f"  ✓ System match DOLCE GUSTO: DG racks +{CM_S_SYSTEM_MATCH:,}, NESPRESSO racks {CM_S_SYSTEM_MISMATCH:+,}")
-        # Unlabelled/universal racks (BELLA CUCINA Βάση) keep base score —
-        # they sit between matched and mismatched, exactly where they belong.
+        pool.loc[match_mask, 'Final_Score'] += CM_S_SYSTEM_MATCH
+        pool.loc[is_universal, 'Final_Score'] += CM_S_UNIVERSAL_BOOST
+        if match_mask.any():
+            notes.append(f"  ✓ System match {capsule_system}: {match_mask.sum()} racks (+{CM_S_SYSTEM_MATCH:,})")
+        if is_universal.any():
+            notes.append(f"  ✓ Universal (unlabelled) racks: {is_universal.sum()} (+{CM_S_UNIVERSAL_BOOST:,})")
+        if capsule_system == 'NESPRESSO VERTUO':
+            notes.append("  ℹ Vertuo → only universal racks eligible (Original-sized 'Nespresso' racks don't fit Vertuo pods)")
         notes.append(f"  Pool size: {len(pool)} (capsule racks)")
         return pool.sort_values('Final_Score', ascending=False)
 
