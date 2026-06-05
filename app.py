@@ -103,7 +103,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v28.48.3 — Κουζίνες no-rival-brands policy: τα MDA accessory pools (καθαρισμός, σκεύη, ταψιά, overflow) δείχνουν ΜΟΝΟ οικογένεια trigger (BSH: BOSCH↔PITSOS↔SIEMENS↔NEFF · Electrolux: AEG↔ELECTROLUX↔ZANUSSI) + ουδέτερα brands (FISSLER, SCANPART, ROLLER, PROFICOOK) — αξεσουάρ ανταγωνιστών HARD-dropped, τα κενά γεμίζουν από SDA backfill · εξαιρέσεις: ρυθμιστής υγραερίου (τυποποιημένο εξάρτημα EN-16129) & SDA αυτόνομες συσκευές · v28.48.2 own-brand care pair στα slots 1-2 αμετάβλητο
+        🟢 Engine v28.49 — Εντοιχιζόμενα Πλυντήρια Πιάτων: νέο cluster/engine, hybrid sales × title-parsed brand × πλάτος (≤10 σερβίτσια = 45cm SlimLine, ≥11 = 60cm) — το hierarchy ΔΕΝ έχει specs/Κατασκευαστή, όλα από τίτλο · πόρτες/μετόπες & θήκες μπουκαλιών = διπλό HARD gate (brand family + πλάτος) · no-rival policy στα αναλώσιμα (FAIRY/FINISH ουδέτερα παντού, MIELE/AEG μόνο σε δικές τους οικογένειες) · misfiled laundry απορρυπαντικά + ανταλλακτικοί πίνακες + βάσεις πλυντηρίων ΕΚΤΟΣ · SDA backfill chain + diversity relaxation για 10/10 · Κουζίνες v28.48.3 αμετάβλητο
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -4224,8 +4224,11 @@ def _ck_classify_kitchen_acc(title: str) -> str:
         return 'care_surface'
     if 'ΡΥΘΜΙΣΤ' in t and ('ΠΙΕΣ' in t or 'ΥΓΡΑΕΡΙ' in t):
         return 'gas_regulator'
-    if 'ΤΗΛΕΣΚΟΠΙΚ' in t or 'FLEXICLIP' in t:
-        return 'rail'
+    if 'ΤΗΛΕΣΚΟΠΙΚ' in t or 'FLEXICLIP' in t or 'ΜΗΧΑΝΙΣΜΟΣ ΚΟΥΖΙΝΑΣ' in t:
+        return 'rail'   # 'Διπλός Μηχανισμός Κουζίνας PITSOS PZ11TE24X0'
+                        # carries no ΤΗΛΕΣΚΟΠΙΚ token — it leaked into the
+                        # overflow of BOTH engines (v28.49 fix; also gives
+                        # PITSOS cookers a second compatible rail)
     if 'ΘΕΡΜΟΜΕΤΡ' in t or 'ΑΙΣΘΗΤΗΡΑΣ ΘΕΡΜΟΚΡΑΣ' in t:
         return 'thermo'
     if 'ΣΚΕΥΗ' in t or 'ΤΗΓΑΝΙ' in t or 'ΚΑΤΣΑΡΟΛ' in t or 'ΧΥΤΡΑ' in t:
@@ -4254,6 +4257,186 @@ def _ck_price_tier(price: float) -> int:
 
 
 
+
+
+
+# ═════════════════════════════════════════════════════════════
+# 🟢 BUILT-IN DISHWASHERS CONFIGURATION (Εντοιχιζόμενα Πλυντήρια Πιάτων, v28.49)
+# ═════════════════════════════════════════════════════════════
+# Trigger detection: MDA sheet, Hierarchy = Εντοιχιζόμενα Πλυντήρια Πιάτων
+# (108 SKUs, €380-4,154, median €755). The trigger side is SPEC-EMPTY:
+# Κατασκευαστής is blank on every row and no ≡ attribute column is
+# populated — all signals are TITLE-PARSED (the FRIDGE_KITCHEN_PARSED
+# pattern, taken further):
+#   • BRAND — first token of the title, 100% reliable in this hierarchy
+#     (PITSOS DVS…, BOSCH SMI…, MIELE G 7131…, AEG FSB…)
+#   • WIDTH — derived from the place-settings count 'για N Σερβίτσια':
+#     N ≤ 10 → 45 cm SlimLine, N ≥ 11 → 60 cm full-size. Industry-standard
+#     mapping, verified across the catalog (PITSOS DVS61X01 10 → 45,
+#     MIELE G 5540 SCi SL 9 → 45/SlimLine, BOSCH SMI4ECS28E 14 → 60).
+#     Missing count → 60 (catalog majority).
+#   • INTEGRATION — 'Πλήρως Εντοιχιζόμενο' vs semi; parsed and surfaced in
+#     diagnostics but NOT gated on (the catalog's door fronts span both
+#     mounting systems per brand line; brand+width is the safe gate).
+#
+# Recommendation depth — HYBRID (sales × brand × width-class):
+#   • Pure sales fails twice: (a) a 60 cm inox door front on a 9-σερβίτσια
+#     SlimLine physically cannot mount — width is a HARD gate on doors and
+#     bottle holders; (b) the no-rival-brands policy (v28.48.3, user) is
+#     carried over — branded consumables and accessories only surface on
+#     own-family triggers, neutral brands (FAIRY, FINISH) on everyone.
+#   • Full multi-spec is impossible: neither side has structured specs.
+#
+# Pool reality (audited v28.49): Αξεσουάρ Πλυντηρίων Πιάτων (26 SKUs) +
+# DW items cross-filed in Αξεσουάρ Πλυντηρίου - Στεγνωτηρίου (MIELE
+# UltraTabs, AEG Super Care / 3-σε-1, AEG Neocal). EXCLUDED junk inside
+# the DW hierarchy: MIELE LAUNDRY detergents (UltraWhite/UltraColor/
+# UltraPhase — misfiled), spare control panels (Ανταλλακτικός Πίνακας
+# Χειρισμού — service parts), and ROLLER washer bases (a BUILT-IN
+# dishwasher never sits on a roller base).
+
+DWASH_TRIGGER_HIERARCHIES = {"Εντοιχιζόμενα Πλυντήρια Πιάτων"}
+
+# Test SKUs — 8 triggers spanning brand ecosystem depth × width × tier.
+# Empty set = show all 108.
+DWASH_TEST_SKUS = {
+    "2025822",  # LG DB476TXS 14 σερβ. €849 — top seller; LG has zero DW accessories → pure neutral+backfill path
+    "1873120",  # PITSOS DVS61X01 10 σερβ. €559 — BSH 45 cm: Blue clip DZP4BH00 must fire, 60 cm door must NOT
+    "1991630",  # BOSCH SMI4ECS28E 14 σερβ. €879 — BSH 60 cm semi: SMZ2056 door + DZP6BH00 holder
+    "1865931",  # BOSCH SPV4HKX10E 10 σερβ. €529 — BSH 45 cm fully integrated: SPZ2044L door
+    "1908827",  # MIELE G 7131 SCi 14 σερβ. €1,499 — deepest own ecosystem (salt/rinse/cleaner/tabs/freshener/GFV doors)
+    "1787501",  # AEG FSB64907Z 14 σερβ. €729 — Electrolux-family consumables (salt, Super Clean, Neocal)
+    "1834316",  # MIDEA MID45S120-ES 10 σερβ. €380 — budget no-ecosystem brand, 45 cm
+    "1686556",  # NEFF S197TCX00E 14 σερβ. €1,495 — BSH premium, Zeolith
+}
+
+# (priority_rank, role_label, logic_key, max_in_round_1, max_total)
+DWASH_PRIORITY = [
+    (1,  'Απορρυπαντικό Πλυντηρίου Πιάτων', 'DWASH_DETERGENT', 1, 2),
+    (2,  'Αλάτι Πλυντηρίου',                'DWASH_SALT',      1, 1),
+    (3,  'Λαμπρυντικό',                     'DWASH_RINSE',     1, 1),
+    (4,  'Καθαριστικό Πλυντηρίου',          'DWASH_CLEANER',   1, 1),
+    (5,  'Πόρτα / Μετόπη Inox',             'DWASH_DOOR',      1, 1),
+    (6,  'Θήκη Μπουκαλιών',                 'DWASH_BASKET',    1, 1),
+    (7,  'Αρωματικό Πλυντηρίου',            'DWASH_FRESHENER', 1, 1),
+    (8,  'Συσκευή Διάσπασης Αλάτων',        'DWASH_ANTISCALE', 1, 1),
+    # ── Backfill chain (proven SDA standalone products — allowed by the
+    #    no-rival policy, they are products, not rival accessories) ──
+    (9,  'Ζυγαριά Κουζίνας',                'DWASH_SCALE',     1, 1),
+    (10, 'Φριτέζα Αέρος',                   'DWASH_AIRFRYER',  1, 1),
+    (11, 'Ψηστιέρα / Γκριλιέρα',            'DWASH_GRILL',     1, 1),
+    (12, 'Βραστήρας',                       'DWASH_KETTLE',    1, 1),
+    (13, 'Αξεσουάρ Κουζίνας (overflow)',    'DWASH_OVERFLOW',  1, None),
+]
+
+DWASH_SLOT_TARGET = 10
+
+DWASH_MARKETING_COPY = {
+    'Απορρυπαντικό Πλυντηρίου Πιάτων': "Ξεκινήστε με πεντακάθαρα πιάτα από την πρώτη πλύση.",
+    'Αλάτι Πλυντηρίου':                "Προστασία από τα άλατα — απαραίτητο για το ελληνικό νερό.",
+    'Λαμπρυντικό':                     "Λάμψη χωρίς στίγματα σε ποτήρια και μαχαιροπίρουνα.",
+    'Καθαριστικό Πλυντηρίου':          "Συντήρηση της μηχανής — καθαρό πλυντήριο, καθαρά πιάτα.",
+    'Πόρτα / Μετόπη Inox':             "Η πρόσοψη που ταιριάζει στο μοντέλο και την κουζίνα σας.",
+    'Θήκη Μπουκαλιών':                 "Έξυπνη οργάνωση του καλαθιού — σταθερά μπουκάλια και βάζα.",
+    'Αρωματικό Πλυντηρίου':            "Φρεσκάδα στο εσωτερικό του πλυντηρίου ανάμεσα στις πλύσεις.",
+    'Συσκευή Διάσπασης Αλάτων':        "Λιγότερα άλατα στο νερό — μεγαλύτερη διάρκεια ζωής της συσκευής.",
+    'Ζυγαριά Κουζίνας':                "Ακρίβεια στη συνταγή — ζυγίστε τα υλικά σας στο γραμμάριο.",
+    'Φριτέζα Αέρος':                   "Η ιδανική σύμμαχος της κουζίνας — τραγανό αποτέλεσμα με ελάχιστο λάδι.",
+    'Ψηστιέρα / Γκριλιέρα':            "Γεύση σχάρας στον πάγκο σας — γρήγορο ψήσιμο κάθε μέρα.",
+    'Βραστήρας':                       "Ζεστό νερό σε δευτερόλεπτα — το απαραίτητο της κουζίνας.",
+    'Αξεσουάρ Κουζίνας (overflow)':    "Ολοκληρώστε τον εξοπλισμό της κουζίνας σας.",
+}
+
+# ── Scoring constants (CK_* convention; price-ratio guard intentionally
+#    absent — consumables are €3-70 and the door front is the only
+#    compatible big item, demoting it would only empty the slot) ──
+DWASH_S_AVAILABILITY  =   300_000
+DWASH_S_TYPE_RELEVANT = 1_500_000
+DWASH_S_BRAND_MATCH   =   400_000   # own-brand consumable over neutral
+DWASH_S_SALES_FACTOR  =       0.5
+DWASH_BRAND_DIVERSITY_CAP =     1   # detergent pair: FAIRY + FINISH, never 2× FAIRY
+
+
+def _dwash_row_brand(row) -> str:
+    """Brand from the TITLE token scan (appliance brands only). The
+    Κατασκευαστής column is unreliable here — the FINISH Promo Set row is
+    labeled 'LG' — and trigger rows are blank, so the title is the single
+    source of truth. No appliance-brand token → '' = NEUTRAL (FAIRY,
+    FINISH, AQUASAN…), which the rival filter always allows."""
+    t = ' ' + _cm_norm(row.get('Title', '')) + ' '
+    for brand in _CK_KNOWN_BRANDS:          # longest-first, token-guarded
+        if f' {brand} ' in t:
+            return brand
+    for brand in ('WHIRLPOOL', 'TEKA', 'MIDEA', 'ELECTROLUX', 'ZANUSSI', 'CANDY', 'BEKO'):
+        if f' {brand} ' in t:
+            return brand
+    return ''
+
+
+def _dwash_settings(title: str):
+    """Place-settings count from 'για N Σερβίτσια' / 'N Σερβίτσια'."""
+    import re as _re
+    m = _re.search(r'(\d+)\s*ΣΕΡΒΙΤΣΙΑ', _cm_norm(title))
+    return int(m.group(1)) if m else None
+
+
+def _dwash_trigger_width(title: str) -> int:
+    """45 (SlimLine) for ≤10 σερβίτσια, else 60. Missing count → 60."""
+    n = _dwash_settings(title)
+    return 45 if (n is not None and n <= 10) else 60
+
+
+def _dwash_acc_widths(title: str) -> set:
+    """Width compatibility of a door/holder accessory, parsed from the
+    title. Explicit '45'/'60' tokens win (MIELE 'GFV 45/60' → both);
+    BSH model-code prefixes fill the gaps: SPZ = 45 cm line, SMZ / SZ7 =
+    60 cm line (BOSCH SPZ2044L carries no number in its title). No signal
+    → {60} (full-size default)."""
+    t = _cm_norm(title)
+    w = set()
+    if '45' in t: w.add(45)
+    if '60' in t: w.add(60)
+    if not w:
+        if 'SPZ' in t: w.add(45)
+        elif 'SMZ' in t or 'SZ7' in t: w.add(60)
+    return w or {60}
+
+
+def _dwash_classify(title: str) -> str:
+    """Functional bucket for the DW accessory universe. ORDER MATTERS:
+      • laundry-only consumables (ΡΟΥΧΩΝ without ΠΙΑΤΩΝ) are misfiled in
+        the DW hierarchy → 'other', excluded
+      • ΚΑΘΑΡΙΣΤΙΚΟ ΑΛΑΤΩΝ is a machine DESCALER → cleaner, NOT salt
+      • spare control panels (ΠΙΝΑΚΑΣ ΧΕΙΡΙΣΜΟΥ) are service parts → other
+      • washer bases (ΒΑΣΗ) are meaningless for a built-in → other
+    """
+    t = _cm_norm(title)
+    if 'ΠΙΝΑΚΑΣ ΧΕΙΡΙΣΜΟΥ' in t or 'ΒΑΣΗ' in t or 'ΑΠΛΩΣΤΡ' in t or 'ΠΕΛΜΑΤΑ' in t:
+        return 'other'
+    if 'ΡΟΥΧΩΝ' in t and 'ΠΙΑΤΩΝ' not in t:
+        return 'other'                       # misfiled laundry consumable
+    if 'ΔΙΑΣΠΑΣΗΣ ΑΛΑΤΩΝ' in t:
+        return 'antiscale'                   # AEG Neocal water-line device
+    if 'ΚΑΘΑΡΙΣΤΙΚ' in t and 'ΑΛΑΤΩΝ' in t:
+        return 'cleaner'                     # descaler ≠ regeneration salt
+    if 'ΑΛΑΤΙ' in t:
+        return 'salt'
+    if 'ΛΑΜΠΡΥΝΤΙΚ' in t:
+        return 'rinse'
+    if 'ΚΑΘΑΡΙΣΤΙΚ' in t and 'ΠΛΥΝΤΗΡΙ' in t:
+        return 'cleaner'
+    if 'ΑΡΩΜΑΤΙΚ' in t and 'ΠΙΑΤΩΝ' in t:
+        return 'freshener'
+    if ('ΚΑΨΟΥΛΕΣ' in t or 'ΤΑΜΠΛΕΤΕΣ' in t or 'FINISH' in t
+            or ('ΑΠΟΡΡΥΠΑΝΤΙΚ' in t and 'ΠΙΑΤΩΝ' in t)):
+        return 'detergent'
+    if 'ΠΟΡΤΑ' in t or 'ΕΠΕΝΔΥΣΗ' in t or 'FCOVER' in t or 'GFV' in t or 'ΜΕΤΟΠΗ' in t:
+        return 'door'
+    if 'ΘΗΚΗ' in t and 'ΜΠΟΥΚΑΛΙ' in t:
+        return 'basket'
+    if 'BLUE CLIP' in t:
+        return 'basket'
+    return 'other'
 
 # ═════════════════════════════════════════════════════════════
 # 🟢 TV CONFIGURATION (Home Entertainment)
@@ -7915,6 +8098,8 @@ L2_CHILDREN = {
          "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='5' y='2' width='14' height='20' rx='2'/%3E%3Cline x1='5' y1='10' x2='19' y2='10'/%3E%3Cline x1='8' y1='6' x2='8.01' y2='6'/%3E%3Cline x1='8' y1='14' x2='8.01' y2='14'/%3E%3C/svg%3E"},
         {"key": "Cookers", "label": "Κουζίνες",
          "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='4' y='8' width='16' height='13' rx='2'/%3E%3Cline x1='4' y1='12' x2='20' y2='12'/%3E%3Crect x='8' y='15' width='8' height='4' rx='0.5'/%3E%3Ccircle cx='8' cy='5' r='1.2'/%3E%3Ccircle cx='12' cy='5' r='1.2'/%3E%3Ccircle cx='16' cy='5' r='1.2'/%3E%3C/svg%3E"},
+        {"key": "Dishwashers", "label": "Εντοιχιζόμενα\nΠλ. Πιάτων",
+         "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='3' width='18' height='18' rx='2'/%3E%3Cline x1='3' y1='8' x2='21' y2='8'/%3E%3Ccircle cx='6.5' cy='5.5' r='0.8'/%3E%3Ccircle cx='12' cy='14.5' r='4'/%3E%3Cpath d='M12 12.5 a2 2 0 0 1 2 2'/%3E%3C/svg%3E"},
     ],
     "TV": [
         {"key": "TVs", "label": "Τηλεοράσεις",
@@ -8925,6 +9110,26 @@ else:
                 st.sidebar.markdown('<p class="sidebar-section">Επιλέξτε Κουζίνα</p>', unsafe_allow_html=True)
                 sel = st.sidebar.selectbox("", cookers['Title'].unique(), label_visibility="collapsed", key="cooker_sel")
                 trigger = cookers[cookers['Title']==sel].iloc[0] if sel else None
+
+    elif active_cluster == "Dishwashers":
+        # Trigger pool: Εντοιχιζόμενα Πλυντήρια Πιάτων (MDA). Brand and
+        # width are parsed from titles — Κατασκευαστής is blank for this
+        # entire hierarchy. DWASH_TEST_SKUS non-empty → 8 demo SKUs.
+        if df_mda is None or df_mda.empty:
+            st.sidebar.warning("Sheet 'MDA' is empty or missing.")
+        else:
+            hier_upper = df_mda['Hierarchy'].fillna('').astype(str).str.upper().str.strip()
+            dw_hiers_upper = {h.upper().strip() for h in DWASH_TRIGGER_HIERARCHIES}
+            dws = df_mda[hier_upper.isin(dw_hiers_upper)].copy()
+            if DWASH_TEST_SKUS:
+                mat_clean = dws['Material'].astype(str).str.strip().str.replace(r'\.0$', '', regex=True)
+                dws = dws[mat_clean.isin(DWASH_TEST_SKUS)]
+            if dws.empty:
+                st.sidebar.warning("Δεν βρέθηκαν Εντοιχιζόμενα Πλυντήρια Πιάτων στο sheet MDA.")
+            else:
+                st.sidebar.markdown('<p class="sidebar-section">Επιλέξτε Πλυντήριο Πιάτων</p>', unsafe_allow_html=True)
+                sel = st.sidebar.selectbox("", dws['Title'].unique(), label_visibility="collapsed", key="dwash_sel")
+                trigger = dws[dws['Title']==sel].iloc[0] if sel else None
 
     elif active_cluster in ("Mouse", "Keyboard", "Gaming Mouse", "Gaming Keyboard"):
         if df_peripherals.empty:
@@ -22842,7 +23047,7 @@ def run_cookers_engine(trigger, df_mda, df_sda, df_history):
             scored = acc[acc['_ck_type'] == 'other'].copy() if not acc.empty else pd.DataFrame()
             if not scored.empty:
                 tnn = scored['Title'].fillna('').astype(str).map(_cm_norm)
-                scored = scored[~tnn.str.contains('ΑΠΟΡΡΟΦΗΤΗΡ|ΦΙΛΤΡΟ ΑΝΘΡΑΚΑ|ΦΟΥΡΝΟ ΑΤΜΟΥ', regex=True, na=False)]
+                scored = scored[~tnn.str.contains('ΑΠΟΡΡΟΦΗΤΗΡ|ΦΙΛΤΡΟ ΑΝΘΡΑΚΑ|ΦΟΥΡΝΟ ΑΤΜΟΥ|ΚΑΠΑΚΙ ΓΙΑ|ΘΕΡΜΑΙΝΟΜΕΝΟ ΣΥΡΤΑΡΙ|ΕΝΤΟΙΧΙΖΟΜΕΝ|TWIST PAD', regex=True, na=False)]
                 scored = _ck_rival_filter(scored, tb, notes)
             if not scored.empty:
                 scored = _ck_base_score(scored)
@@ -22971,6 +23176,320 @@ def run_cookers_engine(trigger, df_mda, df_sda, df_history):
     slot_notes[0] = pool_diag_notes
 
     diag.append(("TOTAL", len(all_recs), f"Filled {slot_num}/{COOKER_SLOT_TARGET} slots in {round_idx} rounds"))
+
+    if all_recs:
+        recs_df = pd.DataFrame(all_recs)
+        recs_df['Draft_Score'] = recs_df['Assigned_Slot']
+        return recs_df, diag, slot_notes, recs_df
+    return pd.DataFrame(), diag, slot_notes, pd.DataFrame()
+
+
+
+# ═════════════════════════════════════════════════════════════
+# 🟢 BUILT-IN DISHWASHERS HELPERS + ENGINE (Εντοιχιζόμενα Πλυντήρια Πιάτων, v28.49)
+# ═════════════════════════════════════════════════════════════
+# Pool builders + round-robin engine. Config and title-parsing helpers
+# live in the DISHWASHERS CONFIGURATION block (sidebar load-time needs
+# them). Reuses the cookers infrastructure deliberately: _CK_KNOWN_BRANDS
+# for title parsing, _ck_brand_family / _CK_APPLIANCE_BRANDS for the
+# no-rival policy, and the cookers' SDA backfill builders' philosophy.
+
+def _dwash_prep_acc_frame(c_mda):
+    """Combined, type-tagged DW accessory universe: the dedicated
+    Αξεσουάρ Πλυντηρίων Πιάτων hierarchy PLUS dishwasher items cross-filed
+    in Αξεσουάρ Πλυντηρίου - Στεγνωτηρίου (MIELE UltraTabs, AEG Super
+    Care / 3-σε-1 / Neocal — title must reference ΠΙΑΤΩΝ or be the
+    Neocal water-line device)."""
+    hn = c_mda['Hierarchy'].fillna('').astype(str).map(_cm_norm)
+    own = c_mda[hn == _cm_norm('Αξεσουάρ Πλυντηρίων Πιάτων')]
+    laundry = c_mda[hn == _cm_norm('Αξεσουάρ Πλυντηρίου - Στεγνωτηρίου')]
+    if not laundry.empty:
+        lt = laundry['Title'].fillna('').astype(str).map(_cm_norm)
+        laundry = laundry[lt.str.contains('ΠΙΑΤΩΝ|ΔΙΑΣΠΑΣΗΣ ΑΛΑΤΩΝ', regex=True, na=False)]
+    acc = pd.concat([own, laundry], ignore_index=False)
+    if acc.empty:
+        return acc
+    acc = acc.drop_duplicates(subset=['Material']).copy()
+    acc['_dw_type'] = acc['Title'].fillna('').astype(str).map(_dwash_classify)
+    acc['_dw_brand'] = acc.apply(_dwash_row_brand, axis=1)
+    return acc
+
+
+def _dwash_score(pool, trigger_brand, notes, brand_dominant=True):
+    """Availability + sales + type relevance + own-brand boost. The rival
+    filter runs BEFORE this, so the boost only separates own-brand from
+    neutral items."""
+    pool['Final_Score'] = 0.0
+    if 'AVAILABILITY' in pool.columns:
+        pool.loc[pool['AVAILABILITY'] == 'Άμεσα Διαθέσιμο', 'Final_Score'] += DWASH_S_AVAILABILITY
+    pool['Final_Score'] += pool['Sales_Tiebreaker'].fillna(0) * DWASH_S_SALES_FACTOR
+    pool.loc[:, 'Final_Score'] += DWASH_S_TYPE_RELEVANT
+    if trigger_brand and brand_dominant:
+        fam = _ck_brand_family(trigger_brand)
+        exact = pool['_dw_brand'].isin(fam)
+        pool.loc[exact, 'Final_Score'] += DWASH_S_BRAND_MATCH
+        if exact.any():
+            notes.append(f"  ✓ Own-family boost ({trigger_brand}): {exact.sum()} (+{DWASH_S_BRAND_MATCH:,})")
+    return pool.sort_values('Final_Score', ascending=False)
+
+
+def _dwash_rival_filter(pool, trigger_brand, notes):
+    """No-rival-brands policy (v28.48.3, user) applied to the DW pools:
+    keep trigger family + neutral (FAIRY, FINISH, AQUASAN, '' from the
+    title parse); drop rival appliance brands' branded items. A BOSCH
+    trigger does not get MIELE salt; the slot backfills instead."""
+    if pool.empty:
+        return pool
+    fam = _ck_brand_family(trigger_brand)
+    rival = pool['_dw_brand'].isin(_CK_APPLIANCE_BRANDS) & ~pool['_dw_brand'].isin(fam)
+    if rival.any():
+        notes.append(f"  ✗ HARD-dropped {rival.sum()} RIVAL-brand items ({sorted(pool.loc[rival, '_dw_brand'].unique())[:4]} ∉ family of {trigger_brand or '—'})")
+    return pool[~rival]
+
+
+def _dwash_build_type_pool(acc, dw_type, trigger_brand, notes, label):
+    """Shared builder for the consumable slots (detergent / salt / rinse /
+    cleaner / freshener / antiscale): type slice → rival filter → score."""
+    pool = acc[acc['_dw_type'] == dw_type].copy()
+    pool = _dwash_rival_filter(pool, trigger_brand, notes)
+    if pool.empty:
+        notes.append(f"  ⚠ No own-family/neutral {label} — slot backfills")
+        return pool
+    pool = _dwash_score(pool, trigger_brand, notes)
+    notes.append(f"  Pool size: {len(pool)}")
+    return pool
+
+
+def _dwash_build_door_pool(acc, trigger_brand, trigger_width, notes):
+    """Slot — Πόρτα / Μετόπη Inox. DOUBLE HARD GATE:
+      1. EXACT brand family — door fronts mount on brand-specific hinge
+         and fixing systems (BOSCH SMZ/SPZ, SIEMENS SZ7, MIELE GFV);
+         printer-cartridge philosophy, no cross-brand bleed, brands
+         without doors (LG, WHIRLPOOL, MIDEA, AEG…) cleanly EMPTY.
+      2. WIDTH — a 60 cm front on a 45 cm SlimLine cannot mount.
+         Width parsed per _dwash_acc_widths (45/60 tokens + SPZ/SMZ/SZ7
+         code prefixes; MIELE 'GFV 45/60' fits both)."""
+    pool = acc[acc['_dw_type'] == 'door'].copy()
+    if pool.empty:
+        notes.append("  ⚠ No door fronts in catalog")
+        return pool
+    fam = _ck_brand_family(trigger_brand)
+    keep_brand = pool['_dw_brand'].isin(fam)
+    if (~keep_brand).any():
+        notes.append(f"  ✗ HARD-dropped {(~keep_brand).sum()} doors (brand family ≠ {trigger_brand or '—'})")
+    pool = pool[keep_brand]
+    if not pool.empty:
+        widths = pool['Title'].fillna('').astype(str).map(_dwash_acc_widths)
+        keep_w = widths.apply(lambda ws: trigger_width in ws)
+        if (~keep_w).any():
+            notes.append(f"  ✗ HARD-dropped {(~keep_w).sum()} doors (width ≠ {trigger_width} cm)")
+        pool = pool[keep_w]
+    if pool.empty:
+        notes.append(f"  ⚠ No {trigger_brand or '—'} {trigger_width} cm door — slot backfills (correct, no incompatible fronts)")
+        return pool
+    pool = _dwash_score(pool, trigger_brand, notes)
+    notes.append(f"  ✓ Compatible doors ({trigger_brand}, {trigger_width} cm): {len(pool)}")
+    return pool
+
+
+def _dwash_build_basket_pool(acc, trigger_brand, trigger_width, notes):
+    """Slot — Θήκη Μπουκαλιών (PITSOS Blue clip DZP4BH00/DZP6BH00). The
+    clips snap onto BSH rack tines → HARD BSH-family gate + width gate
+    (45 vs 60 in the titles)."""
+    pool = acc[acc['_dw_type'] == 'basket'].copy()
+    if pool.empty:
+        notes.append("  ⚠ No bottle holders in catalog")
+        return pool
+    fam = _ck_brand_family(trigger_brand) & _CK_BSH_FAMILY
+    keep = pool['_dw_brand'].isin(fam)
+    if (~keep).any():
+        notes.append(f"  ✗ HARD-dropped {(~keep).sum()} holders (BSH rack part, family ≠ {trigger_brand or '—'})")
+    pool = pool[keep]
+    if not pool.empty:
+        widths = pool['Title'].fillna('').astype(str).map(_dwash_acc_widths)
+        keep_w = widths.apply(lambda ws: trigger_width in ws)
+        if (~keep_w).any():
+            notes.append(f"  ✗ HARD-dropped {(~keep_w).sum()} holders (width ≠ {trigger_width} cm)")
+        pool = pool[keep_w]
+    if pool.empty:
+        notes.append("  ⚠ No compatible bottle holder — slot backfills")
+        return pool
+    pool = _dwash_score(pool, trigger_brand, notes)
+    notes.append(f"  ✓ Compatible holders: {len(pool)}")
+    return pool
+
+
+def run_dishwasher_engine(trigger, df_mda, df_sda, df_history):
+    """Up to 10 cross-sell slots for a built-in dishwasher trigger.
+
+    Round 1: consumables first (detergent → salt → rinse → cleaner), then
+    the hard-gated hardware (door front, bottle holder), freshener,
+    anti-scale. Rival policy means brands without an accessory line (LG,
+    WHIRLPOOL, MIDEA, TEKA, GORENJE) ride on neutral consumables (FAIRY/
+    FINISH) and the SDA backfill chain (ζυγαριά → φριτέζα → ψηστιέρα →
+    neutral kitchen overflow). One-shot diversity relaxation guarantees
+    10/10 (hard gates never relax)."""
+    diag = []
+    slot_notes = {}
+    all_recs = []
+
+    tm = trigger['Material']
+    tb = _dwash_row_brand(trigger)          # Κατασκευαστής is blank — title parse
+    tprice = parse_euro_price(trigger.get('LIST PRICE', 0))
+    tw = _dwash_trigger_width(trigger.get('Title', ''))
+    tset = _dwash_settings(trigger.get('Title', ''))
+    tfull = 'ΠΛΗΡΩΣ' in _cm_norm(trigger.get('Title', ''))
+
+    diag.append(("0. Trigger", f"{tb or '—'} €{tprice:.0f}",
+                 f"Width={tw}cm | Σερβίτσια={tset if tset is not None else '—'} | "
+                 f"{'Πλήρως εντοιχιζόμενο' if tfull else 'Εντοιχιζόμενο (semi)'} | brand TITLE-parsed (Κατασκευαστής blank)"))
+
+    if df_mda is None or df_mda.empty:
+        diag.append(("ERROR", 0, "MDA sheet is empty — engine cannot run"))
+        return pd.DataFrame(), diag, slot_notes, pd.DataFrame()
+
+    # competitor removal: both DW hierarchies (built-in + freestanding)
+    c_mda = df_mda[df_mda['Material'] != tm].copy()
+    hn = c_mda['Hierarchy'].fillna('').astype(str).map(_cm_norm)
+    comp = hn.isin({_cm_norm('Εντοιχιζόμενα Πλυντήρια Πιάτων'), _cm_norm('Πλυντήρια Πιάτων')})
+    b4 = len(c_mda)
+    c_mda = c_mda[~comp]
+    diag.append(("1. MDA pool", len(c_mda), f"Removed {b4 - len(c_mda)} competitor dishwashers"))
+
+    c_mda['Sales_Tiebreaker'] = pd.to_numeric(c_mda.get('Sum of Sales'), errors='coerce').fillna(0.0).astype('float64')
+    c_sda = pd.DataFrame()
+    if df_sda is not None and not df_sda.empty:
+        c_sda = df_sda[df_sda['Material'] != tm].copy()
+        c_sda['Sales_Tiebreaker'] = pd.to_numeric(c_sda.get('Sum of Sales'), errors='coerce').fillna(0.0).astype('float64')
+
+    acc = _dwash_prep_acc_frame(c_mda)
+    diag.append(("2. DW accessory universe", len(acc),
+                 f"Type mix: {acc['_dw_type'].value_counts().to_dict() if not acc.empty else '—'}"))
+
+    pools = {}
+    for rank, role_label, logic_key, max_r1, max_total in DWASH_PRIORITY:
+        notes = [f"=== Priority {rank}: {role_label} ({logic_key}) "
+                 f"| max_round_1={max_r1} | max_total={max_total if max_total else '∞'} ==="]
+        if logic_key == 'DWASH_DETERGENT':
+            scored = _dwash_build_type_pool(acc, 'detergent', tb, notes, 'detergent') if not acc.empty else pd.DataFrame()
+        elif logic_key == 'DWASH_SALT':
+            scored = _dwash_build_type_pool(acc, 'salt', tb, notes, 'salt') if not acc.empty else pd.DataFrame()
+        elif logic_key == 'DWASH_RINSE':
+            scored = _dwash_build_type_pool(acc, 'rinse', tb, notes, 'rinse aid') if not acc.empty else pd.DataFrame()
+        elif logic_key == 'DWASH_CLEANER':
+            scored = _dwash_build_type_pool(acc, 'cleaner', tb, notes, 'machine cleaner') if not acc.empty else pd.DataFrame()
+        elif logic_key == 'DWASH_DOOR':
+            scored = _dwash_build_door_pool(acc, tb, tw, notes) if not acc.empty else pd.DataFrame()
+        elif logic_key == 'DWASH_BASKET':
+            scored = _dwash_build_basket_pool(acc, tb, tw, notes) if not acc.empty else pd.DataFrame()
+        elif logic_key == 'DWASH_FRESHENER':
+            scored = _dwash_build_type_pool(acc, 'freshener', tb, notes, 'freshener') if not acc.empty else pd.DataFrame()
+        elif logic_key == 'DWASH_ANTISCALE':
+            scored = _dwash_build_type_pool(acc, 'antiscale', tb, notes, 'anti-scale device') if not acc.empty else pd.DataFrame()
+        elif logic_key == 'DWASH_SCALE':
+            scored = _ck_build_hierarchy_pool(c_sda, 'Ζυγαριές', tb, notes, 'ζυγαριές') if not c_sda.empty else pd.DataFrame()
+        elif logic_key == 'DWASH_AIRFRYER':
+            scored = _ck_build_hierarchy_pool(c_sda, 'Φριτέζες', tb, notes, 'φριτέζες') if not c_sda.empty else pd.DataFrame()
+        elif logic_key == 'DWASH_GRILL':
+            scored = _ck_build_hierarchy_pool(c_sda, 'Ψηστιέρες, Γκριλιέρες', tb, notes, 'ψηστιέρες') if not c_sda.empty else pd.DataFrame()
+        elif logic_key == 'DWASH_KETTLE':
+            scored = _ck_build_hierarchy_pool(c_sda, 'Βραστήρες', tb, notes, 'βραστήρες') if not c_sda.empty else pd.DataFrame()
+        elif logic_key == 'DWASH_OVERFLOW':
+            # neutral kitchen-accessory overflow — same source as the
+            # cookers engine; the cooker classifier's 'other' bucket plus
+            # its exclusion list and the rival filter keep it sane.
+            kacc = _ck_prep_kitchen_acc_frame(c_mda)
+            scored = kacc[kacc['_ck_type'] == 'other'].copy() if not kacc.empty else pd.DataFrame()
+            if not scored.empty:
+                tnn = scored['Title'].fillna('').astype(str).map(_cm_norm)
+                scored = scored[~tnn.str.contains('ΑΠΟΡΡΟΦΗΤΗΡ|ΦΙΛΤΡΟ ΑΝΘΡΑΚΑ|ΦΟΥΡΝΟ ΑΤΜΟΥ|ΚΑΠΑΚΙ ΕΣΤΙΩΝ|ΚΑΠΑΚΙ ΓΙΑ|ΘΕΡΜΑΙΝΟΜΕΝΟ ΣΥΡΤΑΡΙ|ΕΝΤΟΙΧΙΖΟΜΕΝ|TWIST PAD', regex=True, na=False)]
+                scored = _ck_rival_filter(scored, tb, notes)
+            if not scored.empty:
+                scored = scored.rename(columns={'_ck_brand': '_dw_brand'})
+                scored = _dwash_score(scored, tb, notes, brand_dominant=False)
+                notes.append(f"  Overflow pool size: {len(scored)}")
+            else:
+                notes.append("  ⚠ Overflow pool empty")
+        else:
+            scored = pd.DataFrame()
+        pools[rank] = (role_label, scored, logic_key, max_r1, max_total, notes)
+        diag.append((f"Pool {rank} ({role_label})", 0 if scored is None or scored.empty else len(scored), logic_key))
+
+    # ── round-robin loop with diversity caps + one-shot relaxation
+    used_materials = {tm}
+    pool_cursors = {rank: 0 for rank in pools}
+    pool_taken = {rank: 0 for rank in pools}
+    pool_brand_counts = {rank: {} for rank in pools}
+    diversity_relaxed = False
+    slot_num = 0
+    round_idx = 0
+
+    while slot_num < DWASH_SLOT_TARGET:
+        progress = False
+        round_idx += 1
+        for rank, (role_label, scored, logic_key, max_r1, max_total, notes) in pools.items():
+            if slot_num >= DWASH_SLOT_TARGET:
+                break
+            if scored is None or scored.empty:
+                continue
+            if max_total is not None and pool_taken[rank] >= max_total:
+                continue
+            take_n = max_r1 if round_idx == 1 else 1
+            if max_total is not None:
+                take_n = min(take_n, max_total - pool_taken[rank])
+            apply_brand_diversity = (logic_key in ('DWASH_DETERGENT', 'DWASH_OVERFLOW'))
+            cursor = pool_cursors[rank]
+            taken_this_pass = 0
+            while taken_this_pass < take_n and cursor < len(scored) \
+                  and slot_num < DWASH_SLOT_TARGET:
+                row = scored.iloc[cursor]
+                cursor += 1
+                if row['Material'] in used_materials:
+                    continue
+                row_brand = str(row.get('_dw_brand', '') or '').strip().upper()
+                if apply_brand_diversity and not diversity_relaxed:
+                    if pool_brand_counts[rank].get(row_brand, 0) >= DWASH_BRAND_DIVERSITY_CAP:
+                        continue
+                slot_num += 1
+                rc = row.copy()
+                rc['Slot_Position'] = slot_num
+                rc['Assigned_Slot'] = slot_num
+                rc['Slot_Role'] = role_label
+                rc['Marketing_Copy'] = DWASH_MARKETING_COPY.get(role_label, "Ιδανική επιλογή!")
+                rc['Item_Rank'] = round_idx
+                all_recs.append(rc)
+                used_materials.add(row['Material'])
+                taken_this_pass += 1
+                pool_taken[rank] += 1
+                if apply_brand_diversity:
+                    pool_brand_counts[rank][row_brand] = pool_brand_counts[rank].get(row_brand, 0) + 1
+                progress = True
+                if slot_num not in slot_notes:
+                    slot_notes[slot_num] = []
+                type_hint = f" | type={row.get('_dw_type', '')}" if '_dw_type' in row.index else ""
+                slot_notes[slot_num].append(
+                    f"Round {round_idx} | Pool '{role_label}' | "
+                    f"Score: {float(row.get('Final_Score', 0)):,.0f}{type_hint} | {str(row.get('Title', ''))[:70]}"
+                )
+            pool_cursors[rank] = cursor
+
+        if not progress:
+            if not diversity_relaxed and slot_num < DWASH_SLOT_TARGET:
+                diversity_relaxed = True
+                pool_cursors = {rank: 0 for rank in pools}
+                diag.append(("Loop", round_idx, "Diversity caps relaxed — backfilling remaining slots (hard gates unchanged)"))
+                continue
+            diag.append(("Loop", round_idx, "All pools exhausted or capped — stopping"))
+            break
+
+    pool_diag_notes = []
+    for rank, (role_label, scored, logic_key, max_r1, max_total, notes) in pools.items():
+        pool_diag_notes.extend(notes)
+        cap_note = f" (capped at {max_total})" if max_total is not None else ""
+        pool_diag_notes.append(f"  → consumed {pool_taken[rank]} / {len(scored) if scored is not None else 0} from this pool{cap_note}")
+        pool_diag_notes.append("")
+    slot_notes[0] = pool_diag_notes
+    diag.append(("TOTAL", len(all_recs), f"Filled {slot_num}/{DWASH_SLOT_TARGET} slots in {round_idx} rounds"))
 
     if all_recs:
         recs_df = pd.DataFrame(all_recs)
@@ -27826,6 +28345,12 @@ elif active_cluster == "Cookers":
     # SDA sheet. Hob-type hard gates + BSH family rails + brand diversity.
     recs, diag, slot_notes, full_candidates = run_cookers_engine(trigger, df_mda, df_sda, df_history)
     slot_diag = []
+elif active_cluster == "Dishwashers":
+    # Εντοιχιζόμενα Πλυντήρια Πιάτων: title-parsed brand/width, no-rival
+    # policy on consumables, double hard gate (brand family + width) on
+    # door fronts and bottle holders, SDA backfill chain.
+    recs, diag, slot_notes, full_candidates = run_dishwasher_engine(trigger, df_mda, df_sda, df_history)
+    slot_diag = []
 elif active_cluster == "TVs":
     recs, diag, slot_notes, full_candidates = run_tv_engine(trigger, df_products, df_history)
     slot_diag = []
@@ -28339,6 +28864,12 @@ with st.expander("⚙️ System Diagnostics"):
         attr_keys_to_show = ['Material','Title','Level 1','Level 2','Hierarchy',
                               'Κατασκευαστής','Τύπος\xa0εστίας ≡','Αριθμός\xa0εστιών ≡',
                               'Πλάτος ≡','Χρώμα','Ενεργειακή\xa0κλάση ≡',
+                              'Sum of Sales','LIST PRICE','AVAILABILITY']
+    elif active_cluster == "Dishwashers":
+        # The hierarchy carries NO structured specs — brand, width (45/60
+        # from the σερβίτσια count) and integration type are title-parsed
+        # and shown in the engine's "0. Trigger" diagnostic line instead.
+        attr_keys_to_show = ['Material','Title','Level 1','Level 2','Hierarchy',
                               'Sum of Sales','LIST PRICE','AVAILABILITY']
     else:
         attr_keys_to_show = ['Material','Title','Level 2','Hierarchy','Κατασκευαστής','Μοντέλο','LIST PRICE']
