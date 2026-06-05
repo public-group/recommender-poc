@@ -103,7 +103,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v28.49 — Εντοιχιζόμενα Πλυντήρια Πιάτων: νέο cluster/engine, hybrid sales × title-parsed brand × πλάτος (≤10 σερβίτσια = 45cm SlimLine, ≥11 = 60cm) — το hierarchy ΔΕΝ έχει specs/Κατασκευαστή, όλα από τίτλο · πόρτες/μετόπες & θήκες μπουκαλιών = διπλό HARD gate (brand family + πλάτος) · no-rival policy στα αναλώσιμα (FAIRY/FINISH ουδέτερα παντού, MIELE/AEG μόνο σε δικές τους οικογένειες) · misfiled laundry απορρυπαντικά + ανταλλακτικοί πίνακες + βάσεις πλυντηρίων ΕΚΤΟΣ · SDA backfill chain + diversity relaxation για 10/10 · Κουζίνες v28.48.3 αμετάβλητο
+        🟢 Engine v28.49.2 — Κουζίνες slot-7 rework: κρεατομηχανές/πολυμάγειρες ΕΚΤΟΣ (σύνολο ~4.6k πωλήσεις — νεκρό pool) → Τοστιέρα (173k πωλήσεις) + Βραστήρας (119k) ως νέα slots 7-8, sales-led με brand boost · mixer/chopper slots του αρχικού spec παραμένουν ανοιχτά μέχρι να έρθουν δεδομένα · no-rival-brands policy, hob/brand hard gates & overflow συμβατότητα (v28.49.1) αμετάβλητα
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -4049,12 +4049,19 @@ COOKER_PRIORITY = [
     (4,  'Ταψί & Σκεύη Φούρνου',          'CK_TRAY',      1, 2),
     (5,  'Τηλεσκοπικός Μηχανισμός',       'CK_RAIL',      1, 1),
     (6,  'Θερμόμετρο Μαγειρικής',         'CK_THERMO',    1, 1),
-    (7,  'Κρεατομηχανή / Πολυμάγειρας',   'CK_PREP',      1, 2),
-    (8,  'Ζυγαριά Κουζίνας',              'CK_SCALE',     1, 1),
+    # CK_PREP (κρεατομηχανές/πολυμάγειρες) REMOVED v28.49.2 — user call,
+    # confirmed by data: the whole hunted pool totals ~4.6k lifetime sales
+    # (κρεατομηχανές 2,612 / πολυμάγειρες 2,035) vs Τοστιέρες 173k and
+    # Βραστήρες 119k, the two strongest kitchen-SDA categories after
+    # φριτέζες. The mixer/chopper slots of the original spec stay open
+    # until real mixer/chopper data arrives.
+    (7,  'Τοστιέρα',                      'CK_TOASTER',   1, 1),
+    (8,  'Βραστήρας',                     'CK_KETTLE',    1, 1),
+    (9,  'Ζυγαριά Κουζίνας',              'CK_SCALE',     1, 1),
     # ── Backfill chain ──
-    (9,  'Φριτέζα Αέρος',                 'CK_AIRFRYER',  1, 1),
-    (10, 'Ψηστιέρα / Γκριλιέρα',          'CK_GRILL',     1, 1),
-    (11, 'Αξεσουάρ Κουζίνας (overflow)',  'CK_OVERFLOW',  1, None),
+    (10, 'Φριτέζα Αέρος',                 'CK_AIRFRYER',  1, 1),
+    (11, 'Ψηστιέρα / Γκριλιέρα',          'CK_GRILL',     1, 1),
+    (12, 'Αξεσουάρ Κουζίνας (overflow)',  'CK_OVERFLOW',  1, None),
 ]
 
 COOKER_SLOT_TARGET = 10
@@ -4066,7 +4073,8 @@ COOKER_MARKETING_COPY = {
     'Ταψί & Σκεύη Φούρνου':         "Ο σωστός εξοπλισμός φούρνου — ψήσιμο ομοιόμορφο, αποτέλεσμα επαγγελματικό.",
     'Τηλεσκοπικός Μηχανισμός':      "Τραβήξτε τη σχάρα με ασφάλεια — συμβατός μηχανισμός για τον φούρνο σας.",
     'Θερμόμετρο Μαγειρικής':        "Ψήσιμο στον πόντο — μετρήστε τη θερμοκρασία στο εσωτερικό του φαγητού.",
-    'Κρεατομηχανή / Πολυμάγειρας':  "Ολοκληρώστε την κουζίνα σας — προετοιμασία και μαγείρεμα χωρίς κόπο.",
+    'Τοστιέρα':                     "Το απαραίτητο της κάθε κουζίνας — ζεστό σνακ σε λίγα λεπτά.",
+    'Βραστήρας':                    "Βραστό νερό στη στιγμή — για καφέ, τσάι και μαγείρεμα.",
     'Ζυγαριά Κουζίνας':             "Ακρίβεια στη συνταγή — ζυγίστε τα υλικά σας στο γραμμάριο.",
     'Φριτέζα Αέρος':                "Η ιδανική σύμμαχος της κουζίνας — τραγανό αποτέλεσμα με ελάχιστο λάδι.",
     'Ψηστιέρα / Γκριλιέρα':         "Γεύση σχάρας στον πάγκο σας — γρήγορο ψήσιμο κάθε μέρα.",
@@ -4203,10 +4211,29 @@ def _ck_classify_kitchen_acc(title: str) -> str:
         recommendable against a cooker
     """
     t = _cm_norm(title)
-    if 'ΑΠΟΡΡΟΦΗΤΗΡ' in t or 'ΦΙΛΤΡΟ ΑΝΘΡΑΚΑ' in t:
-        return 'other'
+    # ── 'excluded' bucket (v28.49.1): model-specific built-in parts that
+    # are NEVER a valid cross-sell for a freestanding cooker OR a
+    # dishwasher. Previously these fell into 'other' and resurfaced via
+    # the overflow pools (NEFF Z9416X2 griddle on a dishwasher, Flex
+    # Design trim kits, Twist Pad hob knobs…). 'excluded' ends the
+    # exclusion-regex whack-a-mole: overflow only reads 'other'.
+    _EXCLUDED_PATTERNS = (
+        'ΑΠΟΡΡΟΦΗΤΗΡ', 'ΦΙΛΤΡΟ ΑΝΘΡΑΚΑ',          # hood parts
+        'FLEX DESIGN',                              # ~50 NEFF trim kits
+        'TWIST PAD',                                # hob control knobs
+        'ΠΛΑΚΑ ΓΚΡΙΛ', 'ΠΛΑΚΑ ΨΗΣΙΜΑΤΟΣ',           # induction-hob griddles
+        'ΣΥΡΤΑΡΙ',                                  # warming/vacuum drawers (built-in appliances)
+        'ΚΑΠΑΚΙ ΓΙΑ', 'ΚΑΠΑΚΙ ΕΣΤΙΩΝ',              # dependent lids / model hob covers
+        'ΣΥΝΔΕΤΙΚ', 'ΕΞΑΡΤΗΜΑ ΣΥΝΔΕΣΗΣ',            # Domino hob connectors
+        'ΔΙΑΧΩΡΙΣΤΙΚ',                              # built-in trim strips
+        'ΣΚΟΥΠΙΔΟΦΑΓ', 'ΑΝΑΚΥΚΛΩΣΗΣ',               # sink disposers / recycling sets
+        'ΜΑΓΕΙΡΕΜΑΤΟΣ ΑΤΜΟΥ',                       # steam-OVEN cooking sets
+    )
+    for pat in _EXCLUDED_PATTERNS:
+        if pat in t:
+            return 'excluded'
     if 'ΦΟΥΡΝΟ ΑΤΜΟΥ' in t and 'ΤΑΜΠΛΕΤ' in t:
-        return 'other'
+        return 'excluded'                           # steam-oven descaler tablets
     if ('ΞΥΣΤΡΑ' in t or 'ΞΥΣΤΡΑΣ' in t or 'ΚΑΘΑΡΙΣΤΙΚΟ ΚΕΡΑΜΙΚ' in t
             or 'ΥΑΛΟΚΕΡΑΜΙΚ' in t):  # SCANPART blades "για υαλοκεραμικό"
                                      # were leaking to overflow → could
@@ -4231,17 +4258,13 @@ def _ck_classify_kitchen_acc(title: str) -> str:
                         # PITSOS cookers a second compatible rail)
     if 'ΘΕΡΜΟΜΕΤΡ' in t or 'ΑΙΣΘΗΤΗΡΑΣ ΘΕΡΜΟΚΡΑΣ' in t:
         return 'thermo'
-    if 'ΣΚΕΥΗ' in t or 'ΤΗΓΑΝΙ' in t or 'ΚΑΤΣΑΡΟΛ' in t or 'ΧΥΤΡΑ' in t:
-        return 'cookware'
-    if 'ΠΛΑΚΑ ΓΚΡΙΛ' in t:
-        return 'other'        # NEFF Z9416X2 — FlexInduction HOB griddle, not an
-                              # oven tray; only fits specific NEFF induction hobs
-                              # (no such trigger exists) → never recommendable here
-    if 'ΚΑΠΑΚΙ' in t and 'ΤΑΨΙ' in t:
-        return 'other'        # lid FOR a specific tray (HEZ633001) — useless
-                              # standalone, dependent accessory (v28.48.1)
-    if 'ΤΑΨΙ' in t or 'ΓΚΡΙΛ' in t or 'ΠΕΤΡΑ ΨΗΣ' in t or 'PIZZA STONE' in t:
-        return 'tray'
+    if 'ΣΚΕΥΗ' in t or 'ΣΚΕΥΩΝ' in t or 'ΤΗΓΑΝΙ' in t or 'ΚΑΤΣΑΡΟΛ' in t or 'ΧΥΤΡΑ' in t:
+        return 'cookware'   # ΣΚΕΥΩΝ: 'Σετ Μαγειρικών Σκευών' (MIELE/Fiskars) was missed
+    if 'ΤΑΨΙ' in t or 'TΑΨΙ' in t or 'ΓΚΡΙΛ' in t or 'ΠΕΤΡΑ ΨΗΣ' in t or 'PIZZA STONE' in t:
+        return 'tray'   # 'TΑΨΙ' = LATIN-T variant ('MIELE Ορθογώνιο Tαψί
+                        # Gourmet') — same lookalike trap as 'Eπαγωγική'.
+                        # Griddles and lids are handled by the 'excluded'
+                        # bucket above, which runs first.
     return 'other'
 
 
@@ -22895,33 +22918,6 @@ def _ck_build_thermo_pool(acc, c_sda, trigger_brand, notes):
     return pool.sort_values('Final_Score', ascending=False)
 
 
-def _ck_build_prep_pool(c_sda, trigger_brand, trigger_price, notes):
-    """Slots — Κρεατομηχανή / Πολυμάγειρας ×2 (substitutes the spec's
-    mixer + chopper slots — neither hierarchy exists in any workbook;
-    verified v28.48). TITLE hunt inside Ειδικές Συσκευές: ΚΡΕΑΤΟΜΗΧΑΝ +
-    ΠΟΛΥΜΑΓΕΙΡ + ΖΥΜΑΡΙΚ (pasta makers). Brand-diverse pair via the loop
-    cap (BOSCH κρεατομηχανή + NINJA πολυμάγειρας, never two NINJA).
-    Appliance-grade → price-ratio guard ON: companions costing >50% of
-    the trigger are demoted, so budget cookers lead with budget machines
-    (slot-6 fix, v28.48.1)."""
-    hn = c_sda['Hierarchy'].fillna('').astype(str).map(_cm_norm)
-    es = c_sda[hn == _cm_norm('Ειδικές Συσκευές')]
-    if es.empty:
-        notes.append("  ⚠ Ειδικές Συσκευές hierarchy missing from SDA")
-        return pd.DataFrame()
-    tn = es['Title'].fillna('').astype(str).map(_cm_norm)
-    pool = es[tn.str.contains('ΚΡΕΑΤΟΜΗΧΑΝ|ΠΟΛΥΜΑΓΕΙΡ|ΖΥΜΑΡΙΚ', regex=True, na=False)].drop_duplicates(subset=['Material']).copy()
-    if pool.empty:
-        notes.append("  ⚠ No κρεατομηχανές/πολυμάγειρες in Ειδικές Συσκευές")
-        return pool
-    pool = _ck_base_score(pool)
-    pool.loc[:, 'Final_Score'] += CK_S_TYPE_RELEVANT
-    pool = _ck_brand_layer(pool, trigger_brand, notes)
-    pool = _ck_price_ratio_layer(pool, trigger_price, notes)
-    notes.append(f"  Pool size: {len(pool)} | brands: {pool['Κατασκευαστής'].nunique()}")
-    return pool.sort_values('Final_Score', ascending=False)
-
-
 def _ck_build_hierarchy_pool(c_sda, hier_name, trigger_brand, notes, label):
     """Shared builder for the whole-hierarchy SDA pools (Ζυγαριές,
     Φριτέζες, Ψηστιέρες-Γκριλιέρες). Impulse pattern: availability +
@@ -22948,10 +22944,10 @@ def run_cookers_engine(trigger, df_mda, df_sda, df_history):
     """Build up to 10 cross-sell slots for a cooker trigger (Κουζίνα
     Αερίου / Ηλεκτρική).
 
-    Round 1 lays the hero of each live pool across slots 1-8 (Καθαρισμός →
-    Ρυθμιστής → Σκεύη → Ταψί → Τηλεσκοπικός → Θερμόμετρο → Κρεατομηχανή/
-    Πολυμάγειρας → Ζυγαριά); the hob gates mean a typical trigger has 6-8
-    live pools. Round 2 lays the B-options (different brand, enforced by
+    Round 1 lays the hero of each live pool across slots 1-9 (Καθαρισμός
+    ×2 → Ρυθμιστής → Σκεύη → Ταψί → Τηλεσκοπικός → Θερμόμετρο → Τοστιέρα →
+    Βραστήρας → Ζυγαριά); the hob + rival gates mean a typical trigger
+    has 6-9 live pools. Round 2 lays the B-options (different brand, enforced by
     the brand-diversity cap) of the 2-cap pools; the backfill chain
     (Φριτέζα → Ψηστιέρα → kitchen-accessory overflow) guarantees 10/10.
 
@@ -23029,8 +23025,10 @@ def run_cookers_engine(trigger, df_mda, df_sda, df_history):
             scored = _ck_build_rail_pool(acc, tb, notes) if not acc.empty else pd.DataFrame()
         elif logic_key == 'CK_THERMO':
             scored = _ck_build_thermo_pool(acc, c_sda, tb, notes) if (not acc.empty or not c_sda.empty) else pd.DataFrame()
-        elif logic_key == 'CK_PREP':
-            scored = _ck_build_prep_pool(c_sda, tb, tprice, notes) if not c_sda.empty else pd.DataFrame()
+        elif logic_key == 'CK_TOASTER':
+            scored = _ck_build_hierarchy_pool(c_sda, 'Τοστιέρες', tb, notes, 'τοστιέρες') if not c_sda.empty else pd.DataFrame()
+        elif logic_key == 'CK_KETTLE':
+            scored = _ck_build_hierarchy_pool(c_sda, 'Βραστήρες', tb, notes, 'βραστήρες') if not c_sda.empty else pd.DataFrame()
         elif logic_key == 'CK_SCALE':
             scored = _ck_build_hierarchy_pool(c_sda, 'Ζυγαριές', tb, notes, 'ζυγαριές') if not c_sda.empty else pd.DataFrame()
         elif logic_key == 'CK_AIRFRYER':
@@ -23099,7 +23097,7 @@ def run_cookers_engine(trigger, df_mda, df_sda, df_history):
             # without an own accessory line backfill heavily from overflow
             # — without the cap a BERTAZZONI carousel ended with THREE
             # ROLLER appliance bases in a row.
-            apply_brand_diversity = (logic_key in ('CK_COOKWARE', 'CK_TRAY', 'CK_PREP', 'CK_OVERFLOW'))
+            apply_brand_diversity = (logic_key in ('CK_COOKWARE', 'CK_TRAY', 'CK_OVERFLOW'))
 
             cursor = pool_cursors[rank]
             taken_this_pass = 0
