@@ -103,7 +103,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v28.49.4 — Πλυντήρια Ρούχων συμβατότητα αναλωσίμων: τα brand-system αναλώσιμα (MIELE FA* FragranceDos, UltraPhase TwinDos, CapDosing) ΔΕΝ είναι universal — HARD drop εκτός αν trigger = ίδιο brand · βάσεις σύνδεσης λάθος brand: από penalty σε HARD drop (φυσική ασυμβατότητα) · ουδέτερα brands (ROLLER, SCANPART) παραμένουν universal · Ψυγεία v28.49.3 & Κουζίνες v28.49.2 αμετάβλητα
+        🟢 Engine v28.50 — Νέο cluster: Πλυντήρια - Στεγνωτήρια (47 SKUs) — WM engine με WD slot map: ΧΩΡΙΣ στεγνωτήριο (το combo ΕΙΝΑΙ το στεγνωτήριο, τα Στεγνωτήρια αποκλείονται ως ανταγωνιστές) & ΧΩΡΙΣ βάση σύνδεσης (τίποτα να στοιβαχτεί) · ironing chain προωθημένο: Σίδερο ×2 + Σύστημα Σιδερώματος ×2 + Αντικραδασμικά + Απορρυπαντικά ×2 (rival-gated v28.49.4) + Βάση Στήριξης + Σιδερώστρα + Σύστημα Ατμού = 10/10 · specs parsed από title (kg/kg, στροφές, WiFi, Slim)
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -3539,6 +3539,62 @@ WM_PRIORITY = [
 
 WM_SLOT_TARGET = 10
 
+# ═════════════════════════════════════════════════════════════
+# 🟢 WASHER-DRYER COMBOS (Πλυντήρια - Στεγνωτήρια, v28.50)
+# ═════════════════════════════════════════════════════════════
+# 47 combo SKUs, same data shape as Πλυντήρια Ρούχων: brand + kg/kg +
+# RPM + WiFi + Slim live only in the Title (parsed by _wm_parse_specs;
+# the wash capacity is the first kg figure, which is what the parser
+# already grabs). The engine is the WM engine with a different priority
+# list — combos make TWO of the WM slots nonsensical:
+#   • Στεγνωτήριο: the combo IS the dryer — recommending one cross-sells
+#     a competitor of the machine just bought.
+#   • Βάση Σύνδεσης: nothing to stack.
+# Everything else (ironing chain, rival-gated consumables, antivib pads,
+# pedestal bases) carries over, with caps re-balanced so round 1 lays 7
+# distinct roles and round 2 tops up the 2-cap pools to exactly 10.
+# Compatibility gates inherited unchanged: brand-system consumables
+# (MIELE FragranceDos/TwinDos) HARD-dropped unless same brand (v28.49.4);
+# universal accessory brands always eligible.
+WD_TRIGGER_HIERARCHIES = {"Πλυντήρια - Στεγνωτήρια"}
+
+WD_TEST_SKUS = set()  # 47 triggers only — show all in the picker
+
+WD_PRIORITY = [
+    (1, 'Σίδερο',
+        ['Σίδερα'],
+        'WM_COMPANION_SDA', 1, 2),
+    (2, 'Σύστημα Σιδερώματος',
+        ['Συστήματα Σιδερώματος'],
+        'WM_COMPANION_SDA', 1, 2),
+    (3, 'Αντικραδασμικά',
+        ['Αξεσουάρ Πλυντηρίου - Στεγνωτηρίου'],
+        'WM_ACC_ANTIVIB', 1, 1),
+    (4, 'Απορρυπαντικά / Αρωματικά',
+        ['Αξεσουάρ Πλυντηρίου - Στεγνωτηρίου'],
+        'WM_ACC_DETERGENT', 1, 2),
+    (5, 'Βάση Στήριξης',
+        ['Αξεσουάρ Πλυντηρίου - Στεγνωτηρίου'],
+        'WM_ACC_BASE', 1, 1),
+    (6, 'Σιδερώστρα',
+        ['Σιδερώστρες'],
+        'WM_COMPANION_SDA_SALES', 1, 2),
+    (7, 'Σύστημα Ατμού',
+        ['Συστήματα ατμού'],
+        'WM_COMPANION_SDA_SALES', 1, 2),
+    # Backfill (v28.50): the detergent subset is 100% MIELE+AEG system
+    # consumables, so the rival gate empties it for the other ~80% of
+    # combo triggers — without tail capacity those carousels stop at 8.
+    # Σιδερώστρα + Σύστημα Ατμού caps raised to 2 and Πρέσα Ατμού added
+    # as a final laundry-domain pool: worst case 2+2+1+0+1+2+2+1 = 11 ≥ 10.
+    (8, 'Πρέσα Ατμού',
+        ['Πρέσες ατμού'],
+        'WM_COMPANION_SDA_SALES', 1, 1),
+]
+
+WD_SLOT_TARGET = 10
+
+
 WM_MARKETING_COPY = {
     "Στεγνωτήριο":              "Ολοκλήρωσε το set σου — στέγνωμα στο σπίτι, χωρίς αναμονή.",
     "Βάση Σύνδεσης":            "Στοίβαξε στεγνωτήριο πάνω στο πλυντήριο — εξοικονόμηση χώρου.",
@@ -3548,6 +3604,7 @@ WM_MARKETING_COPY = {
     "Βάση Στήριξης":            "Άνοδος ύψους — άνετη φόρτωση χωρίς να σκύβεις.",
     "Σύστημα Σιδερώματος":      "Επαγγελματικό σιδέρωμα με ατμό — γρήγορα και χωρίς κόπο.",
     "Σιδερώστρα":               "Σταθερή επιφάνεια για άψογο σιδέρωμα.",
+    "Πρέσα Ατμού":              "Σιδέρωμα μεγάλων επιφανειών στο μισό χρόνο.",
     "Σύστημα Ατμού":            "Φρεσκάρισμα κρεμασμένων ρούχων — εναλλακτική του σιδέρου.",
 }
 
@@ -8117,6 +8174,8 @@ L2_CHILDREN = {
     "MDA": [
         {"key": "Washing Machines", "label": "Πλυντήρια\nΡούχων",
          "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='4' y='2' width='16' height='20' rx='2'/%3E%3Ccircle cx='12' cy='13' r='5'/%3E%3Ccircle cx='12' cy='13' r='2'/%3E%3Cline x1='8' y1='5' x2='8.01' y2='5'/%3E%3Cline x1='12' y1='5' x2='14' y2='5'/%3E%3C/svg%3E"},
+        {"key": "Washer Dryers", "label": "Πλυντήρια -\nΣτεγνωτήρια",
+         "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='4' y='2' width='16' height='20' rx='2'/%3E%3Ccircle cx='12' cy='13' r='5'/%3E%3Cpath d='M9 13a3 3 0 0 1 6 0'/%3E%3Cline x1='8' y1='5' x2='8.01' y2='5'/%3E%3Cline x1='15' y1='5' x2='17' y2='5'/%3E%3C/svg%3E"},
         {"key": "Fridges", "label": "Ψυγειο-\nκαταψύκτες",
          "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='5' y='2' width='14' height='20' rx='2'/%3E%3Cline x1='5' y1='10' x2='19' y2='10'/%3E%3Cline x1='8' y1='6' x2='8.01' y2='6'/%3E%3Cline x1='8' y1='14' x2='8.01' y2='14'/%3E%3C/svg%3E"},
         {"key": "Cookers", "label": "Κουζίνες",
@@ -9085,6 +9144,28 @@ else:
                 st.sidebar.markdown('<p class="sidebar-section">Επιλέξτε Πλυντήριο</p>', unsafe_allow_html=True)
                 sel = st.sidebar.selectbox("", washers['Title'].unique(), label_visibility="collapsed", key="wm_sel")
                 trigger = washers[washers['Title']==sel].iloc[0] if sel else None
+
+    elif active_cluster == "Washer Dryers":
+        # Trigger pool: Πλυντήρια - Στεγνωτήρια (washer-dryer combos) from
+        # the MDA sheet. Only 47 SKUs — the picker shows all of them
+        # (WD_TEST_SKUS left empty by design).
+        if df_mda is None or df_mda.empty:
+            st.sidebar.warning("Sheet 'MDA' is empty or missing.")
+        else:
+            hier_upper = df_mda['Hierarchy'].fillna('').astype(str).str.upper().str.strip()
+            trigger_hiers_upper = {h.upper().strip() for h in WD_TRIGGER_HIERARCHIES}
+            combos = df_mda[hier_upper.isin(trigger_hiers_upper)].copy()
+
+            if WD_TEST_SKUS:
+                mat_clean = combos['Material'].astype(str).str.strip().str.replace(r'\.0$', '', regex=True)
+                combos = combos[mat_clean.isin(WD_TEST_SKUS)]
+
+            if combos.empty:
+                st.sidebar.warning("Δεν βρέθηκαν Πλυντήρια - Στεγνωτήρια στο sheet MDA.")
+            else:
+                st.sidebar.markdown('<p class="sidebar-section">Επιλέξτε Πλυντήριο - Στεγνωτήριο</p>', unsafe_allow_html=True)
+                sel = st.sidebar.selectbox("", combos['Title'].unique(), label_visibility="collapsed", key="wd_sel")
+                trigger = combos[combos['Title']==sel].iloc[0] if sel else None
 
     elif active_cluster == "Fridges":
         # Trigger pool: Ψυγειοκαταψύκτες from the MDA sheet.
@@ -21850,8 +21931,16 @@ def _wm_build_sda_companion_pool(c_pool, trigger_brand, trigger_tier,
 # 🟢 WASHING MACHINES ENGINE — Πλυντήρια Ρούχων (Μεγάλες Συσκευές)
 # ═══════════════════════════════════════════════════════════════
 
-def run_washing_machine_engine(trigger, df_mda, df_sda, df_history):
+def run_washing_machine_engine(trigger, df_mda, df_sda, df_history,
+                                priority_list=None, exclude_hiers_extra=None,
+                                slot_target=None):
     """Build up to 10 cross-sell slots for a washing-machine trigger.
+
+    v28.50: parameterized so the washer-dryer combo engine can reuse it —
+    priority_list overrides WM_PRIORITY, exclude_hiers_extra extends the
+    competitor exclusion (combos also exclude Στεγνωτήρια: the combo IS
+    the dryer), slot_target overrides WM_SLOT_TARGET. Defaults = classic
+    WM behavior, so existing callers are untouched.
 
     Pools span TWO sheets:
       • MDA  →  Στεγνωτήρια  +  Αξεσουάρ Πλυντηρίου - Στεγνωτηρίου
@@ -21891,6 +21980,8 @@ def run_washing_machine_engine(trigger, df_mda, df_sda, df_history):
     trigger_hiers_norm = {h.upper().strip() for h in WM_TRIGGER_HIERARCHIES}
     combo_hiers = {'ΠΛΥΝΤΗΡΙΑ - ΣΤΕΓΝΩΤΗΡΙΑ', 'ΕΝΤΟΙΧΙΖΟΜΕΝΑ ΠΛΥΝΤΗΡΙΑ ΡΟΥΧΩΝ'}
     exclude = trigger_hiers_norm | combo_hiers
+    if exclude_hiers_extra:
+        exclude = exclude | {h.upper().strip() for h in exclude_hiers_extra}
     b4 = len(c_mda)
     c_mda = c_mda[~c_mda['Hierarchy'].fillna('').astype(str).str.upper().str.strip().isin(exclude)]
     diag.append(("1. Excl washers/combos", len(c_mda),
@@ -21916,7 +22007,9 @@ def run_washing_machine_engine(trigger, df_mda, df_sda, df_history):
 
     # ── Build a sorted pool per priority entry
     pools = {}  # rank → (role_label, sorted_DataFrame, logic_key, max_round_1, max_total, notes)
-    for rank, role_label, hiers, logic_key, max_r1, max_total in WM_PRIORITY:
+    active_priority = priority_list if priority_list is not None else WM_PRIORITY
+    active_target = slot_target if slot_target is not None else WM_SLOT_TARGET
+    for rank, role_label, hiers, logic_key, max_r1, max_total in active_priority:
         notes = [f"=== Priority {rank}: {role_label} ({logic_key}) "
                  f"| max_round_1={max_r1} | max_total={max_total if max_total else '∞'} ==="]
 
@@ -21982,11 +22075,11 @@ def run_washing_machine_engine(trigger, df_mda, df_sda, df_history):
     slot_num = 0
     round_idx = 0
 
-    while slot_num < WM_SLOT_TARGET:
+    while slot_num < active_target:
         progress = False
         round_idx += 1
         for rank, (role_label, scored, logic_key, max_r1, max_total, notes) in pools.items():
-            if slot_num >= WM_SLOT_TARGET:
+            if slot_num >= active_target:
                 break
             if scored is None or scored.empty:
                 continue
@@ -22000,7 +22093,7 @@ def run_washing_machine_engine(trigger, df_mda, df_sda, df_history):
             cursor = pool_cursors[rank]
             taken_this_pass = 0
             while taken_this_pass < take_n and cursor < len(scored) \
-                  and slot_num < WM_SLOT_TARGET:
+                  and slot_num < active_target:
                 row = scored.iloc[cursor]
                 cursor += 1
                 if row['Material'] in used_materials:
@@ -22051,6 +22144,25 @@ def run_washing_machine_engine(trigger, df_mda, df_sda, df_history):
         recs_df['Draft_Score'] = recs_df['Assigned_Slot']
         return recs_df, diag, slot_notes, recs_df
     return pd.DataFrame(), diag, slot_notes, pd.DataFrame()
+
+
+
+def run_washer_dryer_engine(trigger, df_mda, df_sda, df_history):
+    """Πλυντήρια - Στεγνωτήρια (washer-dryer combos): the WM engine with
+    the WD_PRIORITY slot map. Differences from a plain washer (v28.50):
+      • no Στεγνωτήριο slot AND Στεγνωτήρια excluded outright — the combo
+        IS the dryer, a standalone dryer is an alternative purchase
+      • no Βάση Σύνδεσης slot — nothing to stack
+      • ironing chain promoted (combo buyers are the laundry-completion
+        persona) with Σίδερο + Σύστημα Σιδερώματος each capped at 2
+    Spec parsing, rival-gated consumables (v28.49.4), antivib/base logic
+    and the round-robin loop are inherited unchanged."""
+    return run_washing_machine_engine(
+        trigger, df_mda, df_sda, df_history,
+        priority_list=WD_PRIORITY,
+        exclude_hiers_extra={'ΣΤΕΓΝΩΤΗΡΙΑ'},
+        slot_target=WD_SLOT_TARGET,
+    )
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -28338,6 +28450,12 @@ elif active_cluster == "Washing Machines":
     # Σιδερώματος, Σιδερώστρες, Συστήματα Ατμού) live in the SDA sheet.
     recs, diag, slot_notes, full_candidates = run_washing_machine_engine(trigger, df_mda, df_sda, df_history)
     slot_diag = []
+elif active_cluster == "Washer Dryers":
+    # Πλυντήρια - Στεγνωτήρια (combos): WM engine with the WD slot map —
+    # no dryer / stacking slots (the combo IS the dryer), ironing chain
+    # promoted, rival-gated consumables inherited.
+    recs, diag, slot_notes, full_candidates = run_washer_dryer_engine(trigger, df_mda, df_sda, df_history)
+    slot_diag = []
 elif active_cluster == "Fridges":
     # Ψυγειοκαταψύκτες + every kitchen-package hierarchy lives in the MDA
     # sheet. No need to load SDA — the History data showed Small Kitchen
@@ -28851,6 +28969,11 @@ with st.expander("⚙️ System Diagnostics"):
         # MDA has no real spec columns filled for WMs — show what's there
         # plus the basic taxonomy. Title-parsed specs (kg, RPM, Wi-Fi, Slim)
         # appear in the diagnostics panel under "0. Trigger".
+        attr_keys_to_show = ['Material','Title','Level 1','Level 2','Hierarchy',
+                              'Sum of Sales','LIST PRICE','AVAILABILITY']
+    elif active_cluster == "Washer Dryers":
+        # Same data shape as WMs: specs (kg wash / kg dry, RPM, Wi-Fi,
+        # Slim) live only in the Title and surface via "0. Trigger".
         attr_keys_to_show = ['Material','Title','Level 1','Level 2','Hierarchy',
                               'Sum of Sales','LIST PRICE','AVAILABILITY']
     elif active_cluster == "Fridges":
