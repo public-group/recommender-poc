@@ -103,7 +103,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v28.49.2 — Κουζίνες slot-7 rework: κρεατομηχανές/πολυμάγειρες ΕΚΤΟΣ (σύνολο ~4.6k πωλήσεις — νεκρό pool) → Τοστιέρα (173k πωλήσεις) + Βραστήρας (119k) ως νέα slots 7-8, sales-led με brand boost · mixer/chopper slots του αρχικού spec παραμένουν ανοιχτά μέχρι να έρθουν δεδομένα · no-rival-brands policy, hob/brand hard gates & overflow συμβατότητα (v28.49.1) αμετάβλητα
+        🟢 Engine v28.49.3 — Ψυγεία panel συμβατότητα: τα πάνελ πόρτας είναι SERIES-locked, όχι brand-locked — trigger χωρίς ανιχνεύσιμη σειρά (σταθερή πόρτα, π.χ. BOSCH KGN49XIEA Brushed Steel) → panel pool ΑΔΕΙΑΖΕΙ και το slot γεμίζει από backfill · trigger με σειρά (SAMSUNG BESPOKE) → HARD drop πάνελ άλλης/μη ανιχνεύσιμης σειράς (όχι πλέον penalty) · καταργήθηκε το same-brand color fallback · Κουζίνες v28.49.2 αμετάβλητες
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -22114,60 +22114,43 @@ def _fridge_build_panel_pool(c_pool, trigger_series, trigger_brand,
     cand_series = pool['Title'].fillna('').astype(str).apply(_fridge_detect_series)
     pool['_fridge_panel_series'] = cand_series
 
-    # 1+2. Series match boost (+ color modifier)
-    if trigger_series:
-        same_series = cand_series == trigger_series
-        pool.loc[same_series, 'Final_Score'] += FRIDGE_S_SERIES_MATCH
-        if same_series.any():
-            notes.append(f"  ✓ Series match ({trigger_series}): {same_series.sum()} panels (+{FRIDGE_S_SERIES_MATCH:,})")
+    # ── HARD SERIES GATE (v28.49.3, user-reported incompatibility).
+    # Door panels are SERIES parts, not brand parts: BOSCH KSZ1*/KSZ2*
+    # Vario Style fronts only clip onto Vario Style doors (KGN39IJ/
+    # KGN36IJ…), SAMSUNG RA-B23* only onto BESPOKE. A same-brand fridge
+    # with a fixed door (the KGN49XIEA Brushed Steel case) physically
+    # cannot mount ANY panel. Therefore:
+    #   • trigger has NO detected series → pool EMPTIES, slot backfills
+    #     (printer-cartridge philosophy — same as rails in the cookers
+    #     engine). The old fallback that sorted same-brand panels by
+    #     color was built on the wrong assumption that brand = fit.
+    #   • trigger HAS a series → candidates of any OTHER (or no
+    #     detectable) series are HARD-dropped, not merely penalized.
+    if not trigger_series:
+        notes.append("  ✗ Trigger has no panel-compatible series (fixed door) — pool emptied, slot backfills. No same-brand fallback: panels are series-locked, not brand-locked.")
+        return pool.iloc[0:0]
 
-        # Color group match within series — boosts Μαύρο/Γκρι panels for a Μαύρο fridge
-        if trigger_color_group:
-            cand_colors = pool['Χρώμα'].fillna('').astype(str).apply(_fridge_color_group)
-            same_group = same_series & (cand_colors == trigger_color_group)
-            pool.loc[same_group, 'Final_Score'] += FRIDGE_S_SERIES_COLOR
-            if same_group.any():
-                notes.append(f"  ✓ Series + color group ({trigger_color_group}): {same_group.sum()} panels (+{FRIDGE_S_SERIES_COLOR:,})")
+    same_series = cand_series == trigger_series
+    dropped = (~same_series).sum()
+    if dropped:
+        notes.append(f"  ✗ HARD-dropped {dropped} panels of other/undetected series (≠ {trigger_series})")
+    pool = pool[same_series].copy()
+    if pool.empty:
+        notes.append(f"  ⚠ No {trigger_series} panels in catalog — slot backfills")
+        return pool
+    pool['Final_Score'] += FRIDGE_S_SERIES_MATCH
+    notes.append(f"  ✓ Series match ({trigger_series}): {len(pool)} panels (+{FRIDGE_S_SERIES_MATCH:,})")
 
-        # 3. Wrong-series penalty — same-brand panels of a different series
-        # (rarely fires today since all SAMSUNG panels are BESPOKE, but
-        # protects against catalog additions).
-        wrong_series = (cand_series != '') & (cand_series != trigger_series)
-        pool.loc[wrong_series, 'Final_Score'] += FRIDGE_S_WRONG_SERIES_PEN
-        if wrong_series.any():
-            notes.append(f"  ✗ Wrong-series penalty: {wrong_series.sum()} same-brand panels of different series ({FRIDGE_S_WRONG_SERIES_PEN:+,})")
-    else:
-        # No series detected on the trigger. Same-brand panels are still
-        # correct — and within the same brand, prefer color-matched panels
-        # so a Μαύρο BOSCH buyer sees the Black Matt KSZ2BVZ00 ahead of
-        # the Orange KSZ1BVO00. Uses the same boost scale as the kitchen
-        # package (exact +300k, group +150k).
-        notes.append("  — Trigger has no detected series — sorting same-brand panels by color match + availability + sales")
+    # Color group match within series — boosts Μαύρο/Γκρι panels for a Μαύρο fridge
+    if trigger_color_group:
+        cand_colors = pool['Χρώμα'].fillna('').astype(str).apply(_fridge_color_group)
+        same_group = cand_colors == trigger_color_group
+        pool.loc[same_group, 'Final_Score'] += FRIDGE_S_SERIES_COLOR
+        if same_group.any():
+            notes.append(f"  ✓ Series + color group ({trigger_color_group}): {same_group.sum()} panels (+{FRIDGE_S_SERIES_COLOR:,})")
 
-        if 'Χρώμα' in pool.columns:
-            cand_colors_raw = pool['Χρώμα'].fillna('').astype(str).str.strip()
-
-            # Exact color match — e.g. trigger Μαύρο → BOSCH KSZ2BVZ00 Black Matt
-            if trigger_color:
-                same_color = cand_colors_raw == trigger_color
-                pool.loc[same_color, 'Final_Score'] += FRIDGE_S_COLOR_EXACT
-                if same_color.any():
-                    notes.append(f"  ✓ Same-brand + exact color ({trigger_color}): {same_color.sum()} panels (+{FRIDGE_S_COLOR_EXACT:,})")
-            else:
-                same_color = pd.Series(False, index=pool.index)
-
-            # Color group match (e.g. trigger Μαύρο → also boost Ανθρακί/Γκρι panels)
-            if trigger_color_group:
-                cand_color_groups = cand_colors_raw.apply(_fridge_color_group)
-                # Don't double-count exact-color rows in the group boost
-                same_group = (cand_color_groups == trigger_color_group) & (~same_color)
-                pool.loc[same_group, 'Final_Score'] += FRIDGE_S_COLOR_GROUP
-                if same_group.any():
-                    notes.append(f"  ✓ Same-brand + color group ({trigger_color_group}): {same_group.sum()} panels (+{FRIDGE_S_COLOR_GROUP:,})")
-
-    # ── Sort by score; engine filters out negative-scored rows during
-    # round-robin (any wrong-series penalty pulls below zero, signalling
-    # "do not show").
+    # ── Sort by score. Every surviving row is series-verified compatible
+    # (v28.49.3) — there is no penalty/negative-score signalling anymore.
     return pool.sort_values('Final_Score', ascending=False)
 
 
