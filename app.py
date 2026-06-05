@@ -103,7 +103,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v28.49.3 — Ψυγεία panel συμβατότητα: τα πάνελ πόρτας είναι SERIES-locked, όχι brand-locked — trigger χωρίς ανιχνεύσιμη σειρά (σταθερή πόρτα, π.χ. BOSCH KGN49XIEA Brushed Steel) → panel pool ΑΔΕΙΑΖΕΙ και το slot γεμίζει από backfill · trigger με σειρά (SAMSUNG BESPOKE) → HARD drop πάνελ άλλης/μη ανιχνεύσιμης σειράς (όχι πλέον penalty) · καταργήθηκε το same-brand color fallback · Κουζίνες v28.49.2 αμετάβλητες
+        🟢 Engine v28.49.4 — Πλυντήρια Ρούχων συμβατότητα αναλωσίμων: τα brand-system αναλώσιμα (MIELE FA* FragranceDos, UltraPhase TwinDos, CapDosing) ΔΕΝ είναι universal — HARD drop εκτός αν trigger = ίδιο brand · βάσεις σύνδεσης λάθος brand: από penalty σε HARD drop (φυσική ασυμβατότητα) · ουδέτερα brands (ROLLER, SCANPART) παραμένουν universal · Ψυγεία v28.49.3 & Κουζίνες v28.49.2 αμετάβλητα
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -21722,13 +21722,20 @@ def _wm_build_accessory_brand_pool(c_pool, trigger_brand, notes, role_label):
         pool.loc[same_brand, 'Final_Score'] += WM_S_BRAND_MATCH
         pool.loc[universal,  'Final_Score'] += WM_S_UNIVERSAL_ACC
 
-        # Wrong-brand penalty for stacking kits ONLY (they're physically
-        # incompatible across brands — a BOSCH stacking kit won't fit an LG).
+        # Wrong-brand stacking kits: HARD drop (v28.49.4 — was a -300k
+        # penalty, but penalties can still surface when the pool thins;
+        # a BOSCH stacking kit physically won't fit an LG pair, so this
+        # is a compatibility gate, not a preference).
         if role_label == 'Βάση Σύνδεσης' and tb:
             wrong_brand = (~same_brand) & (~universal) & (cand_brand != '')
-            pool.loc[wrong_brand, 'Final_Score'] += WM_S_BRAND_DISCOUNT
             if wrong_brand.any():
-                notes.append(f"  ✗ Wrong-brand penalty on stacking kit: {wrong_brand.sum()} kits for other brands ({WM_S_BRAND_DISCOUNT:+,})")
+                notes.append(f"  ✗ HARD-dropped {wrong_brand.sum()} stacking kits for other brands (physically incompatible)")
+            pool = pool[~wrong_brand]
+            same_brand = same_brand[pool.index]
+            universal = universal[pool.index]
+            if pool.empty:
+                notes.append(f"  ⚠ No {tb}/universal stacking kit — slot backfills")
+                return pool
 
         if same_brand.any():
             notes.append(f"  ✓ Brand match ({tb}): {same_brand.sum()} same-brand accessories (+{WM_S_BRAND_MATCH:,})")
@@ -21739,15 +21746,35 @@ def _wm_build_accessory_brand_pool(c_pool, trigger_brand, notes, role_label):
 
 
 def _wm_build_accessory_universal_pool(c_pool, trigger_brand, notes):
-    """Score a universal-need accessory pool (anti-vibration pads,
-    detergents, fragrance). These fit any washer, so the logic is mostly
-    sales-driven with a soft brand boost when MIELE/AEG triggers see their
-    own consumables (MIELE's UltraPhase fits MIELE machines especially well).
-    """
+    """Score a 'universal-need' accessory pool (anti-vibration pads,
+    detergents, fragrance) — with one HARD exception (v28.49.4,
+    user-reported): appliance-brand SYSTEM consumables are NOT universal.
+    MIELE FA* flacons only slot into Miele dryers' FragranceDos socket,
+    MIELE UltraPhase cartridges only into TwinDos W1 washers, CapDosing
+    caps only into Miele drawers. The old 'soft brand kicker' wrongly let
+    an LG trigger surface a MIELE flacon. Rule (same shape as the cookers
+    rival filter): a row branded by an appliance manufacturer is kept ONLY
+    when it matches the trigger brand; neutral consumer brands (ROLLER,
+    SCANPART, CARE+PROTECT…) remain universal."""
     if c_pool.empty:
         return c_pool
 
     pool = c_pool.copy()
+
+    tb_gate = (trigger_brand or '').upper().strip()
+    if 'Κατασκευαστής' in pool.columns:
+        cb = pool['Κατασκευαστής'].fillna('').astype(str).str.upper().str.strip()
+        # _CK_APPLIANCE_BRANDS is the shared appliance-manufacturer set
+        # defined in the COOKERS CONFIGURATION block (module-level, loads
+        # before this helper) — same rival universe, same policy.
+        system_locked = cb.isin(_CK_APPLIANCE_BRANDS) & (cb != tb_gate)
+        if system_locked.any():
+            notes.append(f"  ✗ HARD-dropped {system_locked.sum()} brand-system consumables ({sorted(cb[system_locked].unique())[:4]} — dosing/fragrance parts fit only their own machines)")
+        pool = pool[~system_locked]
+        if pool.empty:
+            notes.append("  ⚠ No universal/own-brand consumables left — slot backfills")
+            return pool
+
     pool['Final_Score'] = 0.0
 
     if 'AVAILABILITY' in pool.columns:
