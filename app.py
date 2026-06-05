@@ -103,7 +103,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v28.48 — Κουζίνες: hybrid sales × hob-type × brand — Κουζίνες Αερίου / Ηλεκτρικές ως triggers · Τύπος εστίας = HARD gate (ξύστρα/κρέμα κεραμικών μόνο σε κεραμική-επαγωγική, ρυθμιστής υγραερίου μόνο σε αερίου, αλουμινένια σκεύη εκτός σε επαγωγική) · τηλεσκοπικοί μηχανισμοί + BSH probes = HARD brand-family gate (BOSCH↔PITSOS↔SIEMENS↔NEFF) · 2× καθαρισμός + 2× σκεύη + 2× ταψιά + 2× κρεατομηχανές/πολυμάγειρες με brand diversity · θερμόμετρο + ζυγαριά + backfill φριτέζα → ψηστιέρα → overflow για 10/10 slots
+        🟢 Engine v28.48.1 — Κουζίνες compatibility pass: BSH oven probes/sensors ΕΚΤΟΣ (απαιτούν probe socket εντοιχιζόμενου — καμία ελεύθερη κουζίνα δεν έχει) → μόνο universal θερμόμετρο · τηλεσκοπικοί = EXACT same-brand gate (όχι πλέον BSH family) · Πλάκα Γκριλ (hob griddle) + Καπάκι-για-ταψί εκτός tray pool · tier mirror → price-ratio guard: σκεύη/κρεατομηχανές >50% της τιμής trigger υποβαθμίζονται (φθηνή κουζίνα → φθηνή κρεατομηχανή) · hob-type & brand hard gates όπως v28.48
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -4088,6 +4088,13 @@ CK_S_SPARE_PART_PEN  =  -600_000  # ΑΝΤΑΛΛΑΚΤΙΚ demotion — a replac
 CK_S_PRICE_SAME_TIER =   200_000  # Appliance-grade companion in same tier
 CK_S_PRICE_ONE_OFF   =    70_000  # Companion ±1 price tier
 CK_S_SALES_FACTOR    =       0.5  # Sales tiebreaker weight
+CK_S_OVERPRICED_PEN  =  -500_000  # Appliance companion priced >50% of the
+                                  # trigger — demoted, not dropped. Replaces the
+                                  # cooker-calibrated tier mirror for CK_PREP /
+                                  # CK_COOKWARE, which was a no-op (every prep
+                                  # machine is <€450 = 'tier 0 same' → a €319
+                                  # NINJA led against a €339 OMNYS, v28.48.1)
+CK_PRICE_RATIO_CAP   =       0.5  # The 50% threshold above
 CK_BRAND_DIVERSITY_CAP =       1  # Max items per brand inside the 2-cap pools
                                   # (care pair = MIELE cream + BOSCH gel, never
                                   # two MIELE consumables back-to-back)
@@ -4185,6 +4192,13 @@ def _ck_classify_kitchen_acc(title: str) -> str:
         return 'thermo'
     if 'ΣΚΕΥΗ' in t or 'ΤΗΓΑΝΙ' in t or 'ΚΑΤΣΑΡΟΛ' in t or 'ΧΥΤΡΑ' in t:
         return 'cookware'
+    if 'ΠΛΑΚΑ ΓΚΡΙΛ' in t:
+        return 'other'        # NEFF Z9416X2 — FlexInduction HOB griddle, not an
+                              # oven tray; only fits specific NEFF induction hobs
+                              # (no such trigger exists) → never recommendable here
+    if 'ΚΑΠΑΚΙ' in t and 'ΤΑΨΙ' in t:
+        return 'other'        # lid FOR a specific tray (HEZ633001) — useless
+                              # standalone, dependent accessory (v28.48.1)
     if 'ΤΑΨΙ' in t or 'ΓΚΡΙΛ' in t or 'ΠΕΤΡΑ ΨΗΣ' in t or 'PIZZA STONE' in t:
         return 'tray'
     return 'other'
@@ -22399,6 +22413,23 @@ def _ck_brand_layer(pool, trigger_brand, notes, label=''):
     return pool
 
 
+def _ck_price_ratio_layer(pool, trigger_price, notes):
+    """Budget-proportionality guard for the appliance-grade companion
+    pools (cookware, prep machines). The cooker tier scale (<€450 = tier
+    0) can't discriminate between a €45 and a €319 companion, so instead:
+    anything costing more than CK_PRICE_RATIO_CAP × trigger price gets
+    CK_S_OVERPRICED_PEN. Demotion, not a drop — a deep premium trigger
+    still surfaces premium companions, a €419 cooker leads with the €108
+    BOSCH κρεατομηχανή instead of the €319 NINJA."""
+    if trigger_price and trigger_price > 0 and 'LIST PRICE' in pool.columns:
+        prices = pool['LIST PRICE'].apply(parse_euro_price)
+        over = prices > trigger_price * CK_PRICE_RATIO_CAP
+        pool.loc[over, 'Final_Score'] += CK_S_OVERPRICED_PEN
+        if over.any():
+            notes.append(f"  ✗ Over-priced demotion (>{CK_PRICE_RATIO_CAP:.0%} of trigger €{trigger_price:.0f}): {over.sum()} ({CK_S_OVERPRICED_PEN:,})")
+    return pool
+
+
 def _ck_tier_layer(pool, trigger_tier, notes):
     """Price-tier proximity — appliance-grade companions only (cookware,
     prep). Impulse pools (care, scale, tray, rail, thermo, regulator)
@@ -22474,7 +22505,7 @@ def _ck_build_gas_reg_pool(acc, hob, trigger_brand, notes):
     return pool.sort_values('Final_Score', ascending=False)
 
 
-def _ck_build_cookware_pool(acc, hob, trigger_brand, trigger_tier, notes):
+def _ck_build_cookware_pool(acc, hob, trigger_brand, trigger_price, notes):
     """Slots — Μαγειρικά Σκεύη ×2 (substitutes the spec's pan/pot/mitts
     slots — no standalone cookware hierarchies exist).
 
@@ -22483,7 +22514,8 @@ def _ck_build_cookware_pool(acc, hob, trigger_brand, trigger_tier, notes):
     HARD-dropped for INDUCTION triggers — no ferromagnetic base, the hob
     won't even detect them. Inox sets (BOSCH HEZ9SE030 / AEG A3SS / NEFF
     Z943SE0) and the FISSLER χύτρα are all-hob. Appliance-grade pool →
-    tier mirror ON (a €419 χύτρα shouldn't lead against a €339 OMNYS)."""
+    price-ratio guard ON (a €419 FISSLER χύτρα shouldn't lead against a
+    €339 OMNYS — demoted whenever it costs >50% of the trigger)."""
     pool = acc[acc['_ck_type'] == 'cookware'].copy()
     if pool.empty:
         notes.append("  ⚠ No cookware in Αξεσουάρ Κουζινών")
@@ -22500,7 +22532,7 @@ def _ck_build_cookware_pool(acc, hob, trigger_brand, trigger_tier, notes):
     pool = _ck_base_score(pool)
     pool.loc[:, 'Final_Score'] += CK_S_TYPE_RELEVANT
     pool = _ck_brand_layer(pool, trigger_brand, notes)
-    pool = _ck_tier_layer(pool, trigger_tier, notes)
+    pool = _ck_price_ratio_layer(pool, trigger_price, notes)
     notes.append(f"  Pool size: {len(pool)}")
     return pool.sort_values('Final_Score', ascending=False)
 
@@ -22536,62 +22568,65 @@ def _ck_build_rail_pool(acc, trigger_brand, notes):
     if pool.empty:
         notes.append("  ⚠ No telescopic rails in Αξεσουάρ Κουζινών/Φούρνων")
         return pool
-    fam = _ck_brand_family(trigger_brand)
-    keep = pool['_ck_brand'].isin(fam)
+    # v28.48.1 — tightened from BSH-FAMILY to EXACT brand. The family
+    # gate let a PITSOS trigger pull BOSCH/NEFF/SIEMENS rails; even if
+    # the BSH platform shares the part internally, mounting is published
+    # per model line and the user spec says 'same brand' — strict-filter
+    # principle wins. Brands without their own rail SKU (LA GERMANIA,
+    # BERTAZZONI, GORENJE…) cleanly EMPTY the slot.
+    keep = (pool['_ck_brand'] == trigger_brand) if trigger_brand else pd.Series(False, index=pool.index)
     dropped = (~keep).sum()
     if dropped:
-        notes.append(f"  ✗ HARD-dropped {dropped} rails (brand family ≠ {trigger_brand or '—'} — model-specific mounts)")
+        notes.append(f"  ✗ HARD-dropped {dropped} rails (brand ≠ {trigger_brand or '—'} — model-specific mounts, exact-brand gate)")
     pool = pool[keep]
     if pool.empty:
-        notes.append(f"  ⚠ No {trigger_brand or '—'}-compatible rail in catalog — slot backfills (correct behavior, no cross-brand bleed)")
+        notes.append(f"  ⚠ No {trigger_brand or '—'} rail in catalog — slot backfills (correct behavior, no cross-brand bleed)")
         return pool
     pool = _ck_base_score(pool)
-    pool.loc[:, 'Final_Score'] += CK_S_TYPE_RELEVANT
-    exact = pool['_ck_brand'] == trigger_brand
-    pool.loc[exact, 'Final_Score'] += CK_S_BRAND_MATCH
-    notes.append(f"  ✓ Family-compatible rails ({trigger_brand}): {len(pool)} (exact brand: {exact.sum()})")
+    pool.loc[:, 'Final_Score'] += CK_S_TYPE_RELEVANT + CK_S_BRAND_MATCH
+    notes.append(f"  ✓ Same-brand rails ({trigger_brand}): {len(pool)}")
     return pool.sort_values('Final_Score', ascending=False)
 
 
 def _ck_build_thermo_pool(acc, c_sda, trigger_brand, notes):
-    """Slot — Θερμόμετρο Μαγειρικής. TWO sources, TWO rules:
-      • MDA oven probes (NEFF Z1365WX0 / BOSCH HEZ32WA00 / HEZ39050) plug
-        into the oven's probe socket → HARD BSH-family gate.
-      • The universal PROFICOOK PC-DHT 1039 kitchen thermometer lives in
-        SDA Ειδικές Συσκευές → always eligible, any trigger.
-    Result: BSH triggers see their own wireless probe first; everyone
-    else still gets the universal thermometer (user slot-10 alternative)."""
-    fam = _ck_brand_family(trigger_brand)
-    probes = acc[acc['_ck_type'] == 'thermo'].copy()
-    if not probes.empty:
-        keep = probes['_ck_brand'].isin(fam & _CK_BSH_FAMILY)
-        dropped = (~keep).sum()
-        if dropped:
-            notes.append(f"  ✗ HARD-dropped {dropped} oven probes (BSH-socket parts, family ≠ {trigger_brand or '—'})")
-        probes = probes[keep]
+    """Slot — Θερμόμετρο Μαγειρικής. UNIVERSAL thermometers ONLY.
+
+    The three MDA 'thermo' rows (NEFF Z1365WX0, BOSCH HEZ32WA00, BOSCH
+    HEZ39050) are NOT standalone thermometers — they are plug-in roast
+    probes / PerfectCook hob sensors that require a probe SOCKET on a
+    premium BUILT-IN oven or hob. Freestanding cookers (this engine's
+    entire trigger set) carry no socket, so even a same-brand match is a
+    physical incompatibility — the v28.48.0 BSH-family gate was the
+    WRONG test (family ≠ model capability; validated failure: NEFF
+    Z1365WX0 €129 offered against a PITSOS PAF003D20 €419 gas cooker).
+    They are excluded ENTIRELY (v28.48.1).
+
+    The pool is the title-hunted universal kitchen thermometer(s) from
+    SDA (PROFICOOK PC-DHT 1039) — exactly the user's slot-10 alternative
+    ('…or kitchen thermometer')."""
     tn = c_sda['Title'].fillna('').astype(str).map(_cm_norm)
-    universal = c_sda[tn.str.contains('ΘΕΡΜΟΜΕΤΡΟ ΚΟΥΖΙΝΑΣ', na=False)].drop_duplicates(subset=['Material']).copy()
-    if not universal.empty:
-        notes.append(f"  ✓ Universal kitchen thermometer(s): {len(universal)}")
-    pool = pd.concat([probes, universal], ignore_index=False) if (not probes.empty or not universal.empty) else pd.DataFrame()
+    pool = c_sda[tn.str.contains('ΘΕΡΜΟΜΕΤΡΟ ΚΟΥΖΙΝΑΣ', na=False)].drop_duplicates(subset=['Material']).copy()
+    n_probes = int((acc['_ck_type'] == 'thermo').sum()) if not acc.empty else 0
+    if n_probes:
+        notes.append(f"  ✗ HARD-excluded {n_probes} built-in oven probes/sensors (socket parts — no freestanding cooker has a probe socket)")
     if pool.empty:
-        notes.append("  ⚠ No compatible thermometer — slot backfills")
+        notes.append("  ⚠ No universal kitchen thermometer — slot backfills")
         return pool
     pool = _ck_base_score(pool)
     pool.loc[:, 'Final_Score'] += CK_S_TYPE_RELEVANT
-    if not probes.empty:
-        pool.loc[probes.index, 'Final_Score'] += CK_S_BRAND_MATCH  # own-socket probe outranks generic
-    notes.append(f"  Pool size: {len(pool)} (probes: {len(probes)}, universal: {len(universal)})")
+    notes.append(f"  ✓ Universal kitchen thermometer(s): {len(pool)}")
     return pool.sort_values('Final_Score', ascending=False)
 
 
-def _ck_build_prep_pool(c_sda, trigger_brand, trigger_tier, notes):
+def _ck_build_prep_pool(c_sda, trigger_brand, trigger_price, notes):
     """Slots — Κρεατομηχανή / Πολυμάγειρας ×2 (substitutes the spec's
     mixer + chopper slots — neither hierarchy exists in any workbook;
     verified v28.48). TITLE hunt inside Ειδικές Συσκευές: ΚΡΕΑΤΟΜΗΧΑΝ +
     ΠΟΛΥΜΑΓΕΙΡ + ΖΥΜΑΡΙΚ (pasta makers). Brand-diverse pair via the loop
     cap (BOSCH κρεατομηχανή + NINJA πολυμάγειρας, never two NINJA).
-    Appliance-grade → tier mirror ON."""
+    Appliance-grade → price-ratio guard ON: companions costing >50% of
+    the trigger are demoted, so budget cookers lead with budget machines
+    (slot-6 fix, v28.48.1)."""
     hn = c_sda['Hierarchy'].fillna('').astype(str).map(_cm_norm)
     es = c_sda[hn == _cm_norm('Ειδικές Συσκευές')]
     if es.empty:
@@ -22605,7 +22640,7 @@ def _ck_build_prep_pool(c_sda, trigger_brand, trigger_tier, notes):
     pool = _ck_base_score(pool)
     pool.loc[:, 'Final_Score'] += CK_S_TYPE_RELEVANT
     pool = _ck_brand_layer(pool, trigger_brand, notes)
-    pool = _ck_tier_layer(pool, trigger_tier, notes)
+    pool = _ck_price_ratio_layer(pool, trigger_price, notes)
     notes.append(f"  Pool size: {len(pool)} | brands: {pool['Κατασκευαστής'].nunique()}")
     return pool.sort_values('Final_Score', ascending=False)
 
@@ -22710,7 +22745,7 @@ def run_cookers_engine(trigger, df_mda, df_sda, df_history):
         elif logic_key == 'CK_GAS_REG':
             scored = _ck_build_gas_reg_pool(acc, thob, tb, notes) if not acc.empty else pd.DataFrame()
         elif logic_key == 'CK_COOKWARE':
-            scored = _ck_build_cookware_pool(acc, thob, tb, ttier, notes) if not acc.empty else pd.DataFrame()
+            scored = _ck_build_cookware_pool(acc, thob, tb, tprice, notes) if not acc.empty else pd.DataFrame()
         elif logic_key == 'CK_TRAY':
             scored = _ck_build_tray_pool(acc, tb, notes) if not acc.empty else pd.DataFrame()
         elif logic_key == 'CK_RAIL':
@@ -22718,7 +22753,7 @@ def run_cookers_engine(trigger, df_mda, df_sda, df_history):
         elif logic_key == 'CK_THERMO':
             scored = _ck_build_thermo_pool(acc, c_sda, tb, notes) if (not acc.empty or not c_sda.empty) else pd.DataFrame()
         elif logic_key == 'CK_PREP':
-            scored = _ck_build_prep_pool(c_sda, tb, ttier, notes) if not c_sda.empty else pd.DataFrame()
+            scored = _ck_build_prep_pool(c_sda, tb, tprice, notes) if not c_sda.empty else pd.DataFrame()
         elif logic_key == 'CK_SCALE':
             scored = _ck_build_hierarchy_pool(c_sda, 'Ζυγαριές', tb, notes, 'ζυγαριές') if not c_sda.empty else pd.DataFrame()
         elif logic_key == 'CK_AIRFRYER':
