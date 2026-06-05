@@ -103,7 +103,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v28.48.1 — Στεγνωτήρια: hybrid sales × title-parsed specs (brand · χωρητικότητα kg · price tier) — matched-pair πλυντήριο hero slot 1 + 2ο πλυντήριο bookend · Βάση Σύνδεσης = soft brand penalty (ROLLER universal fallback) · Καλάθι Στεγνώματος = HARD brand lock (μόνο BOSCH/AEG, model-specific) · consumable gate: FragranceDos/TwinDos μόνο σε MIELE triggers + dishwasher-only ταμπλέτες out · σφαιρίδια στεγνωτηρίου + απορρυπαντικά universal · iron-side companions (Σίδερα/Συστήματα/Σιδερώστρες) από SDA · RPM≥1400 premium washer boost · Wi-Fi mirror
+        🟢 Engine v28.48 — Κουζίνες: hybrid sales × hob-type × brand — Κουζίνες Αερίου / Ηλεκτρικές ως triggers · Τύπος εστίας = HARD gate (ξύστρα/κρέμα κεραμικών μόνο σε κεραμική-επαγωγική, ρυθμιστής υγραερίου μόνο σε αερίου, αλουμινένια σκεύη εκτός σε επαγωγική) · τηλεσκοπικοί μηχανισμοί + BSH probes = HARD brand-family gate (BOSCH↔PITSOS↔SIEMENS↔NEFF) · 2× καθαρισμός + 2× σκεύη + 2× ταψιά + 2× κρεατομηχανές/πολυμάγειρες με brand diversity · θερμόμετρο + ζυγαριά + backfill φριτέζα → ψηστιέρα → overflow για 10/10 slots
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -3680,152 +3680,6 @@ WM_S_SALES_FACTOR       =       0.4  # Sales tiebreaker weight (lower than vacuu
 
 
 # ═════════════════════════════════════════════════════════════
-# 🟢 DRYERS CONFIGURATION (Στεγνωτήρια — Μεγάλες Συσκευές) — v28.48
-# ═════════════════════════════════════════════════════════════
-# Trigger detection: products in MDA sheet with Hierarchy = "Στεγνωτήρια".
-#
-# Recommendation depth — HYBRID (sales × brand-ecosystem × parsed title specs):
-#   • Same data situation as Πλυντήρια Ρούχων: the MDA sheet has NO real
-#     spec columns filled for dryers (only Title, Sum of Sales, LIST PRICE,
-#     AVAILABILITY). Audit (v28.48): every spec column = 0/166 populated.
-#   • Title parsing covers 100% of the pool: brand (token 1), capacity
-#     (166/166 "N kg" matches), color, Wi-Fi. Heat pump is 164/166 —
-#     effectively UNIVERSAL on the trigger side, so unlike the WM engine
-#     (where HP differentiated dryer candidates) it carries no signal here
-#     and is NOT used.
-#   • This is the MIRROR of the Washing Machines engine: a dryer-page
-#     visitor's #1 companion is the matched-pair WASHER (same brand for
-#     stackability + matched aesthetics, same capacity tier — a 9kg dryer
-#     pairs with an 8-10kg washer, NOT a 6kg one). Brand crossover
-#     dryer→washer is near-perfect: every dryer brand in the catalog
-#     (LG/CANDY/MIELE/SAMSUNG/BOSCH/AEG/HISENSE/PITSOS/MIDEA/OMNYS/...)
-#     also sells washers, so the matched-pair slot virtually never falls
-#     back to cross-brand.
-#   • Premium signal on the WASHER candidate side is spin speed: RPM≥1400
-#     washers get a boost for tier≥1 triggers (the mirror of the heat-pump
-#     boost the WM engine gives premium dryer candidates).
-#   • Dryer-SPECIFIC accessories exist in Αξεσουάρ Πλυντηρίου - Στεγνωτηρίου:
-#     Καλάθια Στεγνώματος (BOSCH WMZ20600, AEG A4YH200 — model-specific,
-#     brand-critical like stacking kits) and Σφαιρίδια Στεγνωτηρίου
-#     (ELECTROLUX dryer balls — universal consumable). These get their own
-#     Είδος sub-slots that the WM engine doesn't have.
-#   • Iron-side companions reuse the same SDA hierarchies + the SHARED
-#     laundry-domain helpers (_wm_build_sda_companion_pool,
-#     _wm_build_accessory_universal_pool) and the SHARED WM_S_* scoring
-#     constants & _wm_price_tier / _wm_capacity_tier / _wm_parse_specs —
-#     one calibration for the whole laundry domain, zero drift between the
-#     two mirrored engines.
-
-DRYER_TRIGGER_HIERARCHIES = {
-    "Στεγνωτήρια", "ΣΤΕΓΝΩΤΗΡΙΑ", "Στεγνωτήρια ρούχων",
-}
-
-# Test SKUs — 7 representative dryers spanning the spectrum:
-# budget value (OMNYS/CANDY), mainstream best-seller (BOSCH — ecosystem has
-# both stacking kit AND dryer basket), premium black smart (SAMSUNG/LG),
-# AEG (own-basket ecosystem) and luxury MIELE. Leave empty to show all 166.
-DRYER_TEST_SKUS = {
-    "2076739",  # CANDY GD 9N2B-S 9 kg €499 — budget best-seller
-    "2054649",  # OMNYS TD-HP09A 9 kg €470 — budget value brand
-    "2071392",  # BOSCH WQG243B9GR 9 kg €699 — mainstream hero (30k sales; BOSCH kit + basket exist)
-    "2058936",  # SAMSUNG DV90DB7845GBU4 9 kg Μαύρο WiFi €849 — premium black smart (32k sales)
-    "2057564",  # LG RH90V9JV2N 9 kg Μαύρο WiFi €899 — premium black smart (LG washer ecosystem)
-    "2062320",  # AEG TR9396CE 9 kg €998 — premium (AEG basket A4YH200 in catalog)
-    "2009392",  # MIELE TWD640WP 9 kg WiFi €1198 — luxury (MIELE washer ecosystem)
-}
-
-# (priority_rank, role_label, hierarchies, logic_key, max_in_round_1, max_total)
-# Round-1 sum = 1×9 = 9 → 1st washer (hero) + 8 other companions in round 1.
-# Round 2 picks up the 2nd washer (max_total=2 not yet hit), filling slot 10.
-# Net effect: slot 1 = matched-pair washer (hero), slots 2-9 = variety mix,
-# slot 10 = 2nd washer alternative. Mirrors the WM engine's dryer bookends —
-# no back-to-back washers in slots 1+2.
-#
-# Slot layout (priority ORDER = round-robin order):
-#   1. Πλυντήριο Ρούχων (matched-pair companion — highest cross-sell)
-#   2. Βάση Σύνδεσης (stacking kit — brand-critical)
-#   3. Καλάθι Στεγνώματος (dryer basket for shoes/wool — brand-critical, dryer-specific)
-#   4. Σφαιρίδια / Απορρυπαντικά (dryer balls + laundry consumables — recurring)
-#   5. Σίδερο (post-dry workflow companion)
-#   6. Αντικραδασμικά Πέλματα (small universal attach)
-#   7. Βάση Στήριξης (pedestal — height/access)
-#   8. Σύστημα Σιδερώματος (premium iron alternative)
-#   9. Σιδερώστρα (pure post-dry workflow accessory)
-#  10. Πλυντήριο Ρούχων (2nd washer — overflow into round 2 as alternative)
-DRYER_PRIORITY = [
-    (1, 'Πλυντήριο Ρούχων',
-        ['Πλυντήρια Ρούχων'],
-        'DRYER_WASHER', 1, 2),
-    (2, 'Βάση Σύνδεσης',
-        ['Αξεσουάρ Πλυντηρίου - Στεγνωτηρίου'],
-        'DRYER_ACC_STACK', 1, 1),
-    (3, 'Καλάθι Στεγνώματος',
-        ['Αξεσουάρ Πλυντηρίου - Στεγνωτηρίου'],
-        'DRYER_ACC_BASKET', 1, 1),
-    (4, 'Σφαιρίδια / Απορρυπαντικά',
-        ['Αξεσουάρ Πλυντηρίου - Στεγνωτηρίου'],
-        'DRYER_ACC_CONSUMABLE', 1, 2),
-    (5, 'Σίδερο',
-        ['Σίδερα'],
-        'DRYER_COMPANION_SDA', 1, 2),
-    (6, 'Αντικραδασμικά',
-        ['Αξεσουάρ Πλυντηρίου - Στεγνωτηρίου'],
-        'DRYER_ACC_ANTIVIB', 1, 1),
-    (7, 'Βάση Στήριξης',
-        ['Αξεσουάρ Πλυντηρίου - Στεγνωτηρίου'],
-        'DRYER_ACC_BASE', 1, 1),
-    (8, 'Σύστημα Σιδερώματος',
-        ['Συστήματα Σιδερώματος'],
-        'DRYER_COMPANION_SDA', 1, 1),
-    (9, 'Σιδερώστρα',
-        ['Σιδερώστρες'],
-        'DRYER_COMPANION_SDA_SALES', 1, 1),
-]
-
-DRYER_SLOT_TARGET = 10
-
-DRYER_MARKETING_COPY = {
-    "Πλυντήριο Ρούχων":          "Ολοκλήρωσε το set σου — ασορτί πλυντήριο για το στεγνωτήριό σου.",
-    "Βάση Σύνδεσης":             "Στοίβαξε το στεγνωτήριο πάνω στο πλυντήριο — εξοικονόμηση χώρου.",
-    "Καλάθι Στεγνώματος":        "Στέγνωμα παπουτσιών & μάλλινων χωρίς περιστροφή.",
-    "Σφαιρίδια / Απορρυπαντικά": "Πιο γρήγορο στέγνωμα, πιο αφράτα ρούχα.",
-    "Σίδερο":                    "Φρεσκάρισμα ρούχων αμέσως μετά το στέγνωμα.",
-    "Αντικραδασμικά":            "Λιγότεροι κραδασμοί, λιγότερος θόρυβος.",
-    "Βάση Στήριξης":             "Άνοδος ύψους — άνετη φόρτωση χωρίς να σκύβεις.",
-    "Σύστημα Σιδερώματος":       "Επαγγελματικό σιδέρωμα με ατμό — γρήγορα και χωρίς κόπο.",
-    "Σιδερώστρα":                "Σταθερή επιφάνεια για άψογο σιδέρωμα.",
-}
-
-# Είδος-keyword filters for the five accessory sub-slots. Matching is
-# case-insensitive substring against the Είδος column. Two exclusion rules
-# enforced inside _dryer_filter_accessory_subset (not by dict ordering):
-#   • DRYER_ACC_BASE excludes 'σύνδεσ'/'συνδετικ' rows (those are stacking kits)
-#   • DRYER_ACC_BASE excludes 'καλάθ' rows (those are dryer baskets)
-# Validated against the live Είδος values (v28.48 audit): Βάσεις Σύνδεσης (32),
-# Συνδετικό (7+3), Καλάθια Στεγνώματος (4) + Καλάθι (1), Σφαιρίδιο
-# Στεγνωτηρίου (2), Απορρυπαντικά/Αρωματικά (11), Αντικραδασμικά Πέλματα (8)
-# + Πέλματα (4), Βάσεις Πλυντηρίου - Στεγνωτηρίου (13) + Βάσεις (6).
-DRYER_ACC_KEYWORDS = {
-    # Stacking kits — brand-critical pairing
-    'DRYER_ACC_STACK':      ('σύνδεσ', 'συνδετικ'),
-    # Dryer baskets — model/brand-specific (BOSCH WMZ, AEG A4YH)
-    'DRYER_ACC_BASKET':     ('καλάθ',),
-    # Consumables — dryer balls FIRST (σφαιρίδι), then detergents/fragrance
-    'DRYER_ACC_CONSUMABLE': ('σφαιρίδι', 'απορρυπαντικ', 'αρωματικ', 'ταμπλέτ'),
-    # Anti-vibration pads
-    'DRYER_ACC_ANTIVIB':    ('αντικραδασμικ', 'πέλματα'),
-    # Generic bases / pedestals — excludes stacking + basket rows (see above)
-    'DRYER_ACC_BASE':       ('βάσ',),
-}
-
-# Spin-speed premium threshold for the washer candidate pool. ≥1400 RPM is
-# the premium-washer marker in the Greek market; boosted only when the
-# trigger dryer is itself tier≥1 (mirror of the WM engine's heat-pump rule).
-DRYER_PREMIUM_RPM = 1400
-DRYER_S_RPM_BOOST = 80_000
-
-
-# ═════════════════════════════════════════════════════════════
 # 🟢 REFRIGERATORS CONFIGURATION (Ψυγειοκαταψύκτες — Μεγάλες Συσκευές)
 # ═════════════════════════════════════════════════════════════
 # Trigger detection: products in MDA sheet with Hierarchy = "Ψυγειοκαταψύκτες".
@@ -4101,6 +3955,251 @@ FRIDGE_S_WIFI_MATCH        =     50_000  # Trigger has Wi-Fi → boost Wi-Fi can
 FRIDGE_S_UNIVERSAL_CARE    =    400_000  # BOSCH cleaning supplies / SCANPART filter — work for any fridge
 FRIDGE_S_WRONG_SERIES_PEN  =   -500_000  # KSZ Vario panel offered to a non-Vario fridge — physical mismatch
 FRIDGE_S_SALES_FACTOR      =        0.3  # Sales tiebreaker (fridges have low per-SKU sales)
+
+
+# ═════════════════════════════════════════════════════════════
+# 🟢 COOKERS CONFIGURATION (Κουζίνες — Μεγάλες Συσκευές, v28.48)
+# ═════════════════════════════════════════════════════════════
+# Trigger detection: products in the MDA sheet, Hierarchy ∈ {Κουζίνες
+# Αερίου, Κουζίνες Ηλεκτρικές} — 545 rows / 349 unique SKUs. Trigger side
+# is spec-RICH: Τύπος εστίας ≡ 543/545 (Αερίου 341 / Κεραμική 88 /
+# Επαγωγική 86 / Εμαγιέ 15 / Μεικτή 6), Κατασκευαστής 100% (LA GERMANIA +
+# BERTAZZONI = 76% of rows), Πλάτος ≡ / Χρώμα / Ενεργειακή κλάση full.
+#
+# Recommendation depth — HYBRID (sales × hob-type × brand), NOT pure sales
+# and NOT full multi-spec:
+#   • Pure sales fails on physical compatibility THREE ways: (a) a ceramic
+#     hob scraper / cleaning cream against a gas cooker is nonsense;
+#     (b) the LA GERMANIA gas-pressure regulator against an electric
+#     cooker is nonsense in the other direction; (c) an aluminium wok on
+#     an induction trigger won't even heat. All three are HARD gates.
+#   • Full multi-spec is overkill: the accessory side (trays, rails,
+#     cleaners, cookware) carries near-zero structured spec columns — the
+#     trigger's rich specs (Αριθμός εστιών, Πλάτος, Ενεργειακή κλάση)
+#     don't constrain any companion beyond hob type + brand.
+#   • The 3 trigger signals that matter:
+#       1. HOB TYPE from Τύπος εστίας ≡ (GAS / CERAMIC / INDUCTION /
+#          ENAMEL / MIXED) — gates ceramic-care, gas-regulator and
+#          aluminium-cookware eligibility. Fallback: Hierarchy (Κουζίνες
+#          Αερίου → GAS). NOTE: the field contains a Latin-E 'Eπαγωγική'
+#          row → all matching skips the first letter ('ΠΑΓΩΓ', not
+#          'ΕΠΑΓΩΓ'), same Greek/Latin lookalike trap as the Spare sheet.
+#       2. BRAND (Κατασκευαστής) — HARD family gate on telescopic rails +
+#          BSH oven probes (model-specific mounts, printer-cartridge
+#          philosophy: brands without a rail cleanly EMPTY the slot —
+#          LA GERMANIA / BERTAZZONI triggers backfill, no cross-brand
+#          bleed). BSH family (BOSCH↔PITSOS↔SIEMENS↔NEFF) treated as one
+#          platform — same precedent the fridge engine established.
+#          SOFT ecosystem boost everywhere else. Several accessory rows
+#          have EMPTY Κατασκευαστής with the brand in the title (BOSCH
+#          HEZ638D00, NEFF Z1608DX0…) → _ck_row_brand() parses the title
+#          as fallback (FRIDGE_KITCHEN_PARSED lesson).
+#       3. PRICE TIER — proximity boost ONLY on the appliance-grade
+#          companions (cookware, κρεατομηχανές/πολυμάγειρες) so a €7,999
+#          BERTAZZONI doesn't pull €12 impulse items to the top; cleaning
+#          / scale / tray / rail slots skip the mirror (impulse pattern,
+#          same split as coffee + ironing engines).
+#
+# Slot layout (user's 10-slot spec → catalog reality, option B):
+#   The original spec asked for oven mitts (slot 3), frying pan (4), pot
+#   (5), hand/stand mixer (7) and food chopper (8) — NONE of these exist
+#   as hierarchies in any workbook (verified v28.48: the only "γάντια"
+#   are gym gloves; mixers exist only as attachment SKUs). Substitutions:
+#     • mitts/pan/pot → CK_COOKWARE (brand Σετ Μαγειρικά Σκεύη + AEG wok
+#       + FISSLER χύτρα, 6 SKUs, induction-gated)
+#     • mixer/chopper → CK_PREP (Κρεατομηχανές + Πολυμάγειρες + μηχανές
+#       ζυμαρικών title-hunted from Ειδικές Συσκευές, 17 SKUs)
+#     • oven-cleaning spray merged into CK_CARE (scraper + cream + gel,
+#       8 SKUs, hob-gated, brand-diverse pair)
+#     • slot 10's "telescopic rail (same brand) OR kitchen thermometer"
+#       became TWO pools: CK_RAIL (hard family gate) + CK_THERMO (BSH
+#       roast probes family-gated, PROFICOOK PC-DHT universal).
+#   Round 1 lays one pick from each live pool across slots 1-8; round 2
+#   lays the B-options (different brand via the diversity cap) of the
+#   2-cap pools; backfill (Φριτέζα → Ψηστιέρα → kitchen-accessory
+#   overflow) guarantees 10/10.
+
+COOKER_TRIGGER_HIERARCHIES = {
+    "Κουζίνες Αερίου", "Κουζίνες Ηλεκτρικές",
+}
+
+# Test SKUs — 8 representative cookers spanning hob type × brand × tier.
+# Empty set = show all 349.
+COOKER_TEST_SKUS = {
+    "1375955",  # BOSCH HKR390050 ceramic Inox €629, 60,898 sales — bestseller; full BSH ecosystem (rails/trays/probe/cookware)
+    "1375825",  # PITSOS PHC009150 ceramic €549 — BSH family via PITSOS rebrand (PZ11TI15X0 rail)
+    "1987399",  # PITSOS PAF003D20 gas €419 — GAS hob on a BSH brand (regulator + rails both fire)
+    "1951177",  # LA GERMANIA CLS64031DX(GPL) gas €499 — top gas brand; regulator brand match; NO rail → clean backfill
+    "1697595",  # BERTAZZONI PRO105I2EBIT induction €7,999 — pro-tier induction; aluminium-wok gate; zero brand ecosystem → cross-brand fallback
+    "2025743",  # AEG CCB6441NBM ceramic €659 — AEG ecosystem (scraper blade, pizza stone, wok, σετ σκεύη)
+    "1375828",  # PITSOS PHA009020 εμαγιέ €449 — ENAMEL hob → ceramic-care pool must drop scraper/cream
+    "1859548",  # GORENJE GEIT6C60XPG induction €729 — mainstream induction, non-BSH
+}
+
+# (priority_rank, role_label, logic_key, max_in_round_1, max_total)
+COOKER_PRIORITY = [
+    (1,  'Καθαρισμός Εστιών & Φούρνου',   'CK_CARE',      1, 2),
+    (2,  'Ρυθμιστής Πίεσης Υγραερίου',    'CK_GAS_REG',   1, 1),
+    (3,  'Μαγειρικά Σκεύη',               'CK_COOKWARE',  1, 2),
+    (4,  'Ταψί & Σκεύη Φούρνου',          'CK_TRAY',      1, 2),
+    (5,  'Τηλεσκοπικός Μηχανισμός',       'CK_RAIL',      1, 1),
+    (6,  'Θερμόμετρο Μαγειρικής',         'CK_THERMO',    1, 1),
+    (7,  'Κρεατομηχανή / Πολυμάγειρας',   'CK_PREP',      1, 2),
+    (8,  'Ζυγαριά Κουζίνας',              'CK_SCALE',     1, 1),
+    # ── Backfill chain ──
+    (9,  'Φριτέζα Αέρος',                 'CK_AIRFRYER',  1, 1),
+    (10, 'Ψηστιέρα / Γκριλιέρα',          'CK_GRILL',     1, 1),
+    (11, 'Αξεσουάρ Κουζίνας (overflow)',  'CK_OVERFLOW',  1, None),
+]
+
+COOKER_SLOT_TARGET = 10
+
+COOKER_MARKETING_COPY = {
+    'Καθαρισμός Εστιών & Φούρνου':  "Κρατήστε τη νέα σας κουζίνα σαν καινούργια — εύκολος καθαρισμός χωρίς γρατζουνιές.",
+    'Ρυθμιστής Πίεσης Υγραερίου':   "Απαραίτητος για ασφαλή σύνδεση υγραερίου — σωστή πίεση, σωστή φλόγα.",
+    'Μαγειρικά Σκεύη':              "Σκεύη που ταιριάζουν στις εστίες σας — ξεκινήστε το μαγείρεμα από την πρώτη μέρα.",
+    'Ταψί & Σκεύη Φούρνου':         "Ο σωστός εξοπλισμός φούρνου — ψήσιμο ομοιόμορφο, αποτέλεσμα επαγγελματικό.",
+    'Τηλεσκοπικός Μηχανισμός':      "Τραβήξτε τη σχάρα με ασφάλεια — συμβατός μηχανισμός για τον φούρνο σας.",
+    'Θερμόμετρο Μαγειρικής':        "Ψήσιμο στον πόντο — μετρήστε τη θερμοκρασία στο εσωτερικό του φαγητού.",
+    'Κρεατομηχανή / Πολυμάγειρας':  "Ολοκληρώστε την κουζίνα σας — προετοιμασία και μαγείρεμα χωρίς κόπο.",
+    'Ζυγαριά Κουζίνας':             "Ακρίβεια στη συνταγή — ζυγίστε τα υλικά σας στο γραμμάριο.",
+    'Φριτέζα Αέρος':                "Η ιδανική σύμμαχος της κουζίνας — τραγανό αποτέλεσμα με ελάχιστο λάδι.",
+    'Ψηστιέρα / Γκριλιέρα':         "Γεύση σχάρας στον πάγκο σας — γρήγορο ψήσιμο κάθε μέρα.",
+    'Αξεσουάρ Κουζίνας (overflow)': "Ολοκληρώστε τον εξοπλισμό της κουζίνας σας.",
+}
+
+# ── Scoring constants (mirrors the IR_S_* convention) ──
+CK_S_AVAILABILITY    =   300_000  # In-stock boost — outweighs one tier step
+CK_S_TYPE_RELEVANT   = 1_500_000  # Item matches its pool's intended type
+CK_S_BRAND_MATCH     =   400_000  # Same brand as trigger (ecosystem)
+CK_S_BRAND_FAMILY    =   250_000  # Same BSH family (soft, trays/cookware/care)
+CK_S_HOB_SPECIFIC    =   500_000  # Ceramic scraper/cream on a ceramic/induction
+                                  # hob leads the care pair; oven gel is pick #2.
+                                  # MUST outrank CK_S_BRAND_MATCH — validated
+                                  # v28.48: at 150k a BOSCH ceramic trigger led
+                                  # with the BOSCH oven gel and the ceramic care
+                                  # never surfaced (round 1 fills all 10 slots)
+CK_S_SPARE_PART_PEN  =  -600_000  # ΑΝΤΑΛΛΑΚΤΙΚ demotion — a replacement scraper
+                                  # blade must never lead the care pair over the
+                                  # full product. -600k because it must absorb
+                                  # brand(400k)+a tier of sales: at -300k the
+                                  # AEG E6HUE102 blade still outranked the MIELE
+                                  # cream on AEG triggers (validated v28.48)
+CK_S_PRICE_SAME_TIER =   200_000  # Appliance-grade companion in same tier
+CK_S_PRICE_ONE_OFF   =    70_000  # Companion ±1 price tier
+CK_S_SALES_FACTOR    =       0.5  # Sales tiebreaker weight
+CK_BRAND_DIVERSITY_CAP =       1  # Max items per brand inside the 2-cap pools
+                                  # (care pair = MIELE cream + BOSCH gel, never
+                                  # two MIELE consumables back-to-back)
+
+# BSH platform — rails/probes/trays are the same parts rebranded
+# (HEZ538000 ↔ PZ11TI15X0 ↔ Z11TI15X0). Same family the fridge engine uses.
+_CK_BSH_FAMILY = {'BOSCH', 'PITSOS', 'SIEMENS', 'NEFF', 'GAGGENAU'}
+
+# Brands parseable from titles when Κατασκευαστής is empty (longest-first
+# substring with token guards — ' LG ' boundary so it never fires mid-word).
+_CK_KNOWN_BRANDS = [
+    'LA GERMANIA', 'BERTAZZONI', 'KITCHENAID', 'SCANPART', 'LEIFHEIT',
+    'FISSLER', 'GORENJE', 'SIEMENS', 'PITSOS', 'BOSCH', 'MIELE', 'NEFF',
+    'LOFRA', 'SMEG', 'AEG', 'LG',
+]
+
+
+def _ck_row_brand(row) -> str:
+    """Κατασκευαστής, with title parse as fallback for the NaN-brand
+    accessory rows (BOSCH HEZ638D00 / NEFF Z1608DX0 / BOSCH AOV433A00 all
+    carry the brand only in the title). Token-guarded substring on the
+    normalized title — 'LG' can't fire inside another word."""
+    b = str(row.get('Κατασκευαστής', '') or '').strip().upper()
+    if b and b != 'NAN':
+        return b
+    t = ' ' + _cm_norm(row.get('Title', '')) + ' '
+    for brand in _CK_KNOWN_BRANDS:
+        if f' {brand} ' in t:
+            return brand
+    return ''
+
+
+def _ck_brand_family(brand: str) -> set:
+    """Compatibility family for the HARD-gated pools (rails, BSH probes).
+    BSH marques share the physical platform; everyone else is strict
+    same-brand. Empty brand → empty family → gated pools cleanly empty."""
+    if not brand:
+        return set()
+    if brand in _CK_BSH_FAMILY:
+        return set(_CK_BSH_FAMILY)
+    return {brand}
+
+
+def _ck_detect_hob(trigger_row) -> str:
+    """'GAS' | 'CERAMIC' | 'INDUCTION' | 'ENAMEL' | 'MIXED' from
+    Τύπος εστίας ≡ (NBSP header → fetched via _cm_attr), Hierarchy as
+    fallback. ORDER MATTERS: combo values exist ('Εμαγιέ;Αερίου' → the
+    gas component decides, regulator-relevant) and one row carries a
+    Latin-E 'Eπαγωγική' → match 'ΠΑΓΩΓ' without the leading letter."""
+    ht = _cm_norm(_cm_attr(trigger_row, 'Τύπος εστίας ≡', ''))
+    if 'ΜΕΙΚΤ' in ht or 'ΜΙΚΤ' in ht:
+        return 'MIXED'
+    if 'ΑΕΡΙ' in ht:                      # ΑΕΡΙΟΥ + ΥΓΡΑΕΡΙΟΥ + 'Εμαγιέ;Αερίου'
+        return 'GAS'
+    if 'ΠΑΓΩΓ' in ht:                     # Επαγωγική + Latin-E Eπαγωγική
+        return 'INDUCTION'
+    if 'ΚΕΡΑΜ' in ht:
+        return 'CERAMIC'
+    if 'ΕΜΑΓΙΕ' in ht:
+        return 'ENAMEL'
+    # Fallback: hierarchy. Electric without a hob value → ENAMEL is the
+    # conservative read (ceramic care stays OFF — a wrong scraper is worse
+    # than a missing one).
+    hier = _cm_norm(trigger_row.get('Hierarchy', ''))
+    return 'GAS' if 'ΑΕΡΙΟΥ' in hier else 'ENAMEL'
+
+
+def _ck_classify_kitchen_acc(title: str) -> str:
+    """Functional type bucket for Αξεσουάρ Κουζινών + Αξεσουάρ Φούρνων
+    rows (MDA). Title-driven — these hierarchies carry no structured spec
+    columns. ORDER MATTERS (short-substring traps):
+      • ΑΝΤΑΛΛΑΚΤΙΚ ΞΥΣΤΡΑΣ must land in care_ceramic with the scraper,
+        BEFORE any generic rule could claim it
+      • ΦΟΥΡΝΟ ΑΤΜΟΥ descaler tablets are steam-oven-specific → 'other'
+        (a freestanding cooker is not a steam oven)
+      • hood parts (ΑΠΟΡΡΟΦΗΤΗΡ / ΦΙΛΤΡΟ ΑΝΘΡΑΚΑ) → 'other', never
+        recommendable against a cooker
+    """
+    t = _cm_norm(title)
+    if 'ΑΠΟΡΡΟΦΗΤΗΡ' in t or 'ΦΙΛΤΡΟ ΑΝΘΡΑΚΑ' in t:
+        return 'other'
+    if 'ΦΟΥΡΝΟ ΑΤΜΟΥ' in t and 'ΤΑΜΠΛΕΤ' in t:
+        return 'other'
+    if 'ΞΥΣΤΡΑ' in t or 'ΞΥΣΤΡΑΣ' in t or 'ΚΑΘΑΡΙΣΤΙΚΟ ΚΕΡΑΜΙΚ' in t:
+        return 'care_ceramic'
+    if 'ΚΑΘΑΡΙΣΤΙΚ' in t and 'ΦΟΥΡΝ' in t:
+        return 'care_oven'
+    if 'ΠΑΝΙ ΜΙΚΡΟΪΝ' in t or 'ΠΑΝΙ ΜΙΚΡΟΙΝ' in t:
+        return 'care_oven'
+    if 'ΡΥΘΜΙΣΤ' in t and ('ΠΙΕΣ' in t or 'ΥΓΡΑΕΡΙ' in t):
+        return 'gas_regulator'
+    if 'ΤΗΛΕΣΚΟΠΙΚ' in t or 'FLEXICLIP' in t:
+        return 'rail'
+    if 'ΘΕΡΜΟΜΕΤΡ' in t or 'ΑΙΣΘΗΤΗΡΑΣ ΘΕΡΜΟΚΡΑΣ' in t:
+        return 'thermo'
+    if 'ΣΚΕΥΗ' in t or 'ΤΗΓΑΝΙ' in t or 'ΚΑΤΣΑΡΟΛ' in t or 'ΧΥΤΡΑ' in t:
+        return 'cookware'
+    if 'ΤΑΨΙ' in t or 'ΓΚΡΙΛ' in t or 'ΠΕΤΡΑ ΨΗΣ' in t or 'PIZZA STONE' in t:
+        return 'tray'
+    return 'other'
+
+
+def _ck_price_tier(price: float) -> int:
+    """0=Budget(<€450), 1=Mainstream(€450-700), 2=Premium(€700-1500),
+    3=Pro(>€1500). Calibrated on the cooker catalog: OMNYS/εμαγιέ €339-449,
+    PITSOS/BOSCH/LA GERMANIA core €450-700, large LA GERMANIA €700-1500,
+    BERTAZZONI/LOFRA ranges €1500-8000."""
+    if price < 450:    return 0
+    if price < 700:    return 1
+    if price < 1500:   return 2
+    return 3
+
 
 
 
@@ -7760,10 +7859,10 @@ L2_CHILDREN = {
     "MDA": [
         {"key": "Washing Machines", "label": "Πλυντήρια\nΡούχων",
          "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='4' y='2' width='16' height='20' rx='2'/%3E%3Ccircle cx='12' cy='13' r='5'/%3E%3Ccircle cx='12' cy='13' r='2'/%3E%3Cline x1='8' y1='5' x2='8.01' y2='5'/%3E%3Cline x1='12' y1='5' x2='14' y2='5'/%3E%3C/svg%3E"},
-        {"key": "Dryers", "label": "Στεγνωτήρια",
-         "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='4' y='2' width='16' height='20' rx='2'/%3E%3Ccircle cx='12' cy='13' r='5'/%3E%3Cpath d='M9.5 13c.8-1 1.7-1 2.5 0s1.7 1 2.5 0'/%3E%3Cline x1='8' y1='5' x2='8.01' y2='5'/%3E%3Cline x1='12' y1='5' x2='14' y2='5'/%3E%3C/svg%3E"},
         {"key": "Fridges", "label": "Ψυγειο-\nκαταψύκτες",
          "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='5' y='2' width='14' height='20' rx='2'/%3E%3Cline x1='5' y1='10' x2='19' y2='10'/%3E%3Cline x1='8' y1='6' x2='8.01' y2='6'/%3E%3Cline x1='8' y1='14' x2='8.01' y2='14'/%3E%3C/svg%3E"},
+        {"key": "Cookers", "label": "Κουζίνες",
+         "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='4' y='8' width='16' height='13' rx='2'/%3E%3Cline x1='4' y1='12' x2='20' y2='12'/%3E%3Crect x='8' y='15' width='8' height='4' rx='0.5'/%3E%3Ccircle cx='8' cy='5' r='1.2'/%3E%3Ccircle cx='12' cy='5' r='1.2'/%3E%3Ccircle cx='16' cy='5' r='1.2'/%3E%3C/svg%3E"},
     ],
     "TV": [
         {"key": "TVs", "label": "Τηλεοράσεις",
@@ -8727,29 +8826,6 @@ else:
                 sel = st.sidebar.selectbox("", washers['Title'].unique(), label_visibility="collapsed", key="wm_sel")
                 trigger = washers[washers['Title']==sel].iloc[0] if sel else None
 
-    elif active_cluster == "Dryers":
-        # Trigger pool: Στεγνωτήρια from the MDA sheet.
-        # If DRYER_TEST_SKUS is non-empty, restrict to those SKUs (7 demo
-        # dryers spanning budget/mainstream/premium/luxury × key brands).
-        if df_mda is None or df_mda.empty:
-            st.sidebar.warning("Sheet 'MDA' is empty or missing.")
-        else:
-            hier_upper = df_mda['Hierarchy'].fillna('').astype(str).str.upper().str.strip()
-            trigger_hiers_upper = {h.upper().strip() for h in DRYER_TRIGGER_HIERARCHIES}
-            dryers = df_mda[hier_upper.isin(trigger_hiers_upper)].copy()
-
-            # 🧪 Optional test-list filter (leave DRYER_TEST_SKUS empty to show all 166)
-            if DRYER_TEST_SKUS:
-                mat_clean = dryers['Material'].astype(str).str.strip().str.replace(r'\.0$', '', regex=True)
-                dryers = dryers[mat_clean.isin(DRYER_TEST_SKUS)]
-
-            if dryers.empty:
-                st.sidebar.warning("Δεν βρέθηκαν Στεγνωτήρια στο sheet MDA.")
-            else:
-                st.sidebar.markdown('<p class="sidebar-section">Επιλέξτε Στεγνωτήριο</p>', unsafe_allow_html=True)
-                sel = st.sidebar.selectbox("", dryers['Title'].unique(), label_visibility="collapsed", key="dryer_sel")
-                trigger = dryers[dryers['Title']==sel].iloc[0] if sel else None
-
     elif active_cluster == "Fridges":
         # Trigger pool: Ψυγειοκαταψύκτες from the MDA sheet.
         # If FRIDGE_TEST_SKUS is non-empty, restrict to those 7 demo SKUs
@@ -8773,6 +8849,30 @@ else:
                 st.sidebar.markdown('<p class="sidebar-section">Επιλέξτε Ψυγειοκαταψύκτη</p>', unsafe_allow_html=True)
                 sel = st.sidebar.selectbox("", fridges['Title'].unique(), label_visibility="collapsed", key="fridge_sel")
                 trigger = fridges[fridges['Title']==sel].iloc[0] if sel else None
+
+    elif active_cluster == "Cookers":
+        # Trigger pool: Κουζίνες Αερίου + Κουζίνες Ηλεκτρικές from the MDA
+        # sheet. If COOKER_TEST_SKUS is non-empty, restrict to the 8 demo
+        # SKUs (gas/ceramic/induction/enamel × BSH/LA GERMANIA/BERTAZZONI/
+        # AEG/GORENJE × budget→pro).
+        if df_mda is None or df_mda.empty:
+            st.sidebar.warning("Sheet 'MDA' is empty or missing.")
+        else:
+            hier_upper = df_mda['Hierarchy'].fillna('').astype(str).str.upper().str.strip()
+            trigger_hiers_upper = {h.upper().strip() for h in COOKER_TRIGGER_HIERARCHIES}
+            cookers = df_mda[hier_upper.isin(trigger_hiers_upper)].copy()
+
+            # 🧪 Optional test-list filter (leave COOKER_TEST_SKUS empty to show all 349)
+            if COOKER_TEST_SKUS:
+                mat_clean = cookers['Material'].astype(str).str.strip().str.replace(r'\.0$', '', regex=True)
+                cookers = cookers[mat_clean.isin(COOKER_TEST_SKUS)]
+
+            if cookers.empty:
+                st.sidebar.warning("Δεν βρέθηκαν Κουζίνες στο sheet MDA.")
+            else:
+                st.sidebar.markdown('<p class="sidebar-section">Επιλέξτε Κουζίνα</p>', unsafe_allow_html=True)
+                sel = st.sidebar.selectbox("", cookers['Title'].unique(), label_visibility="collapsed", key="cooker_sel")
+                trigger = cookers[cookers['Title']==sel].iloc[0] if sel else None
 
     elif active_cluster in ("Mouse", "Keyboard", "Gaming Mouse", "Gaming Keyboard"):
         if df_peripherals.empty:
@@ -21647,503 +21747,6 @@ def run_washing_machine_engine(trigger, df_mda, df_sda, df_history):
 
 
 # ═══════════════════════════════════════════════════════════════
-# 🟢 DRYERS HELPERS — Στεγνωτήρια (Μεγάλες Συσκευές) — v28.48
-# ═══════════════════════════════════════════════════════════════
-# Mirror of the Washing Machines engine within the same laundry domain.
-# Dryer-specific pieces: washer-pool builder (the matched-pair hero) and
-# a brand-critical accessory builder that covers BOTH stacking kits AND
-# dryer baskets. Everything universal is REUSED from the WM helpers
-# (_wm_parse_specs, _wm_price_tier, _wm_capacity_tier,
-#  _wm_build_accessory_universal_pool, _wm_build_sda_companion_pool) and
-# the shared WM_S_* scoring constants — one calibration, zero drift.
-
-def _dryer_filter_accessory_subset(c_pool, subset_key, notes):
-    """Filter the Αξεσουάρ Πλυντηρίου - Στεγνωτηρίου pool down to one of the
-    five dryer sub-slot keys in DRYER_ACC_KEYWORDS (Είδος, case-insensitive
-    substring).
-
-    Two subtraction rules keep buckets disjoint:
-      • DRYER_ACC_BASE excludes 'σύνδεσ'/'συνδετικ' rows → those belong to
-        DRYER_ACC_STACK ('βάσ' would otherwise steal the 32 'Βάσεις
-        Σύνδεσης' rows).
-      • DRYER_ACC_BASE excludes 'καλάθ' rows → those belong to
-        DRYER_ACC_BASKET.
-    """
-    if c_pool.empty:
-        return c_pool
-
-    keywords = DRYER_ACC_KEYWORDS.get(subset_key, ())
-    if not keywords:
-        notes.append(f"  ⚠ No keywords defined for {subset_key} — returning empty pool")
-        return c_pool.iloc[0:0]
-
-    if 'Είδος' not in c_pool.columns:
-        notes.append(f"  ⚠ 'Είδος' column missing — accessory subset filter is a no-op")
-        return c_pool.iloc[0:0]
-
-    eidos_lower = c_pool['Είδος'].fillna('').astype(str).str.lower()
-    match_mask = pd.Series(False, index=c_pool.index)
-    for kw in keywords:
-        match_mask = match_mask | eidos_lower.str.contains(kw, regex=False, na=False)
-
-    if subset_key == 'DRYER_ACC_BASE':
-        for kw in DRYER_ACC_KEYWORDS.get('DRYER_ACC_STACK', ()):
-            match_mask = match_mask & ~eidos_lower.str.contains(kw, regex=False, na=False)
-        for kw in DRYER_ACC_KEYWORDS.get('DRYER_ACC_BASKET', ()):
-            match_mask = match_mask & ~eidos_lower.str.contains(kw, regex=False, na=False)
-
-    out = c_pool[match_mask].copy()
-    notes.append(f"  ✓ Subset filter ({subset_key}): {len(out)} / {len(c_pool)} rows match Είδος keywords {list(keywords)}")
-    return out
-
-
-def _dryer_build_washer_pool(c_pool, trigger_specs, trigger_tier, notes):
-    """Score the Πλυντήρια Ρούχων pool — the matched-pair hero slot.
-    Mirror of _wm_build_dryer_pool with the premium signal swapped:
-    heat pump (dryer-side) → spin speed RPM≥1400 (washer-side).
-
-    Signals stacked (most important first):
-      1. Brand match: same parsed brand as trigger → +600,000
-         (matched pair = stackability + matched aesthetic; near-perfect
-         coverage — every dryer brand in catalog also sells washers)
-      2. Capacity tier: washer cap in same tier as dryer → +400,000, ±1 → +120,000
-         (a 9kg dryer pairs with an 8-10kg washer, NOT a 6kg one)
-      3. Price tier proximity: ±0 → +200,000, ±1 → +70,000
-      4. RPM≥1400 (for tier≥1 triggers): +80,000
-      5. Wi-Fi mirror: trigger has Wi-Fi → Wi-Fi washer → +40,000
-      6. Sales tiebreaker.
-    """
-    if c_pool.empty:
-        return c_pool
-
-    pool = c_pool.copy()
-    pool['Final_Score'] = 0.0
-
-    # ── Availability boost
-    if 'AVAILABILITY' in pool.columns:
-        pool.loc[pool['AVAILABILITY'] == 'Άμεσα Διαθέσιμο', 'Final_Score'] += WM_S_AVAILABILITY
-
-    # ── Sales baseline
-    pool['Final_Score'] += pool['Sales_Tiebreaker'].fillna(0) * WM_S_SALES_FACTOR
-
-    # ── Parse washer specs from title (MDA has no spec columns for WMs either)
-    washer_specs = pool['Title'].fillna('').astype(str).apply(_wm_parse_specs)
-    pool['_dr_washer_brand']    = washer_specs.apply(lambda d: d['brand'])
-    pool['_dr_washer_cap']      = washer_specs.apply(lambda d: d['capacity_kg'])
-    pool['_dr_washer_cap_tier'] = pool['_dr_washer_cap'].apply(_wm_capacity_tier)
-    pool['_dr_washer_rpm']      = washer_specs.apply(lambda d: d['rpm'])
-    pool['_dr_washer_wifi']     = washer_specs.apply(lambda d: d['wifi'])
-
-    # ── 1. Brand match (matched pair)
-    tbrand = (trigger_specs.get('brand') or '').upper().strip()
-    if tbrand:
-        same_brand = pool['_dr_washer_brand'].str.upper().str.strip() == tbrand
-        pool.loc[same_brand, 'Final_Score'] += WM_S_BRAND_MATCH
-        if same_brand.any():
-            notes.append(f"  ✓ Brand match ({tbrand}): {same_brand.sum()} matched-pair washers (+{WM_S_BRAND_MATCH:,})")
-
-    # ── 2. Capacity tier match (a 9kg dryer pairs with an 8-10kg washer)
-    t_cap_tier = _wm_capacity_tier(trigger_specs.get('capacity_kg'))
-    if t_cap_tier >= 0:
-        same_tier = pool['_dr_washer_cap_tier'] == t_cap_tier
-        near_tier = (pool['_dr_washer_cap_tier'] - t_cap_tier).abs() == 1
-        pool.loc[same_tier, 'Final_Score'] += WM_S_CAP_SAME_TIER
-        pool.loc[near_tier, 'Final_Score'] += WM_S_CAP_ONE_OFF
-        if same_tier.any() or near_tier.any():
-            notes.append(f"  ✓ Capacity-tier match (trigger tier {t_cap_tier} / {trigger_specs.get('capacity_kg')}kg): "
-                         f"same={same_tier.sum()}, ±1={near_tier.sum()}")
-
-    # ── 3. Price-tier proximity
-    if 'LIST PRICE' in pool.columns:
-        prices = pool['LIST PRICE'].apply(parse_euro_price)
-        tiers = prices.apply(_wm_price_tier)
-        same_p = tiers == trigger_tier
-        near_p = (tiers - trigger_tier).abs() == 1
-        pool.loc[same_p, 'Final_Score'] += WM_S_PRICE_SAME_TIER
-        pool.loc[near_p, 'Final_Score'] += WM_S_PRICE_ONE_OFF
-        if same_p.any() or near_p.any():
-            notes.append(f"  ✓ Price-tier match (tier {trigger_tier}): "
-                         f"same={same_p.sum()}, near={near_p.sum()}")
-
-    # ── 4. Spin-speed premium boost (only for trigger tier ≥ 1)
-    if trigger_tier >= 1:
-        rpm_num = pd.to_numeric(pool['_dr_washer_rpm'], errors='coerce').fillna(0)
-        rpm_mask = rpm_num >= DRYER_PREMIUM_RPM
-        pool.loc[rpm_mask, 'Final_Score'] += DRYER_S_RPM_BOOST
-        if rpm_mask.any():
-            notes.append(f"  ✓ Premium-spin preference (≥{DRYER_PREMIUM_RPM} RPM, premium trigger): "
-                         f"{rpm_mask.sum()} washers (+{DRYER_S_RPM_BOOST:,})")
-
-    # ── 5. Wi-Fi mirror
-    if trigger_specs.get('wifi'):
-        wifi_mask = pool['_dr_washer_wifi'] == True
-        pool.loc[wifi_mask, 'Final_Score'] += WM_S_WIFI_MATCH
-        if wifi_mask.any():
-            notes.append(f"  ✓ Wi-Fi mirror (trigger has Wi-Fi): {wifi_mask.sum()} Wi-Fi washers (+{WM_S_WIFI_MATCH:,})")
-
-    notes.append(f"  Pool size after scoring: {len(pool)}")
-    return pool.sort_values('Final_Score', ascending=False)
-
-
-def _dryer_gate_consumables(c_pool, trigger_brand, notes):
-    """Compatibility gate for the Σφαιρίδια / Απορρυπαντικά pool — applied
-    AFTER the Είδος subset filter, BEFORE scoring (strict filters before
-    scoring). Two hard rules (v28.48.1):
-
-      1. DISHWASHER-ONLY rows out: the 'ταμπλέτ' keyword also catches
-         MIELE UltraTabs ('Ταμπλέτες καθαρισμού πλυντηρίου ΠΙΑΤΩΝ') — a
-         dishwasher product that has no place in a dryer carousel. Rule:
-         drop rows whose Title mentions 'πιάτων' WITHOUT also mentioning
-         'ρούχων' (the AEG 'Πιάτων και Ρούχων' multi-use cleaners stay).
-
-      2. DISPENSER-SYSTEM consumables are brand-locked: MIELE FA flacons
-         ('Αρωματικό Στεγνωτηρίου') clip into MIELE's FragranceDos slot and
-         MIELE UltraPhase cartridges into TwinDos — neither works in any
-         other machine. They had the top sales in the pool (252/190), so
-         without this gate they hit slot 3 for EVERY trigger brand
-         (CANDY/LG/SAMSUNG included). For non-MIELE triggers they're
-         DROPPED; for MIELE triggers they stay (and legitimately win).
-
-    What remains for non-MIELE triggers: ELECTROLUX EDBALL dryer balls
-    (truly universal — and the most dryer-relevant consumable) + AEG
-    multi-use descalers + generic detergents.
-    """
-    if c_pool.empty:
-        return c_pool
-
-    pool = c_pool.copy()
-    title_lower = pool['Title'].fillna('').astype(str).str.lower()
-    tb = (trigger_brand or '').upper().strip()
-
-    # ── 1. Drop dishwasher-only consumables
-    dish_only = title_lower.str.contains('πιάτων', regex=False) & \
-                ~title_lower.str.contains('ρούχων', regex=False)
-    if dish_only.any():
-        notes.append(f"  ✗ Dropped {dish_only.sum()} dishwasher-only consumables (πιάτων, όχι ρούχων)")
-        pool = pool[~dish_only]
-        title_lower = title_lower[~dish_only]
-
-    # ── 2. Brand-lock dispenser-system consumables (FragranceDos / TwinDos)
-    if 'Κατασκευαστής' in pool.columns:
-        cand_brand = pool['Κατασκευαστής'].fillna('').astype(str).str.upper().str.strip()
-    else:
-        cand_brand = pool['Title'].fillna('').astype(str).str.split().str[0].str.upper()
-    dispenser = title_lower.str.contains('αρωματικό στεγνωτηρίου', regex=False) | \
-                title_lower.str.contains('ultraphase', regex=False)
-    locked_out = dispenser & (cand_brand != tb)
-    if locked_out.any():
-        notes.append(f"  ✗ Brand-locked dispenser consumables (FragranceDos/TwinDos): "
-                     f"dropped {locked_out.sum()} non-'{tb or '—'}' items (fit only their own machines)")
-        pool = pool[~locked_out]
-
-    notes.append(f"  ✓ Consumable compatibility gate: {len(pool)} / {len(c_pool)} rows survive")
-    return pool
-
-
-def _dryer_build_accessory_brand_pool(c_pool, trigger_brand, notes, role_label,
-                                       brand_critical=False, brand_lock=False):
-    """Score an accessory pool where brand-match is preferred. Same logic as
-    _wm_build_accessory_brand_pool, with two escalation levels:
-
-      brand_critical=True → wrong-brand SOFT penalty (-300,000). Used for
-        stacking kits, where universal ROLLER/MELICONI kits exist as a
-        legitimate fits-anything fallback.
-      brand_lock=True → wrong-brand HARD filter (drop rows). Used for dryer
-        BASKETS: they're drum/model-specific (a BOSCH WMZ20600 will NOT fit
-        an LG drum) and NO universal basket brand exists — so for a trigger
-        brand without its own basket the slot must empty out and the
-        round-robin backfills it from surviving pools. Mirrors the fridge
-        door-panel hard brand lock.
-
-      • Same brand as trigger        → +600,000  (matched-pair compatibility)
-      • Universal accessory brand    → +180,000  (ROLLER/MELICONI fit anything)
-      • Other branded items          → neutral (sales decides)
-      • Wrong brand (brand_critical) → -300,000  (soft — fallback allowed)
-      • Wrong brand (brand_lock)     → DROPPED   (hard — physically incompatible)
-    """
-    if c_pool.empty:
-        return c_pool
-
-    pool = c_pool.copy()
-
-    tb = (trigger_brand or '').upper().strip()
-
-    # ── HARD BRAND LOCK (baskets) — strict filter BEFORE scoring
-    if brand_lock:
-        if not tb:
-            notes.append(f"  ⚠ No trigger brand identified — {role_label} slot stays empty (brand-locked)")
-            return pool.iloc[0:0]
-        if 'Κατασκευαστής' not in pool.columns:
-            notes.append(f"  ⚠ 'Κατασκευαστής' column missing — cannot enforce brand-lock, returning empty pool")
-            return pool.iloc[0:0]
-        cand_brand = pool['Κατασκευαστής'].fillna('').astype(str).str.upper().str.strip()
-        before_n = len(pool)
-        pool = pool[cand_brand == tb].copy()
-        notes.append(f"  ✓ HARD brand-lock ({role_label}): kept {len(pool)}/{before_n} '{tb}' items (model-specific fit)")
-        if pool.empty:
-            notes.append(f"  ⚠ No '{tb}' {role_label} in catalog — slot empties; round-robin backfills from other pools")
-            return pool
-
-    pool['Final_Score'] = 0.0
-
-    if 'AVAILABILITY' in pool.columns:
-        pool.loc[pool['AVAILABILITY'] == 'Άμεσα Διαθέσιμο', 'Final_Score'] += WM_S_AVAILABILITY
-
-    pool['Final_Score'] += pool['Sales_Tiebreaker'].fillna(0) * WM_S_SALES_FACTOR
-
-    if 'Κατασκευαστής' in pool.columns:
-        cand_brand = pool['Κατασκευαστής'].fillna('').astype(str).str.upper().str.strip()
-        same_brand = (cand_brand == tb) if tb else pd.Series(False, index=pool.index)
-        universal  = cand_brand.isin(WM_UNIVERSAL_ACC_BRANDS)
-
-        pool.loc[same_brand, 'Final_Score'] += WM_S_BRAND_MATCH
-        pool.loc[universal,  'Final_Score'] += WM_S_UNIVERSAL_ACC
-
-        if brand_critical and not brand_lock and tb:
-            wrong_brand = (~same_brand) & (~universal) & (cand_brand != '')
-            pool.loc[wrong_brand, 'Final_Score'] += WM_S_BRAND_DISCOUNT
-            if wrong_brand.any():
-                notes.append(f"  ✗ Wrong-brand penalty ({role_label}): {wrong_brand.sum()} items for other brands ({WM_S_BRAND_DISCOUNT:+,})")
-
-        if same_brand.any():
-            notes.append(f"  ✓ Brand match ({tb}): {same_brand.sum()} same-brand accessories (+{WM_S_BRAND_MATCH:,})")
-        if universal.any():
-            notes.append(f"  ✓ Universal accessory brands: {universal.sum()} fits-any items (+{WM_S_UNIVERSAL_ACC:,})")
-
-    return pool.sort_values('Final_Score', ascending=False)
-
-
-# ═══════════════════════════════════════════════════════════════
-# 🟢 DRYERS ENGINE — Στεγνωτήρια (Μεγάλες Συσκευές) — v28.48
-# ═══════════════════════════════════════════════════════════════
-
-def run_dryer_engine(trigger, df_mda, df_sda, df_history):
-    """Build up to 10 cross-sell slots for a tumble-dryer trigger.
-
-    Pools span TWO sheets (mirror of run_washing_machine_engine):
-      • MDA  →  Πλυντήρια Ρούχων  +  Αξεσουάρ Πλυντηρίου - Στεγνωτηρίου
-                (split into 5 sub-slots by Είδος keyword — incl. the
-                dryer-specific Καλάθι Στεγνώματος + Σφαιρίδια buckets)
-      • SDA  →  Σίδερα, Συστήματα Σιδερώματος, Σιδερώστρες
-
-    Round 1 lets Πλυντήρια take 1 (carousel hero); washer #2 lands in
-    round 2 at slot 10 as the alternative bookend. Empty pools are
-    silently skipped — the looping engine over-fills surviving pools to
-    keep the carousel at 10.
-    """
-    diag = []
-    slot_notes = {}
-    all_recs = []
-
-    # ── Trigger attributes (parsed from Title since MDA has no spec columns)
-    tm = trigger['Material']
-    tt = str(trigger.get('Title', ''))
-    tprice = parse_euro_price(trigger.get('LIST PRICE', 0))
-    ttier = _wm_price_tier(tprice)
-    tspecs = _wm_parse_specs(tt)
-    tbrand = tspecs['brand']
-
-    diag.append(("0. Trigger",
-                 f"{tbrand} €{tprice:.0f}",
-                 f"cap={tspecs['capacity_kg']}kg | hp={tspecs['heat_pump']} | "
-                 f"wifi={tspecs['wifi']} | price_tier={ttier} | "
-                 f"cap_tier={_wm_capacity_tier(tspecs['capacity_kg'])}"))
-
-    if df_mda is None or df_mda.empty:
-        diag.append(("ERROR", 0, "MDA sheet is empty — engine cannot run"))
-        return pd.DataFrame(), diag, slot_notes, pd.DataFrame()
-
-    # ── Drop the trigger itself + any other dryers (competitors).
-    # Also drop washer-dryer combos (Πλυντήρια - Στεγνωτήρια) — those are
-    # alternative purchases, not companions. (Εντοιχιζόμενα Πλυντήρια Ρούχων
-    # never enter anyway — the washer pool selects 'Πλυντήρια Ρούχων' only.)
-    c_mda = df_mda[df_mda['Material'] != tm].copy()
-    trigger_hiers_norm = {h.upper().strip() for h in DRYER_TRIGGER_HIERARCHIES}
-    combo_hiers = {'ΠΛΥΝΤΗΡΙΑ - ΣΤΕΓΝΩΤΗΡΙΑ'}
-    exclude = trigger_hiers_norm | combo_hiers
-    b4 = len(c_mda)
-    c_mda = c_mda[~c_mda['Hierarchy'].fillna('').astype(str).str.upper().str.strip().isin(exclude)]
-    diag.append(("1. Excl dryers/combos", len(c_mda),
-                 f"Removed {b4 - len(c_mda)} competitors + combos"))
-
-    # ── Prep SDA pool (irons, steam stations, ironing boards)
-    if df_sda is not None and not df_sda.empty:
-        c_sda = df_sda.copy()
-        diag.append(("1b. SDA pool", len(c_sda),
-                     "Loaded for Σίδερα / Σιδερώματος / Σιδερώστρες slots"))
-    else:
-        c_sda = pd.DataFrame()
-        diag.append(("1b. SDA pool", 0,
-                     "SDA sheet empty — iron-side slots will be skipped"))
-
-    # ── Sales-tiebreaker prep on both pools
-    for _df in (c_mda, c_sda):
-        if not _df.empty:
-            if 'Sum of Sales' in _df.columns:
-                _df['Sales_Tiebreaker'] = pd.to_numeric(_df['Sum of Sales'], errors='coerce').fillna(0)
-            else:
-                _df['Sales_Tiebreaker'] = 0
-
-    # ── Build a sorted pool per priority entry
-    pools = {}  # rank → (role_label, sorted_DataFrame, logic_key, max_round_1, max_total, notes)
-    for rank, role_label, hiers, logic_key, max_r1, max_total in DRYER_PRIORITY:
-        notes = [f"=== Priority {rank}: {role_label} ({logic_key}) "
-                 f"| max_round_1={max_r1} | max_total={max_total if max_total else '∞'} ==="]
-
-        # Pick the right base pool (MDA for washers + accessories; SDA for iron-side)
-        if logic_key in ('DRYER_COMPANION_SDA', 'DRYER_COMPANION_SDA_SALES'):
-            source_pool = c_sda
-        else:
-            source_pool = c_mda
-
-        if source_pool.empty:
-            notes.append(f"  ⚠ Source sheet empty — skipping pool")
-            pools[rank] = (role_label, pd.DataFrame(), logic_key, max_r1, max_total, notes)
-            continue
-
-        hier_upper = {h.upper().strip() for h in hiers}
-        base_pool = source_pool[source_pool['Hierarchy'].fillna('').astype(str).str.upper().str.strip().isin(hier_upper)].copy()
-        notes.append(f"  Base pool size: {len(base_pool)} (hierarchies={hiers})")
-
-        if base_pool.empty:
-            notes.append(f"  ⚠ Hierarchy not present in data — slot will be filled from other pools")
-            pools[rank] = (role_label, pd.DataFrame(), logic_key, max_r1, max_total, notes)
-            continue
-
-        # ── Score the pool based on its logic key
-        if logic_key == 'DRYER_WASHER':
-            scored = _dryer_build_washer_pool(base_pool, tspecs, ttier, notes)
-
-        elif logic_key in ('DRYER_ACC_STACK', 'DRYER_ACC_BASKET',
-                           'DRYER_ACC_ANTIVIB', 'DRYER_ACC_CONSUMABLE',
-                           'DRYER_ACC_BASE'):
-            subset = _dryer_filter_accessory_subset(base_pool, logic_key, notes)
-            if subset.empty:
-                notes.append(f"  ⚠ No Είδος matches for {logic_key} — pool empty")
-                pools[rank] = (role_label, pd.DataFrame(), logic_key, max_r1, max_total, notes)
-                continue
-            # Stacking kits → brand-CRITICAL soft penalty (universal ROLLER
-            # kits are a valid fallback); dryer baskets → HARD brand lock
-            # (model-specific, no universal brand exists); pedestals →
-            # brand-preferred without penalty; consumables + antivib →
-            # universal-need scoring.
-            if logic_key == 'DRYER_ACC_CONSUMABLE':
-                # v28.48.1 — compatibility gate BEFORE scoring: dishwasher-only
-                # rows out; MIELE FragranceDos/TwinDos items locked to MIELE.
-                subset = _dryer_gate_consumables(subset, tbrand, notes)
-                if subset.empty:
-                    notes.append(f"  ⚠ Consumable gate emptied the pool — slot backfills")
-                    pools[rank] = (role_label, pd.DataFrame(), logic_key, max_r1, max_total, notes)
-                    continue
-                scored = _wm_build_accessory_universal_pool(subset, tbrand, notes)
-            elif logic_key == 'DRYER_ACC_STACK':
-                scored = _dryer_build_accessory_brand_pool(subset, tbrand, notes,
-                                                            role_label, brand_critical=True)
-            elif logic_key == 'DRYER_ACC_BASKET':
-                scored = _dryer_build_accessory_brand_pool(subset, tbrand, notes,
-                                                            role_label, brand_lock=True)
-            elif logic_key == 'DRYER_ACC_BASE':
-                scored = _dryer_build_accessory_brand_pool(subset, tbrand, notes,
-                                                            role_label, brand_critical=False)
-            else:
-                scored = _wm_build_accessory_universal_pool(subset, tbrand, notes)
-
-        elif logic_key == 'DRYER_COMPANION_SDA':
-            scored = _wm_build_sda_companion_pool(base_pool, tbrand, ttier,
-                                                   role_label, sales_only=False, notes=notes)
-
-        elif logic_key == 'DRYER_COMPANION_SDA_SALES':
-            scored = _wm_build_sda_companion_pool(base_pool, tbrand, ttier,
-                                                   role_label, sales_only=True, notes=notes)
-
-        else:
-            # Unknown logic → fall back to pure sales
-            scored = base_pool.copy()
-            scored['Final_Score'] = scored['Sales_Tiebreaker']
-
-        pools[rank] = (role_label, scored, logic_key, max_r1, max_total, notes)
-        diag.append((f"Pool {rank} ({role_label})",
-                     len(scored) if scored is not None else 0, logic_key))
-
-    # ── LOOPING: round-robin fill until target hit or all pools exhausted
-    used_materials = {tm}
-    pool_cursors  = {rank: 0 for rank in pools}
-    pool_taken    = {rank: 0 for rank in pools}
-    slot_num = 0
-    round_idx = 0
-
-    while slot_num < DRYER_SLOT_TARGET:
-        progress = False
-        round_idx += 1
-        for rank, (role_label, scored, logic_key, max_r1, max_total, notes) in pools.items():
-            if slot_num >= DRYER_SLOT_TARGET:
-                break
-            if scored is None or scored.empty:
-                continue
-            if max_total is not None and pool_taken[rank] >= max_total:
-                continue
-
-            take_n = max_r1 if round_idx == 1 else 1
-            if max_total is not None:
-                take_n = min(take_n, max_total - pool_taken[rank])
-
-            cursor = pool_cursors[rank]
-            taken_this_pass = 0
-            while taken_this_pass < take_n and cursor < len(scored) \
-                  and slot_num < DRYER_SLOT_TARGET:
-                row = scored.iloc[cursor]
-                cursor += 1
-                if row['Material'] in used_materials:
-                    continue
-                slot_num += 1
-                rc = row.copy()
-                rc['Assigned_Slot'] = slot_num
-                rc['Slot_Role'] = role_label
-                rc['Marketing_Copy'] = DRYER_MARKETING_COPY.get(role_label, "Ιδανική επιλογή!")
-                rc['Item_Rank'] = round_idx
-                all_recs.append(rc)
-                used_materials.add(row['Material'])
-                taken_this_pass += 1
-                pool_taken[rank] += 1
-                progress = True
-
-                title_preview = str(row.get('Title', ''))[:70]
-                score_val = float(row.get('Final_Score', 0))
-                if slot_num not in slot_notes:
-                    slot_notes[slot_num] = []
-                slot_notes[slot_num].append(
-                    f"Round {round_idx} | Pool '{role_label}' | "
-                    f"Score: {score_val:,.0f} | {title_preview}"
-                )
-
-            pool_cursors[rank] = cursor
-
-        if not progress:
-            diag.append(("Loop", round_idx, "All pools exhausted or capped — stopping"))
-            break
-
-    # ── Pool diagnostics under slot 0
-    pool_diag_notes = []
-    for rank, (role_label, scored, logic_key, max_r1, max_total, notes) in pools.items():
-        pool_diag_notes.extend(notes)
-        cap_note = f" (capped at {max_total})" if max_total is not None else ""
-        pool_diag_notes.append(
-            f"  → consumed {pool_taken[rank]} / {len(scored) if scored is not None else 0} from this pool{cap_note}"
-        )
-        pool_diag_notes.append("")
-    slot_notes[0] = pool_diag_notes
-
-    diag.append(("TOTAL", len(all_recs),
-                 f"Filled {slot_num}/{DRYER_SLOT_TARGET} slots in {round_idx} rounds"))
-
-    if all_recs:
-        recs_df = pd.DataFrame(all_recs)
-        recs_df['Draft_Score'] = recs_df['Assigned_Slot']
-        return recs_df, diag, slot_notes, recs_df
-    return pd.DataFrame(), diag, slot_notes, pd.DataFrame()
-
-
-# ═══════════════════════════════════════════════════════════════
 # 🟢 REFRIGERATORS HELPERS — Ψυγειοκαταψύκτες (Μεγάλες Συσκευές)
 # ═══════════════════════════════════════════════════════════════
 # Four pool builders: panel-series, universal care, kitchen-package
@@ -22737,6 +22340,505 @@ def run_fridge_engine(trigger, df_mda, df_history):
         return recs_df, diag, slot_notes, recs_df
     return pd.DataFrame(), diag, slot_notes, pd.DataFrame()
 
+
+
+
+# ═════════════════════════════════════════════════════════════
+# 🟢 COOKERS HELPERS — Κουζίνες (v28.48)
+# ═════════════════════════════════════════════════════════════
+# Pool builders for the round-robin cookers engine. Config + hob/brand/
+# classification helpers live in the COOKERS CONFIGURATION block near the
+# top of the file (needed at sidebar load time).
+#
+# Pools span BOTH Home-file sheets: MDA Αξεσουάρ Κουζινών + Αξεσουάρ
+# Φούρνων hold the type-classified accessory universe (care / regulator /
+# cookware / trays / rails / probes); SDA contributes Ζυγαριές, Φριτέζες,
+# Ψηστιέρες-Γκριλιέρες as whole hierarchies plus a TITLE-hunted prep pool
+# (Κρεατομηχανές / Πολυμάγειρες / μηχανές ζυμαρικών inside Ειδικές
+# Συσκευές) and the one universal kitchen thermometer (PROFICOOK, also
+# misfiled-adjacent in Ειδικές Συσκευές).
+
+def _ck_prep_kitchen_acc_frame(c_mda):
+    """Slice + dedup + type-tag Αξεσουάρ Κουζινών + Αξεσουάρ Φούρνων once;
+    care/regulator/cookware/tray/rail/thermo/overflow pools are
+    type-filters over this frame."""
+    hn = c_mda['Hierarchy'].fillna('').astype(str).map(_cm_norm)
+    acc = c_mda[hn.isin({_cm_norm('Αξεσουάρ Κουζινών'), _cm_norm('Αξεσουάρ Φούρνων')})].copy()
+    if acc.empty:
+        return acc
+    acc = acc.drop_duplicates(subset=['Material'])
+    acc['_ck_type'] = acc['Title'].fillna('').astype(str).map(_ck_classify_kitchen_acc)
+    acc['_ck_brand'] = acc.apply(_ck_row_brand, axis=1)
+    return acc
+
+
+def _ck_base_score(pool):
+    """Availability + sales — the common floor of every pool's score."""
+    pool['Final_Score'] = 0.0
+    if 'AVAILABILITY' in pool.columns:
+        pool.loc[pool['AVAILABILITY'] == 'Άμεσα Διαθέσιμο', 'Final_Score'] += CK_S_AVAILABILITY
+    pool['Final_Score'] += pool['Sales_Tiebreaker'].fillna(0) * CK_S_SALES_FACTOR
+    return pool
+
+
+def _ck_brand_layer(pool, trigger_brand, notes, label=''):
+    """Soft ecosystem layer: exact brand +400k, BSH-family sibling +250k.
+    Uses the parsed _ck_brand when present (NaN-Κατασκευαστής rows),
+    falling back to the raw column for SDA pools."""
+    if not trigger_brand:
+        return pool
+    fam = _CK_BSH_FAMILY if trigger_brand in _CK_BSH_FAMILY else set()
+    bcol = pool['_ck_brand'] if '_ck_brand' in pool.columns else \
+        pool['Κατασκευαστής'].fillna('').astype(str).str.upper().str.strip()
+    exact = bcol == trigger_brand
+    family = bcol.isin(fam) & ~exact if fam else pd.Series(False, index=pool.index)
+    pool.loc[exact, 'Final_Score'] += CK_S_BRAND_MATCH
+    pool.loc[family, 'Final_Score'] += CK_S_BRAND_FAMILY
+    if exact.any() or family.any():
+        notes.append(f"  ✓ Brand ecosystem {label}({trigger_brand}): exact={exact.sum()} (+{CK_S_BRAND_MATCH:,}), family={family.sum()} (+{CK_S_BRAND_FAMILY:,})")
+    return pool
+
+
+def _ck_tier_layer(pool, trigger_tier, notes):
+    """Price-tier proximity — appliance-grade companions only (cookware,
+    prep). Impulse pools (care, scale, tray, rail, thermo, regulator)
+    skip it, same split as the coffee + ironing engines."""
+    if 'LIST PRICE' in pool.columns:
+        tiers = pool['LIST PRICE'].apply(parse_euro_price).apply(_ck_price_tier)
+        same_tier = tiers == trigger_tier
+        near_tier = (tiers - trigger_tier).abs() == 1
+        pool.loc[same_tier, 'Final_Score'] += CK_S_PRICE_SAME_TIER
+        pool.loc[near_tier, 'Final_Score'] += CK_S_PRICE_ONE_OFF
+        if same_tier.any() or near_tier.any():
+            notes.append(f"  ✓ Price-tier match (tier {trigger_tier}): same={same_tier.sum()}, near={near_tier.sum()}")
+    return pool
+
+
+def _ck_build_care_pool(acc, hob, trigger_brand, notes):
+    """Slots — Καθαρισμός ×2 (brand-diverse pair, e.g. MIELE κρέμα +
+    BOSCH τζελ φούρνου).
+
+    HOB GATE: care_ceramic (ξύστρες, λεπίδες, καθαριστικό κεραμικών) is
+    ONLY eligible on CERAMIC / INDUCTION hobs — a scraper against a gas or
+    enamel cooker is a physical mismatch, HARD-dropped. care_oven
+    (καθαριστικά/τζελ φούρνου, πανί μικροϊνών) is universal: every cooker
+    has an oven. On ceramic/induction triggers the ceramic-specific items
+    get +CK_S_HOB_SPECIFIC so the pair leads with the hob-matched product
+    (user slot 1) and the oven cleaner lands as pick #2 (user slot 2)."""
+    pool = acc[acc['_ck_type'].isin(['care_ceramic', 'care_oven'])].copy()
+    if pool.empty:
+        notes.append("  ⚠ No cleaning products in Αξεσουάρ Κουζινών/Φούρνων")
+        return pool
+    ceramic_ok = hob in ('CERAMIC', 'INDUCTION')
+    if not ceramic_ok:
+        drop = pool['_ck_type'] == 'care_ceramic'
+        if drop.any():
+            notes.append(f"  ✗ HARD-dropped {drop.sum()} ceramic-hob care items (hob={hob} — no glass surface to scrape)")
+        pool = pool[~drop]
+        if pool.empty:
+            notes.append("  ⚠ Care pool empty after hob gating")
+            return pool
+    pool = _ck_base_score(pool)
+    pool.loc[:, 'Final_Score'] += CK_S_TYPE_RELEVANT
+    if ceramic_ok:
+        cer = pool['_ck_type'] == 'care_ceramic'
+        pool.loc[cer, 'Final_Score'] += CK_S_HOB_SPECIFIC
+        if cer.any():
+            notes.append(f"  ✓ Ceramic-hob care leads the pair: {cer.sum()} (+{CK_S_HOB_SPECIFIC:,})")
+    spare = pool['Title'].fillna('').astype(str).map(_cm_norm).str.contains('ΑΝΤΑΛΛΑΚΤΙΚ', na=False)
+    pool.loc[spare, 'Final_Score'] += CK_S_SPARE_PART_PEN
+    if spare.any():
+        notes.append(f"  ✗ Spare-part demotion (ΑΝΤΑΛΛΑΚΤΙΚ): {spare.sum()} ({CK_S_SPARE_PART_PEN:,})")
+    pool = _ck_brand_layer(pool, trigger_brand, notes)
+    notes.append(f"  Pool size: {len(pool)} | mix: {pool['_ck_type'].value_counts().to_dict()}")
+    return pool.sort_values('Final_Score', ascending=False)
+
+
+def _ck_build_gas_reg_pool(acc, hob, trigger_brand, notes):
+    """Slot — Ρυθμιστής Πίεσης Υγραερίου. HARD hob gate: GAS / MIXED
+    triggers only — the inverse of the ceramic-scraper gate. One SKU in
+    the catalog (LA GERMANIA 3kg/h 29mbar) and 51% of all cooker triggers
+    ARE LA GERMANIA gas models → brand boost usually fires too. Electric
+    triggers cleanly skip the slot."""
+    if hob not in ('GAS', 'MIXED'):
+        notes.append(f"  ℹ Electric trigger (hob={hob}) — gas regulator slot skipped")
+        return pd.DataFrame()
+    pool = acc[acc['_ck_type'] == 'gas_regulator'].copy()
+    if pool.empty:
+        notes.append("  ⚠ No gas-pressure regulators in Αξεσουάρ Κουζινών")
+        return pool
+    pool = _ck_base_score(pool)
+    pool.loc[:, 'Final_Score'] += CK_S_TYPE_RELEVANT
+    pool = _ck_brand_layer(pool, trigger_brand, notes)
+    notes.append(f"  Pool size: {len(pool)} (gas trigger — regulator eligible)")
+    return pool.sort_values('Final_Score', ascending=False)
+
+
+def _ck_build_cookware_pool(acc, hob, trigger_brand, trigger_tier, notes):
+    """Slots — Μαγειρικά Σκεύη ×2 (substitutes the spec's pan/pot/mitts
+    slots — no standalone cookware hierarchies exist).
+
+    INDUCTION GATE (user spec: 'induction-compatible if induction hob'):
+    aluminium-bodied items (ΑΛΟΥΜΙΝΙ in title — the AEG Fusion Wok) are
+    HARD-dropped for INDUCTION triggers — no ferromagnetic base, the hob
+    won't even detect them. Inox sets (BOSCH HEZ9SE030 / AEG A3SS / NEFF
+    Z943SE0) and the FISSLER χύτρα are all-hob. Appliance-grade pool →
+    tier mirror ON (a €419 χύτρα shouldn't lead against a €339 OMNYS)."""
+    pool = acc[acc['_ck_type'] == 'cookware'].copy()
+    if pool.empty:
+        notes.append("  ⚠ No cookware in Αξεσουάρ Κουζινών")
+        return pool
+    if hob == 'INDUCTION':
+        tn = pool['Title'].fillna('').astype(str).map(_cm_norm)
+        alu = tn.str.contains('ΑΛΟΥΜΙΝΙ', na=False)
+        if alu.any():
+            notes.append(f"  ✗ HARD-dropped {alu.sum()} aluminium cookware (induction hob — no ferromagnetic base)")
+        pool = pool[~alu]
+        if pool.empty:
+            notes.append("  ⚠ Cookware pool empty after induction gating")
+            return pool
+    pool = _ck_base_score(pool)
+    pool.loc[:, 'Final_Score'] += CK_S_TYPE_RELEVANT
+    pool = _ck_brand_layer(pool, trigger_brand, notes)
+    pool = _ck_tier_layer(pool, trigger_tier, notes)
+    notes.append(f"  Pool size: {len(pool)}")
+    return pool.sort_values('Final_Score', ascending=False)
+
+
+def _ck_build_tray_pool(acc, trigger_brand, notes):
+    """Slots — Ταψί & Σκεύη Φούρνου ×2 (brand-diverse). Trays mount on
+    oven side rails — the BSH/AEG/NEFF trays in the catalog are sized for
+    their own ovens, but freestanding-cooker oven cavities are standard
+    width, so this stays a SOFT brand layer (exact + BSH family), not a
+    hard gate. Impulse-adjacent → no tier mirror; sales lead (BOSCH
+    HEZ633073, 793 sales)."""
+    pool = acc[acc['_ck_type'] == 'tray'].copy()
+    if pool.empty:
+        notes.append("  ⚠ No trays in Αξεσουάρ Φούρνων/Κουζινών")
+        return pool
+    pool = _ck_base_score(pool)
+    pool.loc[:, 'Final_Score'] += CK_S_TYPE_RELEVANT
+    pool = _ck_brand_layer(pool, trigger_brand, notes)
+    notes.append(f"  Pool size: {len(pool)} | brands: {pool['_ck_brand'].replace('', pd.NA).nunique()}")
+    return pool.sort_values('Final_Score', ascending=False)
+
+
+def _ck_build_rail_pool(acc, trigger_brand, notes):
+    """Slot — Τηλεσκοπικός Μηχανισμός. HARD brand-FAMILY gate (user spec:
+    'same brand'; printer-cartridge philosophy): rails bolt onto
+    model-specific side-rack mounts. BSH marques share the platform
+    (HEZ538000 ↔ PZ11TI15X0 ↔ Z11TI15X0 are the same part rebranded —
+    same family precedent as the fridge engine), MIELE FlexiClip and LG
+    are strict same-brand. LA GERMANIA / BERTAZZONI have no rails in the
+    catalog → the slot cleanly EMPTIES and the backfill chain absorbs it.
+    No cross-brand bleed, ever."""
+    pool = acc[acc['_ck_type'] == 'rail'].copy()
+    if pool.empty:
+        notes.append("  ⚠ No telescopic rails in Αξεσουάρ Κουζινών/Φούρνων")
+        return pool
+    fam = _ck_brand_family(trigger_brand)
+    keep = pool['_ck_brand'].isin(fam)
+    dropped = (~keep).sum()
+    if dropped:
+        notes.append(f"  ✗ HARD-dropped {dropped} rails (brand family ≠ {trigger_brand or '—'} — model-specific mounts)")
+    pool = pool[keep]
+    if pool.empty:
+        notes.append(f"  ⚠ No {trigger_brand or '—'}-compatible rail in catalog — slot backfills (correct behavior, no cross-brand bleed)")
+        return pool
+    pool = _ck_base_score(pool)
+    pool.loc[:, 'Final_Score'] += CK_S_TYPE_RELEVANT
+    exact = pool['_ck_brand'] == trigger_brand
+    pool.loc[exact, 'Final_Score'] += CK_S_BRAND_MATCH
+    notes.append(f"  ✓ Family-compatible rails ({trigger_brand}): {len(pool)} (exact brand: {exact.sum()})")
+    return pool.sort_values('Final_Score', ascending=False)
+
+
+def _ck_build_thermo_pool(acc, c_sda, trigger_brand, notes):
+    """Slot — Θερμόμετρο Μαγειρικής. TWO sources, TWO rules:
+      • MDA oven probes (NEFF Z1365WX0 / BOSCH HEZ32WA00 / HEZ39050) plug
+        into the oven's probe socket → HARD BSH-family gate.
+      • The universal PROFICOOK PC-DHT 1039 kitchen thermometer lives in
+        SDA Ειδικές Συσκευές → always eligible, any trigger.
+    Result: BSH triggers see their own wireless probe first; everyone
+    else still gets the universal thermometer (user slot-10 alternative)."""
+    fam = _ck_brand_family(trigger_brand)
+    probes = acc[acc['_ck_type'] == 'thermo'].copy()
+    if not probes.empty:
+        keep = probes['_ck_brand'].isin(fam & _CK_BSH_FAMILY)
+        dropped = (~keep).sum()
+        if dropped:
+            notes.append(f"  ✗ HARD-dropped {dropped} oven probes (BSH-socket parts, family ≠ {trigger_brand or '—'})")
+        probes = probes[keep]
+    tn = c_sda['Title'].fillna('').astype(str).map(_cm_norm)
+    universal = c_sda[tn.str.contains('ΘΕΡΜΟΜΕΤΡΟ ΚΟΥΖΙΝΑΣ', na=False)].drop_duplicates(subset=['Material']).copy()
+    if not universal.empty:
+        notes.append(f"  ✓ Universal kitchen thermometer(s): {len(universal)}")
+    pool = pd.concat([probes, universal], ignore_index=False) if (not probes.empty or not universal.empty) else pd.DataFrame()
+    if pool.empty:
+        notes.append("  ⚠ No compatible thermometer — slot backfills")
+        return pool
+    pool = _ck_base_score(pool)
+    pool.loc[:, 'Final_Score'] += CK_S_TYPE_RELEVANT
+    if not probes.empty:
+        pool.loc[probes.index, 'Final_Score'] += CK_S_BRAND_MATCH  # own-socket probe outranks generic
+    notes.append(f"  Pool size: {len(pool)} (probes: {len(probes)}, universal: {len(universal)})")
+    return pool.sort_values('Final_Score', ascending=False)
+
+
+def _ck_build_prep_pool(c_sda, trigger_brand, trigger_tier, notes):
+    """Slots — Κρεατομηχανή / Πολυμάγειρας ×2 (substitutes the spec's
+    mixer + chopper slots — neither hierarchy exists in any workbook;
+    verified v28.48). TITLE hunt inside Ειδικές Συσκευές: ΚΡΕΑΤΟΜΗΧΑΝ +
+    ΠΟΛΥΜΑΓΕΙΡ + ΖΥΜΑΡΙΚ (pasta makers). Brand-diverse pair via the loop
+    cap (BOSCH κρεατομηχανή + NINJA πολυμάγειρας, never two NINJA).
+    Appliance-grade → tier mirror ON."""
+    hn = c_sda['Hierarchy'].fillna('').astype(str).map(_cm_norm)
+    es = c_sda[hn == _cm_norm('Ειδικές Συσκευές')]
+    if es.empty:
+        notes.append("  ⚠ Ειδικές Συσκευές hierarchy missing from SDA")
+        return pd.DataFrame()
+    tn = es['Title'].fillna('').astype(str).map(_cm_norm)
+    pool = es[tn.str.contains('ΚΡΕΑΤΟΜΗΧΑΝ|ΠΟΛΥΜΑΓΕΙΡ|ΖΥΜΑΡΙΚ', regex=True, na=False)].drop_duplicates(subset=['Material']).copy()
+    if pool.empty:
+        notes.append("  ⚠ No κρεατομηχανές/πολυμάγειρες in Ειδικές Συσκευές")
+        return pool
+    pool = _ck_base_score(pool)
+    pool.loc[:, 'Final_Score'] += CK_S_TYPE_RELEVANT
+    pool = _ck_brand_layer(pool, trigger_brand, notes)
+    pool = _ck_tier_layer(pool, trigger_tier, notes)
+    notes.append(f"  Pool size: {len(pool)} | brands: {pool['Κατασκευαστής'].nunique()}")
+    return pool.sort_values('Final_Score', ascending=False)
+
+
+def _ck_build_hierarchy_pool(c_sda, hier_name, trigger_brand, notes, label):
+    """Shared builder for the whole-hierarchy SDA pools (Ζυγαριές,
+    Φριτέζες, Ψηστιέρες-Γκριλιέρες). Impulse pattern: availability +
+    sales + soft brand boost, NO tier mirror — a €17 LAICA scale sells
+    against any cooker."""
+    hn = c_sda['Hierarchy'].fillna('').astype(str).map(_cm_norm)
+    pool = c_sda[hn == _cm_norm(hier_name)].drop_duplicates(subset=['Material']).copy()
+    if pool.empty:
+        notes.append(f"  ⚠ No {label} in SDA")
+        return pool
+    pool = _ck_base_score(pool)
+    pool.loc[:, 'Final_Score'] += CK_S_TYPE_RELEVANT
+    pool = _ck_brand_layer(pool, trigger_brand, notes)
+    notes.append(f"  ℹ Impulse companion — tier mirroring OFF (sales + availability decide)")
+    notes.append(f"  Pool size: {len(pool)}")
+    return pool.sort_values('Final_Score', ascending=False)
+
+
+# ═════════════════════════════════════════════════════════════
+# 🟢 COOKERS ENGINE — Κουζίνες (v28.48)
+# ═════════════════════════════════════════════════════════════
+
+def run_cookers_engine(trigger, df_mda, df_sda, df_history):
+    """Build up to 10 cross-sell slots for a cooker trigger (Κουζίνα
+    Αερίου / Ηλεκτρική).
+
+    Round 1 lays the hero of each live pool across slots 1-8 (Καθαρισμός →
+    Ρυθμιστής → Σκεύη → Ταψί → Τηλεσκοπικός → Θερμόμετρο → Κρεατομηχανή/
+    Πολυμάγειρας → Ζυγαριά); the hob gates mean a typical trigger has 6-8
+    live pools. Round 2 lays the B-options (different brand, enforced by
+    the brand-diversity cap) of the 2-cap pools; the backfill chain
+    (Φριτέζα → Ψηστιέρα → kitchen-accessory overflow) guarantees 10/10.
+
+    Trigger + MDA accessory pools come from the MDA sheet; Ζυγαριές /
+    Φριτέζες / Ψηστιέρες / prep machines / the universal thermometer come
+    from the SDA sheet.
+    """
+    diag = []
+    slot_notes = {}
+    all_recs = []
+
+    # ── Trigger attributes
+    tm = trigger['Material']
+    tb = str(trigger.get('Κατασκευαστής', '')).strip().upper()
+    tprice = parse_euro_price(trigger.get('LIST PRICE', 0))
+    ttier = _ck_price_tier(tprice)
+    thob = _ck_detect_hob(trigger)
+
+    diag.append(("0. Trigger", f"{tb} €{tprice:.0f}",
+                 f"Hob={thob} | Tier={ttier} | Hierarchy={trigger.get('Hierarchy', '—')} | "
+                 f"Τύπος εστίας={_cm_attr(trigger, 'Τύπος εστίας ≡', '—')}"))
+
+    if df_mda is None or df_mda.empty:
+        diag.append(("ERROR", 0, "MDA sheet is empty — engine cannot run"))
+        return pd.DataFrame(), diag, slot_notes, pd.DataFrame()
+
+    # ── MDA universe minus the trigger + ALL competitor cookers (plus the
+    # adjacent built-in cooking hierarchies — a freestanding-cooker buyer
+    # shouldn't see hobs/ovens/built-in sets, they solve the same problem)
+    c_mda = df_mda[df_mda['Material'] != tm].copy()
+    hn = c_mda['Hierarchy'].fillna('').astype(str).map(_cm_norm)
+    competitor_hiers = {_cm_norm(h) for h in COOKER_TRIGGER_HIERARCHIES}
+    competitor_prefixes = ('ΕΣΤΙΕΣ', 'ΦΟΥΡΝΟΙ', 'ΕΝΤΟΙΧΙΖΟΜΕΝ')
+    is_comp = hn.isin(competitor_hiers) | hn.str.startswith(competitor_prefixes)
+    b4 = len(c_mda)
+    c_mda = c_mda[~is_comp]
+    diag.append(("1. MDA pool", len(c_mda),
+                 f"Removed {b4 - len(c_mda)} competitor cookers/hobs/ovens/built-in sets"))
+
+    # ── Sales tiebreaker prep (pandas-3.x safe: plain float64)
+    for frame in (c_mda,):
+        if 'Sum of Sales' in frame.columns:
+            frame['Sales_Tiebreaker'] = pd.to_numeric(frame['Sum of Sales'], errors='coerce').fillna(0.0).astype('float64')
+        else:
+            frame['Sales_Tiebreaker'] = 0.0
+
+    c_sda = pd.DataFrame()
+    if df_sda is not None and not df_sda.empty:
+        c_sda = df_sda[df_sda['Material'] != tm].copy()
+        if 'Sum of Sales' in c_sda.columns:
+            c_sda['Sales_Tiebreaker'] = pd.to_numeric(c_sda['Sum of Sales'], errors='coerce').fillna(0.0).astype('float64')
+        else:
+            c_sda['Sales_Tiebreaker'] = 0.0
+
+    # ── Type-tagged kitchen-accessory frame (care/regulator/cookware/tray/rail/thermo)
+    acc = _ck_prep_kitchen_acc_frame(c_mda)
+    diag.append(("2. Αξεσουάρ Κουζινών+Φούρνων", len(acc),
+                 f"Type mix: {acc['_ck_type'].value_counts().to_dict() if not acc.empty else '—'}"))
+
+    # ── Build a sorted pool per priority entry
+    pools = {}
+    for rank, role_label, logic_key, max_r1, max_total in COOKER_PRIORITY:
+        notes = [f"=== Priority {rank}: {role_label} ({logic_key}) "
+                 f"| max_round_1={max_r1} | max_total={max_total if max_total else '∞'} ==="]
+
+        if logic_key == 'CK_CARE':
+            scored = _ck_build_care_pool(acc, thob, tb, notes) if not acc.empty else pd.DataFrame()
+        elif logic_key == 'CK_GAS_REG':
+            scored = _ck_build_gas_reg_pool(acc, thob, tb, notes) if not acc.empty else pd.DataFrame()
+        elif logic_key == 'CK_COOKWARE':
+            scored = _ck_build_cookware_pool(acc, thob, tb, ttier, notes) if not acc.empty else pd.DataFrame()
+        elif logic_key == 'CK_TRAY':
+            scored = _ck_build_tray_pool(acc, tb, notes) if not acc.empty else pd.DataFrame()
+        elif logic_key == 'CK_RAIL':
+            scored = _ck_build_rail_pool(acc, tb, notes) if not acc.empty else pd.DataFrame()
+        elif logic_key == 'CK_THERMO':
+            scored = _ck_build_thermo_pool(acc, c_sda, tb, notes) if (not acc.empty or not c_sda.empty) else pd.DataFrame()
+        elif logic_key == 'CK_PREP':
+            scored = _ck_build_prep_pool(c_sda, tb, ttier, notes) if not c_sda.empty else pd.DataFrame()
+        elif logic_key == 'CK_SCALE':
+            scored = _ck_build_hierarchy_pool(c_sda, 'Ζυγαριές', tb, notes, 'ζυγαριές') if not c_sda.empty else pd.DataFrame()
+        elif logic_key == 'CK_AIRFRYER':
+            scored = _ck_build_hierarchy_pool(c_sda, 'Φριτέζες', tb, notes, 'φριτέζες') if not c_sda.empty else pd.DataFrame()
+        elif logic_key == 'CK_GRILL':
+            scored = _ck_build_hierarchy_pool(c_sda, 'Ψηστιέρες, Γκριλιέρες', tb, notes, 'ψηστιέρες') if not c_sda.empty else pd.DataFrame()
+        elif logic_key == 'CK_OVERFLOW':
+            # Last-resort backfill — leftover kitchen/oven accessories
+            # (ROLLER appliance bases, σακούλες, MIELE καπάκι σκεύους…).
+            # The typed pools own their slots; hood parts and steam-oven
+            # tablets are already classified 'other' BUT hood parts are
+            # excluded again here by title — they're for a different
+            # appliance, never recommendable against a cooker.
+            scored = acc[acc['_ck_type'] == 'other'].copy() if not acc.empty else pd.DataFrame()
+            if not scored.empty:
+                tnn = scored['Title'].fillna('').astype(str).map(_cm_norm)
+                scored = scored[~tnn.str.contains('ΑΠΟΡΡΟΦΗΤΗΡ|ΦΙΛΤΡΟ ΑΝΘΡΑΚΑ|ΦΟΥΡΝΟ ΑΤΜΟΥ', regex=True, na=False)]
+            if not scored.empty:
+                scored = _ck_base_score(scored)
+                scored = _ck_brand_layer(scored, tb, notes, label='(overflow) ')
+                scored = scored.sort_values('Final_Score', ascending=False)
+                notes.append(f"  Overflow pool size: {len(scored)}")
+            else:
+                notes.append("  ⚠ Overflow pool empty")
+        else:
+            scored = pd.DataFrame()
+
+        pools[rank] = (role_label, scored, logic_key, max_r1, max_total, notes)
+        diag.append((f"Pool {rank} ({role_label})", 0 if scored is None or scored.empty else len(scored), logic_key))
+
+    # ── LOOPING: round-robin fill until target hit or all pools exhausted
+    used_materials = {tm}
+    pool_cursors = {rank: 0 for rank in pools}
+    pool_taken = {rank: 0 for rank in pools}
+    # Brand-diversity guard: max CK_BRAND_DIVERSITY_CAP per brand inside the
+    # 2-cap pools — guarantees pair A ≠ pair B brand (MIELE κρέμα + BOSCH
+    # τζελ, BOSCH κρεατομηχανή + NINJA πολυμάγειρας, never two MIELE).
+    pool_brand_counts = {rank: {} for rank in pools}
+    slot_num = 0
+    round_idx = 0
+
+    while slot_num < COOKER_SLOT_TARGET:
+        progress = False
+        round_idx += 1
+        for rank, (role_label, scored, logic_key, max_r1, max_total, notes) in pools.items():
+            if slot_num >= COOKER_SLOT_TARGET:
+                break
+            if scored is None or scored.empty:
+                continue
+            if max_total is not None and pool_taken[rank] >= max_total:
+                continue
+
+            take_n = max_r1 if round_idx == 1 else 1
+            if max_total is not None:
+                take_n = min(take_n, max_total - pool_taken[rank])
+
+            apply_brand_diversity = (logic_key in ('CK_CARE', 'CK_COOKWARE', 'CK_TRAY', 'CK_PREP'))
+
+            cursor = pool_cursors[rank]
+            taken_this_pass = 0
+            while taken_this_pass < take_n and cursor < len(scored) \
+                  and slot_num < COOKER_SLOT_TARGET:
+                row = scored.iloc[cursor]
+                cursor += 1
+                if row['Material'] in used_materials:
+                    continue
+                row_brand = str(row.get('_ck_brand', '') or row.get('Κατασκευαστής', '') or '').strip().upper()
+                if apply_brand_diversity:
+                    if pool_brand_counts[rank].get(row_brand, 0) >= CK_BRAND_DIVERSITY_CAP:
+                        continue
+
+                slot_num += 1
+                rc = row.copy()
+                rc['Slot_Position'] = slot_num
+                rc['Assigned_Slot'] = slot_num
+                rc['Slot_Role'] = role_label
+                rc['Marketing_Copy'] = COOKER_MARKETING_COPY.get(role_label, "Ιδανική επιλογή!")
+                rc['Item_Rank'] = round_idx
+                all_recs.append(rc)
+                used_materials.add(row['Material'])
+                taken_this_pass += 1
+                pool_taken[rank] += 1
+                if apply_brand_diversity:
+                    pool_brand_counts[rank][row_brand] = pool_brand_counts[rank].get(row_brand, 0) + 1
+                progress = True
+
+                title_preview = str(row.get('Title', ''))[:70]
+                score_val = float(row.get('Final_Score', 0))
+                type_hint = f" | type={row.get('_ck_type', '')}" if '_ck_type' in row.index else ""
+                if slot_num not in slot_notes:
+                    slot_notes[slot_num] = []
+                slot_notes[slot_num].append(
+                    f"Round {round_idx} | Pool '{role_label}' | "
+                    f"Score: {score_val:,.0f}{type_hint} | {title_preview}"
+                )
+
+            pool_cursors[rank] = cursor
+
+        if not progress:
+            diag.append(("Loop", round_idx, "All pools exhausted or capped — stopping"))
+            break
+
+    # ── Pool diagnostics under slot 0
+    pool_diag_notes = []
+    for rank, (role_label, scored, logic_key, max_r1, max_total, notes) in pools.items():
+        pool_diag_notes.extend(notes)
+        cap_note = f" (capped at {max_total})" if max_total is not None else ""
+        pool_diag_notes.append(
+            f"  → consumed {pool_taken[rank]} / {len(scored) if scored is not None else 0} from this pool{cap_note}"
+        )
+        pool_diag_notes.append("")
+    slot_notes[0] = pool_diag_notes
+
+    diag.append(("TOTAL", len(all_recs), f"Filled {slot_num}/{COOKER_SLOT_TARGET} slots in {round_idx} rounds"))
+
+    if all_recs:
+        recs_df = pd.DataFrame(all_recs)
+        recs_df['Draft_Score'] = recs_df['Assigned_Slot']
+        return recs_df, diag, slot_notes, recs_df
+    return pd.DataFrame(), diag, slot_notes, pd.DataFrame()
 
 
 # ═════════════════════════════════════════════════════════════
@@ -27571,13 +27673,6 @@ elif active_cluster == "Washing Machines":
     # Σιδερώματος, Σιδερώστρες, Συστήματα Ατμού) live in the SDA sheet.
     recs, diag, slot_notes, full_candidates = run_washing_machine_engine(trigger, df_mda, df_sda, df_history)
     slot_diag = []
-elif active_cluster == "Dryers":
-    # Στεγνωτήρια + Πλυντήρια Ρούχων + Αξεσουάρ Πλυντηρίου-Στεγνωτηρίου
-    # live in the MDA sheet; iron-side companions (Σίδερα, Συστήματα
-    # Σιδερώματος, Σιδερώστρες) live in the SDA sheet. Mirror of the
-    # Washing Machines engine — matched-pair washer is the hero slot.
-    recs, diag, slot_notes, full_candidates = run_dryer_engine(trigger, df_mda, df_sda, df_history)
-    slot_diag = []
 elif active_cluster == "Fridges":
     # Ψυγειοκαταψύκτες + every kitchen-package hierarchy lives in the MDA
     # sheet. No need to load SDA — the History data showed Small Kitchen
@@ -27585,6 +27680,13 @@ elif active_cluster == "Fridges":
     # Series-aware (SAMSUNG BESPOKE detection) + color-matched + brand-family
     # boosts (BSH: BOSCH↔PITSOS↔SIEMENS↔NEFF).
     recs, diag, slot_notes, full_candidates = run_fridge_engine(trigger, df_mda, df_history)
+    slot_diag = []
+elif active_cluster == "Cookers":
+    # Κουζίνες + Αξεσουάρ Κουζινών/Φούρνων (care, regulator, cookware,
+    # trays, rails, probes) live in the MDA sheet; Ζυγαριές, Φριτέζες,
+    # Ψηστιέρες and the κρεατομηχανές/πολυμάγειρες prep pool live in the
+    # SDA sheet. Hob-type hard gates + BSH family rails + brand diversity.
+    recs, diag, slot_notes, full_candidates = run_cookers_engine(trigger, df_mda, df_sda, df_history)
     slot_diag = []
 elif active_cluster == "TVs":
     recs, diag, slot_notes, full_candidates = run_tv_engine(trigger, df_products, df_history)
@@ -28080,12 +28182,6 @@ with st.expander("⚙️ System Diagnostics"):
         # appear in the diagnostics panel under "0. Trigger".
         attr_keys_to_show = ['Material','Title','Level 1','Level 2','Hierarchy',
                               'Sum of Sales','LIST PRICE','AVAILABILITY']
-    elif active_cluster == "Dryers":
-        # Same data situation as WMs — MDA has no spec columns for dryers.
-        # Title-parsed specs (kg, heat pump, Wi-Fi) appear in the
-        # diagnostics panel under "0. Trigger".
-        attr_keys_to_show = ['Material','Title','Level 1','Level 2','Hierarchy',
-                              'Sum of Sales','LIST PRICE','AVAILABILITY']
     elif active_cluster == "Fridges":
         # Fridges have rich, 100%-filled spec data — surface the signals
         # that drive the engine: brand, color, capacity, cooling system,
@@ -28095,6 +28191,17 @@ with st.expander("⚙️ System Diagnostics"):
                               'Κατασκευαστής','Χρώμα','Συνολική καθαρή χωρητικότητα',
                               'Σύστημα ψύξης','Συνδεσιμότητα','Συμβατό με εφαρμογή',
                               'Ενεργειακή κλάση ≡','Sum of Sales','LIST PRICE','AVAILABILITY']
+    elif active_cluster == "Cookers":
+        # Cookers carry rich, near-100% spec data — surface the signals
+        # that drive the engine: hob type (the hard gate), brand, burner
+        # count, width, color, energy class. Hob detection (incl. the
+        # Latin-E 'Eπαγωγική' trap and 'Εμαγιέ;Αερίου' combos) appears in
+        # diagnostics under "0. Trigger". NBSP headers resolved via the
+        # NBSP-tolerant lookup below.
+        attr_keys_to_show = ['Material','Title','Level 1','Level 2','Hierarchy',
+                              'Κατασκευαστής','Τύπος\xa0εστίας ≡','Αριθμός\xa0εστιών ≡',
+                              'Πλάτος ≡','Χρώμα','Ενεργειακή\xa0κλάση ≡',
+                              'Sum of Sales','LIST PRICE','AVAILABILITY']
     else:
         attr_keys_to_show = ['Material','Title','Level 2','Hierarchy','Κατασκευαστής','Μοντέλο','LIST PRICE']
         
