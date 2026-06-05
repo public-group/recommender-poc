@@ -103,7 +103,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v28.48.2 — Κουζίνες own-brand care first: νέο care_surface bucket (ΚΡΕΜΑ/ΣΚΟΝΗ/ΠΑΝΙ/ΣΕΤ Καθαρισμού — AEG M3SCC200, BOSCH inox, MIELE set βγήκαν από το overflow) · exact-brand care boost 1.2M > hob boost: AEG trigger → AEG κρέμα + AEG λεπίδα στα slots 1-2, ΟΧΙ MIELE · care pair = ίδιο brand επιτρέπεται, variety με type-diversity (ποτέ δύο τζελ φούρνου μαζί) · v28.48.1 compatibility gates αμετάβλητα (probes εκτός, exact-brand rails, price-ratio guard)
+        🟢 Engine v28.48.3 — Κουζίνες no-rival-brands policy: τα MDA accessory pools (καθαρισμός, σκεύη, ταψιά, overflow) δείχνουν ΜΟΝΟ οικογένεια trigger (BSH: BOSCH↔PITSOS↔SIEMENS↔NEFF · Electrolux: AEG↔ELECTROLUX↔ZANUSSI) + ουδέτερα brands (FISSLER, SCANPART, ROLLER, PROFICOOK) — αξεσουάρ ανταγωνιστών HARD-dropped, τα κενά γεμίζουν από SDA backfill · εξαιρέσεις: ρυθμιστής υγραερίου (τυποποιημένο εξάρτημα EN-16129) & SDA αυτόνομες συσκευές · v28.48.2 own-brand care pair στα slots 1-2 αμετάβλητο
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -4113,6 +4113,22 @@ CK_BRAND_DIVERSITY_CAP =       1  # Max items per brand inside the 2-cap pools
 # BSH platform — rails/probes/trays are the same parts rebranded
 # (HEZ538000 ↔ PZ11TI15X0 ↔ Z11TI15X0). Same family the fridge engine uses.
 _CK_BSH_FAMILY = {'BOSCH', 'PITSOS', 'SIEMENS', 'NEFF', 'GAGGENAU'}
+_CK_ELX_FAMILY = {'AEG', 'ELECTROLUX', 'ZANUSSI'}  # Electrolux group
+
+# RIVAL-BRAND EXCLUSION (v28.48.3, user policy): MDA accessory pools
+# (care, cookware, trays, overflow) must never suggest an accessory
+# branded by a RIVAL appliance manufacturer — a MIELE cream or NEFF
+# cookware set against a PITSOS cooker cross-sells the competitor's
+# ecosystem. Allowed: the trigger's own brand family + NEUTRAL
+# specialists (FISSLER, SCANPART, ROLLER, PROFICOOK, LEIFHEIT… — any
+# brand NOT in this set). Pools that thin out backfill from the SDA
+# chain, which holds standalone products, not branded accessories.
+_CK_APPLIANCE_BRANDS = {
+    'AEG', 'ELECTROLUX', 'ZANUSSI', 'BOSCH', 'PITSOS', 'SIEMENS', 'NEFF',
+    'GAGGENAU', 'MIELE', 'LG', 'SAMSUNG', 'LA GERMANIA', 'BERTAZZONI',
+    'LOFRA', 'SMEG', 'GORENJE', 'WHIRLPOOL', 'CANDY', 'BEKO', 'KORTING',
+    'TEKA', 'FRANKE', 'OMNYS', 'INVENTOR', 'MORRIS', 'DAVOLINE', 'ESKIMO',
+}
 
 # Brands parseable from titles when Κατασκευαστής is empty (longest-first
 # substring with token guards — ' LG ' boundary so it never fires mid-word).
@@ -4146,6 +4162,8 @@ def _ck_brand_family(brand: str) -> set:
         return set()
     if brand in _CK_BSH_FAMILY:
         return set(_CK_BSH_FAMILY)
+    if brand in _CK_ELX_FAMILY:
+        return set(_CK_ELX_FAMILY)
     return {brand}
 
 
@@ -4189,7 +4207,10 @@ def _ck_classify_kitchen_acc(title: str) -> str:
         return 'other'
     if 'ΦΟΥΡΝΟ ΑΤΜΟΥ' in t and 'ΤΑΜΠΛΕΤ' in t:
         return 'other'
-    if 'ΞΥΣΤΡΑ' in t or 'ΞΥΣΤΡΑΣ' in t or 'ΚΑΘΑΡΙΣΤΙΚΟ ΚΕΡΑΜΙΚ' in t:
+    if ('ΞΥΣΤΡΑ' in t or 'ΞΥΣΤΡΑΣ' in t or 'ΚΑΘΑΡΙΣΤΙΚΟ ΚΕΡΑΜΙΚ' in t
+            or 'ΥΑΛΟΚΕΡΑΜΙΚ' in t):  # SCANPART blades "για υαλοκεραμικό"
+                                     # were leaking to overflow → could
+                                     # surface on GAS triggers (v28.48.3)
         return 'care_ceramic'
     if 'ΚΑΘΑΡΙΣΤΙΚ' in t and 'ΦΟΥΡΝ' in t:
         return 'care_oven'
@@ -22403,6 +22424,26 @@ def _ck_prep_kitchen_acc_frame(c_mda):
     return acc
 
 
+def _ck_rival_filter(pool, trigger_brand, notes):
+    """HARD rival-brand gate for MDA accessory pools (v28.48.3, user
+    policy: no rival appliance brand's accessories in the carousel).
+    Keeps: trigger brand family (BSH / Electrolux group counted as one
+    house) + neutral non-appliance brands. Drops: every other appliance
+    manufacturer. EXEMPT pools: gas regulator (standardized 29-30 mbar
+    EN-16129 fitting — generic hardware despite the label), rails
+    (already exact-brand), thermo (universal-only) and all SDA pools
+    (standalone products, not accessories)."""
+    if pool.empty:
+        return pool
+    fam = _ck_brand_family(trigger_brand)
+    bcol = pool['_ck_brand'] if '_ck_brand' in pool.columns else \
+        pool['Κατασκευαστής'].fillna('').astype(str).str.upper().str.strip()
+    rival = bcol.isin(_CK_APPLIANCE_BRANDS) & ~bcol.isin(fam)
+    if rival.any():
+        notes.append(f"  ✗ HARD-dropped {rival.sum()} RIVAL-brand accessories ({sorted(bcol[rival].unique())[:5]} ∉ family of {trigger_brand or '—'})")
+    return pool[~rival]
+
+
 def _ck_base_score(pool):
     """Availability + sales — the common floor of every pool's score."""
     pool['Final_Score'] = 0.0
@@ -22479,8 +22520,9 @@ def _ck_build_care_pool(acc, hob, trigger_brand, notes):
     induction triggers the ceramic-specific items still get
     +CK_S_HOB_SPECIFIC as the secondary signal."""
     pool = acc[acc['_ck_type'].isin(['care_ceramic', 'care_oven', 'care_surface'])].copy()
+    pool = _ck_rival_filter(pool, trigger_brand, notes)
     if pool.empty:
-        notes.append("  ⚠ No cleaning products in Αξεσουάρ Κουζινών/Φούρνων")
+        notes.append("  ⚠ No own-family/neutral cleaning products — slot backfills (no rival-brand bleed)")
         return pool
     ceramic_ok = hob in ('CERAMIC', 'INDUCTION')
     if not ceramic_ok:
@@ -22546,8 +22588,9 @@ def _ck_build_cookware_pool(acc, hob, trigger_brand, trigger_price, notes):
     price-ratio guard ON (a €419 FISSLER χύτρα shouldn't lead against a
     €339 OMNYS — demoted whenever it costs >50% of the trigger)."""
     pool = acc[acc['_ck_type'] == 'cookware'].copy()
+    pool = _ck_rival_filter(pool, trigger_brand, notes)
     if pool.empty:
-        notes.append("  ⚠ No cookware in Αξεσουάρ Κουζινών")
+        notes.append("  ⚠ No own-family/neutral cookware — slot backfills (no rival-brand bleed)")
         return pool
     if hob == 'INDUCTION':
         tn = pool['Title'].fillna('').astype(str).map(_cm_norm)
@@ -22568,14 +22611,14 @@ def _ck_build_cookware_pool(acc, hob, trigger_brand, trigger_price, notes):
 
 def _ck_build_tray_pool(acc, trigger_brand, notes):
     """Slots — Ταψί & Σκεύη Φούρνου ×2 (brand-diverse). Trays mount on
-    oven side rails — the BSH/AEG/NEFF trays in the catalog are sized for
-    their own ovens, but freestanding-cooker oven cavities are standard
-    width, so this stays a SOFT brand layer (exact + BSH family), not a
-    hard gate. Impulse-adjacent → no tier mirror; sales lead (BOSCH
-    HEZ633073, 793 sales)."""
+    oven side rails — rival appliance brands are HARD-dropped by the
+    rival filter (v28.48.3); within the surviving family+neutral pool the
+    exact brand still gets the soft boost. Impulse-adjacent → no tier
+    mirror; sales lead."""
     pool = acc[acc['_ck_type'] == 'tray'].copy()
+    pool = _ck_rival_filter(pool, trigger_brand, notes)
     if pool.empty:
-        notes.append("  ⚠ No trays in Αξεσουάρ Φούρνων/Κουζινών")
+        notes.append("  ⚠ No own-family/neutral trays — slot backfills (no rival-brand bleed)")
         return pool
     pool = _ck_base_score(pool)
     pool.loc[:, 'Final_Score'] += CK_S_TYPE_RELEVANT
@@ -22800,6 +22843,7 @@ def run_cookers_engine(trigger, df_mda, df_sda, df_history):
             if not scored.empty:
                 tnn = scored['Title'].fillna('').astype(str).map(_cm_norm)
                 scored = scored[~tnn.str.contains('ΑΠΟΡΡΟΦΗΤΗΡ|ΦΙΛΤΡΟ ΑΝΘΡΑΚΑ|ΦΟΥΡΝΟ ΑΤΜΟΥ', regex=True, na=False)]
+                scored = _ck_rival_filter(scored, tb, notes)
             if not scored.empty:
                 scored = _ck_base_score(scored)
                 scored = _ck_brand_layer(scored, tb, notes, label='(overflow) ')
@@ -22822,6 +22866,7 @@ def run_cookers_engine(trigger, df_mda, df_sda, df_history):
     # τζελ, BOSCH κρεατομηχανή + NINJA πολυμάγειρας, never two MIELE).
     pool_brand_counts = {rank: {} for rank in pools}
     care_types_taken = set()   # care type-diversity tracker (v28.48.2)
+    diversity_relaxed = False  # one-shot relaxation pass flag (v28.48.3)
     slot_num = 0
     round_idx = 0
 
@@ -22845,7 +22890,11 @@ def run_cookers_engine(trigger, df_mda, df_sda, df_history):
             # scraper blade at slots 1-2). Variety inside care is enforced
             # by TYPE instead — pick #2 must be a different _ck_type, so
             # two near-identical oven gels can never sit in one carousel.
-            apply_brand_diversity = (logic_key in ('CK_COOKWARE', 'CK_TRAY', 'CK_PREP'))
+            # CK_OVERFLOW added v28.48.3: with rivals excluded, brands
+            # without an own accessory line backfill heavily from overflow
+            # — without the cap a BERTAZZONI carousel ended with THREE
+            # ROLLER appliance bases in a row.
+            apply_brand_diversity = (logic_key in ('CK_COOKWARE', 'CK_TRAY', 'CK_PREP', 'CK_OVERFLOW'))
 
             cursor = pool_cursors[rank]
             taken_this_pass = 0
@@ -22856,10 +22905,11 @@ def run_cookers_engine(trigger, df_mda, df_sda, df_history):
                 if row['Material'] in used_materials:
                     continue
                 row_brand = str(row.get('_ck_brand', '') or row.get('Κατασκευαστής', '') or '').strip().upper()
-                if apply_brand_diversity:
+                if apply_brand_diversity and not diversity_relaxed:
                     if pool_brand_counts[rank].get(row_brand, 0) >= CK_BRAND_DIVERSITY_CAP:
                         continue
-                if logic_key == 'CK_CARE' and row.get('_ck_type', '') in care_types_taken:
+                if logic_key == 'CK_CARE' and not diversity_relaxed \
+                        and row.get('_ck_type', '') in care_types_taken:
                     continue  # care type-diversity: no two gels / two creams
 
                 slot_num += 1
@@ -22892,6 +22942,20 @@ def run_cookers_engine(trigger, df_mda, df_sda, df_history):
             pool_cursors[rank] = cursor
 
         if not progress:
+            if not diversity_relaxed and slot_num < COOKER_SLOT_TARGET:
+                # Relaxation pass (v28.48.3): the rival-brand exclusion can
+                # starve non-family triggers' tails (e.g. GORENJE enamel —
+                # neutral overflow is 3× ROLLER + 1× LEIFHEIT, but the
+                # brand-diversity cap allows one ROLLER). Slot fill is
+                # non-negotiable, so lift ONLY the diversity caps and keep
+                # looping. Every HARD gate (hob, rival, exact-brand rail)
+                # already shaped the pools and stays intact — a second
+                # ROLLER base is the correct lesser evil vs. a 9-slot
+                # carousel or a rival's accessory.
+                diversity_relaxed = True
+                pool_cursors = {rank: 0 for rank in pools}  # rescan skipped rows
+                diag.append(("Loop", round_idx, "Diversity caps relaxed — backfilling remaining slots (hard gates unchanged)"))
+                continue
             diag.append(("Loop", round_idx, "All pools exhausted or capped — stopping"))
             break
 
