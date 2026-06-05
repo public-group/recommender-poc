@@ -103,7 +103,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v28.50 — Νέο cluster: Πλυντήρια - Στεγνωτήρια (47 SKUs) — WM engine με WD slot map: ΧΩΡΙΣ στεγνωτήριο (το combo ΕΙΝΑΙ το στεγνωτήριο, τα Στεγνωτήρια αποκλείονται ως ανταγωνιστές) & ΧΩΡΙΣ βάση σύνδεσης (τίποτα να στοιβαχτεί) · ironing chain προωθημένο: Σίδερο ×2 + Σύστημα Σιδερώματος ×2 + Αντικραδασμικά + Απορρυπαντικά ×2 (rival-gated v28.49.4) + Βάση Στήριξης + Σιδερώστρα + Σύστημα Ατμού = 10/10 · specs parsed από title (kg/kg, στροφές, WiFi, Slim)
+        🟢 Engine v28.50.1 — Πλυντήρια-Στεγνωτήρια refinements: (1) budget mirroring με price-percentile bands εντός pool (φθηνό trigger → φθηνά σίδερα, premium → premium — τέλος το ίδιο TEFAL παντού), (2) feature-locked αναλώσιμα (FragranceDos/TwinDos: ΑΡΩΜΑΤΙΚ/ULTRAPHASE) υποβαθμίζονται -120k και δεν προωθούνται — same brand ≠ εγγυημένο fit χωρίς per-model feature data, (3) own-brand αξεσουάρ προωθούνται στα slots 1-3 και μετά η κανονική σειρά · WM classic αμετάβλητο
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -21864,6 +21864,7 @@ def _wm_build_accessory_universal_pool(c_pool, trigger_brand, notes):
     pool['Final_Score'] += pool['Sales_Tiebreaker'].fillna(0) * WM_S_SALES_FACTOR
 
     tb = (trigger_brand or '').upper().strip()
+    pool['_wm_feature_locked'] = False
     if tb and 'Κατασκευαστής' in pool.columns:
         cand_brand = pool['Κατασκευαστής'].fillna('').astype(str).str.upper().str.strip()
         same_brand = cand_brand == tb
@@ -21872,6 +21873,20 @@ def _wm_build_accessory_universal_pool(c_pool, trigger_brand, notes):
         pool.loc[same_brand, 'Final_Score'] += WM_S_BRAND_NEIGHBOR
         if same_brand.any():
             notes.append(f"  ✓ Same-brand consumables ({tb}): {same_brand.sum()} (+{WM_S_BRAND_NEIGHBOR:,})")
+
+        # FEATURE-LOCKED demotion (v28.50.1, user challenge): same brand is
+        # NOT proof of fit for dosing/fragrance SYSTEM consumables — a MIELE
+        # FA* flacon needs a FragranceDos slot, UltraPhase needs TwinDos,
+        # and the catalog has no per-model feature flags to verify the
+        # specific trigger has them. These items stay eligible for their
+        # own brand, but demoted out of the carousel's head and tagged so
+        # the brand-match promotion never lifts them into slots 1-3.
+        tnorm = pool['Title'].fillna('').astype(str).map(_cm_norm)
+        locked = same_brand & (tnorm.str.contains('ΑΡΩΜΑΤΙΚ|ULTRAPHASE|FRAGRANCE|TWINDOS|CAPS', regex=True, na=False))
+        pool.loc[locked, '_wm_feature_locked'] = True
+        pool.loc[locked, 'Final_Score'] -= 120_000
+        if locked.any():
+            notes.append(f"  ⚠ Feature-locked consumables demoted (-120,000): {locked.sum()} — require FragranceDos/TwinDos on the specific model, unverifiable from catalog data")
 
     return pool.sort_values('Final_Score', ascending=False)
 
@@ -21912,17 +21927,26 @@ def _wm_build_sda_companion_pool(c_pool, trigger_brand, trigger_tier,
         if same_brand.any():
             notes.append(f"  ✓ Rare brand crossover ({tb}): {same_brand.sum()} (+{WM_S_BRAND_MATCH:,})")
 
-    # ── Price-tier proximity (premium washer buyer → premium iron, etc.)
-    if 'LIST PRICE' in pool.columns:
+    # ── Budget mirroring via WITHIN-POOL price percentile (v28.50.1).
+    # The old check mapped companion prices through _wm_price_tier — the
+    # WASHER scale — so every €30-150 iron was 'tier 0' and any tier-2/3
+    # trigger saw zero signal, collapsing to pure sales: the same TEFAL
+    # FV6840 led on a €398 CANDY, a €935 BOSCH and a €2,999 MIELE
+    # (user-reported sameness). Instead, rank each companion by its price
+    # percentile INSIDE its own pool and match the band to the trigger
+    # tier: budget triggers pull from the cheap end, premium triggers
+    # from the top end. Sales still break ties inside the band.
+    if 'LIST PRICE' in pool.columns and len(pool) >= 4:
         prices = pool['LIST PRICE'].apply(parse_euro_price)
-        tiers = prices.apply(_wm_price_tier)
-        same_p = tiers == trigger_tier
-        near_p = (tiers - trigger_tier).abs() == 1
-        pool.loc[same_p, 'Final_Score'] += WM_S_PRICE_SAME_TIER
-        pool.loc[near_p, 'Final_Score'] += WM_S_PRICE_ONE_OFF
-        if same_p.any() or near_p.any():
-            notes.append(f"  ✓ Price-tier proximity ({role_label}, trigger tier {trigger_tier}): "
-                         f"same={same_p.sum()}, near={near_p.sum()}")
+        pct = prices.rank(pct=True)
+        bands = {0: (0.00, 0.35), 1: (0.20, 0.60), 2: (0.45, 0.85), 3: (0.65, 1.01)}
+        lo, hi = bands.get(trigger_tier, (0.20, 0.60))
+        in_band = (pct >= lo) & (pct <= hi)
+        near_band = (~in_band) & (pct >= lo - 0.15) & (pct <= hi + 0.15)
+        pool.loc[in_band, 'Final_Score'] += WM_S_PRICE_SAME_TIER
+        pool.loc[near_band, 'Final_Score'] += WM_S_PRICE_ONE_OFF
+        notes.append(f"  ✓ Budget band ({role_label}, trigger tier {trigger_tier} → price pct {lo:.0%}-{min(hi,1):.0%}): "
+                     f"in-band={in_band.sum()}, near={near_band.sum()}")
 
     return pool.sort_values('Final_Score', ascending=False)
 
@@ -21933,7 +21957,7 @@ def _wm_build_sda_companion_pool(c_pool, trigger_brand, trigger_tier,
 
 def run_washing_machine_engine(trigger, df_mda, df_sda, df_history,
                                 priority_list=None, exclude_hiers_extra=None,
-                                slot_target=None):
+                                slot_target=None, promote_brand_acc=False):
     """Build up to 10 cross-sell slots for a washing-machine trigger.
 
     v28.50: parameterized so the washer-dryer combo engine can reuse it —
@@ -22046,6 +22070,21 @@ def run_washing_machine_engine(trigger, df_mda, df_sda, df_history,
                 continue
             # Stacking kits + pedestals → brand-preferred scoring;
             # antivib + detergents → universal-need scoring.
+            if logic_key == 'WM_ACC_DETERGENT':
+                # Dishwasher-detergent leak guard (v28.50.1): the Είδος
+                # keyword 'ταμπλέτ' also matches MIELE UltraTabs (πλυντηρίου
+                # ΠΙΑΤΩΝ) rows misfiled under laundry accessories. Drop any
+                # title naming ΠΙΑΤΩΝ unless it also names ΡΟΥΧΩΝ (the AEG
+                # Super Care descaler is dual-purpose and stays).
+                dt = subset['Title'].fillna('').astype(str).map(_cm_norm)
+                dish_only = dt.str.contains('ΠΙΑΤΩΝ', na=False) & ~dt.str.contains('ΡΟΥΧΩΝ', na=False)
+                if dish_only.any():
+                    notes.append(f"  ✗ HARD-dropped {dish_only.sum()} dishwasher-only detergents misfiled in laundry accessories")
+                subset = subset[~dish_only]
+                if subset.empty:
+                    notes.append("  ⚠ Detergent subset empty after dishwasher-leak guard")
+                    pools[rank] = (role_label, pd.DataFrame(), logic_key, max_r1, max_total, notes)
+                    continue
             if logic_key in ('WM_ACC_STACK', 'WM_ACC_BASE'):
                 scored = _wm_build_accessory_brand_pool(subset, tbrand, notes, role_label)
             else:
@@ -22067,6 +22106,31 @@ def run_washing_machine_engine(trigger, df_mda, df_sda, df_history,
         pools[rank] = (role_label, scored, logic_key, max_r1, max_total, notes)
         diag.append((f"Pool {rank} ({role_label})",
                      len(scored) if scored is not None else 0, logic_key))
+
+    # ── BRAND-MATCH PROMOTION (v28.50.1, user spec): when an accessory
+    # pool's TOP candidate is the trigger's own brand, that pool jumps to
+    # the head of the carousel (slots 1-3), then the regular order
+    # follows. Feature-locked consumables (FragranceDos/TwinDos parts,
+    # tagged by the universal-pool builder) never promote — same-brand is
+    # not proof of fit for those, so they stay mid-carousel.
+    if promote_brand_acc and tbrand:
+        acc_keys = {'WM_ACC_ANTIVIB', 'WM_ACC_DETERGENT', 'WM_ACC_BASE', 'WM_ACC_STACK'}
+        promoted, rest = [], []
+        for rank, entry in pools.items():
+            role_label, scored, logic_key, *_ = entry
+            is_brand_top = False
+            if logic_key in acc_keys and scored is not None and not scored.empty:
+                top = scored.iloc[0]
+                top_brand = str(top.get('Κατασκευαστής', '') or '').strip().upper()
+                if top_brand == tbrand and not bool(top.get('_wm_feature_locked', False)):
+                    is_brand_top = True
+            (promoted if is_brand_top and len(promoted) < 3 else rest).append((rank, entry))
+        if promoted:
+            diag.append(("Brand-match promotion",
+                         len(promoted),
+                         "Own-brand accessory pools lead the carousel: " +
+                         ", ".join(e[1][0] for e in promoted)))
+            pools = dict(promoted + rest)
 
     # ── LOOPING: round-robin fill until target hit or all pools exhausted
     used_materials = {tm}
@@ -22162,6 +22226,7 @@ def run_washer_dryer_engine(trigger, df_mda, df_sda, df_history):
         priority_list=WD_PRIORITY,
         exclude_hiers_extra={'ΣΤΕΓΝΩΤΗΡΙΑ'},
         slot_target=WD_SLOT_TARGET,
+        promote_brand_acc=True,   # own-brand accessories lead (slots 1-3)
     )
 
 
