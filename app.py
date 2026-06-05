@@ -103,7 +103,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v28.48.1 — Κουζίνες compatibility pass: BSH oven probes/sensors ΕΚΤΟΣ (απαιτούν probe socket εντοιχιζόμενου — καμία ελεύθερη κουζίνα δεν έχει) → μόνο universal θερμόμετρο · τηλεσκοπικοί = EXACT same-brand gate (όχι πλέον BSH family) · Πλάκα Γκριλ (hob griddle) + Καπάκι-για-ταψί εκτός tray pool · tier mirror → price-ratio guard: σκεύη/κρεατομηχανές >50% της τιμής trigger υποβαθμίζονται (φθηνή κουζίνα → φθηνή κρεατομηχανή) · hob-type & brand hard gates όπως v28.48
+        🟢 Engine v28.48.2 — Κουζίνες own-brand care first: νέο care_surface bucket (ΚΡΕΜΑ/ΣΚΟΝΗ/ΠΑΝΙ/ΣΕΤ Καθαρισμού — AEG M3SCC200, BOSCH inox, MIELE set βγήκαν από το overflow) · exact-brand care boost 1.2M > hob boost: AEG trigger → AEG κρέμα + AEG λεπίδα στα slots 1-2, ΟΧΙ MIELE · care pair = ίδιο brand επιτρέπεται, variety με type-diversity (ποτέ δύο τζελ φούρνου μαζί) · v28.48.1 compatibility gates αμετάβλητα (probes εκτός, exact-brand rails, price-ratio guard)
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -4038,7 +4038,12 @@ COOKER_TEST_SKUS = {
 
 # (priority_rank, role_label, logic_key, max_in_round_1, max_total)
 COOKER_PRIORITY = [
-    (1,  'Καθαρισμός Εστιών & Φούρνου',   'CK_CARE',      1, 2),
+    (1,  'Καθαρισμός Εστιών & Φούρνου',   'CK_CARE',      2, 2),  # max_r1=2 (v28.48.2):
+    # the care PAIR lands at slots 1-2 together — exactly the user's
+    # original layout (slot 1 scraper/cream, slot 2 oven spray). Type-
+    # diversity in the loop guarantees the two are different care types,
+    # and brand-dominant scoring makes them same-brand when the trigger
+    # brand has its own care line (AEG κρέμα + AEG λεπίδα).
     (2,  'Ρυθμιστής Πίεσης Υγραερίου',    'CK_GAS_REG',   1, 1),
     (3,  'Μαγειρικά Σκεύη',               'CK_COOKWARE',  1, 2),
     (4,  'Ταψί & Σκεύη Φούρνου',          'CK_TRAY',      1, 2),
@@ -4079,6 +4084,12 @@ CK_S_HOB_SPECIFIC    =   500_000  # Ceramic scraper/cream on a ceramic/induction
                                   # v28.48: at 150k a BOSCH ceramic trigger led
                                   # with the BOSCH oven gel and the ceramic care
                                   # never surfaced (round 1 fills all 10 slots)
+CK_S_CARE_BRAND      = 1_200_000  # Exact trigger-brand care item — DOMINATES the
+                                  # hob-specific boost (500k): when the trigger
+                                  # brand sells its own care line, lead with it
+                                  # and don't surface competitor consumables
+                                  # (AEG case, v28.48.2: AEG M3SCC200 + E6HUE102
+                                  # at slots 1-2, MIELE not shown)
 CK_S_SPARE_PART_PEN  =  -600_000  # ΑΝΤΑΛΛΑΚΤΙΚ demotion — a replacement scraper
                                   # blade must never lead the care pair over the
                                   # full product. -600k because it must absorb
@@ -4182,8 +4193,14 @@ def _ck_classify_kitchen_acc(title: str) -> str:
         return 'care_ceramic'
     if 'ΚΑΘΑΡΙΣΤΙΚ' in t and 'ΦΟΥΡΝ' in t:
         return 'care_oven'
-    if 'ΠΑΝΙ ΜΙΚΡΟΪΝ' in t or 'ΠΑΝΙ ΜΙΚΡΟΙΝ' in t:
-        return 'care_oven'
+    # care_surface (v28.48.2): universal surface-care consumables that the
+    # ΚΑΘΑΡΙΣΤΙΚ rule missed — ΚΡΕΜΑ/ΣΚΟΝΗ/ΠΑΝΙ/ΣΕΤ Καθαρισμού (AEG
+    # M3SCC200 cream, BOSCH inox powders + grease cloth, MIELE care set).
+    # They were falling to 'other'/overflow, which is why an AEG ceramic
+    # trigger led with the MIELE cream instead of AEG's own (user-reported).
+    if ('ΚΡΕΜΑ ΚΑΘΑΡΙΣΜ' in t or 'ΣΚΟΝΗ ΚΑΘΑΡΙΣΜ' in t or 'ΠΑΝΙ ΚΑΘΑΡΙΣΜ' in t
+            or 'ΣΕΤ ΚΑΘΑΡΙΣΜ' in t or 'ΠΑΝΙ ΜΙΚΡΟΪΝ' in t or 'ΠΑΝΙ ΜΙΚΡΟΙΝ' in t):
+        return 'care_surface'
     if 'ΡΥΘΜΙΣΤ' in t and ('ΠΙΕΣ' in t or 'ΥΓΡΑΕΡΙ' in t):
         return 'gas_regulator'
     if 'ΤΗΛΕΣΚΟΠΙΚ' in t or 'FLEXICLIP' in t:
@@ -22452,11 +22469,16 @@ def _ck_build_care_pool(acc, hob, trigger_brand, notes):
     HOB GATE: care_ceramic (ξύστρες, λεπίδες, καθαριστικό κεραμικών) is
     ONLY eligible on CERAMIC / INDUCTION hobs — a scraper against a gas or
     enamel cooker is a physical mismatch, HARD-dropped. care_oven
-    (καθαριστικά/τζελ φούρνου, πανί μικροϊνών) is universal: every cooker
-    has an oven. On ceramic/induction triggers the ceramic-specific items
-    get +CK_S_HOB_SPECIFIC so the pair leads with the hob-matched product
-    (user slot 1) and the oven cleaner lands as pick #2 (user slot 2)."""
-    pool = acc[acc['_ck_type'].isin(['care_ceramic', 'care_oven'])].copy()
+    (καθαριστικά/τζελ φούρνου) and care_surface (κρέμες/σκόνες/πανιά/σετ
+    καθαρισμού) are universal.
+
+    BRAND DOMINATES (v28.48.2, user spec): an exact trigger-brand care
+    item gets +CK_S_CARE_BRAND (1.2M) which outranks the hob boost — when
+    the brand sells its own care line (AEG, BOSCH, MIELE), the pair leads
+    with it and competitor consumables only fill what's left. On ceramic/
+    induction triggers the ceramic-specific items still get
+    +CK_S_HOB_SPECIFIC as the secondary signal."""
+    pool = acc[acc['_ck_type'].isin(['care_ceramic', 'care_oven', 'care_surface'])].copy()
     if pool.empty:
         notes.append("  ⚠ No cleaning products in Αξεσουάρ Κουζινών/Φούρνων")
         return pool
@@ -22480,7 +22502,14 @@ def _ck_build_care_pool(acc, hob, trigger_brand, notes):
     pool.loc[spare, 'Final_Score'] += CK_S_SPARE_PART_PEN
     if spare.any():
         notes.append(f"  ✗ Spare-part demotion (ΑΝΤΑΛΛΑΚΤΙΚ): {spare.sum()} ({CK_S_SPARE_PART_PEN:,})")
-    pool = _ck_brand_layer(pool, trigger_brand, notes)
+    if trigger_brand:
+        exact = pool['_ck_brand'] == trigger_brand
+        fam = pool['_ck_brand'].isin(_CK_BSH_FAMILY) & ~exact if trigger_brand in _CK_BSH_FAMILY \
+            else pd.Series(False, index=pool.index)
+        pool.loc[exact, 'Final_Score'] += CK_S_CARE_BRAND
+        pool.loc[fam, 'Final_Score'] += CK_S_BRAND_FAMILY
+        if exact.any() or fam.any():
+            notes.append(f"  ✓ Own-brand care DOMINATES ({trigger_brand}): exact={exact.sum()} (+{CK_S_CARE_BRAND:,}), family={fam.sum()} (+{CK_S_BRAND_FAMILY:,})")
     notes.append(f"  Pool size: {len(pool)} | mix: {pool['_ck_type'].value_counts().to_dict()}")
     return pool.sort_values('Final_Score', ascending=False)
 
@@ -22792,6 +22821,7 @@ def run_cookers_engine(trigger, df_mda, df_sda, df_history):
     # 2-cap pools — guarantees pair A ≠ pair B brand (MIELE κρέμα + BOSCH
     # τζελ, BOSCH κρεατομηχανή + NINJA πολυμάγειρας, never two MIELE).
     pool_brand_counts = {rank: {} for rank in pools}
+    care_types_taken = set()   # care type-diversity tracker (v28.48.2)
     slot_num = 0
     round_idx = 0
 
@@ -22810,7 +22840,12 @@ def run_cookers_engine(trigger, df_mda, df_sda, df_history):
             if max_total is not None:
                 take_n = min(take_n, max_total - pool_taken[rank])
 
-            apply_brand_diversity = (logic_key in ('CK_CARE', 'CK_COOKWARE', 'CK_TRAY', 'CK_PREP'))
+            # CK_CARE left the brand-diversity list in v28.48.2: a same-
+            # brand care PAIR is the desired outcome (AEG cream + AEG
+            # scraper blade at slots 1-2). Variety inside care is enforced
+            # by TYPE instead — pick #2 must be a different _ck_type, so
+            # two near-identical oven gels can never sit in one carousel.
+            apply_brand_diversity = (logic_key in ('CK_COOKWARE', 'CK_TRAY', 'CK_PREP'))
 
             cursor = pool_cursors[rank]
             taken_this_pass = 0
@@ -22824,6 +22859,8 @@ def run_cookers_engine(trigger, df_mda, df_sda, df_history):
                 if apply_brand_diversity:
                     if pool_brand_counts[rank].get(row_brand, 0) >= CK_BRAND_DIVERSITY_CAP:
                         continue
+                if logic_key == 'CK_CARE' and row.get('_ck_type', '') in care_types_taken:
+                    continue  # care type-diversity: no two gels / two creams
 
                 slot_num += 1
                 rc = row.copy()
@@ -22838,6 +22875,8 @@ def run_cookers_engine(trigger, df_mda, df_sda, df_history):
                 pool_taken[rank] += 1
                 if apply_brand_diversity:
                     pool_brand_counts[rank][row_brand] = pool_brand_counts[rank].get(row_brand, 0) + 1
+                if logic_key == 'CK_CARE':
+                    care_types_taken.add(row.get('_ck_type', ''))
                 progress = True
 
                 title_preview = str(row.get('Title', ''))[:70]
