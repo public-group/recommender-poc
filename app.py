@@ -103,7 +103,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v28.51.2 — Δικτυακά fixes: (1) DOMAIN-scoped backfill — οι networking personas (Router/Switch/Powerline) γεμίζουν ΜΟΝΟ με δικτυακό εξοπλισμό και οι smart-home ΜΟΝΟ με smart-home (τέλος το camera-flooding σε powerline/switch και το switch σε smart-plug), (2) καθαρισμός cable pool — μόνο γνήσια Ethernet patch (έξω το Starlink 45m & USB-Ethernet adapters), (3) BLUETOOTH dongles (UB500) έξω από παντού, (4) coverage μόνο από title — router που απλώς υποστηρίζει extender-mode δεν γράφεται πλέον 'Επέκταση Κάλυψης' · microSD στην κάμερα · 10/10 σε όλες τις personas
+        🟢 Engine v28.51.3 — Δικτυακά: HARD κανόνας «ποτέ ίδια ιεραρχία με το trigger» — πρίζα→όχι άλλη πρίζα, powerline→όχι powerline, doorbell→όχι doorbell, κάμερα→όχι κάμερα· ο πελάτης βλέπει ΣΥΜΠΛΗΡΩΜΑΤΙΚΑ προϊόντα, όχι παραλλαγές του ίδιου. Το hub εξακολουθεί να προτείνεται για sensor (από διαφορετική ιεραρχία, π.χ. H200). Παραμένουν: domain-scoped backfill, καθαρό cable pool, χωρίς Bluetooth dongles, microSD στην κάμερα · 10/10 σε όλες τις personas
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -28729,6 +28729,33 @@ def run_networking_engine(trigger, df_spare, df_peripherals, df_products, df_his
     hub = pd.concat([h for h in (hub_a, hub_b, hub_c) if not h.empty],
                     ignore_index=True) if any(not h.empty for h in (hub_a, hub_b, hub_c)) else pd.DataFrame()
 
+    # ── HARD same-hierarchy rule: never cross-sell the trigger's OWN
+    #    hierarchy. A plug buyer shouldn't get more plugs, powerline→
+    #    powerline, doorbell→doorbell, camera→camera. The customer is
+    #    already on that product; suggest COMPLEMENTS instead. Hubs are
+    #    exempt (a hub is filed under various hierarchies but is the
+    #    functional companion, e.g. the Tapo H100 for a sensor buyer).
+    t_hier = _cm_norm(trigger.get('Hierarchy', ''))
+
+    def _drop_th(pool):
+        if pool is None or pool.empty or 'Hierarchy' not in pool.columns:
+            return pool
+        hh = pool['Hierarchy'].fillna('').astype(str).map(_cm_norm)
+        return pool[hh != t_hier].copy()
+
+    routers   = _drop_th(routers)
+    coverage  = _drop_th(coverage)
+    switches  = _drop_th(switches)
+    powerline = _drop_th(powerline)
+    cameras   = _drop_th(cameras)
+    lighting  = _drop_th(lighting)
+    sensors   = _drop_th(sensors)
+    plugs     = _drop_th(plugs)
+    smartdev  = _drop_th(smartdev)
+    hub       = _drop_th(hub)   # strict: even a hub filed under the trigger's
+                                # own hierarchy is dropped (a different-hierarchy
+                                # hub still represents the role, e.g. H200).
+
     # cross-workbook generic gear
     cable = _nw_hier_slice(df_peripherals, {'NETWORK CABLES'})
     if cable.empty:
@@ -28777,7 +28804,8 @@ def run_networking_engine(trigger, df_spare, df_peripherals, df_products, df_his
                         'ΕΞΥΠΝΕΣ ΣΥΣΚΕΥΕΣ', 'ΕΞΥΠΝΕΣ ΠΡΙΖΕΣ', 'ΑΣΥΡΜΑΤΟΙ ΣΥΝΑΓΕΡΜΟΙ'}
     _domain = _NW_NET_DOMAIN if persona in ('ROUTER', 'SWITCH', 'POWERLINE') else _NW_SMART_DOMAIN
     _hu = c['Hierarchy'].fillna('').astype(str).str.upper().str.strip()
-    c_backfill = c[_hu.isin(_domain)].copy()
+    _hu_norm = c['Hierarchy'].fillna('').astype(str).map(_cm_norm)
+    c_backfill = c[_hu.isin(_domain) & (_hu_norm != t_hier)].copy()
     backfill = _nw_base_score(c_backfill, tprice, teco, 'Δικτυακό Bestseller')
 
     # ── Persona-routed priority list: (role_label, pool_key, max_r1, max_total) ──
