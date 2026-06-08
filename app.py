@@ -103,7 +103,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v28.52 — Περιποίηση Προσώπου: 4 νέα clusters (Ξυριστικές, Trimmers, Σετ Περιποίησης, Αποτριχωτικές) από το SDA sheet. HYBRID scoring (sales × brand-ecosystem με title-parse όπου λείπει ο Κατασκευαστής × price-tier) + soft face-relevance boost. HARD GATE: ανταλλακτικά (κεφαλές/λεπίδες/πλέγματα) διαφορετικού brand πέφτουν — ένα BRAUN ξυριστικό δεν δείχνει ποτέ PHILIPS ανταλλακτικό. Brand-gated ACCESSORIES + wellness (οδοντόβουρτσα/ζυγαριά/μασάζ) + Stationery impulse · 10/10 σε όλα τα test SKUs
+        🟢 Engine v28.52.1 — Περιποίηση Προσώπου (ανδρικό tuning): τα ανδρικά clusters (Ξυριστικές/Trimmers/Σετ) ΧΩΡΙΣ feminine impulse-δώρα (Legami/eye-masks) — device-led με overflow. ACCESSORY GATE: same-brand + όχι off-category (yoga mats/sprays) + system-match (OneBlade QP ≠ rotary SH/HQ — ένα OneBlade δεν δείχνει ποτέ κεφαλή περιστροφικής). MASSAGE GATE: μόνο πραγματικές συσκευές, όχι sleep-masks/αξεσουάρ. Το γυναικείο (Αποτριχωτικές) κρατά hair-styling + γυναικεία δώρα · 10/10 παντού
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -3521,6 +3521,53 @@ def _fc_is_replacement_part(title: str) -> bool:
     x = str(title).lower()
     return any(term in x for term in _FC_REPLACEMENT_TERMS)
 
+# ── Shaver replacement-system detection. Replacement heads/blades are
+#    model-system-specific: a PHILIPS OneBlade (QP* blades) and a PHILIPS
+#    rotary shaver (SH*/HQ* heads) are mutually INCOMPATIBLE even though both
+#    are PHILIPS. We detect the system from the title so the accessory gate can
+#    reject a same-brand-but-wrong-system replacement part.
+def _fc_system_of(title: str) -> str:
+    u = str(title).upper()
+    if 'ONEBLADE' in u or 'ONE BLADE' in u or re.search(r'\bQP\d', u):
+        return 'oneblade'
+    if re.search(r'\bSH\d', u) or re.search(r'\bHQ\d', u):
+        return 'rotary'
+    return ''  # unknown / generic
+
+# ── Off-category accessory terms: items that live in the ACCESSORIES hierarchy
+#    but are NOT grooming accessories (yoga mats, fitness gear, hair sprays).
+_FC_ACC_OFFCAT_TERMS = ['yoga', 'στρώμα', 'στρωμα', 'γυμναστ', 'fitness', 'mat ',
+                        'σπρέι', 'σπρει', 'spray', 'λάδι', 'λαδι μαλλ']
+
+def _fc_accessory_compatible(trig_title: str, trig_brand: str,
+                             acc_title: str, acc_brand: str) -> bool:
+    """True if an ACCESSORIES item is a sensible cross-sell for this trigger.
+    Rules (hard gate):
+      1. Off-category (yoga/fitness/hair-spray) → drop.
+      2. Brand: same-brand only — a brand-ecosystem accessory slot should not
+         surface another brand (or an unknown-brand) accessory.
+      3. Replacement parts must match the trigger's shaver SYSTEM — a OneBlade
+         (QP) blade never fits a rotary shaver, an SH/HQ rotary head never fits
+         a OneBlade, and a system-specific part never fits a non-shaver trigger
+         (e.g. an epilator). System-agnostic parts pass."""
+    a = str(acc_title).lower()
+    if any(t in a for t in _FC_ACC_OFFCAT_TERMS):
+        return False
+    if trig_brand and (not acc_brand or acc_brand != trig_brand):
+        return False
+    if _fc_is_replacement_part(acc_title):
+        asys = _fc_system_of(acc_title)
+        tsys = _fc_system_of(trig_title)
+        if asys and asys != tsys:   # system-specific part that doesn't match trigger system
+            return False
+    return True
+
+# ── Massage-pool filter: the MASSAGE DEVICES hierarchy contains non-device
+#    accessories (sleep masks, starter accessory kits) that read poorly as a
+#    "Συσκευή Μασάζ" cross-sell. Drop them so only real devices surface.
+_FC_MASSAGE_DROP_TERMS = ['μάσκα', 'mask', 'αξεσουάρ', 'accessory', 'starter',
+                          'ανταλλακτ', 'θήκη', 'θηκη']
+
 # ── Face-relevance title terms (soft boost when the trigger is a face device).
 _FC_FACE_TERMS = ['πρόσωπ', 'προσώπ', 'face', 'γένι', 'γενει', 'γενι', 'μούσ',
                   'μουσ', 'beard', 'μύτη', 'μυτη', 'αυτ', 'nose', 'ear']
@@ -3555,14 +3602,16 @@ FACE_CARE_CLUSTERS = {
         "test_skus": {"1970104", "2084863", "2022968", "2025598", "1974876", "1719301"},
         "marketing": FACE_CARE_MARKETING,
         "priority": [
-            (1, 'Trimmer Γενιού',          ['TRIMMERS'],                'FC_DEVICE',    1, 2),
-            (2, 'Σετ Περιποίησης',         ['GROOMING SET'],            'FC_DEVICE',    1, 2),
-            (3, 'Κουρευτική Μηχανή',       ['ΚΟΥΡΕΥΤΙΚΕΣ ΜΗΧΑΝΕΣ'],      'FC_DEVICE',    1, 1),
+            # Men's grooming: device-led plan. NO impulse-gift slot (Stationery
+            # PERSONAL CARE is feminine/kids-skewed). Devices carry slots 8-10 via
+            # overflow; massage is device-only filtered.
+            (1, 'Trimmer Γενιού',          ['TRIMMERS'],                'FC_DEVICE',    1, 3),
+            (2, 'Σετ Περιποίησης',         ['GROOMING SET'],            'FC_DEVICE',    1, 3),
+            (3, 'Κουρευτική Μηχανή',       ['ΚΟΥΡΕΥΤΙΚΕΣ ΜΗΧΑΝΕΣ'],      'FC_DEVICE',    1, 2),
             (4, 'Ανταλλακτικά & Αξεσουάρ', ['ACCESSORIES'],             'FC_ACCESSORY', 1, 1),
             (5, 'Ηλεκτρική Οδοντόβουρτσα', ['ELECTRIC TOOTHBRUSHES', 'ΗΛΕΚΤΡΙΚΕΣ ΟΔΟΝΤΟΒΟΥΡΤΣΕΣ'], 'FC_WELLNESS', 1, 1),
             (6, 'Ζυγαριά Σώματος',         ['BODY SCALES'],             'FC_WELLNESS',  1, 1),
-            (7, 'Δώρα Περιποίησης',        ['PERSONAL CARE'],           'FC_IMPULSE',   1, 2),
-            (8, 'Συσκευή Μασάζ',           ['MASSAGE DEVICES'],         'FC_WELLNESS',  1, 1),
+            (7, 'Συσκευή Μασάζ',           ['MASSAGE DEVICES'],         'FC_MASSAGE',   1, 1),
         ],
     },
     "Trimmers": {
@@ -3574,14 +3623,14 @@ FACE_CARE_CLUSTERS = {
         "test_skus": {"1557308", "2025877", "1588327", "1525258", "610445", "2111292"},
         "marketing": FACE_CARE_MARKETING,
         "priority": [
-            (1, 'Ξυριστική Μηχανή',        ['SHAVING MACHINES'],        'FC_DEVICE',    1, 2),
-            (2, 'Σετ Περιποίησης',         ['GROOMING SET'],            'FC_DEVICE',    1, 2),
-            (3, 'Κουρευτική Μηχανή',       ['ΚΟΥΡΕΥΤΙΚΕΣ ΜΗΧΑΝΕΣ'],      'FC_DEVICE',    1, 1),
+            # Men's grooming — device-led, no impulse-gift slot.
+            (1, 'Ξυριστική Μηχανή',        ['SHAVING MACHINES'],        'FC_DEVICE',    1, 3),
+            (2, 'Σετ Περιποίησης',         ['GROOMING SET'],            'FC_DEVICE',    1, 3),
+            (3, 'Κουρευτική Μηχανή',       ['ΚΟΥΡΕΥΤΙΚΕΣ ΜΗΧΑΝΕΣ'],      'FC_DEVICE',    1, 2),
             (4, 'Ανταλλακτικά & Αξεσουάρ', ['ACCESSORIES'],             'FC_ACCESSORY', 1, 1),
             (5, 'Ηλεκτρική Οδοντόβουρτσα', ['ELECTRIC TOOTHBRUSHES', 'ΗΛΕΚΤΡΙΚΕΣ ΟΔΟΝΤΟΒΟΥΡΤΣΕΣ'], 'FC_WELLNESS', 1, 1),
             (6, 'Ζυγαριά Σώματος',         ['BODY SCALES'],             'FC_WELLNESS',  1, 1),
-            (7, 'Δώρα Περιποίησης',        ['PERSONAL CARE'],           'FC_IMPULSE',   1, 2),
-            (8, 'Συσκευή Μασάζ',           ['MASSAGE DEVICES'],         'FC_WELLNESS',  1, 1),
+            (7, 'Συσκευή Μασάζ',           ['MASSAGE DEVICES'],         'FC_MASSAGE',   1, 1),
         ],
     },
     "Grooming Sets": {
@@ -3593,14 +3642,14 @@ FACE_CARE_CLUSTERS = {
         "test_skus": {"1984050", "2074006", "2074008", "2025883", "2089094", "2025884"},
         "marketing": FACE_CARE_MARKETING,
         "priority": [
-            (1, 'Ξυριστική Μηχανή',        ['SHAVING MACHINES'],        'FC_DEVICE',    1, 2),
-            (2, 'Trimmer Γενιού',          ['TRIMMERS'],                'FC_DEVICE',    1, 2),
-            (3, 'Κουρευτική Μηχανή',       ['ΚΟΥΡΕΥΤΙΚΕΣ ΜΗΧΑΝΕΣ'],      'FC_DEVICE',    1, 1),
+            # Men's grooming — device-led, no impulse-gift slot.
+            (1, 'Ξυριστική Μηχανή',        ['SHAVING MACHINES'],        'FC_DEVICE',    1, 3),
+            (2, 'Trimmer Γενιού',          ['TRIMMERS'],                'FC_DEVICE',    1, 3),
+            (3, 'Κουρευτική Μηχανή',       ['ΚΟΥΡΕΥΤΙΚΕΣ ΜΗΧΑΝΕΣ'],      'FC_DEVICE',    1, 2),
             (4, 'Ανταλλακτικά & Αξεσουάρ', ['ACCESSORIES'],             'FC_ACCESSORY', 1, 1),
             (5, 'Ηλεκτρική Οδοντόβουρτσα', ['ELECTRIC TOOTHBRUSHES', 'ΗΛΕΚΤΡΙΚΕΣ ΟΔΟΝΤΟΒΟΥΡΤΣΕΣ'], 'FC_WELLNESS', 1, 1),
             (6, 'Ζυγαριά Σώματος',         ['BODY SCALES'],             'FC_WELLNESS',  1, 1),
-            (7, 'Δώρα Περιποίησης',        ['PERSONAL CARE'],           'FC_IMPULSE',   1, 2),
-            (8, 'Συσκευή Μασάζ',           ['MASSAGE DEVICES'],         'FC_WELLNESS',  1, 1),
+            (7, 'Συσκευή Μασάζ',           ['MASSAGE DEVICES'],         'FC_MASSAGE',   1, 1),
         ],
     },
     "Face Epilators": {
@@ -3612,14 +3661,15 @@ FACE_CARE_CLUSTERS = {
         "test_skus": {"1936843", "1736444", "1513060", "2119803", "1836658", "2023339"},
         "marketing": FACE_CARE_MARKETING,
         "priority": [
+            # Women's hair-removal: hair-styling-led + women-appropriate impulse gifts.
             (1, 'Ισιωτικό Μαλλιών',        ['STRAIGHTENERS'],           'FC_DEVICE',    1, 2),
-            (2, 'Πιστολάκι Μαλλιών',       ['HAIR DRYERS'],             'FC_DEVICE',    1, 1),
+            (2, 'Πιστολάκι Μαλλιών',       ['HAIR DRYERS'],             'FC_DEVICE',    1, 2),
             (3, 'Ψαλίδι / Βούρτσα',        ['CURLERS & BRUSHES'],       'FC_DEVICE',    1, 1),
             (4, 'Ξυριστική Μηχανή',        ['SHAVING MACHINES'],        'FC_DEVICE',    1, 1),
             (5, 'Αξεσουάρ Φροντίδας',      ['ACCESSORIES'],             'FC_ACCESSORY', 1, 1),
             (6, 'Ηλεκτρική Οδοντόβουρτσα', ['ELECTRIC TOOTHBRUSHES', 'ΗΛΕΚΤΡΙΚΕΣ ΟΔΟΝΤΟΒΟΥΡΤΣΕΣ'], 'FC_WELLNESS', 1, 1),
             (7, 'Δώρα Περιποίησης',        ['PERSONAL CARE'],           'FC_IMPULSE',   1, 2),
-            (8, 'Συσκευή Μασάζ',           ['MASSAGE DEVICES'],         'FC_WELLNESS',  1, 1),
+            (8, 'Συσκευή Μασάζ',           ['MASSAGE DEVICES'],         'FC_MASSAGE',   1, 1),
         ],
     },
 }
@@ -22329,29 +22379,53 @@ def _fc_build_device_pool(c_pool, tb, ttier, tcolors, trigger_is_face, notes, us
     return pool.sort_values('Final_Score', ascending=False)
 
 
-def _fc_build_accessory_pool(c_pool, tb, ttier, tcolors, notes):
-    """ACCESSORIES with the cross-brand replacement-part HARD GATE: drop any
-    replacement head/blade/foil/grid whose brand ≠ trigger brand. Universal
-    accessories (sprays, generic stands, cleaning pods) survive."""
+def _fc_build_accessory_pool(c_pool, tb, ttier, tcolors, notes, trigger_title=''):
+    """ACCESSORIES with a strict compatibility gate (see _fc_accessory_compatible):
+    same-brand only, no off-category (yoga/fitness/spray), and replacement parts
+    must match the trigger's shaver system (OneBlade-QP vs rotary-SH/HQ). When the
+    gate empties the pool, the slot backfills from the device pools — a 3rd device
+    beats a wrong-system blade or a cross-brand yoga mat."""
     if c_pool.empty:
         return c_pool
     pool = c_pool.copy()
-    if tb:
-        brand_resolved, _ = _fc_resolve_brand_series(pool)
-        is_rep = pool['Title'].fillna('').apply(_fc_is_replacement_part)
-        drop = is_rep & (brand_resolved != tb)
-        if drop.any():
-            notes.append(f"  ⛔ HARD GATE: dropped {drop.sum()} cross-brand replacement parts (trigger brand {tb or '∅'})")
-            pool = pool[~drop].copy()
+    brand_resolved, _ = _fc_resolve_brand_series(pool)
+    keep = pd.Series(
+        [_fc_accessory_compatible(trigger_title, tb, t, brand_resolved.loc[i])
+         for i, t in pool['Title'].fillna('').items()],
+        index=pool.index,
+    )
+    dropped = int((~keep).sum())
+    if dropped:
+        notes.append(f"  ⛔ ACCESSORY GATE: dropped {dropped} incompatible "
+                     f"(cross-brand / off-category / wrong-system) — trigger brand {tb or '∅'}")
+    pool = pool[keep].copy()
     if pool.empty:
-        notes.append("  ⚠ Accessory pool empty after gate")
+        notes.append("  ⚠ Accessory pool empty after gate — slot backfills from devices")
+        return pool
+    pool = _fc_apply_base_score(pool, tb, ttier, tcolors, notes, color_exact_weight=0, color_partial_weight=0)
+    return pool.sort_values('Final_Score', ascending=False)
+
+
+def _fc_build_massage_pool(c_pool, tb, ttier, tcolors, notes):
+    """MASSAGE DEVICES filtered to real devices (drops sleep masks, starter
+    accessory kits, cases). Backfills from devices if empty after the filter."""
+    if c_pool.empty:
+        return c_pool
+    pool = c_pool.copy()
+    t = pool['Title'].fillna('').astype(str).str.lower()
+    drop = t.apply(lambda x: any(k in x for k in _FC_MASSAGE_DROP_TERMS))
+    if drop.any():
+        notes.append(f"  ⛔ MASSAGE GATE: dropped {int(drop.sum())} non-device items (masks/accessories/cases)")
+    pool = pool[~drop].copy()
+    if pool.empty:
+        notes.append("  ⚠ Massage pool empty after gate — slot backfills from devices")
         return pool
     pool = _fc_apply_base_score(pool, tb, ttier, tcolors, notes, color_exact_weight=0, color_partial_weight=0)
     return pool.sort_values('Final_Score', ascending=False)
 
 
 def _fc_build_wellness_pool(c_pool, tb, ttier, tcolors, notes):
-    """Toothbrushes / scales / massage — utilitarian wellness cross-sell.
+    """Toothbrushes / scales — utilitarian wellness cross-sell.
     Brand match still fires (rare), price+sales carry it; no color."""
     if c_pool.empty:
         return c_pool
@@ -22443,9 +22517,11 @@ def run_face_care_engine(trigger, df_sda, df_history, df_stationery=None, cluste
         if logic_key == 'FC_DEVICE':
             scored = _fc_build_device_pool(base_pool, tb, ttier, tcolors, trigger_is_face, notes, use_color=use_color)
         elif logic_key == 'FC_ACCESSORY':
-            scored = _fc_build_accessory_pool(base_pool, tb, ttier, tcolors, notes)
+            scored = _fc_build_accessory_pool(base_pool, tb, ttier, tcolors, notes, trigger_title=str(trigger.get('Title', '')))
         elif logic_key == 'FC_WELLNESS':
             scored = _fc_build_wellness_pool(base_pool, tb, ttier, tcolors, notes)
+        elif logic_key == 'FC_MASSAGE':
+            scored = _fc_build_massage_pool(base_pool, tb, ttier, tcolors, notes)
         elif logic_key == 'FC_IMPULSE':
             scored = _pc_build_impulse_accessory_pool(base_pool, tb, ttier, tcolors, role_label, notes, trigger_price=tprice)
         else:
