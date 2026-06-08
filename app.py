@@ -103,7 +103,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v28.52.1 — Περιποίηση Προσώπου (ανδρικό tuning): τα ανδρικά clusters (Ξυριστικές/Trimmers/Σετ) ΧΩΡΙΣ feminine impulse-δώρα (Legami/eye-masks) — device-led με overflow. ACCESSORY GATE: same-brand + όχι off-category (yoga mats/sprays) + system-match (OneBlade QP ≠ rotary SH/HQ — ένα OneBlade δεν δείχνει ποτέ κεφαλή περιστροφικής). MASSAGE GATE: μόνο πραγματικές συσκευές, όχι sleep-masks/αξεσουάρ. Το γυναικείο (Αποτριχωτικές) κρατά hair-styling + γυναικεία δώρα · 10/10 παντού
+        🟢 Engine v28.52.2 — Περιποίηση Προσώπου & Σώματος: προστέθηκε cluster «Αποτριχωτικές Σώματος» (ίδια EPILATORS ιεραρχία με τις «Προσώπου», split κατά Περιοχή Χρήσης). Και τα δύο epilator clusters είναι γυναικεία: hair-styling-led (Ισιωτικό/Πιστολάκι/Ψαλίδι/Πολυσυσκευή) — η ανδρική Ξυριστική αντικαταστάθηκε από Πολυσυσκευή Styling. Παραμένουν: ανδρικά clusters χωρίς feminine δώρα, ACCESSORY system-match gate (OneBlade QP ≠ rotary), MASSAGE device-only gate · 10/10 παντού
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -3587,6 +3587,7 @@ FACE_CARE_MARKETING = {
     'Ισιωτικό Μαλλιών':        "Ολοκλήρωσε το hair-styling set σου.",
     'Πιστολάκι Μαλλιών':       "Στέγνωμα & styling στο σπίτι.",
     'Ψαλίδι / Βούρτσα':        "Μπούκλες & όγκος — η εναλλακτική επιλογή styling.",
+    'Πολυσυσκευή Styling':     "Όλα-σε-ένα styling — ίσιωμα, μπούκλες & όγκος.",
 }
 
 # ── Per-cluster config. (rank, role_label, [hierarchies], logic_key,
@@ -3654,7 +3655,7 @@ FACE_CARE_CLUSTERS = {
     },
     "Face Epilators": {
         "trigger_hiers": {"EPILATORS"},
-        "picker_label": "Επιλέξτε Αποτριχωτική Μηχανή",
+        "picker_label": "Επιλέξτε Αποτριχωτική Προσώπου",
         "empty_msg": "Δεν βρέθηκαν Αποτριχωτικές Μηχανές στο sheet SDA.",
         "use_color": True,   # women's-care: aesthetic color coordination matters
         "slot_target": 10,
@@ -3662,14 +3663,42 @@ FACE_CARE_CLUSTERS = {
         "marketing": FACE_CARE_MARKETING,
         "priority": [
             # Women's hair-removal: hair-styling-led + women-appropriate impulse gifts.
+            # Slot 4 is MULTISTYLERS (women's premium styling), NOT men's shavers.
+            # NO accessory slot: the ACCESSORIES hierarchy is shaver/trimmer
+            # replacement parts only (foils/heads/blades) — irrelevant to an
+            # epilator. Curlers take the freed capacity.
             (1, 'Ισιωτικό Μαλλιών',        ['STRAIGHTENERS'],           'FC_DEVICE',    1, 2),
             (2, 'Πιστολάκι Μαλλιών',       ['HAIR DRYERS'],             'FC_DEVICE',    1, 2),
-            (3, 'Ψαλίδι / Βούρτσα',        ['CURLERS & BRUSHES'],       'FC_DEVICE',    1, 1),
-            (4, 'Ξυριστική Μηχανή',        ['SHAVING MACHINES'],        'FC_DEVICE',    1, 1),
-            (5, 'Αξεσουάρ Φροντίδας',      ['ACCESSORIES'],             'FC_ACCESSORY', 1, 1),
-            (6, 'Ηλεκτρική Οδοντόβουρτσα', ['ELECTRIC TOOTHBRUSHES', 'ΗΛΕΚΤΡΙΚΕΣ ΟΔΟΝΤΟΒΟΥΡΤΣΕΣ'], 'FC_WELLNESS', 1, 1),
-            (7, 'Δώρα Περιποίησης',        ['PERSONAL CARE'],           'FC_IMPULSE',   1, 2),
-            (8, 'Συσκευή Μασάζ',           ['MASSAGE DEVICES'],         'FC_MASSAGE',   1, 1),
+            (3, 'Ψαλίδι / Βούρτσα',        ['CURLERS & BRUSHES'],       'FC_DEVICE',    1, 2),
+            (4, 'Πολυσυσκευή Styling',     ['MULTISTYLERS'],            'FC_DEVICE',    1, 1),
+            (5, 'Ηλεκτρική Οδοντόβουρτσα', ['ELECTRIC TOOTHBRUSHES', 'ΗΛΕΚΤΡΙΚΕΣ ΟΔΟΝΤΟΒΟΥΡΤΣΕΣ'], 'FC_WELLNESS', 1, 1),
+            (6, 'Δώρα Περιποίησης',        ['PERSONAL CARE'],           'FC_IMPULSE',   1, 2),
+            (7, 'Συσκευή Μασάζ',           ['MASSAGE DEVICES'],         'FC_MASSAGE',   1, 1),
+        ],
+    },
+    "Body Epilators": {
+        "trigger_hiers": {"EPILATORS"},
+        "picker_label": "Επιλέξτε Αποτριχωτική Σώματος",
+        "empty_msg": "Δεν βρέθηκαν Αποτριχωτικές Μηχανές στο sheet SDA.",
+        "use_color": True,   # women's-care: aesthetic color coordination matters
+        "slot_target": 10,
+        # Body-leaning demo set: mechanical Silk-épil (Υγρή & Στεγνή) + IPL
+        # body / body+face. EPILATORS is mostly body or body+face (only ~4
+        # pure-face SKUs), so this is the dominant slice of the hierarchy.
+        "test_skus": {"1936835", "1736444", "1513060", "2119803", "1836658", "1936832"},
+        "marketing": FACE_CARE_MARKETING,
+        "priority": [
+            # Same women's hair-styling-led plan as Face Epilators — a body
+            # hair-removal buyer is the same women's-beauty customer. Both face &
+            # body live in the EPILATORS hierarchy (split by Περιοχή Χρήσης).
+            # No accessory slot (ACCESSORIES = shaver parts, irrelevant here).
+            (1, 'Ισιωτικό Μαλλιών',        ['STRAIGHTENERS'],           'FC_DEVICE',    1, 2),
+            (2, 'Πιστολάκι Μαλλιών',       ['HAIR DRYERS'],             'FC_DEVICE',    1, 2),
+            (3, 'Ψαλίδι / Βούρτσα',        ['CURLERS & BRUSHES'],       'FC_DEVICE',    1, 2),
+            (4, 'Πολυσυσκευή Styling',     ['MULTISTYLERS'],            'FC_DEVICE',    1, 1),
+            (5, 'Ηλεκτρική Οδοντόβουρτσα', ['ELECTRIC TOOTHBRUSHES', 'ΗΛΕΚΤΡΙΚΕΣ ΟΔΟΝΤΟΒΟΥΡΤΣΕΣ'], 'FC_WELLNESS', 1, 1),
+            (6, 'Δώρα Περιποίησης',        ['PERSONAL CARE'],           'FC_IMPULSE',   1, 2),
+            (7, 'Συσκευή Μασάζ',           ['MASSAGE DEVICES'],         'FC_MASSAGE',   1, 1),
         ],
     },
 }
@@ -8431,6 +8460,8 @@ L2_CHILDREN = {
          "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='7' width='18' height='14' rx='2'/%3E%3Cpath d='M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2'/%3E%3Cline x1='8' y1='12' x2='8.01' y2='12'/%3E%3Cline x1='12' y1='12' x2='12.01' y2='12'/%3E%3Cline x1='16' y1='12' x2='16.01' y2='12'/%3E%3C/svg%3E"},
         {"key": "Face Epilators", "label": "Αποτριχωτικές\nΠροσώπου",
          "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='9' y='2' width='6' height='9' rx='3'/%3E%3Cpath d='M9 6h.01M12 6h.01M15 6h.01'/%3E%3Cpath d='M12 11v10'/%3E%3Cpath d='M10 21h4'/%3E%3C/svg%3E"},
+        {"key": "Body Epilators", "label": "Αποτριχωτικές\nΣώματος",
+         "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='4' r='2'/%3E%3Cpath d='M12 6v8'/%3E%3Cpath d='M8 9h8'/%3E%3Cpath d='M9 21l3-7 3 7'/%3E%3C/svg%3E"},
     ],
     "MDA": [
         {"key": "Washing Machines", "label": "Πλυντήρια\nΡούχων",
