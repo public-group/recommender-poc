@@ -103,7 +103,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v28.51 — Νέα катηγορία Δικτυακά (Networking + Smart Home): νέα μηχανή per-persona (Router / Switch / Powerline / Camera / Lighting / Sensor / Plug) με κυρίαρχο σήμα το brand-ecosystem (TP-Link/Tapo/Deco, Philips-Hue, WIZ, Nanoleaf, Reolink, EZVIZ…), HARD ecosystem-lock στην επέκταση mesh/φωτισμού/hub, generic gear (Ethernet/switch/πολύπριζο) brand-agnostic, no-consecutive-role και universal sales backfill → 10/10 σε όλες τις personas · οι υπόλοιπες μηχανές αμετάβλητες
+        🟢 Engine v28.51.2 — Δικτυακά fixes: (1) DOMAIN-scoped backfill — οι networking personas (Router/Switch/Powerline) γεμίζουν ΜΟΝΟ με δικτυακό εξοπλισμό και οι smart-home ΜΟΝΟ με smart-home (τέλος το camera-flooding σε powerline/switch και το switch σε smart-plug), (2) καθαρισμός cable pool — μόνο γνήσια Ethernet patch (έξω το Starlink 45m & USB-Ethernet adapters), (3) BLUETOOTH dongles (UB500) έξω από παντού, (4) coverage μόνο από title — router που απλώς υποστηρίζει extender-mode δεν γράφεται πλέον 'Επέκταση Κάλυψης' · microSD στην κάμερα · 10/10 σε όλες τις personas
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -28617,12 +28617,15 @@ def _nw_base_score(pool, trig_price, trig_eco, role):
 
 
 def _nw_router_func(row) -> str:
-    """Detect mesh/extender capability from spec + title."""
-    blob = _cm_norm(_cm_attr(row, 'Λειτουργία Wi-Fi', '')) + ' ' \
-        + _cm_norm(_cm_attr(row, 'Wireless Functions', '')) + ' ' \
-        + _cm_norm(row.get('Title', ''))
-    if 'MESH' in blob or 'DECO' in blob or 'EXTENDER' in blob or 'REPEATER' in blob \
-            or 'ΕΝΙΣΧΥΤ' in blob or 'RANGE EXTENDER' in blob:
+    """Mesh/extender DEVICE detection from the TITLE only.
+
+    The Wi-Fi-function spec lists every supported MODE (most TP-Link
+    routers advertise a Range-Extender mode), so reading the spec
+    mislabels ordinary routers as coverage gear. A product is only a
+    coverage device if its title says so (Deco/mesh/extender/repeater)."""
+    t = _cm_norm(row.get('Title', ''))
+    if 'MESH' in t or 'DECO' in t or 'EXTENDER' in t or 'REPEATER' in t \
+            or 'ΕΝΙΣΧΥΤ' in t or 'RANGE EXTENDER' in t:
         return 'COVERAGE'
     return 'ROUTER'
 
@@ -28691,6 +28694,8 @@ def run_networking_engine(trigger, df_spare, df_peripherals, df_products, df_his
         c = c[l2 == 'networking']
     hier_u = c['Hierarchy'].fillna('').astype(str).str.upper().str.strip()
     c = c[~hier_u.isin({h.upper() for h in NW_EXCLUDE_HIERS})]
+    # Bluetooth dongles (UB500 etc.) are not a network/smart-home cross-sell
+    c = c[hier_u[c.index].ne('BLUETOOTH DEVICES')] if len(c) else c
 
     # ── Build raw hierarchy slices ──
     routers = _nw_hier_slice(c, {'ROUTERS Wireless ADSL', 'ROUTER-MODEM Wireless ADSL', 'Access Points'})
@@ -28728,7 +28733,17 @@ def run_networking_engine(trigger, df_spare, df_peripherals, df_products, df_his
     cable = _nw_hier_slice(df_peripherals, {'NETWORK CABLES'})
     if cable.empty:
         cable = _nw_hier_slice(df_products, {'NETWORK CABLES'})
+    # Keep only real Ethernet patch cables — drops proprietary cables
+    # (e.g. a 45m Starlink dish cable) and USB-to-Ethernet adapters.
+    if not cable.empty:
+        _ct = cable['Title'].fillna('').astype(str).map(_cm_norm)
+        _keep = _ct.str.contains(r'UTP|CAT\.?5|CAT\.?6|CAT\.?7|PATCH|RJ45|ΔΙΚΤΥΟΥ|ΔΙΚΤΥΟ', regex=True, na=False)
+        _bad = _ct.str.contains('STARLINK|USB', regex=True, na=False)
+        cable = cable[_keep & ~_bad].copy()
     surge = _nw_hier_slice(df_products, {'SURGE PROTECTORS'})
+    # microSD storage for cameras — Products sheet, Level 2 = Storage,
+    # Hierarchy = 'MICRO SD'. Brand-agnostic (any card fits any camera).
+    storage = _nw_hier_slice(df_products, {'MICRO SD'})
 
     # ── Score pools (role-aware ecosystem lock) ──
     def S(pool, role):
@@ -28747,11 +28762,23 @@ def run_networking_engine(trigger, df_spare, df_peripherals, df_products, df_his
         'light_exp': S(lighting, 'Επέκταση Φωτισμού'),
         'sensor':    S(sensors, 'Smart Sensor'),
         'surge':     S(surge, 'Πολύπριζο Ασφαλείας'),
+        'storage':   S(storage, 'Κάρτα microSD'),
     }
 
-    # universal backfill — top sellers across the whole networking universe,
-    # ecosystem-match boosted, price-banded (guarantees 10/10)
-    backfill = _nw_base_score(c, tprice, teco, 'Δικτυακό Bestseller')
+    # DOMAIN-scoped backfill — networking personas backfill from networking
+    # gear only; smart-home personas from smart-home only. Stops camera
+    # bestsellers (huge sales) from swamping Router/Switch/Powerline, and
+    # stops switches/powerline from leaking into smart-home carousels.
+    _NW_NET_DOMAIN = {'ROUTERS WIRELESS ADSL', 'ROUTER-MODEM WIRELESS ADSL',
+                      'ACCESS POINTS', 'SWITCHES', 'POE ADAPTERS', 'POWERLINE',
+                      'WIRELESS ACCESSORIES', 'ETHERNET CARDS USB WIRELESS',
+                      'ADAPTERS', 'USB CABLES'}
+    _NW_SMART_DOMAIN = {'IP CAMERAS', 'ΕΞΥΠΝΟΣ ΦΩΤΙΣΜΟΣ', 'SMART SENSORS',
+                        'ΕΞΥΠΝΕΣ ΣΥΣΚΕΥΕΣ', 'ΕΞΥΠΝΕΣ ΠΡΙΖΕΣ', 'ΑΣΥΡΜΑΤΟΙ ΣΥΝΑΓΕΡΜΟΙ'}
+    _domain = _NW_NET_DOMAIN if persona in ('ROUTER', 'SWITCH', 'POWERLINE') else _NW_SMART_DOMAIN
+    _hu = c['Hierarchy'].fillna('').astype(str).str.upper().str.strip()
+    c_backfill = c[_hu.isin(_domain)].copy()
+    backfill = _nw_base_score(c_backfill, tprice, teco, 'Δικτυακό Bestseller')
 
     # ── Persona-routed priority list: (role_label, pool_key, max_r1, max_total) ──
     if persona == 'ROUTER':
@@ -28784,6 +28811,7 @@ def run_networking_engine(trigger, df_spare, df_peripherals, df_products, df_his
     elif persona == 'CAMERA':
         pri = [
             ('IP Camera',             'camera',    1, 2),
+            ('Κάρτα microSD',         'storage',   1, 1),
             ('Smart Hub',             'hub',       1, 1),
             ('Smart Sensor',          'sensor',    1, 1),
             ('Router / Access Point', 'router',    1, 1),
