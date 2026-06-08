@@ -103,7 +103,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v28.51.3 — Δικτυακά: HARD κανόνας «ποτέ ίδια ιεραρχία με το trigger» — πρίζα→όχι άλλη πρίζα, powerline→όχι powerline, doorbell→όχι doorbell, κάμερα→όχι κάμερα· ο πελάτης βλέπει ΣΥΜΠΛΗΡΩΜΑΤΙΚΑ προϊόντα, όχι παραλλαγές του ίδιου. Το hub εξακολουθεί να προτείνεται για sensor (από διαφορετική ιεραρχία, π.χ. H200). Παραμένουν: domain-scoped backfill, καθαρό cable pool, χωρίς Bluetooth dongles, microSD στην κάμερα · 10/10 σε όλες τις personas
+        🟢 Engine v28.52 — Περιποίηση Προσώπου: 4 νέα clusters (Ξυριστικές, Trimmers, Σετ Περιποίησης, Αποτριχωτικές) από το SDA sheet. HYBRID scoring (sales × brand-ecosystem με title-parse όπου λείπει ο Κατασκευαστής × price-tier) + soft face-relevance boost. HARD GATE: ανταλλακτικά (κεφαλές/λεπίδες/πλέγματα) διαφορετικού brand πέφτουν — ένα BRAUN ξυριστικό δεν δείχνει ποτέ PHILIPS ανταλλακτικό. Brand-gated ACCESSORIES + wellness (οδοντόβουρτσα/ζυγαριά/μασάζ) + Stationery impulse · 10/10 σε όλα τα test SKUs
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -3439,6 +3439,191 @@ EB_S_PRICE_TWO_OFF   = -150_000  # ≥2 tiers away
 EB_S_COLOR_EXACT     =  60_000   # Color-group exact match
 EB_S_COLOR_PARTIAL   =  20_000   # Color-group token overlap
 EB_S_SALES_FACTOR    =       0.5 # Sales tiebreaker weight
+
+
+
+# ═════════════════════════════════════════════════════════════
+# 🟢 FACE CARE CONFIGURATION (Περιποίηση Προσώπου — Personal Care)  [v28.52]
+# ═════════════════════════════════════════════════════════════
+# Four NEW trigger clusters, all sourced from the SDA sheet (Home file):
+#   • Face Shavers   → Hierarchy "SHAVING MACHINES"  (Ξυριστικές Προσώπου)
+#   • Trimmers       → Hierarchy "TRIMMERS"
+#   • Grooming Sets  → Hierarchy "GROOMING SET"       (Σετ Περιποίησης)
+#   • Face Epilators → Hierarchy "EPILATORS"          (Αποτριχωτικές Προσώπου)
+#
+# Audit findings driving the design (run BEFORE any code, per standing rule):
+#   - Κατασκευαστής (brand) column: 0% filled for SHAVING/TRIMMERS, 100% for
+#     EPILATORS/ACCESSORIES → brand resolved via title-parse fallback.
+#   - "Περιοχή Χρήσης" (face/body): ~37% filled for EPILATORS, 0% for
+#     SHAVING/TRIMMERS → face scoping is a SOFT title-parsed boost, NEVER a
+#     hard trigger gate (hard-gating would drop 60-100% of triggers).
+#   - LIST PRICE + Sum of Sales: 100% populated → reliable hybrid base.
+#   Depth = HYBRID (sales × brand-ecosystem[title-parsed] × price-tier + soft
+#   face-relevance boost). NOT full-spec — structured specs are too sparse.
+#
+# Suggestion universe (Option A — existing data, no new files):
+#   same-family grooming devices (cross brand-overlap 38-78%) + ΚΟΥΡΕΥΤΙΚΕΣ
+#   ΜΗΧΑΝΕΣ + brand-gated ACCESSORIES + wellness (toothbrush/scale/massage) +
+#   Stationery PERSONAL CARE impulse. Epilators lean women's hair-styling.
+#
+# HARD GATE (per universal "hard gates over soft scoring" principle):
+#   ACCESSORIES that are brand+model replacement parts (Ανταλλακτικ*/Κεφαλ*/
+#   Λεπίδα/Πλέγμα/foil/blade) are DROPPED unless brand == trigger brand. A
+#   BRAUN shaver must never surface a PHILIPS replacement foil. Universal
+#   items (sprays, generic stands, cleaning pods) pass through.
+
+# ── Scoring constants (FC_S_*). Brand outranks price outranks sales; face
+#    relevance is a mid-weight nudge; color only fires for the women's
+#    (epilator) hair-styling pools.
+FC_S_AVAILABILITY    = 100_000   # In-stock boost (Άμεσα Διαθέσιμο)
+FC_S_BRAND_MATCH     = 500_000   # Same brand via Κατασκευαστής column
+FC_S_BRAND_PARSED    = 400_000   # Same brand via title-parse (less trustworthy)
+FC_S_PRICE_SAME_TIER = 250_000   # Companion in same price tier
+FC_S_PRICE_ONE_OFF   =  80_000   # Companion ±1 price tier
+FC_S_PRICE_TWO_OFF   = -150_000  # Companion ≥2 tiers away — penalize
+FC_S_FACE_RELEVANCE  = 120_000   # Face-trigger → companion title says face/beard/nose
+FC_S_COLOR_EXACT     =  60_000   # Color-group exact (epilator women's-care pools only)
+FC_S_COLOR_PARTIAL   =  20_000   # Color-group token overlap
+FC_S_SALES_FACTOR    =       0.5 # Sales tiebreaker weight
+
+# ── Grooming-brand priority list for the title-brand parser. Checked BEFORE
+#    the shared _str_parse_brand_from_title so face-care brands that the
+#    column never carries (SHAVING/TRIMMERS = 0% column) resolve correctly.
+#    Note: brand is often NOT the first token (e.g. "Αποτριχωτική Μηχανή BRAUN
+#    …") so we match it as any whitespace-delimited token, not just leading.
+FC_GROOMING_BRANDS = [
+    'FIRST AUSTRIA', 'HAIR MAJESTY', 'PROFI CARE', 'PROFICARE', 'GA.MA', 'GAMA',
+    'PHILIPS', 'BRAUN', 'REMINGTON', 'PANASONIC', 'BABYLISS', 'WAHL', 'VALERA',
+    'ROWENTA', 'ROHNSON', 'TAURUS', 'LAIFEN', 'SOGO', 'IZZY', 'BEURER', 'FOREO',
+    'LEXICAL', 'HTC', 'CARRERA', 'NOVA', 'CECOTEC', 'HOOVER', 'LENOSED', 'KEMEI',
+    'GEEMY', 'ENCHEN', 'VGR', 'SURKER', 'TESLA', 'SENCOR', 'AENO', 'XIAOMI',
+]
+
+def _fc_parse_brand_from_title(title: str) -> str:
+    """Resolve a face-care brand from a Title string.
+    Grooming brands first (token-anywhere match, since the brand frequently
+    sits after a Greek device noun), then fall back to the shared Personal
+    Care parser for anything else (DYSON, etc.)."""
+    if not title or pd.isna(title):
+        return ''
+    u = str(title).upper()
+    for b in FC_GROOMING_BRANDS:
+        if u.startswith(b + ' ') or f' {b} ' in u or u.startswith(b + '-'):
+            return b.strip()
+    return _str_parse_brand_from_title(str(title))
+
+# ── Replacement-part detector for the ACCESSORIES hard brand gate.
+_FC_REPLACEMENT_TERMS = [
+    'ανταλλακτ', 'κεφαλ', 'λεπίδ', 'λεπιδ', 'πλέγμα', 'πλεγμα', 'foil',
+    'blade', 'ξυριστική κεφαλή', 'ξυριστικη κεφαλη', 'χτεν', 'comb',
+]
+def _fc_is_replacement_part(title: str) -> bool:
+    x = str(title).lower()
+    return any(term in x for term in _FC_REPLACEMENT_TERMS)
+
+# ── Face-relevance title terms (soft boost when the trigger is a face device).
+_FC_FACE_TERMS = ['πρόσωπ', 'προσώπ', 'face', 'γένι', 'γενει', 'γενι', 'μούσ',
+                  'μουσ', 'beard', 'μύτη', 'μυτη', 'αυτ', 'nose', 'ear']
+
+# ── Shared marketing copy across all four face-care clusters (keyed by role).
+FACE_CARE_MARKETING = {
+    'Ξυριστική Μηχανή':        "Καθαρό, άνετο ξύρισμα — ολοκλήρωσε τη ρουτίνα σου.",
+    'Trimmer Γενιού':          "Ακριβές φινίρισμα γενιού & styling — επαγγελματικό αποτέλεσμα.",
+    'Σετ Περιποίησης':         "Πλήρες σετ περιποίησης — όλα-σε-ένα για κάθε ανάγκη.",
+    'Κουρευτική Μηχανή':       "Κούρεμα στο σπίτι — σταθερό, ομοιόμορφο αποτέλεσμα.",
+    'Ανταλλακτικά & Αξεσουάρ': "Γνήσια ανταλλακτικά & αξεσουάρ για τη συσκευή σου.",
+    'Αξεσουάρ Φροντίδας':      "Αξεσουάρ που ολοκληρώνουν τη φροντίδα σου.",
+    'Ηλεκτρική Οδοντόβουρτσα': "Λευκό χαμόγελο, καθαριότητα επιπέδου οδοντιάτρου.",
+    'Ζυγαριά Σώματος':         "Παρακολούθησε την πρόοδό σου — υγεία & ευεξία.",
+    'Δώρα Περιποίησης':        "Σετ περιποίησης, πετσέτες & δωράκια — pamper yourself.",
+    'Συσκευή Μασάζ':           "Χαλάρωσε τους μυς σου — wellness εμπειρία στο σπίτι.",
+    'Ισιωτικό Μαλλιών':        "Ολοκλήρωσε το hair-styling set σου.",
+    'Πιστολάκι Μαλλιών':       "Στέγνωμα & styling στο σπίτι.",
+    'Ψαλίδι / Βούρτσα':        "Μπούκλες & όγκος — η εναλλακτική επιλογή styling.",
+}
+
+# ── Per-cluster config. (rank, role_label, [hierarchies], logic_key,
+#    max_in_round_1, max_total). Each plan fills 9 slots in round 1 and one
+#    overflow slot (from a max_total=2 device pool) in round 2 → 10/10.
+FACE_CARE_CLUSTERS = {
+    "Face Shavers": {
+        "trigger_hiers": {"SHAVING MACHINES"},
+        "picker_label": "Επιλέξτε Ξυριστική Μηχανή",
+        "empty_msg": "Δεν βρέθηκαν Ξυριστικές Μηχανές στο sheet SDA.",
+        "use_color": False,
+        "slot_target": 10,
+        "test_skus": {"1970104", "2084863", "2022968", "2025598", "1974876", "1719301"},
+        "marketing": FACE_CARE_MARKETING,
+        "priority": [
+            (1, 'Trimmer Γενιού',          ['TRIMMERS'],                'FC_DEVICE',    1, 2),
+            (2, 'Σετ Περιποίησης',         ['GROOMING SET'],            'FC_DEVICE',    1, 2),
+            (3, 'Κουρευτική Μηχανή',       ['ΚΟΥΡΕΥΤΙΚΕΣ ΜΗΧΑΝΕΣ'],      'FC_DEVICE',    1, 1),
+            (4, 'Ανταλλακτικά & Αξεσουάρ', ['ACCESSORIES'],             'FC_ACCESSORY', 1, 1),
+            (5, 'Ηλεκτρική Οδοντόβουρτσα', ['ELECTRIC TOOTHBRUSHES', 'ΗΛΕΚΤΡΙΚΕΣ ΟΔΟΝΤΟΒΟΥΡΤΣΕΣ'], 'FC_WELLNESS', 1, 1),
+            (6, 'Ζυγαριά Σώματος',         ['BODY SCALES'],             'FC_WELLNESS',  1, 1),
+            (7, 'Δώρα Περιποίησης',        ['PERSONAL CARE'],           'FC_IMPULSE',   1, 2),
+            (8, 'Συσκευή Μασάζ',           ['MASSAGE DEVICES'],         'FC_WELLNESS',  1, 1),
+        ],
+    },
+    "Trimmers": {
+        "trigger_hiers": {"TRIMMERS"},
+        "picker_label": "Επιλέξτε Trimmer",
+        "empty_msg": "Δεν βρέθηκαν Trimmers στο sheet SDA.",
+        "use_color": False,
+        "slot_target": 10,
+        "test_skus": {"1557308", "2025877", "1588327", "1525258", "610445", "2111292"},
+        "marketing": FACE_CARE_MARKETING,
+        "priority": [
+            (1, 'Ξυριστική Μηχανή',        ['SHAVING MACHINES'],        'FC_DEVICE',    1, 2),
+            (2, 'Σετ Περιποίησης',         ['GROOMING SET'],            'FC_DEVICE',    1, 2),
+            (3, 'Κουρευτική Μηχανή',       ['ΚΟΥΡΕΥΤΙΚΕΣ ΜΗΧΑΝΕΣ'],      'FC_DEVICE',    1, 1),
+            (4, 'Ανταλλακτικά & Αξεσουάρ', ['ACCESSORIES'],             'FC_ACCESSORY', 1, 1),
+            (5, 'Ηλεκτρική Οδοντόβουρτσα', ['ELECTRIC TOOTHBRUSHES', 'ΗΛΕΚΤΡΙΚΕΣ ΟΔΟΝΤΟΒΟΥΡΤΣΕΣ'], 'FC_WELLNESS', 1, 1),
+            (6, 'Ζυγαριά Σώματος',         ['BODY SCALES'],             'FC_WELLNESS',  1, 1),
+            (7, 'Δώρα Περιποίησης',        ['PERSONAL CARE'],           'FC_IMPULSE',   1, 2),
+            (8, 'Συσκευή Μασάζ',           ['MASSAGE DEVICES'],         'FC_WELLNESS',  1, 1),
+        ],
+    },
+    "Grooming Sets": {
+        "trigger_hiers": {"GROOMING SET"},
+        "picker_label": "Επιλέξτε Σετ Περιποίησης",
+        "empty_msg": "Δεν βρέθηκαν Σετ Περιποίησης στο sheet SDA.",
+        "use_color": False,
+        "slot_target": 10,
+        "test_skus": {"1984050", "2074006", "2074008", "2025883", "2089094", "2025884"},
+        "marketing": FACE_CARE_MARKETING,
+        "priority": [
+            (1, 'Ξυριστική Μηχανή',        ['SHAVING MACHINES'],        'FC_DEVICE',    1, 2),
+            (2, 'Trimmer Γενιού',          ['TRIMMERS'],                'FC_DEVICE',    1, 2),
+            (3, 'Κουρευτική Μηχανή',       ['ΚΟΥΡΕΥΤΙΚΕΣ ΜΗΧΑΝΕΣ'],      'FC_DEVICE',    1, 1),
+            (4, 'Ανταλλακτικά & Αξεσουάρ', ['ACCESSORIES'],             'FC_ACCESSORY', 1, 1),
+            (5, 'Ηλεκτρική Οδοντόβουρτσα', ['ELECTRIC TOOTHBRUSHES', 'ΗΛΕΚΤΡΙΚΕΣ ΟΔΟΝΤΟΒΟΥΡΤΣΕΣ'], 'FC_WELLNESS', 1, 1),
+            (6, 'Ζυγαριά Σώματος',         ['BODY SCALES'],             'FC_WELLNESS',  1, 1),
+            (7, 'Δώρα Περιποίησης',        ['PERSONAL CARE'],           'FC_IMPULSE',   1, 2),
+            (8, 'Συσκευή Μασάζ',           ['MASSAGE DEVICES'],         'FC_WELLNESS',  1, 1),
+        ],
+    },
+    "Face Epilators": {
+        "trigger_hiers": {"EPILATORS"},
+        "picker_label": "Επιλέξτε Αποτριχωτική Μηχανή",
+        "empty_msg": "Δεν βρέθηκαν Αποτριχωτικές Μηχανές στο sheet SDA.",
+        "use_color": True,   # women's-care: aesthetic color coordination matters
+        "slot_target": 10,
+        "test_skus": {"1936843", "1736444", "1513060", "2119803", "1836658", "2023339"},
+        "marketing": FACE_CARE_MARKETING,
+        "priority": [
+            (1, 'Ισιωτικό Μαλλιών',        ['STRAIGHTENERS'],           'FC_DEVICE',    1, 2),
+            (2, 'Πιστολάκι Μαλλιών',       ['HAIR DRYERS'],             'FC_DEVICE',    1, 1),
+            (3, 'Ψαλίδι / Βούρτσα',        ['CURLERS & BRUSHES'],       'FC_DEVICE',    1, 1),
+            (4, 'Ξυριστική Μηχανή',        ['SHAVING MACHINES'],        'FC_DEVICE',    1, 1),
+            (5, 'Αξεσουάρ Φροντίδας',      ['ACCESSORIES'],             'FC_ACCESSORY', 1, 1),
+            (6, 'Ηλεκτρική Οδοντόβουρτσα', ['ELECTRIC TOOTHBRUSHES', 'ΗΛΕΚΤΡΙΚΕΣ ΟΔΟΝΤΟΒΟΥΡΤΣΕΣ'], 'FC_WELLNESS', 1, 1),
+            (7, 'Δώρα Περιποίησης',        ['PERSONAL CARE'],           'FC_IMPULSE',   1, 2),
+            (8, 'Συσκευή Μασάζ',           ['MASSAGE DEVICES'],         'FC_WELLNESS',  1, 1),
+        ],
+    },
+}
+FACE_CARE_CLUSTER_KEYS = set(FACE_CARE_CLUSTERS.keys())
 
 
 # ═════════════════════════════════════════════════════════════
@@ -8188,6 +8373,14 @@ L2_CHILDREN = {
          "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='9' y='2' width='6' height='18' rx='3'/%3E%3Cpath d='M5 8c0 0 0 2 2 3'/%3E%3Cpath d='M19 8c0 0 0 2-2 3'/%3E%3Cpath d='M6 14c0 0 1 1 2 1.5'/%3E%3Cpath d='M18 14c0 0-1 1-2 1.5'/%3E%3Ccircle cx='12' cy='6' r='1' fill='%23ff5e00'/%3E%3C/svg%3E"},
         {"key": "Electric Brushes", "label": "Ηλεκτρικές\nΒούρτσες",
          "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='8' y='3' width='8' height='10' rx='4'/%3E%3Cpath d='M9 5h.01M11 5h.01M13 5h.01M15 5h.01M9 7h.01M11 7h.01M13 7h.01M15 7h.01M9 9h.01M11 9h.01M13 9h.01M15 9h.01M9 11h.01M11 11h.01M13 11h.01M15 11h.01'/%3E%3Cpath d='M12 13v8'/%3E%3Cpath d='M10 21h4'/%3E%3C/svg%3E"},
+        {"key": "Face Shavers", "label": "Ξυριστικές\nΠροσώπου",
+         "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='8' y='2' width='8' height='6' rx='1'/%3E%3Cline x1='9' y1='4.5' x2='15' y2='4.5'/%3E%3Cline x1='9' y1='6' x2='15' y2='6'/%3E%3Cpath d='M12 8v13'/%3E%3Cpath d='M10 21h4'/%3E%3C/svg%3E"},
+        {"key": "Trimmers", "label": "Trimmers",
+         "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='9' y='2' width='6' height='5' rx='1'/%3E%3Cpath d='M9 5h-3'/%3E%3Cpath d='M15 5h3'/%3E%3Cpath d='M12 7v14'/%3E%3Cpath d='M10 21h4'/%3E%3C/svg%3E"},
+        {"key": "Grooming Sets", "label": "Σετ\nΠεριποίησης",
+         "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='7' width='18' height='14' rx='2'/%3E%3Cpath d='M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2'/%3E%3Cline x1='8' y1='12' x2='8.01' y2='12'/%3E%3Cline x1='12' y1='12' x2='12.01' y2='12'/%3E%3Cline x1='16' y1='12' x2='16.01' y2='12'/%3E%3C/svg%3E"},
+        {"key": "Face Epilators", "label": "Αποτριχωτικές\nΠροσώπου",
+         "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='9' y='2' width='6' height='9' rx='3'/%3E%3Cpath d='M9 6h.01M12 6h.01M15 6h.01'/%3E%3Cpath d='M12 11v10'/%3E%3Cpath d='M10 21h4'/%3E%3C/svg%3E"},
     ],
     "MDA": [
         {"key": "Washing Machines", "label": "Πλυντήρια\nΡούχων",
@@ -9139,6 +9332,31 @@ else:
                 st.sidebar.markdown('<p class="sidebar-section">Επιλέξτε Ηλεκτρική Βούρτσα</p>', unsafe_allow_html=True)
                 sel = st.sidebar.selectbox("", ebrushes['Title'].unique(), label_visibility="collapsed", key="electric_brush_sel")
                 trigger = ebrushes[ebrushes['Title']==sel].iloc[0] if sel else None
+
+    elif active_cluster in FACE_CARE_CLUSTER_KEYS:
+        # Περιποίηση Προσώπου — four trigger clusters, all from the SDA sheet
+        # (SHAVING MACHINES / TRIMMERS / GROOMING SET / EPILATORS). One shared
+        # picker driven by FACE_CARE_CLUSTERS[active_cluster]. Brand is
+        # title-parsed downstream where Κατασκευαστής is empty.
+        _fc_cfg = FACE_CARE_CLUSTERS[active_cluster]
+        if df_sda is None or df_sda.empty:
+            st.sidebar.warning("Sheet 'SDA' is empty or missing.")
+        else:
+            hier_upper = df_sda['Hierarchy'].fillna('').astype(str).str.upper().str.strip()
+            trigger_hiers_upper = {h.upper().strip() for h in _fc_cfg['trigger_hiers']}
+            fc_pool = df_sda[hier_upper.isin(trigger_hiers_upper)].copy()
+
+            # 🧪 Optional test-list filter (empty test_skus shows the whole hierarchy)
+            if _fc_cfg.get('test_skus'):
+                mat_clean = fc_pool['Material'].astype(str).str.strip().str.replace(r'\.0$', '', regex=True)
+                fc_pool = fc_pool[mat_clean.isin(_fc_cfg['test_skus'])]
+
+            if fc_pool.empty:
+                st.sidebar.warning(_fc_cfg['empty_msg'])
+            else:
+                st.sidebar.markdown(f'<p class="sidebar-section">{_fc_cfg["picker_label"]}</p>', unsafe_allow_html=True)
+                sel = st.sidebar.selectbox("", fc_pool['Title'].unique(), label_visibility="collapsed", key="face_care_sel")
+                trigger = fc_pool[fc_pool['Title']==sel].iloc[0] if sel else None
 
     elif active_cluster == "Washing Machines":
         # Trigger pool: Πλυντήρια Ρούχων from the MDA sheet.
@@ -22002,6 +22220,301 @@ def _wm_build_sda_companion_pool(c_pool, trigger_brand, trigger_tier,
     return pool.sort_values('Final_Score', ascending=False)
 
 
+
+# ═══════════════════════════════════════════════════════════════
+# 🟢 FACE CARE HELPERS + ENGINE — Περιποίηση Προσώπου (Personal Care)  [v28.52]
+# ═══════════════════════════════════════════════════════════════
+# One parametrized engine (run_face_care_engine) drives all four clusters via
+# FACE_CARE_CLUSTERS[cluster_key]. Mirrors the run_straighteners_engine spine
+# (pre-build & score every pool, then round-robin fill to 10). Brand is
+# resolved column-OR-title (SHAVING/TRIMMERS have 0% column), and the
+# ACCESSORIES pool applies the cross-brand replacement-part HARD GATE.
+
+def _fc_resolve_brand_series(pool):
+    """Uppercase brand per row: Κατασκευαστής when present, else title-parse.
+    Returns (brand_series, was_parsed_mask) so the engine can award the
+    slightly smaller FC_S_BRAND_PARSED for title-derived matches."""
+    if 'Κατασκευαστής' in pool.columns:
+        col = pool['Κατασκευαστής'].fillna('').astype(str).str.upper().str.strip()
+    else:
+        col = pd.Series([''] * len(pool), index=pool.index)
+    needs = col == ''
+    if needs.any():
+        col.loc[needs] = pool.loc[needs, 'Title'].fillna('').apply(
+            lambda t: _fc_parse_brand_from_title(t).upper()
+        )
+    return col, needs & (col != '')
+
+
+def _fc_apply_base_score(pool, trigger_brand, trigger_tier, trigger_colors, notes,
+                         color_exact_weight=0, color_partial_weight=0):
+    """Shared scoring spine: availability + sales + brand(col/parsed) + price-tier
+    + optional color. No face boost here (applied separately by device pools)."""
+    if pool.empty:
+        return pool
+    pool = pool.copy()
+    pool['Final_Score'] = 0.0
+
+    if 'AVAILABILITY' in pool.columns:
+        avail = pool['AVAILABILITY'] == 'Άμεσα Διαθέσιμο'
+        pool.loc[avail, 'Final_Score'] += FC_S_AVAILABILITY
+        if avail.any():
+            notes.append(f"  ✓ Availability: {avail.sum()} in stock (+{FC_S_AVAILABILITY:,})")
+
+    pool['Final_Score'] += pool['Sales_Tiebreaker'].fillna(0) * FC_S_SALES_FACTOR
+
+    if trigger_brand:
+        brand_resolved, was_parsed = _fc_resolve_brand_series(pool)
+        same = brand_resolved == trigger_brand
+        col_match    = same & ~was_parsed
+        parsed_match = same & was_parsed
+        pool.loc[col_match,    'Final_Score'] += FC_S_BRAND_MATCH
+        pool.loc[parsed_match, 'Final_Score'] += FC_S_BRAND_PARSED
+        if col_match.any():
+            notes.append(f"  ✓ Brand ecosystem ({trigger_brand}, column): {col_match.sum()} (+{FC_S_BRAND_MATCH:,})")
+        if parsed_match.any():
+            notes.append(f"  ✓ Brand ecosystem ({trigger_brand}, title-parsed): {parsed_match.sum()} (+{FC_S_BRAND_PARSED:,})")
+
+    if 'LIST PRICE' in pool.columns:
+        tiers = pool['LIST PRICE'].apply(parse_euro_price).apply(_str_price_tier)
+        diffs = (tiers - trigger_tier).abs()
+        same_t = diffs == 0; near_t = diffs == 1; far_t = diffs >= 2
+        pool.loc[same_t, 'Final_Score'] += FC_S_PRICE_SAME_TIER
+        pool.loc[near_t, 'Final_Score'] += FC_S_PRICE_ONE_OFF
+        pool.loc[far_t,  'Final_Score'] += FC_S_PRICE_TWO_OFF
+        if same_t.any() or near_t.any() or far_t.any():
+            notes.append(f"  ✓ Price-tier (trigger tier {trigger_tier}): "
+                         f"same={same_t.sum()} (+{FC_S_PRICE_SAME_TIER:,}), "
+                         f"near={near_t.sum()} (+{FC_S_PRICE_ONE_OFF:,}), "
+                         f"far={far_t.sum()} ({FC_S_PRICE_TWO_OFF:+,})")
+
+    if trigger_colors and 'Χρώμα' in pool.columns and color_exact_weight > 0:
+        pool_colors = pool['Χρώμα'].apply(_str_color_group)
+        exact   = pool_colors.apply(lambda g: g == trigger_colors and len(g) > 0)
+        partial = pool_colors.apply(lambda g: bool(g & trigger_colors) and g != trigger_colors)
+        pool.loc[exact,   'Final_Score'] += color_exact_weight
+        pool.loc[partial, 'Final_Score'] += color_partial_weight
+        if exact.any() or partial.any():
+            notes.append(f"  ✓ Color match ({'/'.join(sorted(trigger_colors))}): "
+                         f"exact={exact.sum()} (+{color_exact_weight:,}), partial={partial.sum()} (+{color_partial_weight:,})")
+
+    return pool
+
+
+def _fc_face_relevance_boost(pool, trigger_is_face, notes):
+    """Soft boost: if the trigger is a FACE device, lift companions whose title
+    signals face/beard/nose grooming. Soft (not a gate) because the structured
+    Περιοχή Χρήσης discriminator is 0% filled for shavers/trimmers."""
+    if not trigger_is_face or pool.empty or 'Title' not in pool.columns:
+        return pool
+    t = pool['Title'].fillna('').astype(str).str.lower()
+    m = t.apply(lambda x: any(term in x for term in _FC_FACE_TERMS))
+    pool.loc[m, 'Final_Score'] += FC_S_FACE_RELEVANCE
+    if m.any():
+        notes.append(f"  ✓ Face-relevance (face trigger): {m.sum()} face/grooming companions (+{FC_S_FACE_RELEVANCE:,})")
+    return pool
+
+
+def _fc_build_device_pool(c_pool, tb, ttier, tcolors, trigger_is_face, notes, use_color=False):
+    """Same-family + cross-device companions (shavers/trimmers/sets/clippers,
+    or hair-styling for epilators). Color only for women's-care (use_color)."""
+    if c_pool.empty:
+        return c_pool
+    pool = _fc_apply_base_score(
+        c_pool, tb, ttier, tcolors, notes,
+        color_exact_weight=(FC_S_COLOR_EXACT if use_color else 0),
+        color_partial_weight=(FC_S_COLOR_PARTIAL if use_color else 0),
+    )
+    pool = _fc_face_relevance_boost(pool, trigger_is_face, notes)
+    return pool.sort_values('Final_Score', ascending=False)
+
+
+def _fc_build_accessory_pool(c_pool, tb, ttier, tcolors, notes):
+    """ACCESSORIES with the cross-brand replacement-part HARD GATE: drop any
+    replacement head/blade/foil/grid whose brand ≠ trigger brand. Universal
+    accessories (sprays, generic stands, cleaning pods) survive."""
+    if c_pool.empty:
+        return c_pool
+    pool = c_pool.copy()
+    if tb:
+        brand_resolved, _ = _fc_resolve_brand_series(pool)
+        is_rep = pool['Title'].fillna('').apply(_fc_is_replacement_part)
+        drop = is_rep & (brand_resolved != tb)
+        if drop.any():
+            notes.append(f"  ⛔ HARD GATE: dropped {drop.sum()} cross-brand replacement parts (trigger brand {tb or '∅'})")
+            pool = pool[~drop].copy()
+    if pool.empty:
+        notes.append("  ⚠ Accessory pool empty after gate")
+        return pool
+    pool = _fc_apply_base_score(pool, tb, ttier, tcolors, notes, color_exact_weight=0, color_partial_weight=0)
+    return pool.sort_values('Final_Score', ascending=False)
+
+
+def _fc_build_wellness_pool(c_pool, tb, ttier, tcolors, notes):
+    """Toothbrushes / scales / massage — utilitarian wellness cross-sell.
+    Brand match still fires (rare), price+sales carry it; no color."""
+    if c_pool.empty:
+        return c_pool
+    pool = _fc_apply_base_score(c_pool, tb, ttier, tcolors, notes, color_exact_weight=0, color_partial_weight=0)
+    return pool.sort_values('Final_Score', ascending=False)
+
+
+def run_face_care_engine(trigger, df_sda, df_history, df_stationery=None, cluster_key="Face Shavers"):
+    """Build up to 10 cross-sell slots for a face-care trigger.
+    Parametrized by cluster_key over FACE_CARE_CLUSTERS. Round-robin fill:
+    device pools (some max_total=2) → brand-gated accessories → wellness →
+    Stationery impulse (×2) → wellness filler. Round 1 fills 9, round 2 takes
+    one device-pool overflow → 10/10."""
+    cfg = FACE_CARE_CLUSTERS[cluster_key]
+    PRIORITY    = cfg['priority']
+    SLOT_TARGET = cfg['slot_target']
+    MARKETING   = cfg['marketing']
+    use_color   = cfg.get('use_color', False)
+
+    diag = []; slot_notes = {}; all_recs = []
+
+    tm = trigger['Material']
+    _tb_raw = trigger.get('Κατασκευαστής', '')
+    tb = '' if pd.isna(_tb_raw) else str(_tb_raw).strip().upper()   # guard: str(NaN)→'NAN' is truthy
+    if not tb or tb == 'NAN':
+        tb = _fc_parse_brand_from_title(trigger.get('Title', '')).upper()
+    tprice = parse_euro_price(trigger.get('LIST PRICE', 0))
+    ttier = _str_price_tier(tprice)
+    tcolor_raw = str(trigger.get('Χρώμα', '') or '').strip()
+    tcolors = _str_color_group(tcolor_raw)
+
+    # Trigger face-ness: NBSP-tolerant Περιοχή Χρήσης lookup, OR title signal.
+    tarea = ''
+    for k in trigger.index:
+        if str(k).replace('\xa0', ' ').strip().startswith('Περιοχή Χρήσης'):
+            tarea = str(trigger.get(k, '') or ''); break
+    tt_low = str(trigger.get('Title', '')).lower()
+    trigger_is_face = ('πρόσωπ' in tarea.lower()) or ('προσωπ' in tarea.lower()) \
+                      or any(term in tt_low for term in _FC_FACE_TERMS)
+
+    diag.append(("0. Trigger", f"{tb or '∅'} €{tprice:.0f}",
+                 f"Tier={ttier} | Color={tcolor_raw}→{sorted(tcolors)} | Face={trigger_is_face} | cluster={cluster_key}"))
+
+    if df_sda is None or df_sda.empty:
+        diag.append(("ERROR", 0, "SDA sheet is empty — engine cannot run"))
+        return pd.DataFrame(), diag, slot_notes, pd.DataFrame()
+
+    # Drop the trigger itself + same-hierarchy competitors (no same-hierarchy rule)
+    c_sda = df_sda[df_sda['Material'] != tm].copy()
+    trig_hiers = {h.upper().strip() for h in cfg['trigger_hiers']}
+    b4 = len(c_sda)
+    c_sda = c_sda[~c_sda['Hierarchy'].fillna('').astype(str).str.upper().str.strip().isin(trig_hiers)]
+    diag.append(("1. Excl same-hierarchy", len(c_sda), f"Removed {b4 - len(c_sda)} same-hierarchy competitors"))
+
+    if 'Sum of Sales' in c_sda.columns:
+        c_sda['Sales_Tiebreaker'] = pd.to_numeric(c_sda['Sum of Sales'], errors='coerce').fillna(0)
+    else:
+        c_sda['Sales_Tiebreaker'] = 0
+
+    # + Stationery for the impulse pool (PERSONAL CARE gifts), same as hair engines
+    if df_stationery is not None and not df_stationery.empty:
+        stat = df_stationery[df_stationery['Material'] != tm].copy()
+        if 'Sum of Sales' in stat.columns:
+            stat['Sales_Tiebreaker'] = pd.to_numeric(stat['Sum of Sales'], errors='coerce').fillna(0)
+        else:
+            stat['Sales_Tiebreaker'] = 0
+        if 'Χρώμα' not in stat.columns:
+            stat['Χρώμα'] = ''
+        c_combined = pd.concat([c_sda, stat], ignore_index=True, sort=False)
+        diag.append(("1b. + Stationery", len(c_combined), f"Added {len(stat)} stationery rows for impulse pool"))
+    else:
+        c_combined = c_sda
+        diag.append(("1b. Stationery", 0, "No Stationery sheet — impulse pool will be empty"))
+
+    # Build a sorted pool per priority entry
+    pools = {}
+    for rank, role_label, hiers, logic_key, max_r1, max_total in PRIORITY:
+        notes = [f"=== Priority {rank}: {role_label} ({logic_key}) "
+                 f"| max_round_1={max_r1} | max_total={max_total if max_total else '∞'} ==="]
+        hier_upper = {h.upper().strip() for h in hiers}
+        base_pool = c_combined[c_combined['Hierarchy'].fillna('').astype(str).str.upper().str.strip().isin(hier_upper)].copy()
+        notes.append(f"  Base pool size: {len(base_pool)} (hierarchies={hiers})")
+
+        if base_pool.empty:
+            notes.append("  ⚠ Hierarchy not present in data — slot will be filled from other pools")
+            pools[rank] = (role_label, pd.DataFrame(), logic_key, max_r1, max_total, notes)
+            continue
+
+        if logic_key == 'FC_DEVICE':
+            scored = _fc_build_device_pool(base_pool, tb, ttier, tcolors, trigger_is_face, notes, use_color=use_color)
+        elif logic_key == 'FC_ACCESSORY':
+            scored = _fc_build_accessory_pool(base_pool, tb, ttier, tcolors, notes)
+        elif logic_key == 'FC_WELLNESS':
+            scored = _fc_build_wellness_pool(base_pool, tb, ttier, tcolors, notes)
+        elif logic_key == 'FC_IMPULSE':
+            scored = _pc_build_impulse_accessory_pool(base_pool, tb, ttier, tcolors, role_label, notes, trigger_price=tprice)
+        else:
+            scored = base_pool.copy(); scored['Final_Score'] = scored['Sales_Tiebreaker']
+
+        pools[rank] = (role_label, scored, logic_key, max_r1, max_total, notes)
+        diag.append((f"Pool {rank} ({role_label})", len(scored), logic_key))
+
+    # Round-robin fill
+    used_materials = {tm}
+    pool_cursors = {rank: 0 for rank in pools}
+    pool_taken   = {rank: 0 for rank in pools}
+    slot_num = 0; round_idx = 0
+
+    while slot_num < SLOT_TARGET:
+        progress = False; round_idx += 1
+        for rank, (role_label, scored, logic_key, max_r1, max_total, notes) in pools.items():
+            if slot_num >= SLOT_TARGET:
+                break
+            if scored is None or scored.empty:
+                continue
+            if max_total is not None and pool_taken[rank] >= max_total:
+                continue
+            take_n = max_r1 if round_idx == 1 else 1
+            if max_total is not None:
+                take_n = min(take_n, max_total - pool_taken[rank])
+            cursor = pool_cursors[rank]; taken_this_pass = 0
+            while taken_this_pass < take_n and cursor < len(scored) and slot_num < SLOT_TARGET:
+                row = scored.iloc[cursor]; cursor += 1
+                if row['Material'] in used_materials:
+                    continue
+                slot_num += 1
+                rc = row.copy()
+                rc['Assigned_Slot']  = slot_num
+                rc['Slot_Role']      = role_label
+                rc['Marketing_Copy'] = MARKETING.get(role_label, "Ιδανική επιλογή!")
+                rc['Item_Rank']      = round_idx
+                all_recs.append(rc)
+                used_materials.add(row['Material'])
+                taken_this_pass += 1; pool_taken[rank] += 1; progress = True
+                if slot_num not in slot_notes:
+                    slot_notes[slot_num] = []
+                slot_notes[slot_num].append(
+                    f"Round {round_idx} | Pool '{role_label}' | "
+                    f"Score: {float(row.get('Final_Score', 0)):,.0f} | {str(row.get('Title', ''))[:70]}"
+                )
+            pool_cursors[rank] = cursor
+        if not progress:
+            diag.append(("Loop", round_idx, "All pools exhausted or capped — stopping"))
+            break
+
+    # Pool diagnostics under slot 0
+    pool_diag_notes = []
+    for rank, (role_label, scored, logic_key, max_r1, max_total, notes) in pools.items():
+        pool_diag_notes.extend(notes)
+        cap_note = f" (capped at {max_total})" if max_total is not None else ""
+        pool_diag_notes.append(f"  → consumed {pool_taken[rank]} / {len(scored) if scored is not None else 0} from this pool{cap_note}")
+        pool_diag_notes.append("")
+    slot_notes[0] = pool_diag_notes
+
+    diag.append(("TOTAL", len(all_recs), f"Filled {slot_num}/{SLOT_TARGET} slots in {round_idx} rounds"))
+
+    if all_recs:
+        recs_df = pd.DataFrame(all_recs)
+        recs_df['Draft_Score'] = recs_df['Assigned_Slot']
+        return recs_df, diag, slot_notes, recs_df
+    return pd.DataFrame(), diag, slot_notes, pd.DataFrame()
+
+
 # ═══════════════════════════════════════════════════════════════
 # 🟢 WASHING MACHINES ENGINE — Πλυντήρια Ρούχων (Μεγάλες Συσκευές)
 # ═══════════════════════════════════════════════════════════════
@@ -29076,6 +29589,17 @@ elif active_cluster == "Electric Brushes":
         trigger, df_sda, df_history, df_stationery=df_stationery
     )
     slot_diag = []
+elif active_cluster in FACE_CARE_CLUSTER_KEYS:
+    # Περιποίηση Προσώπου — one parametrized engine over the 4 clusters
+    # (Face Shavers / Trimmers / Grooming Sets / Face Epilators), all sourced
+    # from the SDA sheet. Hybrid sales × brand-ecosystem(title-parsed) ×
+    # price-tier + soft face-relevance boost. The ACCESSORIES pool applies a
+    # cross-brand replacement-part HARD GATE (no PHILIPS foil for a BRAUN
+    # shaver). df_stationery powers the PERSONAL CARE impulse-gift slots.
+    recs, diag, slot_notes, full_candidates = run_face_care_engine(
+        trigger, df_sda, df_history, df_stationery=df_stationery, cluster_key=active_cluster
+    )
+    slot_diag = []
 elif active_cluster == "Washing Machines":
     # Πλυντήρια Ρούχων + Στεγνωτήρια + Αξεσουάρ Πλυντηρίου-Στεγνωτηρίου
     # live in the MDA sheet; iron-side companions (Σίδερα, Συστήματα
@@ -29603,6 +30127,15 @@ with st.expander("⚙️ System Diagnostics"):
                               'Κατασκευαστής','Μοντέλο','Τύπος συσκευής','Χρώμα',
                               'Βάρος','Διαστάσεις (ΠxΒxΥ)','Δυνατότητες',
                               'Ειδικά χαρακτηριστικά','Experts Rating ≡',
+                              'Sum of Sales','LIST PRICE','AVAILABILITY']
+    elif active_cluster in FACE_CARE_CLUSTER_KEYS:
+        # Περιποίηση Προσώπου — surface the signals the engine actually uses:
+        # brand (title-parsed where the column is empty), model, usage area
+        # (face/body, sparsely filled), color, price, sales. The trigger
+        # brand + face-detection appear in the engine's "0. Trigger" line.
+        attr_keys_to_show = ['Material','Title','Level 1','Level 2','Hierarchy',
+                              'Κατασκευαστής','Μοντέλο','Περιοχή Χρήσης ≡','Χρώμα',
+                              'Τύπος συσκευής','Δυνατότητες','Experts Rating ≡',
                               'Sum of Sales','LIST PRICE','AVAILABILITY']
     elif active_cluster == "Washing Machines":
         # MDA has no real spec columns filled for WMs — show what's there
