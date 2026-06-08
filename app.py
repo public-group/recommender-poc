@@ -103,7 +103,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v28.52.2 — Περιποίηση Προσώπου & Σώματος: προστέθηκε cluster «Αποτριχωτικές Σώματος» (ίδια EPILATORS ιεραρχία με τις «Προσώπου», split κατά Περιοχή Χρήσης). Και τα δύο epilator clusters είναι γυναικεία: hair-styling-led (Ισιωτικό/Πιστολάκι/Ψαλίδι/Πολυσυσκευή) — η ανδρική Ξυριστική αντικαταστάθηκε από Πολυσυσκευή Styling. Παραμένουν: ανδρικά clusters χωρίς feminine δώρα, ACCESSORY system-match gate (OneBlade QP ≠ rotary), MASSAGE device-only gate · 10/10 παντού
+        🟢 Engine v28.53 — Soundbars (TV & Home Entertainment): νέο cluster με τη soundbar ως trigger → ολοκλήρωση home-cinema setup. Hybrid scoring: brand-ecosystem (κυρίαρχο) × tier (κανάλια/Watt/τιμή από τίτλο) × sales. Brand-matched TV pairing (Samsung Q-Symphony / LG WOW / Sony Acoustic Center Sync), HDMI 2.1 eARC hard-gate σε Atmos/premium, soundbar-mount boost, cross-brand upgrade discovery, universal backfill → 10/10. PC/desktop soundbars (Razer/Dell/Trust) gated out του trigger set · 10/10 παντού
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -4822,6 +4822,72 @@ TV_MARKETING_COPY = {
 }
 
 # ═════════════════════════════════════════════════════════════
+# 🟢 SOUNDBARS CONFIGURATION (Soundbars — TV & Home Entertainment, v28.53)
+# ═════════════════════════════════════════════════════════════
+# Trigger = a soundbar (Hierarchy 'SOUNDBARS' in the Products sheet).
+# Engine = run_soundbars_engine. Builds a "complete your home-cinema setup"
+# carousel. Spec columns for soundbars are almost entirely empty (Dolby /
+# Surround / HDMI / Wi-Fi / Bluetooth / channels = 0), so depth is HYBRID:
+#   brand-ecosystem (dominant) × tier × sales, with hard gates.
+# Tier is derived from the soundbar's OWN title-parsed channel config
+# (front.sub.height), Watt and price. That tier routes the TV size bucket and
+# every accessory price cap.
+#
+# PC/desktop soundbars (Razer / Redragon / Dell / Trust) are a different
+# persona (computer audio, not home cinema) and are gated OUT of the trigger
+# set at the sidebar picker — see SOUNDBAR_PC_BRANDS.
+
+# TV size buckets (Products-sheet Hierarchy values — NOTE special chars: ” and en-dash –)
+SOUNDBAR_TV_BUCKETS = {
+    'entry':    ['35” – 45”', '46” – 54”'],
+    'mid':      ['46” – 54”', '55” – 59”'],
+    'premium':  ['55” – 59”', '60” – 69”'],
+    'flagship': ['60” – 69”', '70” – 79”', '80”+'],
+}
+# TV price window suggested by the soundbar's tier (aspirational "complete the setup")
+SOUNDBAR_TV_PRICE_WIN = {
+    'entry':    (250, 800),
+    'mid':      (450, 1300),
+    'premium':  (900, 2200),
+    'flagship': (1500, 6000),
+}
+# Brands with a TV line → brand-matched pairing (Q-Symphony / WOW Orchestra /
+# Acoustic Center Sync). For Sonos / Bose / JBL / Denon (no TV line) the TV slot
+# falls back to tier + sales.
+SOUNDBAR_BRANDS_WITH_TV = {'SAMSUNG', 'LG', 'SONY', 'HISENSE', 'SHARP', 'PHILIPS', 'TCL'}
+# Physically gated out of the soundbar trigger set (PC/desktop audio personas)
+SOUNDBAR_PC_BRANDS = {'RAZER', 'REDRAGON', 'DELL', 'TRUST'}
+
+# Test SKUs (tier-spanning, brand-diverse) — restricts the sidebar dropdown during dev.
+# Leave empty to show all home-cinema soundbars.
+SOUNDBAR_TEST_SKUS = {
+    "1295759",  # Sony HT-SF150 2.0 €129 — entry, Sony (TV line)
+    "1619394",  # JBL Cinema SB170 2.1 €199 — entry, JBL (no TV line)
+    "1690949",  # Sony HT-S400 2.1 €259 — mid, Sony
+    "1607995",  # Denon DHT-S316 2.1 €259 — mid, Denon (no TV line)
+    "1936335",  # LG S60TR 5.1 €249 — mid, LG (WOW)
+    "1658301",  # Sonos Beam Gen2 2.0 €499 — premium, Sonos
+    "1532602",  # Sonos Arc 5.0.2 €598 — premium, Sonos (Atmos)
+    "1978684",  # LG S95TR 9.1.5 €798 — flagship, LG (Atmos)
+    "1981658",  # Sonos Arc Ultra 7.1.4 €1099 — flagship, Sonos
+    "1995911",  # Samsung HW-Q930D 9.1.4 €599 — flagship Atmos, Samsung (Q-Symphony)
+}
+
+SOUNDBAR_MARKETING_COPY = {
+    "Καλώδιο HDMI eARC":  "Σύνδεσε με eARC — full Atmos/DTS από μία τηλεόραση.",
+    "Τηλεόραση":          "Η τέλεια εικόνα για τον νέο σου ήχο — ίδιο brand, τέλειο sync.",
+    "Βάση Στήριξης":      "Ασφαλής, σταθερή τοποθέτηση για το setup σου.",
+    "Προστασία Ρεύματος": "Προστάτεψε το home cinema σου από υπερτάσεις.",
+    "Τηλεχειριστήριο":    "Ένας έλεγχος για όλα — τηλεόραση & soundbar μαζί.",
+    "Εφεδρικό Καλώδιο":   "Έξτρα καλώδιο για κονσόλες & πηγές.",
+    "Καθαρισμός":         "Κράτησε τη συσκευή σου σαν καινούργια.",
+    "Μπαταρίες":          "Μην ξεμείνεις ποτέ από ενέργεια στο τηλεχειριστήριο.",
+    "Αναβάθμιση Ήχου":    "Ανέβα κατηγορία — περισσότερα κανάλια, βαθύτερο μπάσο.",
+    "Φορητό Ηχείο":       "Πάρε τη μουσική σου παντού.",
+    "Πρόσθετο Αξεσουάρ":  "Ολοκλήρωσε το setup σου.",
+}
+
+# ═════════════════════════════════════════════════════════════
 # 🟢 VINYL & TURNTABLES CONFIGURATION
 # ═════════════════════════════════════════════════════════════
 
@@ -8480,6 +8546,8 @@ L2_CHILDREN = {
          "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='2' y='5' width='20' height='13' rx='1.5'/%3E%3Cline x1='8' y1='22' x2='16' y2='22'/%3E%3Cline x1='12' y1='18' x2='12' y2='22'/%3E%3C/svg%3E"},
         {"key": "Projectors", "label": "Projectors",
          "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='8' width='14' height='10' rx='1.5'/%3E%3Ccircle cx='10' cy='13' r='2.5'/%3E%3Cpath d='M17 11l4-2v8l-4-2'/%3E%3Cline x1='6' y1='22' x2='14' y2='22'/%3E%3C/svg%3E"},
+        {"key": "Soundbars", "label": "Soundbars",
+         "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='2' y='9' width='20' height='6' rx='2'/%3E%3Ccircle cx='7' cy='12' r='1.4'/%3E%3Ccircle cx='12' cy='12' r='1.4'/%3E%3Ccircle cx='17' cy='12' r='1.4'/%3E%3C/svg%3E"},
         {"key": "Turntables", "label": "Πικάπ",
          "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3Ccircle cx='12' cy='12' r='2'/%3E%3Cline x1='17' y1='4' x2='14' y2='11'/%3E%3Ccircle cx='17' cy='4' r='1'/%3E%3C/svg%3E"},
         {"key": "Vinyl Records", "label": "Δίσκοι\\nΒινυλίου",
@@ -9003,6 +9071,36 @@ else:
             sel = st.sidebar.selectbox("", tvs['Title'].unique(), label_visibility="collapsed", key="tv_sel")
             trigger = tvs[tvs['Title']==sel].iloc[0] if sel else None
             
+    elif active_cluster == "Soundbars":
+        if df_products.empty: st.stop()
+        hier = df_products['Hierarchy'].fillna('').astype(str).str.strip().str.upper()
+        bars = df_products[hier == 'SOUNDBARS'].copy()
+
+        # ── Option A: hard-gate PC/desktop soundbars OUT of the trigger set ──
+        # (Razer / Redragon / Dell / Trust — computer audio, not home cinema)
+        brand_u = bars['Κατασκευαστής'].fillna('').astype(str).str.strip().str.upper()
+        title_u = bars['Title'].fillna('').astype(str).str.upper()
+        pc_mask = brand_u.isin(SOUNDBAR_PC_BRANDS)
+        for b in SOUNDBAR_PC_BRANDS:
+            pc_mask = pc_mask | title_u.str.contains(b, na=False)
+        # Also drop accessory-only rows (no channel notation AND not a "soundbar" title)
+        not_a_bar = ~title_u.str.contains('SOUNDBAR', na=False) & ~bars['Title'].fillna('').str.contains(r'\d\.\d', regex=True, na=False)
+        bars = bars[~pc_mask & ~not_a_bar]
+
+        # 🧪 TEST LIST filter (leave SOUNDBAR_TEST_SKUS empty to show all)
+        if SOUNDBAR_TEST_SKUS:
+            mat_clean = bars['Material'].astype(str).str.strip().str.replace(r'\.0$', '', regex=True)
+            b_filtered = bars[mat_clean.isin(SOUNDBAR_TEST_SKUS)]
+            if not b_filtered.empty:
+                bars = b_filtered
+
+        if bars.empty:
+            st.sidebar.warning("Δεν βρέθηκαν Soundbars.")
+        else:
+            st.sidebar.markdown('<p class="sidebar-section">Επιλέξτε Soundbar</p>', unsafe_allow_html=True)
+            sel = st.sidebar.selectbox("", bars['Title'].unique(), label_visibility="collapsed", key="sb_sel")
+            trigger = bars[bars['Title']==sel].iloc[0] if sel else None
+
     elif active_cluster == "AirUnits":
         if df_air.empty: 
             st.sidebar.warning("Το sheet 'Air' είναι άδειο.")
@@ -26894,6 +26992,220 @@ def run_tv_engine(trigger, df_products, df_history):
 
     
 # ═════════════════════════════════════════════════════════════
+# 🟢 SOUNDBARS ENGINE (v28.53)
+# ═════════════════════════════════════════════════════════════
+# Trigger = a soundbar. Builds a "complete your home-cinema setup" carousel.
+# Hybrid: brand-ecosystem (dominant) × tier (title-parsed channels/Watt/price)
+# × sales. Hard gates: HDMI 2.1 eARC forced for Atmos/premium; floor/projector
+# mounts dropped; PC-bar brands excluded from the upgrade slot. Universal
+# backfill guarantees 10/10. Constants live in the SOUNDBARS CONFIG block.
+def run_soundbars_engine(trigger, df_products, df_history):
+    diag, slot_notes, all_recs = [], {}, []
+
+    tm = trigger['Material']
+    tt = str(trigger.get('Title', ''))
+    tb = str(trigger.get('Κατασκευαστής', '')).strip().upper()
+    tprice = parse_euro_price(trigger.get('LIST PRICE', 0))
+
+    # ── Title-parsed channel config (front.sub.height) + Watt → tier ──
+    cm = re.search(r'\b(\d{1,2})\.(\d)(?:\.(\d))?\b', tt)
+    t_front  = int(cm.group(1)) if cm else 2
+    t_sub    = int(cm.group(2)) if cm else 0
+    t_height = int(cm.group(3)) if (cm and cm.group(3)) else 0
+    is_atmos = t_height >= 1
+    has_sub  = t_sub >= 1
+
+    wm = re.search(r'(\d{2,4})\s*W\b', tt)
+    t_watt = int(wm.group(1)) if wm else 0
+
+    if tprice <= 200 and not is_atmos:
+        tier = 'entry'
+    elif tprice <= 450:
+        tier = 'mid'
+    elif tprice <= 900:
+        tier = 'premium'
+    else:
+        tier = 'flagship'
+
+    brand_pairs_tv = tb in SOUNDBAR_BRANDS_WITH_TV
+    needs_hdmi21 = is_atmos or tier in ('premium', 'flagship')
+    diag.append(("0. Trigger",
+                 f"Brand={tb} €{tprice:.0f} {t_front}.{t_sub}.{t_height} {t_watt}W",
+                 f"Tier={tier} Atmos={is_atmos} Sub={has_sub} TVpair={brand_pairs_tv}"))
+
+    potential_slots = [
+        ('Καλώδιο HDMI eARC',  ['HDMI'],                                       'HDMI_EARC'),
+        ('Τηλεόραση',          SOUNDBAR_TV_BUCKETS[tier],                      'TV_PAIR'),
+        ('Βάση Στήριξης',      ['MOUNTS & STANDS'],                            'MOUNT'),
+        ('Προστασία Ρεύματος', ['SURGE PROTECTORS'],                           'SURGE'),
+        ('Τηλεχειριστήριο',    ['REMOTE CONTROLS'],                            'REMOTE'),
+        ('Εφεδρικό Καλώδιο',   ['ΚΑΛΩΔΙΑ 3.5MM JACK', 'ΚΑΛΩΔΙΑ RCA', 'HDMI'],  'CABLE2'),
+        ('Καθαρισμός',         ['CLEANING PRODUCTS'],                          'GENERIC'),
+        ('Μπαταρίες',          ['ΑΛΚΑΛΙΚΕΣ'],                                  'GENERIC'),
+        ('Αναβάθμιση Ήχου',    ['SOUNDBARS'],                                  'SB_UPGRADE'),
+        ('Φορητό Ηχείο',       ['ΗΧΕΙΑ ΦΟΡΗΤΟΥ ΗΧΟΥ', 'PARTY SPEAKERS'],       'PORTABLE'),
+    ]
+
+    # ── Base candidate pool + co-purchase frequency ──
+    c = df_products[df_products['Material'] != tm].copy()
+    c['Sales_Tiebreaker'] = pd.to_numeric(c.get('Sum of Sales', 0), errors='coerce').fillna(0)
+    c['_p'] = c['LIST PRICE'].apply(parse_euro_price)
+
+    tcust = df_history[df_history['Material'] == tm]['customerEmail'].unique() if not df_history.empty else []
+    bw = df_history[(df_history['customerEmail'].isin(tcust)) & (df_history['Material'] != tm)] if len(tcust) else pd.DataFrame()
+    fdf = bw['Material'].value_counts().reset_index() if not bw.empty else pd.DataFrame(columns=['NID', 'Frequency'])
+    if not fdf.empty:
+        fdf.columns = ['NID', 'Frequency']
+        c = c.merge(fdf, left_on='Material', right_on='NID', how='left')
+        c['Frequency'] = c['Frequency'].fillna(0).astype(int)
+    else:
+        c['Frequency'] = 0
+
+    used_materials = {tm}
+    current_slot = 1
+
+    def base_score(pool):
+        pool['Final_Score'] = 0.0
+        if 'AVAILABILITY' in pool.columns:
+            pool.loc[pool['AVAILABILITY'] == 'Άμεσα Διαθέσιμο', 'Final_Score'] += 100000
+        pool['Final_Score'] += pool['Sales_Tiebreaker'] * 0.1
+        pool['Final_Score'] += pool['Frequency'] * 100
+        return pool
+
+    for role, hierarchies, logic_key in potential_slots:
+        if current_slot > 10:
+            break
+        notes = [f"Logic: {logic_key}"]
+        hier_upper = [h.upper().strip() for h in hierarchies]
+        pool = c[c['Hierarchy'].fillna('').astype(str).str.upper().str.strip().isin(hier_upper)].copy()
+        pool = pool[~pool['Material'].isin(used_materials)]
+        if pool.empty:
+            diag.append((f"Slot {current_slot} ({role})", 0, "Empty Hierarchy"))
+            continue
+        pool = base_score(pool)
+        title_l = pool['Title'].fillna('').str.lower()
+
+        if logic_key == 'HDMI_EARC':
+            ver_col = pool.get('Έκδοση ≡', pd.Series('', index=pool.index)).fillna('').astype(str)
+            is_21 = ver_col.str.contains('2.1', na=False) | title_l.str.contains('2.1', na=False)
+            is_20 = ver_col.str.contains('2.0', na=False) | title_l.str.contains(r'\b2\.0\b', regex=True, na=False)
+            is_14 = ver_col.str.contains(r'1\.[234]', regex=True, na=False)
+            earc  = title_l.str.contains('earc|e-arc|arc', regex=True, na=False)
+            if needs_hdmi21:
+                pool.loc[is_21, 'Final_Score'] += 400000
+                pool.loc[is_20, 'Final_Score'] += 60000
+                pool.loc[is_14, 'Final_Score'] -= 200000
+                notes.append("Atmos/premium soundbar → forced HDMI 2.1")
+            else:
+                pool.loc[is_21 | is_20, 'Final_Score'] += 150000
+            pool.loc[earc, 'Final_Score'] += 120000
+            pool.loc[pool['_p'] > 60, 'Final_Score'] -= 200000  # keep cable price sane
+
+        elif logic_key == 'TV_PAIR':
+            lo, hi = SOUNDBAR_TV_PRICE_WIN[tier]
+            in_win = (pool['_p'] >= lo) & (pool['_p'] <= hi)
+            pool.loc[in_win, 'Final_Score'] += 350000
+            pool.loc[pool['_p'] < lo * 0.6, 'Final_Score'] -= 200000
+            pool.loc[pool['_p'] > hi * 1.4, 'Final_Score'] -= 400000
+            if brand_pairs_tv:
+                bmatch = pool['Κατασκευαστής'].fillna('').str.strip().str.upper() == tb
+                pool.loc[bmatch, 'Final_Score'] += 400000  # Q-Symphony / WOW / Acoustic Center Sync
+                notes.append(f"Brand-ecosystem TV pairing ({tb}) +400k")
+            if tier in ('premium', 'flagship'):
+                premium_panel = title_l.str.contains('oled|qled|mini.?led|neo', regex=True, na=False)
+                pool.loc[premium_panel, 'Final_Score'] += 120000
+
+        elif logic_key == 'MOUNT':
+            topo = pool.get('Τοποθέτηση ≡', pd.Series('', index=pool.index)).fillna('').astype(str).str.strip()
+            pool = pool[~topo.isin(['Δαπέδου', 'Επιδαπέδια'])]
+            tl = pool['Title'].fillna('').str.lower()
+            pool = pool[~tl.str.contains('μαγνητικό πλαίσιο|magnetic frame|projector', regex=True, na=False)]
+            title_l = pool['Title'].fillna('').str.lower()
+            sb_mount = title_l.str.contains('soundbar|ηχείο|ηχομπάρα', regex=True, na=False)
+            pool.loc[sb_mount, 'Final_Score'] += 200000
+            cap = {'entry': 35, 'mid': 50, 'premium': 80, 'flagship': 100}[tier]
+            pool.loc[pool['_p'] > cap, 'Final_Score'] -= 300000
+
+        elif logic_key == 'SURGE':
+            cap = {'entry': 20, 'mid': 25, 'premium': 45, 'flagship': 50}[tier]
+            pool.loc[pool['_p'] > cap, 'Final_Score'] -= 300000
+
+        elif logic_key == 'REMOTE':
+            generic = title_l.str.contains('universal|one for all|superior|αντικατάστασης|συμβατό|generic', regex=True, na=False)
+            pool.loc[generic, 'Final_Score'] += 250000
+            if tb:
+                bmatch = pool['Κατασκευαστής'].fillna('').str.strip().str.upper() == tb
+                pool.loc[bmatch, 'Final_Score'] += 100000
+
+        elif logic_key == 'CABLE2':
+            hier_u = pool['Hierarchy'].fillna('').astype(str).str.upper().str.strip()
+            is_hdmi = hier_u == 'HDMI'
+            pool.loc[~is_hdmi, 'Final_Score'] += 180000  # prefer a different cable type, not a 2nd HDMI
+            ver_col = pool.get('Έκδοση ≡', pd.Series('', index=pool.index)).fillna('').astype(str)
+            is_14 = ver_col.str.contains(r'1\.[234]', regex=True, na=False) | title_l.str.contains('hdmi 1.', na=False)
+            pool.loc[is_hdmi & is_14, 'Final_Score'] -= 250000  # never a worse-version duplicate of slot 1
+            pool.loc[pool['_p'] > 40, 'Final_Score'] -= 200000
+
+        elif logic_key == 'SB_UPGRADE':
+            # discovery / upsell: a higher-tier, cross-brand soundbar
+            pool = pool[~pool['Title'].fillna('').str.contains('|'.join(SOUNDBAR_PC_BRANDS), case=False, na=False)]
+            pool.loc[pool['_p'] > tprice * 1.15, 'Final_Score'] += 250000
+            pool.loc[pool['_p'] <= tprice, 'Final_Score'] -= 200000
+            if tb:
+                same_brand = pool['Κατασκευαστής'].fillna('').str.strip().str.upper() == tb
+                pool.loc[same_brand, 'Final_Score'] -= 80000
+
+        elif logic_key == 'PORTABLE':
+            cap = {'entry': 120, 'mid': 200, 'premium': 350, 'flagship': 500}[tier]
+            pool.loc[(pool['_p'] >= 25) & (pool['_p'] <= cap), 'Final_Score'] += 150000
+            pool.loc[pool['_p'] > cap, 'Final_Score'] -= 200000
+
+        pool = pool.sort_values('Final_Score', ascending=False)
+        if pool.empty:
+            diag.append((f"Slot {current_slot} ({role})", 0, "Filtered Empty"))
+            continue
+        chosen = pool.iloc[0]
+        rc = chosen.copy()
+        rc['Assigned_Slot'] = current_slot
+        rc['Slot_Role'] = role
+        rc['Marketing_Copy'] = SOUNDBAR_MARKETING_COPY.get(role, "Ιδανική επιλογή.")
+        rc['Item_Rank'] = 1
+        all_recs.append(rc)
+        used_materials.add(chosen['Material'])
+        notes.append(f"✅ {str(chosen.get('Title',''))[:55]}")
+        slot_notes[current_slot] = notes
+        diag.append((f"Slot {current_slot} ({role})", 1, f"€{parse_euro_price(chosen.get('LIST PRICE',0)):.0f} | Score {chosen['Final_Score']:.0f}"))
+        current_slot += 1
+
+    # ── Backfill guarantee → always 10/10 ──
+    if current_slot <= 10:
+        BACKFILL_HIER = ['HDMI', 'SURGE PROTECTORS', 'ΗΧΕΙΑ ΦΟΡΗΤΟΥ ΗΧΟΥ', 'MOUNTS & STANDS',
+                         'PARTY SPEAKERS', 'ΑΛΚΑΛΙΚΕΣ', 'CLEANING PRODUCTS', 'ΚΑΛΩΔΙΑ RCA']
+        bf = c[c['Hierarchy'].fillna('').astype(str).str.upper().str.strip().isin([h.upper() for h in BACKFILL_HIER])].copy()
+        bf = bf[~bf['Material'].isin(used_materials)]
+        bf = base_score(bf).sort_values('Final_Score', ascending=False)
+        for _, chosen in bf.iterrows():
+            if current_slot > 10:
+                break
+            if chosen['Material'] in used_materials:
+                continue
+            rc = chosen.copy()
+            rc['Assigned_Slot'] = current_slot
+            rc['Slot_Role'] = 'Πρόσθετο Αξεσουάρ'
+            rc['Marketing_Copy'] = SOUNDBAR_MARKETING_COPY['Πρόσθετο Αξεσουάρ']
+            rc['Item_Rank'] = 1
+            all_recs.append(rc)
+            used_materials.add(chosen['Material'])
+            diag.append((f"Slot {current_slot} (Backfill)", 1, f"€{parse_euro_price(chosen.get('LIST PRICE',0)):.0f}"))
+            current_slot += 1
+
+    recs_df = pd.DataFrame(all_recs) if all_recs else pd.DataFrame()
+    if not recs_df.empty:
+        recs_df['Draft_Score'] = recs_df['Assigned_Slot']
+    return recs_df, diag, slot_notes, recs_df
+
+
+# ═════════════════════════════════════════════════════════════
 # 🟢 PROJECTORS ENGINE — REWRITE
 # ═════════════════════════════════════════════════════════════
 # Slot order (per Achilleas' spec):
@@ -29743,6 +30055,13 @@ elif active_cluster == "Dishwashers":
 elif active_cluster == "TVs":
     recs, diag, slot_notes, full_candidates = run_tv_engine(trigger, df_products, df_history)
     slot_diag = []
+elif active_cluster == "Soundbars":
+    # v28.53 — soundbar trigger → home-cinema setup completion. Hybrid scoring:
+    # brand-ecosystem (dominant) × tier (title-parsed channels/Watt/price) × sales.
+    # Brand-matched TV pairing, HDMI 2.1 eARC hard-gate on Atmos/premium,
+    # cross-brand upgrade discovery, universal backfill → 10/10.
+    recs, diag, slot_notes, full_candidates = run_soundbars_engine(trigger, df_products, df_history)
+    slot_diag = []
 elif active_cluster == "Tablets":
     recs, diag, slot_notes, full_candidates = run_tablets_engine(trigger, df_products, df_history)
     slot_diag = []
@@ -29962,6 +30281,8 @@ if not recs.empty:
             marketing_text = str(r.get('Marketing_Copy', DH_MARKETING_COPY.get(raw_role, "Ιδανική επιλογή!")))
         elif active_cluster == "Vinyl Records":
             marketing_text = str(r.get('Marketing_Copy', VINYLREC_MARKETING_COPY.get(raw_role, "Ιδανική επιλογή!")))
+        elif active_cluster == "Soundbars":
+            marketing_text = str(r.get('Marketing_Copy', SOUNDBAR_MARKETING_COPY.get(raw_role, "Ιδανική επιλογή!")))
         else:
             marketing_text = MARKETING_COPY.get(raw_role, "Μια εξαιρετική επιλογή!")
         
@@ -29989,6 +30310,8 @@ if not recs.empty:
         header_text = "Ολοκλήρωσε το υγιεινό σου σπίτι"
     elif active_cluster == "Vinyl Records":
         header_text = "Για τη συλλογή σου"
+    elif active_cluster == "Soundbars":
+        header_text = "Ολοκλήρωσε το home cinema σου"
     else:
         header_text = "Συνέχισε την περιπέτεια"
 
