@@ -103,7 +103,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v28.50.1 — Πλυντήρια-Στεγνωτήρια refinements: (1) budget mirroring με price-percentile bands εντός pool (φθηνό trigger → φθηνά σίδερα, premium → premium — τέλος το ίδιο TEFAL παντού), (2) feature-locked αναλώσιμα (FragranceDos/TwinDos: ΑΡΩΜΑΤΙΚ/ULTRAPHASE) υποβαθμίζονται -120k και δεν προωθούνται — same brand ≠ εγγυημένο fit χωρίς per-model feature data, (3) own-brand αξεσουάρ προωθούνται στα slots 1-3 και μετά η κανονική σειρά · WM classic αμετάβλητο
+        🟢 Engine v28.51 — Νέα катηγορία Δικτυακά (Networking + Smart Home): νέα μηχανή per-persona (Router / Switch / Powerline / Camera / Lighting / Sensor / Plug) με κυρίαρχο σήμα το brand-ecosystem (TP-Link/Tapo/Deco, Philips-Hue, WIZ, Nanoleaf, Reolink, EZVIZ…), HARD ecosystem-lock στην επέκταση mesh/φωτισμού/hub, generic gear (Ethernet/switch/πολύπριζο) brand-agnostic, no-consecutive-role και universal sales backfill → 10/10 σε όλες τις personas · οι υπόλοιπες μηχανές αμετάβλητες
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -8000,6 +8000,22 @@ if 'nav_level' not in st.session_state:
     st.session_state.nav_level = 1   # 1 = L1 grid, 2 = L2 grid + selector
 if 'selected_l1' not in st.session_state:
     st.session_state.selected_l1 = None
+# ============================================================
+# NETWORKING / SMART-HOME CONFIG (Δικτυακά — v28.51) — trigger-side only
+# ============================================================
+NW_TRIGGER_HIERARCHIES = {
+    'ROUTERS Wireless ADSL', 'ROUTER-MODEM Wireless ADSL', 'Access Points',
+    'SWITCHES', 'POE ADAPTERS', 'POWERLINE', 'WIRELESS ACCESSORIES',
+    'ADAPTERS', 'Ethernet Cards USB Wireless', 'USB CABLES',
+    'IP CAMERAS', 'ΕΞΥΠΝΟΣ ΦΩΤΙΣΜΟΣ', 'Smart Sensors', 'ΕΞΥΠΝΕΣ ΣΥΣΚΕΥΕΣ',
+    'ΕΞΥΠΝΕΣ ΠΡΙΖΕΣ', 'ΑΣΥΡΜΑΤΟΙ ΣΥΝΑΓΕΡΜΟΙ', 'BLUETOOTH DEVICES',
+}
+NW_TEST_SKUS = {
+    "1330241", "1527679", "991566", "0991566", "1736733",
+    "1588966", "1865585", "1664296",
+}
+
+
 if 'active_cluster' not in st.session_state:
     st.session_state.active_cluster = None
 
@@ -8104,6 +8120,8 @@ L2_CHILDREN = {
          "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='10' r='6'/%3E%3Ccircle cx='12' cy='10' r='2'/%3E%3Cpath d='M5 22h14l-2-5H7l-2 5z'/%3E%3C/svg%3E"},
         {"key": "USB Hub", "label": "USB Hub",
          "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='9' width='18' height='6' rx='1'/%3E%3Cline x1='7' y1='12' x2='7.01' y2='12'/%3E%3Cline x1='11' y1='12' x2='11.01' y2='12'/%3E%3Cline x1='15' y1='12' x2='15.01' y2='12'/%3E%3Cline x1='19' y1='12' x2='19.01' y2='12'/%3E%3C/svg%3E"},
+        {"key": "Networking", "label": "\u0394\u03b9\u03ba\u03c4\u03c5\u03b1\u03ba\u03ac",
+         "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12.55a11 11 0 0 1 14.08 0'/%3E%3Cpath d='M1.42 9a16 16 0 0 1 21.16 0'/%3E%3Cpath d='M8.53 16.11a6 6 0 0 1 6.95 0'/%3E%3Cline x1='12' y1='20' x2='12.01' y2='20'/%3E%3C/svg%3E"},
     ],
     "Stationery": [
         {"key": "Pens", "label": "Στυλό",
@@ -9373,6 +9391,39 @@ else:
                 st.sidebar.markdown('<p class="sidebar-section">Επιλέξτε Εκτυπωτή / Πολυμηχάνημα</p>', unsafe_allow_html=True)
                 sel = st.sidebar.selectbox("", printers['Title'].unique(), label_visibility="collapsed", key="print_sel")
                 trigger = printers[printers['Title']==sel].iloc[0] if sel else None
+
+    elif active_cluster == "Networking":
+        # v28.51 — Δικτυακά. Triggers live in the SPARE sheet (Home file),
+        # Level 2 = 'Networking', scope = NW_TRIGGER_HIERARCHIES (core networking
+        # + smart-home). POWER STATION-* hierarchies stay out of scope.
+        if df_spare is None or df_spare.empty:
+            st.sidebar.warning(
+                "Δεν βρέθηκε πηγή για Δικτυακά σε κανένα workbook. "
+                f"Sheets loaded: {', '.join(sheets_loaded)}"
+            )
+        else:
+            l2 = df_spare['Level 2'].fillna('').astype(str).str.strip().str.lower() \
+                if 'Level 2' in df_spare.columns else pd.Series([''] * len(df_spare), index=df_spare.index)
+            hier_u = df_spare['Hierarchy'].fillna('').astype(str).str.upper().str.strip() \
+                if 'Hierarchy' in df_spare.columns else pd.Series([''] * len(df_spare), index=df_spare.index)
+            trig_hiers = {h.upper() for h in NW_TRIGGER_HIERARCHIES}
+            net = df_spare[(l2 == 'networking') & hier_u.isin(trig_hiers)].copy()
+            if net.empty:
+                net = df_spare[(l2 == 'networking')
+                               & ~hier_u.str.contains('POWER STATION', regex=True, na=False)].copy()
+            if NW_TEST_SKUS and not net.empty:
+                mat_clean = net['Material'].astype(str).str.strip().str.replace(r'\.0$', '', regex=True)
+                hit = net[mat_clean.isin(NW_TEST_SKUS)]
+                if not hit.empty:
+                    net = hit
+            if not net.empty:
+                net = net.drop_duplicates(subset=['Material'])
+            if net.empty:
+                st.sidebar.warning("Δεν βρέθηκαν δικτυακά προϊόντα στο sheet Spare.")
+            else:
+                st.sidebar.markdown('<p class="sidebar-section">Επιλέξτε Δικτυακό / Smart Home</p>', unsafe_allow_html=True)
+                sel = st.sidebar.selectbox("", net['Title'].unique(), label_visibility="collapsed", key="nw_sel")
+                trigger = net[net['Title']==sel].iloc[0] if sel else None
 
     elif active_cluster == "Webcam":
         if df_peripherals.empty:
@@ -28401,6 +28452,466 @@ def run_vinyl_engine(trigger, df_products, df_peripherals, df_music, df_history)
     return recs_df, diag, slot_notes, recs_df
     
 # ─────────────────────────────────────────────────────────────
+
+# ============================================================
+# NETWORKING / SMART-HOME ENGINE + HELPERS (Δικτυακά — v28.51)
+# ============================================================
+# Trigger-side constants (NW_TRIGGER_HIERARCHIES / NW_TEST_SKUS) live in the
+# config section above the UI. Reuses shared _cm_norm/_cm_attr/parse_euro_price.
+
+# Excluded from triggers AND pools (not a network/smart-home cross-sell):
+NW_EXCLUDE_HIERS = {
+    'POWER STATION-DEVICES', 'POWER STATION-ACCESSORIES',
+    'POWER STATION-SOLAR PANELS',
+}
+
+# ── Persona map: Hierarchy (UPPER) → persona key ──
+NW_PERSONA_BY_HIER = {
+    'ROUTERS WIRELESS ADSL': 'ROUTER',
+    'ROUTER-MODEM WIRELESS ADSL': 'ROUTER',
+    'ACCESS POINTS': 'ROUTER',
+    'ETHERNET CARDS USB WIRELESS': 'ROUTER',
+    'WIRELESS ACCESSORIES': 'ROUTER',
+    'SWITCHES': 'SWITCH',
+    'POE ADAPTERS': 'SWITCH',
+    'POWERLINE': 'POWERLINE',
+    'ADAPTERS': 'POWERLINE',
+    'USB CABLES': 'POWERLINE',
+    'IP CAMERAS': 'CAMERA',
+    'ΕΞΥΠΝΟΣ ΦΩΤΙΣΜΟΣ': 'LIGHTING',
+    'SMART SENSORS': 'SENSOR',
+    'ΕΞΥΠΝΕΣ ΣΥΣΚΕΥΕΣ': 'SMARTDEV',
+    'ΕΞΥΠΝΕΣ ΠΡΙΖΕΣ': 'PLUG',
+    'ΑΣΥΡΜΑΤΟΙ ΣΥΝΑΓΕΡΜΟΙ': 'ALARM',
+    'BLUETOOTH DEVICES': 'SMARTDEV',
+}
+
+# ── Brand ecosystem alias families (normalized, accent-stripped) ──
+NW_ECOSYSTEMS = {
+    'TP-LINK':  {'TP-LINK', 'TP LINK', 'TPLINK', 'TAPO', 'DECO', 'KASA'},
+    'PHILIPS':  {'PHILIPS', 'HUE', 'PHILIPS HUE', 'SIGNIFY'},
+    'WIZ':      {'WIZ'},
+    'NANOLEAF': {'NANOLEAF'},
+    'REOLINK':  {'REOLINK'},
+    'EZVIZ':    {'EZVIZ'},
+    'IMOU':     {'IMOU'},
+    'MEROSS':   {'MEROSS'},
+    'XIAOMI':   {'XIAOMI', 'MI', 'AQARA', 'YEELIGHT'},
+    'NETGEAR':  {'NETGEAR'},
+    'ASUS':     {'ASUS'},
+    'D-LINK':   {'D-LINK', 'D LINK', 'DLINK'},
+    'MERCUSYS': {'MERCUSYS'},
+    'UBIQUITI': {'UBIQUITI', 'UNIFI'},
+}
+
+
+def _nw_ecosystem(brand_or_title: str) -> str:
+    """Map a brand/title to its ecosystem key, '' if unknown."""
+    b = _cm_norm(brand_or_title)
+    for eco, members in NW_ECOSYSTEMS.items():
+        for m in members:
+            if m in b:
+                return eco
+    return b.split()[0] if b else ''
+
+
+def _nw_persona(trigger_row) -> str:
+    hier = _cm_norm(trigger_row.get('Hierarchy', ''))
+    # exact-key lookup first (keys are already accent-stripped uppercase)
+    if hier in NW_PERSONA_BY_HIER:
+        return NW_PERSONA_BY_HIER[hier]
+    # substring backstop for spelling drift
+    if 'ROUTER' in hier or 'ACCESS POINT' in hier:
+        return 'ROUTER'
+    if 'SWITCH' in hier or 'POE' in hier:
+        return 'SWITCH'
+    if 'POWERLINE' in hier:
+        return 'POWERLINE'
+    if 'CAMERA' in hier or 'IP CAM' in hier:
+        return 'CAMERA'
+    if 'ΦΩΤΙΣΜΟ' in hier:
+        return 'LIGHTING'
+    if 'SENSOR' in hier or 'ΑΙΣΘΗΤΗΡ' in hier:
+        return 'SENSOR'
+    if 'ΠΡΙΖ' in hier or 'PLUG' in hier:
+        return 'PLUG'
+    if 'ΣΥΝΑΓΕΡΜ' in hier or 'ALARM' in hier:
+        return 'ALARM'
+    return 'SMARTDEV'
+
+
+# ── Scoring constants (mirrors the *_S_* convention used elsewhere) ──
+NW_SLOT_TARGET     = 10
+NW_S_AVAILABILITY  =   300_000   # in-stock boost
+NW_S_ECO_MATCH     =   600_000   # same brand ecosystem (soft pools)
+NW_S_PRICE_BAND    =   150_000   # within a sensible price band of the trigger
+NW_S_SALES_FACTOR  =       1.0   # sales tiebreaker weight
+
+NW_MARKETING_COPY = {
+    'Επέκταση Κάλυψης':     "Φέρε το Wi-Fi παντού — mesh/extender συμβατό με τον εξοπλισμό σου.",
+    'Powerline Kit':        "Ίντερνετ μέσω πρίζας εκεί που δεν φτάνει το Wi-Fi.",
+    'Network Switch':       "Περισσότερες ενσύρματες θύρες για σταθερή σύνδεση.",
+    'Καλώδιο Ethernet':     "Σταθερή ενσύρματη σύνδεση — Cat.5e/Cat.6 στο μήκος που θες.",
+    'Router / Access Point':"Δώσε Wi-Fi στο δίκτυό σου — router ή access point.",
+    'IP Camera':            "Δες το χώρο σου από παντού — ασύρματη κάμερα παρακολούθησης.",
+    'Κάρτα microSD':        "Τοπική αποθήκευση για την κάμερά σου — χωρίς συνδρομή.",
+    'Smart Hub':            "Ο εγκέφαλος του έξυπνου σπιτιού — συνδέει όλες τις συσκευές.",
+    'Έξυπνη Πρίζα':         "Έλεγξε κάθε συσκευή από το κινητό — ξεκίνα το smart home σου.",
+    'Έξυπνος Φωτισμός':     "Φώτα με χρώμα & χρονοδιακόπτη — ατμόσφαιρα με ένα tap.",
+    'Επέκταση Φωτισμού':    "Πρόσθεσε κι άλλα φώτα στο ίδιο οικοσύστημα.",
+    'Smart Sensor':         "Αισθητήρες κίνησης/πόρτας για αυτοματισμούς & ασφάλεια.",
+    'Πολύπριζο Ασφαλείας':  "Προστάτεψε router & συσκευές από αυξομειώσεις τάσης.",
+    'Αντάπτορας Δικτύου':   "Πρόσθεσε ασύρματη/ενσύρματη σύνδεση εκεί που τη χρειάζεσαι.",
+    'Δικτυακό Bestseller':  "Δημοφιλής επιλογή για το δίκτυο & το έξυπνο σπίτι σου.",
+}
+
+# Pools that are HARD ecosystem-locked (drop non-matching brand before scoring)
+NW_ECO_LOCKED_ROLES = {'Επέκταση Κάλυψης', 'Επέκταση Φωτισμού', 'Smart Hub'}
+
+
+# ───────────────────────── pool helpers ─────────────────────────
+def _nw_hier_slice(df, hier_set):
+    if df is None or df.empty or 'Hierarchy' not in df.columns:
+        return pd.DataFrame()
+    h = df['Hierarchy'].fillna('').astype(str).str.upper().str.strip()
+    return df[h.isin({x.upper() for x in hier_set})].copy()
+
+
+def _nw_base_score(pool, trig_price, trig_eco, role):
+    """Score a candidate pool. pandas-3.x safe (plain float64 arrays)."""
+    if pool is None or pool.empty:
+        return pd.DataFrame()
+    p = pool.copy()
+    n = len(p)
+
+    avail = p['AVAILABILITY'].fillna('').astype(str).str.upper() if 'AVAILABILITY' in p.columns else pd.Series([''] * n, index=p.index)
+    in_stock = avail.str.contains('IN STOCK|ΔΙΑΘ|AVAILABLE|YES|NAI', regex=True, na=False).to_numpy()
+
+    sales = pd.to_numeric(p['Sum of Sales'], errors='coerce').fillna(0).to_numpy(dtype=float) if 'Sum of Sales' in p.columns else np.zeros(n)
+    prices = np.array([parse_euro_price(v) for v in p['LIST PRICE']], dtype=float) if 'LIST PRICE' in p.columns else np.zeros(n)
+
+    brands = p['Κατασκευαστής'].fillna('').astype(str) if 'Κατασκευαστής' in p.columns else pd.Series([''] * n, index=p.index)
+    titles = p['Title'].fillna('').astype(str) if 'Title' in p.columns else pd.Series([''] * n, index=p.index)
+    ecos = np.array([_nw_ecosystem(b if _cm_norm(b) else t) for b, t in zip(brands, titles)])
+    eco_match = (ecos == trig_eco) & (trig_eco != '')
+
+    # price band: within 0.25×–2.5× of trigger, with a tiny graceful taper
+    band = np.zeros(n)
+    if trig_price > 0:
+        ratio = np.divide(prices, trig_price, out=np.full(n, 99.0), where=prices > 0)
+        band = np.where((ratio >= 0.2) & (ratio <= 2.6), 1.0, 0.0)
+
+    score = (in_stock.astype(float) * NW_S_AVAILABILITY
+             + eco_match.astype(float) * NW_S_ECO_MATCH
+             + band * NW_S_PRICE_BAND
+             + np.log1p(np.clip(sales, 0, None)) * 10_000 * NW_S_SALES_FACTOR)
+
+    p = p.assign(Final_Score=score, _nw_eco=ecos, _nw_eco_match=eco_match)
+
+    # HARD ecosystem lock
+    if role in NW_ECO_LOCKED_ROLES and trig_eco:
+        p = p[p['_nw_eco'] == trig_eco]
+
+    p = p.sort_values('Final_Score', ascending=False)
+    return p
+
+
+def _nw_router_func(row) -> str:
+    """Detect mesh/extender capability from spec + title."""
+    blob = _cm_norm(_cm_attr(row, 'Λειτουργία Wi-Fi', '')) + ' ' \
+        + _cm_norm(_cm_attr(row, 'Wireless Functions', '')) + ' ' \
+        + _cm_norm(row.get('Title', ''))
+    if 'MESH' in blob or 'DECO' in blob or 'EXTENDER' in blob or 'REPEATER' in blob \
+            or 'ΕΝΙΣΧΥΤ' in blob or 'RANGE EXTENDER' in blob:
+        return 'COVERAGE'
+    return 'ROUTER'
+
+
+# Hierarchy (UPPER) → human role label, used to relabel backfill items by
+# their actual product type (so the carousel never shows a generic label
+# and no-consecutive-role detection works on the TRUE type).
+_NW_ROLE_BY_HIER = {
+    'ROUTERS WIRELESS ADSL': 'Router / Access Point',
+    'ROUTER-MODEM WIRELESS ADSL': 'Router / Access Point',
+    'ACCESS POINTS': 'Router / Access Point',
+    'WIRELESS ACCESSORIES': 'Επέκταση Κάλυψης',
+    'ETHERNET CARDS USB WIRELESS': 'Router / Access Point',
+    'SWITCHES': 'Network Switch',
+    'POE ADAPTERS': 'Network Switch',
+    'POWERLINE': 'Powerline Kit',
+    'ADAPTERS': 'Αντάπτορας Δικτύου',
+    'IP CAMERAS': 'IP Camera',
+    'ΕΞΥΠΝΟΣ ΦΩΤΙΣΜΟΣ': 'Έξυπνος Φωτισμός',
+    'SMART SENSORS': 'Smart Sensor',
+    'ΕΞΥΠΝΕΣ ΣΥΣΚΕΥΕΣ': 'Smart Hub',
+    'ΕΞΥΠΝΕΣ ΠΡΙΖΕΣ': 'Έξυπνη Πρίζα',
+    'ΑΣΥΡΜΑΤΟΙ ΣΥΝΑΓΕΡΜΟΙ': 'Smart Sensor',
+    'BLUETOOTH DEVICES': 'Αντάπτορας Δικτύου',
+    'USB CABLES': 'Αντάπτορας Δικτύου',
+    'ETHERNET CARDS USB WIRELESS': 'Αντάπτορας Δικτύου',
+}
+
+
+def _nw_role_from_hier(row) -> str:
+    h = _cm_norm(row.get('Hierarchy', ''))
+    return _NW_ROLE_BY_HIER.get(h, 'Δικτυακό Bestseller')
+
+
+def run_networking_engine(trigger, df_spare, df_peripherals, df_products, df_history):
+    """Build up to 10 cross-sell slots for a networking / smart-home trigger.
+
+    Persona (ROUTER / SWITCH / POWERLINE / CAMERA / LIGHTING / SENSOR /
+    PLUG / SMARTDEV / ALARM) drives the slot layout; ecosystem-locked
+    expansion pools are HARD-gated to the trigger's brand family, generic
+    gear is brand-agnostic, and a universal sales-ranked backfill guarantees
+    10/10 slots.
+    """
+    diag = []
+    slot_notes = {}
+    all_recs = []
+
+    if df_spare is None or df_spare.empty:
+        diag.append(("ERROR", 0, "Spare sheet empty — engine cannot run"))
+        return pd.DataFrame(), diag, slot_notes, pd.DataFrame()
+
+    tm = trigger['Material']
+    tbrand = str(trigger.get('Κατασκευαστής', '')).strip()
+    teco = _nw_ecosystem(tbrand if _cm_norm(tbrand) else trigger.get('Title', ''))
+    tprice = parse_euro_price(trigger.get('LIST PRICE', 0))
+    persona = _nw_persona(trigger)
+
+    diag.append(("0. Trigger", f"{tbrand or '—'} €{tprice:.0f}",
+                 f"Persona={persona} | Ecosystem={teco or '—'}"))
+
+    # ── Universe: all networking/smart-home rows minus trigger, minus
+    #    excluded (power stations), minus exact dupes ──
+    c = df_spare[df_spare['Material'] != tm].copy()
+    if 'Level 2' in c.columns:
+        l2 = c['Level 2'].fillna('').astype(str).str.strip().str.lower()
+        c = c[l2 == 'networking']
+    hier_u = c['Hierarchy'].fillna('').astype(str).str.upper().str.strip()
+    c = c[~hier_u.isin({h.upper() for h in NW_EXCLUDE_HIERS})]
+
+    # ── Build raw hierarchy slices ──
+    routers = _nw_hier_slice(c, {'ROUTERS Wireless ADSL', 'ROUTER-MODEM Wireless ADSL', 'Access Points'})
+    coverage = routers[routers.apply(_nw_router_func, axis=1) == 'COVERAGE'].copy() if not routers.empty else pd.DataFrame()
+    wireless_acc = _nw_hier_slice(c, {'WIRELESS ACCESSORIES'})
+    coverage = pd.concat([coverage, wireless_acc], ignore_index=True) if not wireless_acc.empty else coverage
+    switches = _nw_hier_slice(c, {'SWITCHES', 'POE ADAPTERS'})
+    powerline = _nw_hier_slice(c, {'POWERLINE'})
+    cameras = _nw_hier_slice(c, {'IP CAMERAS'})
+    lighting = _nw_hier_slice(c, {'ΕΞΥΠΝΟΣ ΦΩΤΙΣΜΟΣ'})
+    sensors = _nw_hier_slice(c, {'Smart Sensors'})
+    plugs = _nw_hier_slice(c, {'ΕΞΥΠΝΕΣ ΠΡΙΖΕΣ'})
+    smartdev = _nw_hier_slice(c, {'ΕΞΥΠΝΕΣ ΣΥΣΚΕΥΕΣ'})
+    alarms = _nw_hier_slice(c, {'ΑΣΥΡΜΑΤΟΙ ΣΥΝΑΓΕΡΜΟΙ'})
+
+    # Smart hub = any row (across smartdev/sensors/plugs) whose title is a
+    # hub/bridge/gateway. Pull them OUT of their origin pools so an Hxxx hub
+    # is never mislabeled "Smart Sensor".
+    _HUB_RE = r'HUB|BRIDGE|GATEWAY|\bGW\b|\bH100\b|\bH200\b|\bH500\b'
+
+    def _split_hubs(pool):
+        if pool is None or pool.empty:
+            return pool, pd.DataFrame()
+        t = pool['Title'].fillna('').astype(str).map(_cm_norm)
+        is_hub = t.str.contains(_HUB_RE, regex=True, na=False)
+        return pool[~is_hub].copy(), pool[is_hub].copy()
+
+    smartdev, hub_a = _split_hubs(smartdev)
+    sensors, hub_b = _split_hubs(sensors)
+    plugs, hub_c = _split_hubs(plugs)
+    hub = pd.concat([h for h in (hub_a, hub_b, hub_c) if not h.empty],
+                    ignore_index=True) if any(not h.empty for h in (hub_a, hub_b, hub_c)) else pd.DataFrame()
+
+    # cross-workbook generic gear
+    cable = _nw_hier_slice(df_peripherals, {'NETWORK CABLES'})
+    if cable.empty:
+        cable = _nw_hier_slice(df_products, {'NETWORK CABLES'})
+    surge = _nw_hier_slice(df_products, {'SURGE PROTECTORS'})
+
+    # ── Score pools (role-aware ecosystem lock) ──
+    def S(pool, role):
+        return _nw_base_score(pool, tprice, teco, role)
+
+    P = {
+        'coverage':  S(coverage, 'Επέκταση Κάλυψης'),
+        'powerline': S(powerline, 'Powerline Kit'),
+        'switch':    S(switches, 'Network Switch'),
+        'cable':     S(cable, 'Καλώδιο Ethernet'),
+        'router':    S(routers, 'Router / Access Point'),
+        'camera':    S(cameras, 'IP Camera'),
+        'hub':       S(hub, 'Smart Hub'),
+        'plug':      S(plugs, 'Έξυπνη Πρίζα'),
+        'lighting':  S(lighting, 'Έξυπνος Φωτισμός'),
+        'light_exp': S(lighting, 'Επέκταση Φωτισμού'),
+        'sensor':    S(sensors, 'Smart Sensor'),
+        'surge':     S(surge, 'Πολύπριζο Ασφαλείας'),
+    }
+
+    # universal backfill — top sellers across the whole networking universe,
+    # ecosystem-match boosted, price-banded (guarantees 10/10)
+    backfill = _nw_base_score(c, tprice, teco, 'Δικτυακό Bestseller')
+
+    # ── Persona-routed priority list: (role_label, pool_key, max_r1, max_total) ──
+    if persona == 'ROUTER':
+        pri = [
+            ('Επέκταση Κάλυψης',      'coverage',  1, 2),
+            ('Powerline Kit',         'powerline', 1, 1),
+            ('Network Switch',        'switch',    1, 1),
+            ('Καλώδιο Ethernet',      'cable',     1, 2),
+            ('Έξυπνη Πρίζα',          'plug',      1, 1),
+            ('IP Camera',             'camera',    1, 1),
+            ('Πολύπριζο Ασφαλείας',   'surge',     1, 1),
+        ]
+    elif persona == 'SWITCH':
+        pri = [
+            ('Καλώδιο Ethernet',      'cable',     1, 3),
+            ('Router / Access Point', 'router',    1, 1),
+            ('Powerline Kit',         'powerline', 1, 1),
+            ('Network Switch',        'switch',    1, 1),
+            ('IP Camera',             'camera',    1, 1),
+            ('Πολύπριζο Ασφαλείας',   'surge',     1, 1),
+        ]
+    elif persona == 'POWERLINE':
+        pri = [
+            ('Powerline Kit',         'powerline', 1, 2),
+            ('Καλώδιο Ethernet',      'cable',     1, 2),
+            ('Network Switch',        'switch',    1, 1),
+            ('Router / Access Point', 'router',    1, 1),
+            ('Πολύπριζο Ασφαλείας',   'surge',     1, 1),
+        ]
+    elif persona == 'CAMERA':
+        pri = [
+            ('IP Camera',             'camera',    1, 2),
+            ('Smart Hub',             'hub',       1, 1),
+            ('Smart Sensor',          'sensor',    1, 1),
+            ('Router / Access Point', 'router',    1, 1),
+            ('Έξυπνη Πρίζα',          'plug',      1, 1),
+            ('Πολύπριζο Ασφαλείας',   'surge',     1, 1),
+        ]
+    elif persona == 'LIGHTING':
+        pri = [
+            ('Επέκταση Φωτισμού',     'light_exp', 1, 2),
+            ('Smart Hub',            'hub',       1, 1),
+            ('Έξυπνη Πρίζα',          'plug',      1, 1),
+            ('Smart Sensor',          'sensor',    1, 1),
+        ]
+    elif persona == 'SENSOR':
+        pri = [
+            ('Smart Hub',            'hub',       1, 1),
+            ('Smart Sensor',          'sensor',    1, 2),
+            ('Έξυπνη Πρίζα',          'plug',      1, 1),
+            ('Έξυπνος Φωτισμός',      'lighting',  1, 1),
+            ('IP Camera',             'camera',    1, 1),
+        ]
+    elif persona == 'PLUG':
+        pri = [
+            ('Έξυπνη Πρίζα',          'plug',      1, 2),
+            ('Έξυπνος Φωτισμός',      'lighting',  1, 1),
+            ('Smart Hub',            'hub',       1, 1),
+            ('Smart Sensor',          'sensor',    1, 1),
+        ]
+    else:  # SMARTDEV / ALARM — generic smart-home
+        pri = [
+            ('Smart Sensor',          'sensor',    1, 1),
+            ('IP Camera',             'camera',    1, 1),
+            ('Έξυπνη Πρίζα',          'plug',      1, 1),
+            ('Έξυπνος Φωτισμός',      'lighting',  1, 1),
+            ('Smart Hub',            'hub',       1, 1),
+        ]
+
+    # always end with the universal bestseller backfill (∞ cap)
+    pri.append(('Δικτυακό Bestseller', 'backfill', 2, None))
+    P['backfill'] = backfill
+
+    # ── Build the ordered pool list for the round-robin ──
+    pools = {}
+    for rank, (role_label, key, max_r1, max_total) in enumerate(pri, start=1):
+        scored = P.get(key, pd.DataFrame())
+        pools[rank] = (role_label, scored, max_r1, max_total)
+        diag.append((f"Pool {rank} ({role_label})",
+                     0 if scored is None or scored.empty else len(scored),
+                     f"key={key} | persona={persona}"))
+
+    # ── Round-robin fill (same loop contract as printers/coffee), with a
+    #    hard no-consecutive-same-role rule (relaxed only if a full round
+    #    can't otherwise make progress, so 10/10 is still guaranteed) ──
+    used = {tm}
+    cursors = {r: 0 for r in pools}
+    taken = {r: 0 for r in pools}
+    slot_num = 0
+    round_idx = 0
+    last_role = None
+    relaxed = False
+
+    def _eff_role(row, role_label):
+        # backfill rows carry their TRUE product role for variety + display
+        return _nw_role_from_hier(row) if role_label == 'Δικτυακό Bestseller' else role_label
+
+    while slot_num < NW_SLOT_TARGET:
+        progress = False
+        round_idx += 1
+        for rank, (role_label, scored, max_r1, max_total) in pools.items():
+            if slot_num >= NW_SLOT_TARGET:
+                break
+            if scored is None or scored.empty:
+                continue
+            if max_total is not None and taken[rank] >= max_total:
+                continue
+            take_n = max_r1 if round_idx == 1 else 1
+            if max_total is not None:
+                take_n = min(take_n, max_total - taken[rank])
+            cursor = cursors[rank]
+            done = 0
+            while done < take_n and cursor < len(scored) and slot_num < NW_SLOT_TARGET:
+                row = scored.iloc[cursor]
+                eff = _eff_role(row, role_label)
+                # skip used, and (unless relaxed) skip rows that would repeat
+                # the previous slot's role
+                if row['Material'] in used or (not relaxed and eff == last_role):
+                    cursor += 1
+                    continue
+                cursor += 1
+                slot_num += 1
+                rc = row.copy()
+                rc['Slot_Position'] = slot_num
+                rc['Assigned_Slot'] = slot_num
+                rc['Slot_Role'] = eff
+                rc['Marketing_Copy'] = NW_MARKETING_COPY.get(eff, "Ιδανική επιλογή!")
+                rc['Item_Rank'] = round_idx
+                all_recs.append(rc)
+                used.add(row['Material'])
+                last_role = eff
+                done += 1
+                taken[rank] += 1
+                progress = True
+                slot_notes.setdefault(slot_num, []).append(
+                    f"Round {round_idx} | Pool '{role_label}'→role '{eff}' | "
+                    f"Score: {float(row.get('Final_Score', 0)):,.0f} | "
+                    f"eco={row.get('_nw_eco', '')} | {str(row.get('Title',''))[:60]}")
+            cursors[rank] = cursor
+        if not progress:
+            if not relaxed:
+                # nothing placed under the strict no-consecutive rule — relax
+                # it for the remaining slots and reset cursors for one sweep
+                relaxed = True
+                cursors = {r: 0 for r in pools}
+                diag.append(("Loop", round_idx, "No-consecutive rule relaxed to fill remaining slots"))
+                continue
+            diag.append(("Loop", round_idx, "All pools exhausted/capped — stopping"))
+            break
+
+    diag.append(("TOTAL", len(all_recs),
+                 f"Filled {slot_num}/{NW_SLOT_TARGET} slots in {round_idx} rounds"))
+
+    if all_recs:
+        recs_df = pd.DataFrame(all_recs)
+        recs_df['Draft_Score'] = recs_df['Assigned_Slot']
+        return recs_df, diag, slot_notes, recs_df
+    return pd.DataFrame(), diag, slot_notes, pd.DataFrame()
+
+
 # RUN ENGINE
 # ─────────────────────────────────────────────────────────────
 if active_cluster == "Smartphones":
@@ -28652,6 +29163,13 @@ elif active_cluster == "Printers":
     # run_peripherals_engine is no longer routed to.
     recs, diag, slot_notes, full_candidates = run_printers_engine(
         trigger, df_spare, df_peripherals, df_products, df_stationery, df_history)
+    slot_diag = []
+elif active_cluster == "Networking":
+    # v28.51 — dedicated persona-routed networking / smart-home engine
+    # (SPARE-sheet triggers, brand-ecosystem dominant, hard ecosystem-lock
+    # on mesh/lighting/hub expansion, universal sales backfill → 10/10).
+    recs, diag, slot_notes, full_candidates = run_networking_engine(
+        trigger, df_spare, df_peripherals, df_products, df_history)
     slot_diag = []
 elif active_cluster in ("Monitors", "Webcam", "USB Hub"):
     recs, diag, slot_notes, full_candidates = run_peripherals_engine(trigger, df_peripherals, df_history, active_cluster)
