@@ -103,7 +103,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v28.54 — Χειριστήρια (Controllers): το χειριστήριο ως trigger → ολοκλήρωση setup με ΣΥΜΒΑΤΑ-ΜΕ-ΤΗΝ-ΠΛΑΤΦΟΡΜΑ αξεσουάρ μόνο. Persona routing (PS5/PS4/Xbox/Switch/PC/Racing) — hard platform-lock gate (drop-before-scoring) × sales × χρώμα × keyword routing. Slots: βάση φόρτισης · συμβατό παιχνίδι · θήκη σιλικόνης · headset · καλώδιο/μπαταρία · καλύμματα αναλογικών · 2ο παιχνίδι · συνδρομή/πίστωση · θήκη μεταφοράς · αξεσουάρ. Same-hierarchy exclusion, domain-scoped universal backfill → 10/10.
+        🟢 Engine v28.54.3 — Χειριστήρια (Controllers): persona routing (PS5/PS4/Xbox/Switch/PC/Racing) — hard platform-lock × sales × χρώμα × brand-match (accessories only) × keyword routing. v28.54.3: χωρίς cross-generation bleed (PS4 gear ↛ PS5 & αντίστροφα), special/themed editions → χωρίς cover/skin, racing wheel → games μόνο για platforms που υποστηρίζει (όχι Xbox game σε PS5/PS4/PC τιμόνι), themed boost μόνο σε αληθινά game franchises (όχι 'nintendo_switch'), no-same-type dedup με wallet/seat/wheel consolidation. + v28.54.2: re-routing misfiled console pads, χωρίς console covers/handheld docks (ROG Ally), Pro Controller ≠ Joy-Con. Racing: μόνο racing games + cockpit complements. Same-hierarchy exclusion, domain-scoped backfill → 10/10.
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -5904,6 +5904,73 @@ CTRL_SKIN_RE  = re.compile(r'σιλικόν|silicone|θήκη σιλικ|θήκ�
                            r'\bcover\b|κάλυμμα χειριστηρ|faceplate', re.I)
 CTRL_GRIP_RE  = re.compile(r'thumb|\bgrip\b|grips|καλύμματα αναλογικ|αναλογικών μοχλ|stick cap|grip tape', re.I)
 CTRL_CASE_RE  = re.compile(r'θήκη|case|carry|μεταφορ|sleeve|protection|προστασ|bag', re.I)
+# A whole steering wheel (competing product) or a Switch Joy-Con "wheel-shaped"
+# toy holder — neither is a valid COMPLEMENT for a sim-racing wheel trigger.
+# Used to keep these out of the RACING accessory/extra/backfill pools.
+CTRL_WHEEL_RE = re.compile(r'τιμονιέρα|τιμονιερα|σχήμα τιμον|racing wheel|steering wheel|'
+                           r'gaming wheel|driving force|joy-?con.*τιμον|wheel.*joy-?con', re.I)
+# Console "covers"/faceplates/skins — the user does not want these recommended
+# (a console faceplate is not a controller companion). Carry cases stay allowed.
+CTRL_COVER_RE = re.compile(r'κάλυμμα κονσόλ|console cover|faceplate|πρόσοψη|console skin|'
+                           r'console faceplate|δερμάτιν[οη] κάλυμμα κονσόλ', re.I)
+# Device-specific charging docks bound to a particular handheld/console — only
+# valid if the trigger IS that device, never as a generic controller dock.
+CTRL_HANDHELD_DOCK_RE = re.compile(r'rog ally|steam deck|legion go|msi claw|ayaneo', re.I)
+# Joy-Con specific accessories — incompatible with a Switch *Pro Controller*.
+CTRL_JOYCON_RE = re.compile(r'joy-?con', re.I)
+
+# Coarse product-type token — used to avoid recommending two of the *same type*
+# (e.g. two gaming chairs) even when they share a hierarchy. Games are exempt
+# (different titles are different products; franchise dedup handles variety).
+def _ctrl_ptype(title, hier=''):
+    t = str(title).lower()
+    # Accent-insensitive (NFD): strip Greek diacritics so "ακούστικα" and
+    # "ακουστικά" both match the same type token.
+    t = unicodedata.normalize('NFD', t)
+    t = ''.join(c for c in t if not unicodedata.combining(c))
+    h = str(hier).upper().strip()
+    # Wallet / subscription / prepaid — one per carousel, regardless of the
+    # hierarchy it's filed under (some live in DIGITAL GAMES).
+    if re.search(r'prepaid|προπληρωμ|gift card|playstation plus|ps plus|game pass|'
+                 r'xbox live|nintendo.*online|battle\.net|eshop|psn|συνδρομ', t):
+        return 'wallet'
+    if h.endswith('GAMES') or 'DIGITAL GAMES' in h:
+        return 'game'
+    pairs = [
+        # Order matters: a "wheel + pedals" bundle is primarily a WHEEL; a
+        # "Καρέκλα/Γραφείου" combo is a SEAT, not a desk. Primary type first.
+        (r'τιμονιερα|steering wheel|racing wheel',      'wheel'),
+        (r'playseat|cockpit|καρεκλ|chair|\bseat\b',     'seat'),
+        (r'γραφει|desk',                               'desk'),
+        (r'wheel stand|βαση τιμον',                    'wheelstand'),
+        (r'πεταλ|pedal|μοχλο|shifter|χειροφρεν|handbrake', 'pedals'),
+        (r'ακουστικ|headset|headphone|earbud',         'headset'),
+        (r'μικροφων|microphone|\bmic\b|seiren',        'mic'),
+        (r'καμερα|webcam|capture',                     'av'),
+        (r'βαση|dock|σταθμ|charging stand|charge stand','dock'),
+        (r'μπαταρ|battery|rechargeable',               'battery'),
+        (r'καλωδιο|cable',                             'cable'),
+        (r'θηκη σιλικ|σιλικον|silicone|\bskin\b|αυτοκολλητ|faceplate', 'skin'),
+        (r'thumb|\bgrip\b|grips|αναλογικ|stick cap',   'grip'),
+        (r'θηκη|case|carry|μεταφορ|sleeve|bag',        'case'),
+        (r'portal|remote player',                      'remote'),
+        (r'memory card|καρτα μνημ|microsd|sd card',    'storage'),
+    ]
+    for pat, tok in pairs:
+        if re.search(pat, t):
+            return tok
+    return 'other'
+
+def _ctrl_hier_platform(hier_u):
+    """Map a game/accessory hierarchy to a coarse platform token."""
+    h = str(hier_u).upper().strip()
+    if h.startswith('PS5'):                      return 'ps5'
+    if h.startswith('PS4') or h.startswith('PS3'):return 'ps4'
+    if h.startswith('XBOX'):                     return 'xbox'
+    if h.startswith('NINTENDO'):                 return 'switch'
+    if h.startswith('PC '):                      return 'pc'
+    if h == 'PC GAMES' or h.startswith('PC'):    return 'pc'
+    return 'pc'   # generic gaming hierarchies (VARIOUS/DIGITAL) → treat as PC-safe
 
 
 # ─────────────────────────────────────────────────────────────
@@ -29233,11 +29300,70 @@ def run_controllers_engine(trigger, df_gaming, df_history=None):
     thier  = str(trigger.get('Hierarchy', '')).upper().strip()
     tcolor = str(trigger.get('Χρώμα', '')).strip()
     tprice = parse_euro_price(trigger.get('LIST PRICE', 0))
+    tbrand = str(trigger.get('Κατασκευαστής', '')).upper().strip()
 
     persona_key = CTRL_PERSONA_BY_HIER.get(thier, 'PC')
+
+    # ── Misfiled-controller re-routing ──────────────────────────────────────
+    # The CAMEPADS/JOYSTICKS sheet mixes genuine PC gamepads with mis-shelved
+    # CONSOLE pads (e.g. a Sony DualSense filed under CAMEPADS). Routing those
+    # to the PC persona surfaces PC-only junk (ROG Ally dock, steering wheels)
+    # for what is really a console controller. If a PC-routed trigger's title
+    # clearly names a console platform, re-route to that console persona.
+    if persona_key == 'PC':
+        _tl = tt.lower()
+        if re.search(r'dualsense|ps5|playstation 5', _tl):
+            persona_key = 'PS5'
+        elif re.search(r'dualshock|ps4|playstation 4', _tl):
+            persona_key = 'PS4'
+        elif re.search(r'\bxbox\b', _tl):
+            persona_key = 'XBOX'
+        elif re.search(r'nintendo|switch|joy-?con', _tl):
+            persona_key = 'SWITCH'
+
     persona     = CTRL_PERSONAS[persona_key]
     plabel      = persona['label']
     racing_only = bool(persona.get('racing_only_games'))
+
+    # First-party trigger? → prefer same-brand accessories (soft boost).
+    FIRST_PARTY = {'SONY', 'NINTENDO', 'MICROSOFT'}
+    tbrand_first = next((b for b in FIRST_PARTY if b in tbrand or b.lower() in tt.lower()), '')
+
+    # Switch *Pro Controller* is NOT compatible with Joy-Con chargers/docks.
+    is_pro_controller = bool(re.search(r'pro controller', tt, re.I))
+
+    # Game-themed controller (e.g. a franchise-branded pad) → push that game.
+    # BUT _psg_extract_franchise on a controller title often returns a hardware/
+    # platform token (e.g. 'nintendo_switch', 'sony_dualsense', 'logitech_g29').
+    # Those are NOT game themes — only treat genuine game franchises as a theme,
+    # otherwise we'd rocket a no-name title that merely says "Nintendo Switch".
+    _HW_THEME_TOKENS = ('switch', 'dualsense', 'dualshock', 'playstation', 'xbox',
+                        'nintendo', 'sony', 'microsoft', 'logitech', 'spartan', 'hori',
+                        'razer', 'nacon', 'trust', 'speedlink', 'bigben', '8bitdo',
+                        'powera', 'turtle', 'controller', 'gamepad', 'joycon', 'joy_con',
+                        'wheel', 'pro_controller', 'ps5', 'ps4', 'ps3', 'gxt')
+    _raw_theme = _psg_extract_franchise(tt)
+    trig_franchise = _raw_theme if (_raw_theme and not any(
+        tok in str(_raw_theme).lower() for tok in _HW_THEME_TOKENS)) else None
+
+    # Special / limited / themed editions: don't suggest a cover/skin — it hides
+    # the unique design the customer paid for.
+    is_special_edition = bool(re.search(
+        r'collection|limited|special edition|anniversary|\bbundle\b|edition\b', tt, re.I
+    )) or bool(trig_franchise)
+
+    # For a racing wheel, the platforms it actually supports come from its title
+    # ("για PS5, PS4, PC"). Games for unsupported platforms (e.g. Xbox) are wrong.
+    wheel_platforms = set()
+    if racing_only:
+        _wl = tt.lower()
+        if re.search(r'ps5|playstation 5', _wl):           wheel_platforms.add('ps5')
+        if re.search(r'ps4|ps3|playstation [34]', _wl):    wheel_platforms.add('ps4')
+        if re.search(r'xbox', _wl):                        wheel_platforms.add('xbox')
+        if re.search(r'\bpc\b', _wl):                      wheel_platforms.add('pc')
+        if re.search(r'switch', _wl):                      wheel_platforms.add('switch')
+        if not wheel_platforms:
+            wheel_platforms = {'ps5', 'ps4', 'xbox', 'pc', 'switch'}
 
     # First colour token (e.g. "Λευκό", "Μαύρο") for the colour-match boost.
     tcolor_token = re.split(r'[\s/;,]+', tcolor)[0].strip().lower() if tcolor else ''
@@ -29245,7 +29371,10 @@ def run_controllers_engine(trigger, df_gaming, df_history=None):
     diag.append((
         "0. Trigger",
         f"€{tprice:.0f} · {plabel}",
-        f"Hierarchy='{thier}' → persona={persona_key} · colour='{tcolor or '—'}'",
+        f"Hierarchy='{thier}' → persona={persona_key} · colour='{tcolor or '—'}'"
+        + (f" · brand={tbrand_first}" if tbrand_first else '')
+        + (f" · theme={trig_franchise}" if trig_franchise else '')
+        + (" · PRO-CTRL" if is_pro_controller else ''),
     ))
 
     # ── Domain-scoped candidate pool: ONLY this persona's hierarchies ──
@@ -29273,6 +29402,49 @@ def run_controllers_engine(trigger, df_gaming, df_history=None):
     # Restrict to the persona's domain (drop-before-scoring platform lock).
     domain_pool = pool_all[pool_all['_hier_u'].isin(all_persona_hiers)].copy()
 
+    # RACING compatibility gate: a sim-racing wheel's *complements* are pedals,
+    # shifters, handbrakes, stands, cockpits, chairs & racing games — never
+    # another whole wheel (competing product) nor a Switch Joy-Con "wheel-shaped"
+    # toy holder (incompatible). Drop those before scoring so they can't surface
+    # in any slot or in the universal backfill.
+    if racing_only:
+        _dt = domain_pool['Title'].fillna('').astype(str)
+        _wheel_like = _dt.str.contains(CTRL_WHEEL_RE, na=False)
+        _is_game    = domain_pool['_hier_u'].str.endswith('GAMES')
+        domain_pool = domain_pool[~(_wheel_like & ~_is_game)].copy()
+
+    # NO COVERS: console faceplates/skins are never a controller companion.
+    _ct = domain_pool['Title'].fillna('').astype(str)
+    domain_pool = domain_pool[~_ct.str.contains(CTRL_COVER_RE, na=False)].copy()
+
+    # NO DEVICE-SPECIFIC HANDHELD DOCKS (ROG Ally / Steam Deck / Legion Go …):
+    # those charge a specific handheld, not the customer's controller — drop
+    # unless the trigger itself is that device (it never is here).
+    _ct = domain_pool['Title'].fillna('').astype(str)
+    domain_pool = domain_pool[~_ct.str.contains(CTRL_HANDHELD_DOCK_RE, na=False)].copy()
+
+    # PRO CONTROLLER ≠ JOY-CON gear: a Switch Pro Controller can't use Joy-Con
+    # chargers/docks/grips — drop Joy-Con-named accessories for a Pro trigger.
+    if is_pro_controller:
+        _ct = domain_pool['Title'].fillna('').astype(str)
+        _jc = _ct.str.contains(CTRL_JOYCON_RE, na=False) & ~domain_pool['_hier_u'].str.endswith('GAMES')
+        domain_pool = domain_pool[~_jc].copy()
+
+    # NO CROSS-GENERATION PlayStation accessory bleed: a PS5 controller should
+    # not get PS4/PS3-labelled gear and vice-versa. Cross-platform items that
+    # name BOTH generations (e.g. a wheel "για PS5, PS4, PC") stay eligible.
+    # Games are platform-correct by hierarchy, so this only touches accessories.
+    if persona_key in ('PS5', 'PS4'):
+        _at = domain_pool['Title'].fillna('').astype(str).str.lower()
+        _is_game = domain_pool['_hier_u'].str.endswith('GAMES')
+        has_ps5 = _at.str.contains(r'ps5|playstation 5', regex=True, na=False)
+        has_ps4 = _at.str.contains(r'ps4|ps3|playstation [34]', regex=True, na=False)
+        if persona_key == 'PS5':
+            wrong_gen = has_ps4 & ~has_ps5      # PS4/PS3-only → drop for PS5
+        else:
+            wrong_gen = has_ps5 & ~has_ps4      # PS5-only → drop for PS4
+        domain_pool = domain_pool[~(wrong_gen & ~_is_game)].copy()
+
     # Global prepaid pool (platform-agnostic).
     prepaid_pool = pool_all[pool_all['_hier_u'].isin({h.upper() for h in CTRL_PREPAID_HIERARCHIES})].copy()
 
@@ -29282,6 +29454,7 @@ def run_controllers_engine(trigger, df_gaming, df_history=None):
     used_materials  = {tm}
     used_franchises = set()
     used_titles_sig = set()
+    used_ptypes     = set()   # coarse product-type tokens already placed
 
     def _sig(t):
         txt = re.sub(r'[^a-z0-9α-ωά-ώ\s]', ' ', str(t).lower())
@@ -29308,6 +29481,20 @@ def run_controllers_engine(trigger, df_gaming, df_history=None):
                 notes.append(f"🎨 Colour match '{tcolor_token}': +3000 to {int(m.sum())} items")
         return pool
 
+    def _brand_boost(pool, notes):
+        # First-party trigger (Sony/Nintendo/Microsoft) → prefer same-brand
+        # accessories (e.g. a Sony dock for a DualSense). Soft boost, not a gate.
+        if tbrand_first:
+            bt = pool['Title'].fillna('').astype(str)
+            mk = pool['Κατασκευαστής'].fillna('').astype(str).str.upper() if 'Κατασκευαστής' in pool.columns else None
+            m = bt.str.contains(tbrand_first, case=False, na=False)
+            if mk is not None:
+                m = m | mk.str.contains(tbrand_first, na=False)
+            pool.loc[m, 'Final_Score'] += 4000
+            if m.any():
+                notes.append(f"🏷 {tbrand_first} brand-match: +4000 to {int(m.sum())} items")
+        return pool
+
     def _group_pool(grp):
         if grp == 'prepaid':
             return prepaid_pool.copy()
@@ -29329,6 +29516,8 @@ def run_controllers_engine(trigger, df_gaming, df_history=None):
         pool = pool.copy()
         pool['Final_Score'] = pool['Sales_30'].astype(float)
         pool = _avail_boost(pool)
+        if logic != 'GAME':          # brand-match is for accessories, not games
+            pool = _brand_boost(pool, notes)
 
         if logic == 'DOCK':
             title = pool['Title'].fillna('').astype(str)
@@ -29360,12 +29549,26 @@ def run_controllers_engine(trigger, df_gaming, df_history=None):
             pool['_franch'] = pool['Title'].apply(_psg_extract_franchise)
             pool['_genre']  = pool['Title'].apply(_psg_classify_genre)
             pool = pool[~pool['_franch'].isin(used_franchises)]
+            # Game-themed controller → strongly prefer that game's title.
+            if trig_franchise:
+                tm_match = pool['_franch'] == trig_franchise
+                pool.loc[tm_match, 'Final_Score'] += 60000
+                if tm_match.any():
+                    notes.append(f"🎮 Themed-controller match '{trig_franchise}': +60000 to {int(tm_match.sum())} titles")
             if racing_only:
+                # Keep only games for platforms the wheel actually supports
+                # (e.g. a "PS5/PS4/PC" wheel must not get an Xbox-only game).
+                _gp = pool['_hier_u'].apply(_ctrl_hier_platform)
+                pool = pool[_gp.isin(wheel_platforms)]
                 rac = pool[pool['_genre'] == 'racing']
                 if not rac.empty:
-                    pool = rac; notes.append(f"🏎 Racing-only filter: {len(pool)} titles")
+                    pool = rac; notes.append(f"🏎 Racing-only · platforms {sorted(wheel_platforms)}: {len(pool)} titles")
                 else:
-                    notes.append("🏎 No racing title left → broadening")
+                    # Never put a non-racing title (e.g. FIFA, Resident Evil) on
+                    # a wheel — drop the slot and let the (racing-filtered)
+                    # backfill fill it with racing gear instead.
+                    slot_notes[slot_num] = notes + ["⊘ no racing title left → backfill (wheel-compatible only)"]
+                    diag.append((f"Slot {slot_num} ({role})", 0, "No racing game left")); continue
             if pool.empty:
                 slot_notes[slot_num] = notes + ["⊘ no game left → backfill"]
                 diag.append((f"Slot {slot_num} ({role})", 0, "No game candidates")); continue
@@ -29377,6 +29580,12 @@ def run_controllers_engine(trigger, df_gaming, df_history=None):
             pool.loc[pool['_p'] > CTRL_BUDGET['headset'], 'Final_Score'] -= 30000
 
         elif logic == 'SKIN':
+            if racing_only:
+                slot_notes[slot_num] = notes + ["⊘ wheel has no controller body to skin → backfill"]
+                diag.append((f"Slot {slot_num} ({role})", 0, "Skin n/a for racing wheel")); continue
+            if is_special_edition:
+                slot_notes[slot_num] = notes + ["⊘ special/themed edition → no cover (keep the unique design) → backfill"]
+                diag.append((f"Slot {slot_num} ({role})", 0, "Special edition → no skin/cover")); continue
             title = pool['Title'].fillna('').astype(str)
             skin = title.str.contains(CTRL_SKIN_RE, na=False)
             grip = title.str.contains(CTRL_GRIP_RE, na=False)
@@ -29389,6 +29598,9 @@ def run_controllers_engine(trigger, df_gaming, df_history=None):
             pool.loc[pool['_p'] > CTRL_BUDGET['skin'], 'Final_Score'] -= 30000
 
         elif logic == 'GRIP':
+            if racing_only:
+                slot_notes[slot_num] = notes + ["⊘ wheel has no thumbsticks to grip → backfill"]
+                diag.append((f"Slot {slot_num} ({role})", 0, "Grip n/a for racing wheel")); continue
             title = pool['Title'].fillna('').astype(str)
             grip = title.str.contains(CTRL_GRIP_RE, na=False)
             keep = pool[grip]
@@ -29451,6 +29663,13 @@ def run_controllers_engine(trigger, df_gaming, df_history=None):
             slot_notes[slot_num] = notes + ["⊘ empty after dedup → backfill"]
             diag.append((f"Slot {slot_num} ({role})", 0, "Empty after dedup")); continue
 
+        # NO-SAME-TYPE: don't place a second item of a product type already shown
+        # (e.g. two gaming chairs). Games are exempt — different titles differ.
+        if logic != 'GAME':
+            ptmask = pool.apply(lambda r: _ctrl_ptype(r['Title'], r.get('Hierarchy', '')) not in used_ptypes, axis=1)
+            if ptmask.any():
+                pool = pool[ptmask]
+
         pool = pool.sort_values(['Final_Score', 'Sales_30'], ascending=[False, False])
         chosen = pool.iloc[0]
         rc = chosen.copy()
@@ -29460,6 +29679,7 @@ def run_controllers_engine(trigger, df_gaming, df_history=None):
         all_recs.append(rc)
         used_materials.add(chosen['Material'])
         used_titles_sig.add(_sig(chosen['Title']))
+        used_ptypes.add(_ctrl_ptype(chosen['Title'], chosen.get('Hierarchy', '')))
         if logic == 'GAME':
             fr = _psg_extract_franchise(chosen['Title'])
             if fr:
@@ -29499,6 +29719,21 @@ def run_controllers_engine(trigger, df_gaming, df_history=None):
                 fb = pd.concat([fb, extra_prepaid], ignore_index=True).drop_duplicates(subset=['Material'])
         fb['Final_Score'] = fb['Sales_30'].astype(float)
         fb = _avail_boost(fb)
+        # For a racing wheel, any GAME that backfills an empty slot must also be
+        # a racing title (same rule as the GAME slots) — keep FIFA/Resident Evil
+        # etc. out of the wheel's carousel entirely.
+        if racing_only and not fb.empty:
+            _fbg = fb['Hierarchy'].fillna('').astype(str).str.upper().str.strip().str.endswith('GAMES')
+            if _fbg.any():
+                _genre = fb.loc[_fbg, 'Title'].apply(_psg_classify_genre)
+                _non_racing = _fbg & fb.index.isin(_genre[_genre != 'racing'].index)
+                fb = fb[~_non_racing].copy()
+            # Drop games for platforms the wheel doesn't support (e.g. Xbox).
+            _fbg2 = fb['Hierarchy'].fillna('').astype(str).str.upper().str.strip().str.endswith('GAMES')
+            if _fbg2.any():
+                _plat = fb.loc[_fbg2, '_hier_u'].apply(_ctrl_hier_platform)
+                _bad_plat = _fbg2 & fb.index.isin(_plat[~_plat.isin(wheel_platforms)].index)
+                fb = fb[~_bad_plat].copy()
         fb = fb.sort_values(['Final_Score', 'Sales_30'], ascending=[False, False])
 
         diag.append(("── Universal backfill ──", len(empty_slots),
@@ -29514,6 +29749,12 @@ def run_controllers_engine(trigger, df_gaming, df_history=None):
             return CTRL_GROUP_TO_ROLE.get(grp, ('Αξεσουάρ Gaming', 'Αναβάθμισε το setup σου.'))
 
         hier_count = {}
+        # Seed with hierarchies already placed by the main loop so the
+        # MAX_PER_HIER cap counts them too (prevents e.g. a 3rd headset when a
+        # persona's complement inventory is thin, as with racing wheels).
+        for _r in all_recs:
+            _h = str(_r.get('Hierarchy', '')).upper().strip()
+            hier_count[_h] = hier_count.get(_h, 0) + 1
         MAX_PER_HIER = 2
         for slot_num in empty_slots:
             prev_role = recs_by_slot.get(slot_num - 1, {}).get('Slot_Role') if (slot_num - 1) in recs_by_slot else None
@@ -29522,6 +29763,11 @@ def run_controllers_engine(trigger, df_gaming, df_history=None):
             def _ok(r, relaxed=False):
                 h = str(r.get('Hierarchy', '')).upper().strip()
                 if _sig(r['Title']) in used_titles_sig:
+                    return False
+                # No second item of a product type already shown (e.g. 2 chairs,
+                # 2 headsets) — HARD rule, enforced even in the relaxed pass.
+                pt = _ctrl_ptype(r['Title'], h)
+                if pt != 'game' and pt in used_ptypes:
                     return False
                 if not relaxed and hier_count.get(h, 0) >= MAX_PER_HIER:
                     return False
@@ -29537,7 +29783,12 @@ def run_controllers_engine(trigger, df_gaming, df_history=None):
             if cand.empty:
                 cand = fb[fb.apply(lambda r: _ok(r, relaxed=True), axis=1)]
             if cand.empty:
-                cand = fb
+                # Last resort: still avoid an exact same-type duplicate if any
+                # alternative exists; only allow a dup if nothing else is left.
+                notdup = fb[fb.apply(
+                    lambda r: _ctrl_ptype(r['Title'], r.get('Hierarchy', '')) == 'game'
+                    or _ctrl_ptype(r['Title'], r.get('Hierarchy', '')) not in used_ptypes, axis=1)]
+                cand = notdup if not notdup.empty else fb
             if cand.empty:
                 diag.append((f"Slot {slot_num} (Backfill)", 0, "Domain pool exhausted")); continue
 
@@ -29552,6 +29803,7 @@ def run_controllers_engine(trigger, df_gaming, df_history=None):
             recs_by_slot[slot_num] = rc
             used_materials.add(chosen['Material'])
             used_titles_sig.add(_sig(chosen['Title']))
+            used_ptypes.add(_ctrl_ptype(chosen['Title'], h))
             hier_count[h] = hier_count.get(h, 0) + 1
             if h.endswith('GAMES'):
                 fr = _psg_extract_franchise(chosen['Title'])
