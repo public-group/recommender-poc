@@ -103,7 +103,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v28.54.3 — Χειριστήρια (Controllers): persona routing (PS5/PS4/Xbox/Switch/PC/Racing) — hard platform-lock × sales × χρώμα × brand-match (accessories only) × keyword routing. v28.54.3: χωρίς cross-generation bleed (PS4 gear ↛ PS5 & αντίστροφα), special/themed editions → χωρίς cover/skin, racing wheel → games μόνο για platforms που υποστηρίζει (όχι Xbox game σε PS5/PS4/PC τιμόνι), themed boost μόνο σε αληθινά game franchises (όχι 'nintendo_switch'), no-same-type dedup με wallet/seat/wheel consolidation. + v28.54.2: re-routing misfiled console pads, χωρίς console covers/handheld docks (ROG Ally), Pro Controller ≠ Joy-Con. Racing: μόνο racing games + cockpit complements. Same-hierarchy exclusion, domain-scoped backfill → 10/10.
+        🟢 Engine v28.54.4 — Χειριστήρια (Controllers): persona routing (PS5/PS4/Xbox/Switch/PC/Racing) — hard platform-lock × sales × χρώμα × brand-match (accessories) × keyword routing. v28.54.4: ΠΟΤΕ δεύτερο χειριστήριο/gamepad ως αξεσουάρ (drop misfiled pads π.χ. Horipad Turbo σε VARIOUS), drop device-specific handheld gear (ROG Ally / ROG Xbox Ally cases & docks), drop orphan wheel add-ons (πετάλια/μοχλός/βάση) σε gamepad personas (μόνο για τιμόνι). + v28.54.3: no cross-gen PS bleed, special editions → χωρίς cover, wheel games μόνο για supported platforms, themed boost μόνο σε real franchises, no-same-type dedup (wallet/seat/wheel). Same-hierarchy exclusion, domain-scoped backfill → 10/10.
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -5913,9 +5913,10 @@ CTRL_WHEEL_RE = re.compile(r'τιμονιέρα|τιμονιερα|σχήμα τ
 # (a console faceplate is not a controller companion). Carry cases stay allowed.
 CTRL_COVER_RE = re.compile(r'κάλυμμα κονσόλ|console cover|faceplate|πρόσοψη|console skin|'
                            r'console faceplate|δερμάτιν[οη] κάλυμμα κονσόλ', re.I)
-# Device-specific charging docks bound to a particular handheld/console — only
-# valid if the trigger IS that device, never as a generic controller dock.
-CTRL_HANDHELD_DOCK_RE = re.compile(r'rog ally|steam deck|legion go|msi claw|ayaneo', re.I)
+# Device-specific gear bound to a particular handheld/console (docks, cases,
+# screen protectors…) — only valid if the trigger IS that device, never as a
+# generic controller companion. Catches "ROG Ally" and "ROG Xbox Ally".
+CTRL_HANDHELD_DOCK_RE = re.compile(r'rog\b[\w\s]*\bally\b|steam deck|legion go|msi claw|ayaneo', re.I)
 # Joy-Con specific accessories — incompatible with a Switch *Pro Controller*.
 CTRL_JOYCON_RE = re.compile(r'joy-?con', re.I)
 
@@ -5951,10 +5952,14 @@ def _ctrl_ptype(title, hier=''):
         (r'μπαταρ|battery|rechargeable',               'battery'),
         (r'καλωδιο|cable',                             'cable'),
         (r'θηκη σιλικ|σιλικον|silicone|\bskin\b|αυτοκολλητ|faceplate', 'skin'),
-        (r'thumb|\bgrip\b|grips|αναλογικ|stick cap',   'grip'),
+        (r'thumb|\bgrip\b|grips|αναλογικ|stick cap|\bcap\b|\bcaps\b', 'grip'),
         (r'θηκη|case|carry|μεταφορ|sleeve|bag',        'case'),
         (r'portal|remote player',                      'remote'),
         (r'memory card|καρτα μνημ|microsd|sd card',    'storage'),
+        # LAST: an item that is itself a gamepad/controller (misfiled in an
+        # accessory hierarchy). Accessory patterns above win first, so a
+        # "Controller Cap Set" → grip and a "Stream Controller" keypad → other.
+        (r'(?<!stream )\bcontroller\b|\bgamepad\b|\bjoypad\b|horipad|χειριστηριο\b', 'controller'),
     ]
     for pat, tok in pairs:
         if re.search(pat, t):
@@ -29417,9 +29422,9 @@ def run_controllers_engine(trigger, df_gaming, df_history=None):
     _ct = domain_pool['Title'].fillna('').astype(str)
     domain_pool = domain_pool[~_ct.str.contains(CTRL_COVER_RE, na=False)].copy()
 
-    # NO DEVICE-SPECIFIC HANDHELD DOCKS (ROG Ally / Steam Deck / Legion Go …):
-    # those charge a specific handheld, not the customer's controller — drop
-    # unless the trigger itself is that device (it never is here).
+    # NO DEVICE-SPECIFIC HANDHELD GEAR (ROG Ally / ROG Xbox Ally / Steam Deck /
+    # Legion Go …): docks, cases & protectors for a specific handheld are
+    # useless to a controller buyer — drop unless the trigger is that device.
     _ct = domain_pool['Title'].fillna('').astype(str)
     domain_pool = domain_pool[~_ct.str.contains(CTRL_HANDHELD_DOCK_RE, na=False)].copy()
 
@@ -29444,6 +29449,26 @@ def run_controllers_engine(trigger, df_gaming, df_history=None):
         else:
             wrong_gen = has_ps5 & ~has_ps4      # PS5-only → drop for PS4
         domain_pool = domain_pool[~(wrong_gen & ~_is_game)].copy()
+
+    # NO SECOND CONTROLLER: never recommend another gamepad/controller as an
+    # "accessory" (the trigger IS a controller). Same-hierarchy exclusion only
+    # catches pads in the trigger's own hierarchy; this also drops pads MISFILED
+    # in accessory hierarchies (e.g. a "Horipad Turbo Controller" shelved under
+    # VARIOUS ACCESSORIES). Accessories like a "Controller Cap Set" are typed as
+    # 'grip', not 'controller', so they survive.
+    _is_pad = domain_pool.apply(
+        lambda r: _ctrl_ptype(r['Title'], r['_hier_u']) == 'controller', axis=1)
+    if _is_pad.any():
+        domain_pool = domain_pool[~_is_pad].copy()
+
+    # NO ORPHAN WHEEL ADD-ONS for a gamepad buyer: pedals, a shifter, a
+    # handbrake or a wheel/gearbox stand are useless without a steering wheel
+    # the customer didn't buy. Keep them only for the RACING (wheel) persona.
+    if not racing_only:
+        _addon = domain_pool.apply(
+            lambda r: _ctrl_ptype(r['Title'], r['_hier_u']) in ('pedals', 'wheelstand'), axis=1)
+        if _addon.any():
+            domain_pool = domain_pool[~_addon].copy()
 
     # Global prepaid pool (platform-agnostic).
     prepaid_pool = pool_all[pool_all['_hier_u'].isin({h.upper() for h in CTRL_PREPAID_HIERARCHIES})].copy()
