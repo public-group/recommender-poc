@@ -103,7 +103,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v28.53.1 — Soundbars (TV & Home Entertainment): η soundbar ως trigger → ολοκλήρωση setup με ΣΥΜΒΑΤΑ αξεσουάρ ήχου μόνο. Αφαιρέθηκαν το slot Τηλεόρασης (λάθος intent + cross-brand) και το slot «Αναβάθμιση Ήχου» (ανταγωνιστική soundbar). Καλώδια μόνο HDMI eARC (μόνο συμβατός τύπος στον κατάλογο — κανένα optical/3.5mm/RCA). Slots: HDMI eARC · βάση soundbar · προστασία ρεύματος · τηλεχειριστήριο · μπαταρίες · καθαρισμός · ακουστικά · φορητό/πάρτυ/επιπλέον ηχείο. Tier-capped τιμές, universal backfill → 10/10. PC bars gated out.
+        🟢 Engine v28.54 — Χειριστήρια (Controllers): το χειριστήριο ως trigger → ολοκλήρωση setup με ΣΥΜΒΑΤΑ-ΜΕ-ΤΗΝ-ΠΛΑΤΦΟΡΜΑ αξεσουάρ μόνο. Persona routing (PS5/PS4/Xbox/Switch/PC/Racing) — hard platform-lock gate (drop-before-scoring) × sales × χρώμα × keyword routing. Slots: βάση φόρτισης · συμβατό παιχνίδι · θήκη σιλικόνης · headset · καλώδιο/μπαταρία · καλύμματα αναλογικών · 2ο παιχνίδι · συνδρομή/πίστωση · θήκη μεταφοράς · αξεσουάρ. Same-hierarchy exclusion, domain-scoped universal backfill → 10/10.
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -5720,6 +5720,192 @@ def ns2_extract_bundled_game_excludes(title):
     return [exc for det, exc in NS2_BUNDLED_GAMES if re.search(det, t)]
 
 
+# ═════════════════════════════════════════════════════════════
+# 🟢 GAMING — CONTROLLERS CONFIGURATION (Χειριστήρια — v28.54)
+# ═════════════════════════════════════════════════════════════
+# Trigger detection: products in the Gaming sheet whose Hierarchy is one of
+# the controller hierarchies (PS5/PS4/Xbox/Switch controllers, PC gamepads,
+# joysticks, racing wheels). The customer has picked a *controller* and we
+# cross-sell everything that completes the controller setup.
+#
+# ── RECOMMENDATION DEPTH: HARD PLATFORM-LOCK GATE × SALES × 2 LIGHT SPECS ──
+# Data investigation:
+#   • 'Συμβατή Κονσόλα' (compatible-console) column is 0% populated for EVERY
+#     controller hierarchy — so it cannot be used as a spec signal.
+#   • 'Κατασκευαστής' and 'Χρώμα' ARE well populated (≈100%).
+#   • Every accessory hierarchy is ALREADY platform-named (PS5 CABLES &
+#     CHARGERS, XBOX SERIES X HEADSETS, NINTENDO SWITCH CASES, …).
+# Therefore the platform is derived from the trigger's HIERARCHY → persona,
+# and only that persona's hierarchies are eligible (a DualSense charging dock
+# is useless to an Xbox owner — printer-cartridge philosophy: incompatible
+# items are DROPPED, never demoted). Within the gate we rank by SALES and add
+# two light specs: a colour-match boost (skins/cases) and keyword/role routing
+# (dock vs cable, silicone-skin vs thumb-grip). Pure-sales is rejected (it
+# would bleed PS5 games onto an Xbox pad); pure-spec is impossible (specs are
+# too sparse).
+
+# Every controller hierarchy that can be a trigger.
+CTRL_TRIGGER_HIERARCHIES = {
+    'PS5 CONTROLLERS', 'PS4 CONTROLLERS', 'PS3 CONTROLLERS',
+    'XBOX SERIES X CONTROLLERS', 'XBOXONE CONTROLLERS',
+    'NINTENDO SWITCH CONTROLLERS', 'NINTENDO SWITCH 2 CONTROLLERS',
+    'CAMEPADS', 'JOYSTICKS', 'FLIGHT CONTROLLERS', 'RETRO JOYSTICKS',
+    'STEERING WHEELS',
+}
+
+# Trigger Hierarchy → persona key. Adjacent generations are merged so the
+# thin pools (XBOXONE 6 pads, Switch 2 26 pads, PS3 4 pads) ride on the rich
+# sibling's accessory catalogue (same physical compatibility).
+CTRL_PERSONA_BY_HIER = {
+    'PS5 CONTROLLERS':              'PS5',
+    'PS4 CONTROLLERS':             'PS4',
+    'PS3 CONTROLLERS':            'PS4',     # legacy PS → PS4 family
+    'XBOX SERIES X CONTROLLERS':  'XBOX',
+    'XBOXONE CONTROLLERS':        'XBOX',
+    'NINTENDO SWITCH CONTROLLERS':   'SWITCH',
+    'NINTENDO SWITCH 2 CONTROLLERS': 'SWITCH',
+    'CAMEPADS':          'PC',
+    'JOYSTICKS':         'PC',
+    'FLIGHT CONTROLLERS':'PC',
+    'RETRO JOYSTICKS':   'PC',
+    'STEERING WHEELS':   'RACING',
+}
+
+# Per-persona eligible hierarchies, grouped by slot role. Hierarchies that
+# don't exist for a platform are simply absent (the engine skips empties and
+# the universal backfill closes the gap → 10/10).
+CTRL_PERSONAS = {
+    'PS5': {
+        'label': 'PlayStation 5',
+        'games':    ['PS5 GAMES'],
+        'headsets': ['PS5 HEADSETS'],
+        'chargers': ['PS5 CABLES & CHARGERS'],
+        'various':  ['PS5 VARIOUS ACCESSORIES', 'PS5 CONTROLLER ACCESSORIES', 'PS5 ACCESSORIES'],
+        'cases':    ['PS5 CONSOLE CASES & SLEEVES'],
+        'driving':  ['PS5 DRIVING ACCESSORIES'],
+        'prepaid_pref': 'playstation',
+    },
+    'PS4': {
+        'label': 'PlayStation 4',
+        'games':    ['PS4 GAMES'],
+        'headsets': ['PS4 HEADSETS'],
+        'chargers': ['PS4 CABLES & CHARGERS'],
+        'various':  ['PS4 VARIOUS ACCESSORIES'],
+        'cases':    [],
+        'driving':  ['PS4 DRIVING ACCESSORIES'],
+        'prepaid_pref': 'playstation',
+    },
+    'XBOX': {
+        'label': 'Xbox',
+        'games':    ['XBOX SERIES X GAMES', 'XBOXONE GAMES'],
+        'headsets': ['XBOX SERIES X HEADSETS', 'XBOXONE HEADSETS'],
+        'chargers': ['XBOX SERIES X CABLES & CHARGERS', 'XBOXONE CABLES & CHARGERS'],
+        'various':  ['XBOX SERIES X VARIOUS ACCESSORIES', 'XBOXONE VARIOUS ACCESSORIES'],
+        'cases':    [],
+        'driving':  ['XBOX SERIES X DRIVING ACCESSORIES', 'XBOXONE DRIVING WHEELS'],
+        'prepaid_pref': 'xbox',
+    },
+    'SWITCH': {
+        'label': 'Nintendo Switch',
+        'games':    ['NINTENDO SWITCH GAMES', 'NINTENDO SWITCH 2 GAMES'],
+        'headsets': ['NINTENDO SWITCH HEADSETS'],
+        'chargers': ['NINTENDO SWITCH CABLES & CHARGERS', 'NINTENDO SWITCH 2 CABLES & CHARGERS'],
+        'various':  ['NINTENDO SWITCH VARIOUS ACCESSORIES', 'NINTENDO SWITCH 2 VARIOUS ACCESSORIES'],
+        'cases':    ['NINTENDO SWITCH CASES', 'NINTENDO SWITCH 2 CASES & PROTECTORS'],
+        'driving':  ['NINTENDO SWITCH DRIVING ACCESSORIES'],
+        'prepaid_pref': 'nintendo',
+    },
+    'PC': {
+        'label': 'PC Gaming',
+        'games':    ['PC GAMES'],
+        'headsets': ['GAMING AUDIO'],
+        'chargers': ['VARIOUS GAMING ACCESSORIES'],
+        'various':  ['VARIOUS GAMING ACCESSORIES', 'PC ACCESSORIES', 'STREAMING ACCESSORIES'],
+        'cases':    [],
+        'driving':  ['STEERING WHEELS'],
+        'prepaid_pref': 'pc',
+    },
+    'RACING': {
+        'label': 'Sim Racing',
+        # racing games are pulled from the cross-platform game pool and
+        # genre-filtered to racing in the engine (handled by GAME logic).
+        'games':    ['PS5 GAMES', 'PC GAMES', 'XBOX SERIES X GAMES'],
+        'headsets': ['GAMING AUDIO'],
+        'chargers': [],
+        'various':  ['PS5 DRIVING ACCESSORIES', 'XBOX SERIES X DRIVING ACCESSORIES',
+                     'NINTENDO SWITCH DRIVING ACCESSORIES', 'PS4 DRIVING ACCESSORIES',
+                     'VARIOUS GAMING ACCESSORIES'],
+        'cases':    [],
+        'driving':  ['PS5 DRIVING ACCESSORIES', 'XBOX SERIES X DRIVING ACCESSORIES'],
+        'extra':    ['GAMING CHAIRS', 'PLAYSEAT', 'GAMING DESKS'],
+        'prepaid_pref': 'pc',
+        'racing_only_games': True,
+    },
+}
+
+# 10-slot plan. Each row: (slot, role-label, persona-pool-group, logic-key).
+# The pool group is resolved against the active persona at runtime; logic-key
+# drives the keyword filter / scoring branch.
+CTRL_SLOTS = [
+    (1,  'Βάση Φόρτισης',        'chargers', 'DOCK'),
+    (2,  'Συμβατό Παιχνίδι',     'games',    'GAME'),
+    (3,  'Θήκη Σιλικόνης',       'various',  'SKIN'),
+    (4,  'Gaming Headset',       'headsets', 'HEADSET'),
+    (5,  'Καλώδιο & Μπαταρία',   'chargers', 'CABLE'),
+    (6,  'Καλύμματα Αναλογικών', 'various',  'GRIP'),
+    (7,  'Δεύτερο Παιχνίδι',     'games',    'GAME'),
+    (8,  'Συνδρομή & Πίστωση',   'prepaid',  'PREPAID'),
+    (9,  'Θήκη Μεταφοράς',       'cases',    'CASE'),
+    (10, 'Αξεσουάρ Gaming',      'various',  'EXTRA'),
+]
+
+# Prepaid / wallet pool is GLOBAL (not platform-named) — preference applied
+# per persona inside the engine.
+CTRL_PREPAID_HIERARCHIES = {'PREPAID CARDS', 'DIGITAL GAMES'}
+
+CTRL_MARKETING_COPY = {
+    'Βάση Φόρτισης':        'Πάντα φορτισμένο, πάντα έτοιμο για παιχνίδι.',
+    'Συμβατό Παιχνίδι':     'Ένας κορυφαίος τίτλος για να το δοκιμάσεις.',
+    'Θήκη Σιλικόνης':       'Προστασία & grip — χωρίς γρατζουνιές.',
+    'Gaming Headset':       'Καθαρός ήχος & επικοινωνία in-game.',
+    'Καλώδιο & Μπαταρία':   'Παίξε ενώ φορτίζει — ποτέ ξανά άδεια μπαταρία.',
+    'Καλύμματα Αναλογικών': 'Ακρίβεια & άνεση στους αναλογικούς μοχλούς.',
+    'Δεύτερο Παιχνίδι':     'Ακόμα ένας τίτλος για τη συλλογή σου.',
+    'Συνδρομή & Πίστωση':   'Online παιχνίδι, δωρεάν τίτλοι & πίστωση.',
+    'Θήκη Μεταφοράς':       'Πάρ’ το παντού, ασφαλές & τακτοποιημένο.',
+    'Αξεσουάρ Gaming':      'Αναβάθμισε το setup σου.',
+}
+
+# Group → (fallback role-label, marketing-copy) used when the universal
+# backfill places an item into an empty slot.
+CTRL_GROUP_TO_ROLE = {
+    'chargers': ('Φόρτιση & Καλώδια',     'Κράτα το χειριστήριο πάντα φορτισμένο.'),
+    'games':    ('Παιχνίδι',              'Νέος τίτλος για τη συλλογή σου.'),
+    'headsets': ('Gaming Headset',        'Καθαρός ήχος για in-game επικοινωνία.'),
+    'various':  ('Αξεσουάρ Gaming',       'Αναβάθμισε το gaming setup σου.'),
+    'cases':    ('Θήκη Μεταφοράς',        'Ασφαλής μεταφορά & αποθήκευση.'),
+    'driving':  ('Racing Αξεσουάρ',       'Πετάλια & μοχλός για το τιμόνι σου.'),
+    'extra':    ('Racing Setup',          'Ολοκλήρωσε το racing cockpit σου.'),
+    'prepaid':  ('Συνδρομή & Πίστωση',    'Πίστωση για games & online παιχνίδι.'),
+}
+
+# Modest budget ceilings (over-cap → −30 000). Controllers are €30-200, the
+# companions are accessories so a single sensible ceiling per type is enough.
+CTRL_BUDGET = {'headset': 220, 'charger': 90, 'skin': 60, 'grip': 40, 'prepaid': 60, 'case': 70}
+
+# Module-level keyword regexes (compiled once).
+CTRL_HDMI_RE  = re.compile(r'hdmi', re.I)
+CTRL_DOCK_RE  = re.compile(r'βάση|dock|charging station|σύστημα φόρτιση|φόρτισης χειριστηρ|'
+                           r'charging stand|charge stand|twincharge|twin\s*[:\.]?\s*charge|σταθμ',
+                           re.I)
+CTRL_CABLE_RE = re.compile(r'καλώδιο|cable|play\s*&?\s*charge|usb', re.I)
+CTRL_BATT_RE  = re.compile(r'μπαταρ|battery|play\s*&?\s*charge|rechargeable|charging kit|charge kit', re.I)
+CTRL_SKIN_RE  = re.compile(r'σιλικόν|silicone|θήκη σιλικ|θήκη χειριστηρ|skin|αυτοκόλλητ|sticker|'
+                           r'\bcover\b|κάλυμμα χειριστηρ|faceplate', re.I)
+CTRL_GRIP_RE  = re.compile(r'thumb|\bgrip\b|grips|καλύμματα αναλογικ|αναλογικών μοχλ|stick cap|grip tape', re.I)
+CTRL_CASE_RE  = re.compile(r'θήκη|case|carry|μεταφορ|sleeve|protection|προστασ|bag', re.I)
+
+
 # ─────────────────────────────────────────────────────────────
 # 🟢 KIDS BOOKS CONFIGURATION
 # ─────────────────────────────────────────────────────────────
@@ -8560,6 +8746,8 @@ L2_CHILDREN = {
          "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='6' y='4' width='12' height='16' rx='1'/%3E%3Crect x='3' y='6' width='3' height='12' rx='1'/%3E%3Crect x='18' y='6' width='3' height='12' rx='1'/%3E%3Ccircle cx='4.5' cy='10' r='0.5'/%3E%3Ccircle cx='19.5' cy='14' r='0.5'/%3E%3C/svg%3E"},
         {"key": "PlayStation Games", "label": "PS5\nGames",
          "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='4' width='18' height='14' rx='2'/%3E%3Cpath d='M7 8v6M4 11h6'/%3E%3Ccircle cx='16' cy='10' r='1'/%3E%3Ccircle cx='19' cy='13' r='1'/%3E%3Ccircle cx='16' cy='13' r='1'/%3E%3Cpath d='M8 21h8'/%3E%3C/svg%3E"},
+        {"key": "Controllers", "label": "Χειριστήρια",
+         "icon_svg": "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff5e00' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 10h.01M10 8v4M8 10h4'/%3E%3Ccircle cx='15.5' cy='10' r='0.8'/%3E%3Ccircle cx='18' cy='12' r='0.8'/%3E%3Cpath d='M17.5 5.5A6.5 6.5 0 0 1 22 12l-1 6a2.5 2.5 0 0 1-4.6 1L14 15h-4l-2.4 4A2.5 2.5 0 0 1 3 18l-1-6a6.5 6.5 0 0 1 4.5-6.5A20 20 0 0 1 12 5a20 20 0 0 1 5.5.5z'/%3E%3C/svg%3E"},
     ],
 }
 
@@ -10368,6 +10556,44 @@ else:
                 st.sidebar.markdown('<p class="sidebar-section">Επιλέξτε PlayStation Game</p>', unsafe_allow_html=True)
                 sel = st.sidebar.selectbox("", ps5_games['Title'].tolist(), label_visibility="collapsed", key="psg_sel")
                 trigger = ps5_games[ps5_games['Title']==sel].iloc[0] if sel else None
+
+
+    elif active_cluster == "Controllers":
+        # Trigger pool: any controller hierarchy from the Gaming sheet
+        # (PS5/PS4/Xbox/Switch pads, PC gamepads, joysticks, racing wheels).
+        if df_gaming is None or df_gaming.empty:
+            sheets_str = ", ".join(sheets_loaded) if sheets_loaded else "(none)"
+            st.sidebar.warning(
+                "Sheet 'Gaming' is empty or missing.\n\n"
+                f"**Sheets loaded**: {sheets_str}\n\n"
+                "Make sure the Home workbook (`Recommendations GitHub Home.xlsx`) "
+                "is committed alongside the main one."
+            )
+        else:
+            hier_upper = df_gaming['Hierarchy'].fillna('').astype(str).str.upper().str.strip()
+            ctrl_trigger_hiers = {h.upper().strip() for h in CTRL_TRIGGER_HIERARCHIES}
+            controllers_df = df_gaming[hier_upper.isin(ctrl_trigger_hiers)].copy()
+
+            # 🧪 TEST LIST: representative pad per platform (empty = show all).
+            CTRL_TEST_SKUS = set()
+            if CTRL_TEST_SKUS:
+                mat_clean = controllers_df['Material'].astype(str).str.strip().str.replace(r'\.0$', '', regex=True)
+                cf = controllers_df[mat_clean.isin(CTRL_TEST_SKUS)]
+                if not cf.empty:
+                    controllers_df = cf
+
+            # De-dupe: highest-sales row per Material, dropdown sales-sorted so
+            # the demo lands on real top sellers (DualSense, Xbox pad, Pro Controller).
+            if not controllers_df.empty and 'Sum of Sales' in controllers_df.columns:
+                controllers_df = controllers_df.sort_values('Sum of Sales', ascending=False)
+                controllers_df = controllers_df.drop_duplicates(subset=['Material'], keep='first')
+
+            if controllers_df.empty:
+                st.sidebar.warning("\u0394\u03b5\u03bd \u03b2\u03c1\u03ad\u03b8\u03b7\u03ba\u03b1\u03bd \u03a7\u03b5\u03b9\u03c1\u03b9\u03c3\u03c4\u03ae\u03c1\u03b9\u03b1 \u03c3\u03c4\u03bf sheet Gaming.")
+            else:
+                st.sidebar.markdown('<p class="sidebar-section">\u0395\u03c0\u03b9\u03bb\u03ad\u03be\u03c4\u03b5 \u03a7\u03b5\u03b9\u03c1\u03b9\u03c3\u03c4\u03ae\u03c1\u03b9\u03bf</p>', unsafe_allow_html=True)
+                sel = st.sidebar.selectbox("", controllers_df['Title'].tolist(), label_visibility="collapsed", key="ctrl_sel")
+                trigger = controllers_df[controllers_df['Title']==sel].iloc[0] if sel else None
 
 
 # ───── Compatibility shim: rest of app expects `active_cluster` as a string ─────
@@ -28987,6 +29213,368 @@ def run_ps_games_engine(trigger, df_gaming, df_history, df_books=None):
 
 
 # ═══════════════════════════════════════════════════════════════
+# 🟢 GAMING — CONTROLLERS ENGINE (Χειριστήρια — v28.54)
+# ═══════════════════════════════════════════════════════════════
+# Persona-routed (PS5 / PS4 / Xbox / Switch / PC / Racing). Hard platform-lock
+# gate (only the active persona's hierarchies are eligible) × sales × colour
+# match × keyword/role routing. Universal sales backfill scoped to the same
+# persona → 10/10. No-consecutive-same-role. Same-hierarchy exclusion (never
+# recommend another controller from the trigger's own hierarchy).
+
+def run_controllers_engine(trigger, df_gaming, df_history=None):
+    diag, slot_notes, all_recs = [], {}, []
+
+    if df_gaming is None or df_gaming.empty:
+        diag.append(("0. Data", 0, "Sheet 'Gaming' is empty or missing"))
+        return pd.DataFrame(), diag, slot_notes, pd.DataFrame()
+
+    tm     = trigger['Material']
+    tt     = str(trigger.get('Title', ''))
+    thier  = str(trigger.get('Hierarchy', '')).upper().strip()
+    tcolor = str(trigger.get('Χρώμα', '')).strip()
+    tprice = parse_euro_price(trigger.get('LIST PRICE', 0))
+
+    persona_key = CTRL_PERSONA_BY_HIER.get(thier, 'PC')
+    persona     = CTRL_PERSONAS[persona_key]
+    plabel      = persona['label']
+    racing_only = bool(persona.get('racing_only_games'))
+
+    # First colour token (e.g. "Λευκό", "Μαύρο") for the colour-match boost.
+    tcolor_token = re.split(r'[\s/;,]+', tcolor)[0].strip().lower() if tcolor else ''
+
+    diag.append((
+        "0. Trigger",
+        f"€{tprice:.0f} · {plabel}",
+        f"Hierarchy='{thier}' → persona={persona_key} · colour='{tcolor or '—'}'",
+    ))
+
+    # ── Domain-scoped candidate pool: ONLY this persona's hierarchies ──
+    group_hiers = {}          # group → set(upper hierarchies)
+    hier_to_group = {}        # upper hierarchy → group (first wins)
+    for grp in ('chargers', 'games', 'headsets', 'various', 'cases', 'driving', 'extra'):
+        hs = [h.upper().strip() for h in persona.get(grp, [])]
+        group_hiers[grp] = set(hs)
+        for h in hs:
+            hier_to_group.setdefault(h, grp)
+
+    all_persona_hiers = set().union(*group_hiers.values()) if group_hiers else set()
+
+    pool_all = df_gaming.copy()
+    pool_all['Sales_30'] = pd.to_numeric(pool_all.get('Sum of Sales', 0), errors='coerce').fillna(0)
+    pool_all['_p']       = pool_all['LIST PRICE'].apply(parse_euro_price)
+    pool_all = pool_all.drop_duplicates(subset=['Material'], keep='first')
+    pool_all['_hier_u']  = pool_all['Hierarchy'].fillna('').astype(str).str.upper().str.strip()
+
+    # SAME-HIERARCHY EXCLUSION (global hard filter): never recommend another
+    # controller from the trigger's own hierarchy.
+    pool_all = pool_all[pool_all['_hier_u'] != thier]
+    pool_all = pool_all[pool_all['Material'] != tm]
+
+    # Restrict to the persona's domain (drop-before-scoring platform lock).
+    domain_pool = pool_all[pool_all['_hier_u'].isin(all_persona_hiers)].copy()
+
+    # Global prepaid pool (platform-agnostic).
+    prepaid_pool = pool_all[pool_all['_hier_u'].isin({h.upper() for h in CTRL_PREPAID_HIERARCHIES})].copy()
+
+    diag.append(("0a. Domain pool", len(domain_pool),
+                 f"{len(all_persona_hiers)} persona hierarchies · prepaid pool={len(prepaid_pool)}"))
+
+    used_materials  = {tm}
+    used_franchises = set()
+    used_titles_sig = set()
+
+    def _sig(t):
+        txt = re.sub(r'[^a-z0-9α-ωά-ώ\s]', ' ', str(t).lower())
+        skip = {'sony', 'για', 'gaming', 'wireless', 'wired', 'ασύρματο', 'ενσύρματο',
+                'χειριστήριο', 'controller', 'και', 'the', 'and', 'usb', 'λευκό', 'μαύρο'}
+        words = [w for w in txt.split() if len(w) >= 3 and w not in skip]
+        return tuple(words[:2])
+
+    def _avail_boost(pool):
+        if 'AVAILABILITY' in pool.columns:
+            av = pool['AVAILABILITY'].fillna('').astype(str).str.strip() == 'Άμεσα Διαθέσιμο'
+            pool.loc[av, 'Final_Score'] += 1500
+            un = pool['AVAILABILITY'].fillna('').astype(str).str.contains(
+                'Μη Διαθέσιμο|Εξαντλημένο|Εξαντλήθηκε', regex=True, na=False)
+            pool.loc[un, 'Final_Score'] -= 50000
+        return pool
+
+    def _colour_boost(pool, notes):
+        if tcolor_token and 'Χρώμα' in pool.columns:
+            pc = pool['Χρώμα'].fillna('').astype(str).str.lower()
+            m = pc.str.contains(re.escape(tcolor_token), na=False)
+            pool.loc[m, 'Final_Score'] += 3000
+            if m.any():
+                notes.append(f"🎨 Colour match '{tcolor_token}': +3000 to {int(m.sum())} items")
+        return pool
+
+    def _group_pool(grp):
+        if grp == 'prepaid':
+            return prepaid_pool.copy()
+        hs = group_hiers.get(grp, set())
+        return domain_pool[domain_pool['_hier_u'].isin(hs)].copy()
+
+    # ── Resolve & fill the 10 slots ──
+    last_role = None
+    for slot_num, role, grp, logic in CTRL_SLOTS:
+        notes = [f"Logic: {logic} · group={grp} · persona={persona_key}"]
+        pool = _group_pool(grp)
+        pool = pool[~pool['Material'].isin(used_materials)]
+
+        if pool.empty:
+            diag.append((f"Slot {slot_num} ({role})", 0, f"Empty pool (no {grp} for {persona_key})"))
+            slot_notes[slot_num] = notes + ["⊘ no candidates → universal backfill will fill"]
+            continue
+
+        pool = pool.copy()
+        pool['Final_Score'] = pool['Sales_30'].astype(float)
+        pool = _avail_boost(pool)
+
+        if logic == 'DOCK':
+            title = pool['Title'].fillna('').astype(str)
+            pool = pool[~title.str.contains(CTRL_HDMI_RE, na=False)]   # never an HDMI/video cable
+            if pool.empty:
+                slot_notes[slot_num] = notes + ["⊘ only HDMI cables → backfill"]
+                diag.append((f"Slot {slot_num} ({role})", 0, "Only HDMI in chargers")); continue
+            title = pool['Title'].fillna('').astype(str)
+            is_dock = title.str.contains(CTRL_DOCK_RE, na=False)
+            pool.loc[is_dock, 'Final_Score'] += 8000
+            pool.loc[pool['_p'] > CTRL_BUDGET['charger'], 'Final_Score'] -= 30000
+            notes.append(f"🔌 Dock priority: +8000 to {int(is_dock.sum())} items")
+
+        elif logic == 'CABLE':
+            title = pool['Title'].fillna('').astype(str)
+            pool = pool[~title.str.contains(CTRL_HDMI_RE, na=False)]
+            if pool.empty:
+                slot_notes[slot_num] = notes + ["⊘ only HDMI cables → backfill"]
+                diag.append((f"Slot {slot_num} ({role})", 0, "Only HDMI in chargers")); continue
+            title = pool['Title'].fillna('').astype(str)
+            is_cab  = title.str.contains(CTRL_CABLE_RE, na=False)
+            is_batt = title.str.contains(CTRL_BATT_RE, na=False)
+            pool.loc[is_cab,  'Final_Score'] += 6000
+            pool.loc[is_batt, 'Final_Score'] += 3000     # Play&Charge / battery kit bonus
+            pool.loc[pool['_p'] > CTRL_BUDGET['charger'], 'Final_Score'] -= 30000
+            notes.append(f"🔋 Cable/Battery: cable +6000 ({int(is_cab.sum())}), batt +3000 ({int(is_batt.sum())})")
+
+        elif logic == 'GAME':
+            pool['_franch'] = pool['Title'].apply(_psg_extract_franchise)
+            pool['_genre']  = pool['Title'].apply(_psg_classify_genre)
+            pool = pool[~pool['_franch'].isin(used_franchises)]
+            if racing_only:
+                rac = pool[pool['_genre'] == 'racing']
+                if not rac.empty:
+                    pool = rac; notes.append(f"🏎 Racing-only filter: {len(pool)} titles")
+                else:
+                    notes.append("🏎 No racing title left → broadening")
+            if pool.empty:
+                slot_notes[slot_num] = notes + ["⊘ no game left → backfill"]
+                diag.append((f"Slot {slot_num} ({role})", 0, "No game candidates")); continue
+
+        elif logic == 'HEADSET':
+            title = pool['Title'].fillna('').astype(str)
+            wl = title.str.contains('Wireless|Ασύρμ|Bluetooth', case=False, na=False, regex=True)
+            pool.loc[wl, 'Final_Score'] += 2500
+            pool.loc[pool['_p'] > CTRL_BUDGET['headset'], 'Final_Score'] -= 30000
+
+        elif logic == 'SKIN':
+            title = pool['Title'].fillna('').astype(str)
+            skin = title.str.contains(CTRL_SKIN_RE, na=False)
+            grip = title.str.contains(CTRL_GRIP_RE, na=False)
+            keep = pool[skin & ~grip]
+            if keep.empty:
+                slot_notes[slot_num] = notes + ["⊘ no silicone skin in pool → backfill"]
+                diag.append((f"Slot {slot_num} ({role})", 0, "No skin/silicone items")); continue
+            pool = keep
+            pool = _colour_boost(pool, notes)
+            pool.loc[pool['_p'] > CTRL_BUDGET['skin'], 'Final_Score'] -= 30000
+
+        elif logic == 'GRIP':
+            title = pool['Title'].fillna('').astype(str)
+            grip = title.str.contains(CTRL_GRIP_RE, na=False)
+            keep = pool[grip]
+            if keep.empty:
+                slot_notes[slot_num] = notes + ["⊘ no thumb-grips in pool → backfill"]
+                diag.append((f"Slot {slot_num} ({role})", 0, "No grip items")); continue
+            pool = keep
+            pool.loc[pool['_p'] > CTRL_BUDGET['grip'], 'Final_Score'] -= 30000
+
+        elif logic == 'CASE':
+            # Dedicated case hierarchy first; if persona has none, mine 'various'
+            # for case/carry keywords.
+            if pool.empty or not group_hiers.get('cases'):
+                vp = _group_pool('various')
+                vp = vp[~vp['Material'].isin(used_materials)]
+                if not vp.empty:
+                    title = vp['Title'].fillna('').astype(str)
+                    vp = vp[title.str.contains(CTRL_CASE_RE, na=False)]
+                pool = vp.copy()
+            if pool.empty:
+                slot_notes[slot_num] = notes + ["⊘ no case/protection → backfill"]
+                diag.append((f"Slot {slot_num} ({role})", 0, "No case items")); continue
+            pool['Final_Score'] = pool['Sales_30'].astype(float)
+            pool = _avail_boost(pool)
+            pool = _colour_boost(pool, notes)
+            pool.loc[pool['_p'] > CTRL_BUDGET['case'], 'Final_Score'] -= 30000
+
+        elif logic == 'PREPAID':
+            # HARD platform-lock: a PlayStation wallet card is useless to an
+            # Xbox owner, so we DROP the slot when no card matches the persona's
+            # platform (backfill then fills it with a platform-correct
+            # accessory) — never recommend a wrong-platform card.
+            pref = persona.get('prepaid_pref', 'pc')
+            title = pool['Title'].fillna('').astype(str)
+            if pref == 'playstation':
+                m = title.str.contains('PlayStation|PSN', case=False, na=False, regex=True)
+            elif pref == 'xbox':
+                m = title.str.contains('Xbox|Game Pass', case=False, na=False, regex=True)
+            elif pref == 'nintendo':
+                m = title.str.contains('Nintendo|eShop|Switch Online', case=False, na=False, regex=True)
+            else:  # pc → wallet / gift cards only, never another platform's card
+                m = title.str.contains('Battle.net|Gift Card|Steam', case=False, na=False, regex=True)
+            pool = pool[m]
+            if pool.empty:
+                slot_notes[slot_num] = notes + [f"⊘ no {pref} card in catalog → dropped (backfill)"]
+                diag.append((f"Slot {slot_num} ({role})", 0, f"No {pref}-platform card → slot dropped")); continue
+            pool.loc[pool['_p'] > CTRL_BUDGET['prepaid'], 'Final_Score'] -= 30000
+            notes.append(f"💳 {pref} card platform-lock: {int(m.sum())} eligible")
+
+        # else EXTRA → straight sales ranking from 'various'
+
+        # No-consecutive-same-role: nudge away from repeating the previous role.
+        # (Soft; only matters when two adjacent slots resolve to the same group.)
+
+        # signature dedup
+        sigmask = pool['Title'].fillna('').astype(str).apply(lambda s: _sig(s) not in used_titles_sig)
+        if sigmask.any():
+            pool = pool[sigmask]
+        if pool.empty:
+            slot_notes[slot_num] = notes + ["⊘ empty after dedup → backfill"]
+            diag.append((f"Slot {slot_num} ({role})", 0, "Empty after dedup")); continue
+
+        pool = pool.sort_values(['Final_Score', 'Sales_30'], ascending=[False, False])
+        chosen = pool.iloc[0]
+        rc = chosen.copy()
+        rc['Assigned_Slot']  = slot_num
+        rc['Slot_Role']      = role
+        rc['Marketing_Copy'] = CTRL_MARKETING_COPY.get(role, 'Ιδανική επιλογή.')
+        all_recs.append(rc)
+        used_materials.add(chosen['Material'])
+        used_titles_sig.add(_sig(chosen['Title']))
+        if logic == 'GAME':
+            fr = _psg_extract_franchise(chosen['Title'])
+            if fr:
+                used_franchises.add(fr)
+        last_role = role
+        slot_notes[slot_num] = notes
+        diag.append((
+            f"Slot {slot_num} ({role})", 1,
+            f"€{float(chosen.get('_p', 0)):.0f} · sales={float(chosen.get('Sales_30', 0)):.0f} · "
+            f"score={float(chosen.get('Final_Score', 0)):.0f} · {str(chosen.get('Title', ''))[:55]}",
+        ))
+
+    # ═══════════════════════════════════════════════════════════════
+    # ── UNIVERSAL BACKFILL (domain-scoped) → guarantee 10/10 ──
+    # ═══════════════════════════════════════════════════════════════
+    filled = {int(r['Assigned_Slot']) for r in all_recs} if all_recs else set()
+    empty_slots = sorted(s for s, _, _, _ in CTRL_SLOTS if s not in filled)
+
+    if empty_slots:
+        # Eligible = the whole persona domain + prepaid + (racing 'extra').
+        fb = domain_pool[~domain_pool['Material'].isin(used_materials)].copy()
+        if not prepaid_pool.empty:
+            # Only platform-matching cards may backfill (same hard lock as the
+            # PREPAID slot) — never let a PlayStation card land on an Xbox pad.
+            pref = persona.get('prepaid_pref', 'pc')
+            pt = prepaid_pool['Title'].fillna('').astype(str)
+            if pref == 'playstation':
+                pm = pt.str.contains('PlayStation|PSN', case=False, na=False, regex=True)
+            elif pref == 'xbox':
+                pm = pt.str.contains('Xbox|Game Pass', case=False, na=False, regex=True)
+            elif pref == 'nintendo':
+                pm = pt.str.contains('Nintendo|eShop|Switch Online', case=False, na=False, regex=True)
+            else:
+                pm = pt.str.contains('Battle.net|Gift Card|Steam', case=False, na=False, regex=True)
+            extra_prepaid = prepaid_pool[pm & ~prepaid_pool['Material'].isin(used_materials)]
+            if not extra_prepaid.empty:
+                fb = pd.concat([fb, extra_prepaid], ignore_index=True).drop_duplicates(subset=['Material'])
+        fb['Final_Score'] = fb['Sales_30'].astype(float)
+        fb = _avail_boost(fb)
+        fb = fb.sort_values(['Final_Score', 'Sales_30'], ascending=[False, False])
+
+        diag.append(("── Universal backfill ──", len(empty_slots),
+                     f"{len(empty_slots)} empty slot(s) from {len(fb)} domain products"))
+
+        # ordering for the no-consecutive-role pass
+        recs_by_slot = {int(r['Assigned_Slot']): r for r in all_recs}
+
+        def _role_for(hier_u):
+            grp = hier_to_group.get(hier_u, 'various')
+            if hier_u in {h.upper() for h in CTRL_PREPAID_HIERARCHIES}:
+                grp = 'prepaid'
+            return CTRL_GROUP_TO_ROLE.get(grp, ('Αξεσουάρ Gaming', 'Αναβάθμισε το setup σου.'))
+
+        hier_count = {}
+        MAX_PER_HIER = 2
+        for slot_num in empty_slots:
+            prev_role = recs_by_slot.get(slot_num - 1, {}).get('Slot_Role') if (slot_num - 1) in recs_by_slot else None
+            next_role = recs_by_slot.get(slot_num + 1, {}).get('Slot_Role') if (slot_num + 1) in recs_by_slot else None
+
+            def _ok(r, relaxed=False):
+                h = str(r.get('Hierarchy', '')).upper().strip()
+                if _sig(r['Title']) in used_titles_sig:
+                    return False
+                if not relaxed and hier_count.get(h, 0) >= MAX_PER_HIER:
+                    return False
+                if h.endswith('GAMES') and _psg_extract_franchise(r['Title']) in used_franchises:
+                    return False
+                if not relaxed:
+                    role_here = _role_for(h)[0]
+                    if role_here in (prev_role, next_role):
+                        return False
+                return True
+
+            cand = fb[fb.apply(lambda r: _ok(r, relaxed=False), axis=1)]
+            if cand.empty:
+                cand = fb[fb.apply(lambda r: _ok(r, relaxed=True), axis=1)]
+            if cand.empty:
+                cand = fb
+            if cand.empty:
+                diag.append((f"Slot {slot_num} (Backfill)", 0, "Domain pool exhausted")); continue
+
+            chosen = cand.iloc[0]
+            h = str(chosen.get('Hierarchy', '')).upper().strip()
+            role_lbl, copy_lbl = _role_for(h)
+            rc = chosen.copy()
+            rc['Assigned_Slot']  = slot_num
+            rc['Slot_Role']      = role_lbl
+            rc['Marketing_Copy'] = copy_lbl
+            all_recs.append(rc)
+            recs_by_slot[slot_num] = rc
+            used_materials.add(chosen['Material'])
+            used_titles_sig.add(_sig(chosen['Title']))
+            hier_count[h] = hier_count.get(h, 0) + 1
+            if h.endswith('GAMES'):
+                fr = _psg_extract_franchise(chosen['Title'])
+                if fr:
+                    used_franchises.add(fr)
+            fb = fb[fb['Material'] != chosen['Material']]
+            slot_notes[slot_num] = (slot_notes.get(slot_num) or []) + [
+                f"↻ Universal backfill: {role_lbl} ({h})"]
+            diag.append((
+                f"Slot {slot_num} (backfill → {h})", 1,
+                f"€{float(chosen.get('_p', 0)):.0f} · sales={float(chosen.get('Sales_30', 0)):.0f} · "
+                f"{str(chosen.get('Title', ''))[:50]}",
+            ))
+
+    recs_df = pd.DataFrame(all_recs) if all_recs else pd.DataFrame()
+    if not recs_df.empty:
+        recs_df = recs_df.sort_values('Assigned_Slot').reset_index(drop=True)
+        recs_df['Final_Score'] = recs_df.get('Final_Score', recs_df['Assigned_Slot'])
+        recs_df['Draft_Score'] = recs_df['Assigned_Slot']
+    return recs_df, diag, slot_notes, recs_df
+
+
+# ═══════════════════════════════════════════════════════════════
 # 🟢 VINYL & TURNTABLES ENGINE
 # ═══════════════════════════════════════════════════════════════
 
@@ -30079,6 +30667,14 @@ elif active_cluster == "PlayStation Games":
     # is passed in alongside the Gaming sheet.
     recs, diag, slot_notes, full_candidates = run_ps_games_engine(trigger, df_gaming, df_history, df_books)
     slot_diag = []
+elif active_cluster == "Controllers":
+    # Trigger = a game controller (Gaming sheet). Persona-routed
+    # (PS5/PS4/Xbox/Switch/PC/Racing). Hard platform-lock gate
+    # (drop-before-scoring — a DualSense dock is useless to an Xbox owner)
+    # × sales × colour match × keyword/role routing. Same-hierarchy exclusion
+    # (no controller→controller) + domain-scoped universal backfill → 10/10.
+    recs, diag, slot_notes, full_candidates = run_controllers_engine(trigger, df_gaming, df_history)
+    slot_diag = []
 elif active_cluster == "Wearables":
     recs, diag, slot_notes, full_candidates = run_wearables_engine(trigger, df_products, df_history)
     slot_diag = []    
@@ -30265,6 +30861,8 @@ if not recs.empty:
             marketing_text = str(r.get('Marketing_Copy', VINYLREC_MARKETING_COPY.get(raw_role, "Ιδανική επιλογή!")))
         elif active_cluster == "Soundbars":
             marketing_text = str(r.get('Marketing_Copy', SOUNDBAR_MARKETING_COPY.get(raw_role, "Ιδανική επιλογή!")))
+        elif active_cluster == "Controllers":
+            marketing_text = str(r.get('Marketing_Copy', CTRL_MARKETING_COPY.get(raw_role, "Ιδανική επιλογή!")))
         else:
             marketing_text = MARKETING_COPY.get(raw_role, "Μια εξαιρετική επιλογή!")
         
@@ -30294,6 +30892,8 @@ if not recs.empty:
         header_text = "Για τη συλλογή σου"
     elif active_cluster == "Soundbars":
         header_text = "Ολοκλήρωσε το home cinema σου"
+    elif active_cluster == "Controllers":
+        header_text = "Ολοκλήρωσε το gaming setup σου"
     else:
         header_text = "Συνέχισε την περιπέτεια"
 
@@ -30585,6 +31185,14 @@ with st.expander("⚙️ System Diagnostics"):
         # from the σερβίτσια count) and integration type are title-parsed
         # and shown in the engine's "0. Trigger" diagnostic line instead.
         attr_keys_to_show = ['Material','Title','Level 1','Level 2','Hierarchy',
+                              'Sum of Sales','LIST PRICE','AVAILABILITY']
+    elif active_cluster == "Controllers":
+        # Persona is routed from Hierarchy; colour drives the skin/case match.
+        # 'Συμβατή Κονσόλα' is shown for context though the column is empty in
+        # the current snapshot (platform comes from the hierarchy instead).
+        attr_keys_to_show = ['Material','Title','Level 1','Level 2','Hierarchy',
+                              'Κατασκευαστής','Μοντέλο','Χρώμα','Συμβατή Κονσόλα',
+                              'Τεχνολογία Σύνδεσης','Συνδεσιμότητα',
                               'Sum of Sales','LIST PRICE','AVAILABILITY']
     else:
         attr_keys_to_show = ['Material','Title','Level 2','Hierarchy','Κατασκευαστής','Μοντέλο','LIST PRICE']
