@@ -103,7 +103,7 @@ st.markdown("""
         <div class="poc-title">Recommendation PoC</div>
     </div>
     <div class="poc-promo-banner">
-        🟢 Engine v28.53 — Soundbars (TV & Home Entertainment): νέο cluster με τη soundbar ως trigger → ολοκλήρωση home-cinema setup. Hybrid scoring: brand-ecosystem (κυρίαρχο) × tier (κανάλια/Watt/τιμή από τίτλο) × sales. Brand-matched TV pairing (Samsung Q-Symphony / LG WOW / Sony Acoustic Center Sync), HDMI 2.1 eARC hard-gate σε Atmos/premium, soundbar-mount boost, cross-brand upgrade discovery, universal backfill → 10/10. PC/desktop soundbars (Razer/Dell/Trust) gated out του trigger set · 10/10 παντού
+        🟢 Engine v28.53.1 — Soundbars (TV & Home Entertainment): η soundbar ως trigger → ολοκλήρωση setup με ΣΥΜΒΑΤΑ αξεσουάρ ήχου μόνο. Αφαιρέθηκαν το slot Τηλεόρασης (λάθος intent + cross-brand) και το slot «Αναβάθμιση Ήχου» (ανταγωνιστική soundbar). Καλώδια μόνο HDMI eARC (μόνο συμβατός τύπος στον κατάλογο — κανένα optical/3.5mm/RCA). Slots: HDMI eARC · βάση soundbar · προστασία ρεύματος · τηλεχειριστήριο · μπαταρίες · καθαρισμός · ακουστικά · φορητό/πάρτυ/επιπλέον ηχείο. Tier-capped τιμές, universal backfill → 10/10. PC bars gated out.
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -4875,15 +4875,15 @@ SOUNDBAR_TEST_SKUS = {
 
 SOUNDBAR_MARKETING_COPY = {
     "Καλώδιο HDMI eARC":  "Σύνδεσε με eARC — full Atmos/DTS από μία τηλεόραση.",
-    "Τηλεόραση":          "Η τέλεια εικόνα για τον νέο σου ήχο — ίδιο brand, τέλειο sync.",
-    "Βάση Στήριξης":      "Ασφαλής, σταθερή τοποθέτηση για το setup σου.",
+    "Βάση Στήριξης":      "Ασφαλής, σταθερή τοποθέτηση για τη soundbar σου.",
     "Προστασία Ρεύματος": "Προστάτεψε το home cinema σου από υπερτάσεις.",
     "Τηλεχειριστήριο":    "Ένας έλεγχος για όλα — τηλεόραση & soundbar μαζί.",
-    "Εφεδρικό Καλώδιο":   "Έξτρα καλώδιο για κονσόλες & πηγές.",
-    "Καθαρισμός":         "Κράτησε τη συσκευή σου σαν καινούργια.",
     "Μπαταρίες":          "Μην ξεμείνεις ποτέ από ενέργεια στο τηλεχειριστήριο.",
-    "Αναβάθμιση Ήχου":    "Ανέβα κατηγορία — περισσότερα κανάλια, βαθύτερο μπάσο.",
+    "Καθαρισμός":         "Κράτησε τη συσκευή σου σαν καινούργια.",
+    "Ακουστικά":          "Ιδιωτική ακρόαση αργά το βράδυ — χωρίς να ξυπνάς το σπίτι.",
     "Φορητό Ηχείο":       "Πάρε τη μουσική σου παντού.",
+    "Πάρτυ Ηχείο":        "Δυνατός ήχος για κάθε γιορτή & παρέα.",
+    "Επιπλέον Ηχείο":     "Ένα ακόμη ηχείο για ήχο σε κάθε δωμάτιο.",
     "Πρόσθετο Αξεσουάρ":  "Ολοκλήρωσε το setup σου.",
 }
 
@@ -27034,16 +27034,16 @@ def run_soundbars_engine(trigger, df_products, df_history):
                  f"Tier={tier} Atmos={is_atmos} Sub={has_sub} TVpair={brand_pairs_tv}"))
 
     potential_slots = [
-        ('Καλώδιο HDMI eARC',  ['HDMI'],                                       'HDMI_EARC'),
-        ('Τηλεόραση',          SOUNDBAR_TV_BUCKETS[tier],                      'TV_PAIR'),
-        ('Βάση Στήριξης',      ['MOUNTS & STANDS'],                            'MOUNT'),
-        ('Προστασία Ρεύματος', ['SURGE PROTECTORS'],                           'SURGE'),
-        ('Τηλεχειριστήριο',    ['REMOTE CONTROLS'],                            'REMOTE'),
-        ('Εφεδρικό Καλώδιο',   ['ΚΑΛΩΔΙΑ 3.5MM JACK', 'ΚΑΛΩΔΙΑ RCA', 'HDMI'],  'CABLE2'),
-        ('Καθαρισμός',         ['CLEANING PRODUCTS'],                          'GENERIC'),
-        ('Μπαταρίες',          ['ΑΛΚΑΛΙΚΕΣ'],                                  'GENERIC'),
-        ('Αναβάθμιση Ήχου',    ['SOUNDBARS'],                                  'SB_UPGRADE'),
-        ('Φορητό Ηχείο',       ['ΗΧΕΙΑ ΦΟΡΗΤΟΥ ΗΧΟΥ', 'PARTY SPEAKERS'],       'PORTABLE'),
+        ('Καλώδιο HDMI eARC',  ['HDMI'],                                 'HDMI_EARC'),   # only soundbar-compatible cable in the catalog
+        ('Βάση Στήριξης',      ['MOUNTS & STANDS'],                      'MOUNT'),
+        ('Προστασία Ρεύματος', ['SURGE PROTECTORS'],                     'SURGE'),
+        ('Τηλεχειριστήριο',    ['REMOTE CONTROLS'],                      'REMOTE'),
+        ('Μπαταρίες',          ['ΑΛΚΑΛΙΚΕΣ'],                           'GENERIC'),
+        ('Καθαρισμός',         ['CLEANING PRODUCTS'],                    'GENERIC'),
+        ('Ακουστικά',          ['OVERHEAD'],                             'HEADPHONES'),  # private late-night listening
+        ('Φορητό Ηχείο',       ['ΗΧΕΙΑ ΦΟΡΗΤΟΥ ΗΧΟΥ'],                   'PORTABLE'),
+        ('Πάρτυ Ηχείο',        ['PARTY SPEAKERS'],                       'PARTY'),
+        ('Επιπλέον Ηχείο',     ['ΗΧΕΙΑ ΦΟΡΗΤΟΥ ΗΧΟΥ', 'PARTY SPEAKERS'], 'PORTABLE'),    # 2nd, de-duped via used_materials
     ]
 
     # ── Base candidate pool + co-purchase frequency ──
@@ -27101,20 +27101,6 @@ def run_soundbars_engine(trigger, df_products, df_history):
             pool.loc[earc, 'Final_Score'] += 120000
             pool.loc[pool['_p'] > 60, 'Final_Score'] -= 200000  # keep cable price sane
 
-        elif logic_key == 'TV_PAIR':
-            lo, hi = SOUNDBAR_TV_PRICE_WIN[tier]
-            in_win = (pool['_p'] >= lo) & (pool['_p'] <= hi)
-            pool.loc[in_win, 'Final_Score'] += 350000
-            pool.loc[pool['_p'] < lo * 0.6, 'Final_Score'] -= 200000
-            pool.loc[pool['_p'] > hi * 1.4, 'Final_Score'] -= 400000
-            if brand_pairs_tv:
-                bmatch = pool['Κατασκευαστής'].fillna('').str.strip().str.upper() == tb
-                pool.loc[bmatch, 'Final_Score'] += 400000  # Q-Symphony / WOW / Acoustic Center Sync
-                notes.append(f"Brand-ecosystem TV pairing ({tb}) +400k")
-            if tier in ('premium', 'flagship'):
-                premium_panel = title_l.str.contains('oled|qled|mini.?led|neo', regex=True, na=False)
-                pool.loc[premium_panel, 'Final_Score'] += 120000
-
         elif logic_key == 'MOUNT':
             topo = pool.get('Τοποθέτηση ≡', pd.Series('', index=pool.index)).fillna('').astype(str).str.strip()
             pool = pool[~topo.isin(['Δαπέδου', 'Επιδαπέδια'])]
@@ -27137,23 +27123,19 @@ def run_soundbars_engine(trigger, df_products, df_history):
                 bmatch = pool['Κατασκευαστής'].fillna('').str.strip().str.upper() == tb
                 pool.loc[bmatch, 'Final_Score'] += 100000
 
-        elif logic_key == 'CABLE2':
-            hier_u = pool['Hierarchy'].fillna('').astype(str).str.upper().str.strip()
-            is_hdmi = hier_u == 'HDMI'
-            pool.loc[~is_hdmi, 'Final_Score'] += 180000  # prefer a different cable type, not a 2nd HDMI
-            ver_col = pool.get('Έκδοση ≡', pd.Series('', index=pool.index)).fillna('').astype(str)
-            is_14 = ver_col.str.contains(r'1\.[234]', regex=True, na=False) | title_l.str.contains('hdmi 1.', na=False)
-            pool.loc[is_hdmi & is_14, 'Final_Score'] -= 250000  # never a worse-version duplicate of slot 1
-            pool.loc[pool['_p'] > 40, 'Final_Score'] -= 200000
+        elif logic_key == 'HEADPHONES':
+            # Private late-night listening — price-capped to the soundbar's tier
+            cap = {'entry': 90, 'mid': 160, 'premium': 320, 'flagship': 500}[tier]
+            pool.loc[(pool['_p'] >= 20) & (pool['_p'] <= cap), 'Final_Score'] += 180000
+            pool.loc[pool['_p'] > cap, 'Final_Score'] -= 250000
+            if tb:  # nudge toward same audio brand when present (Sony/JBL/etc. make headphones too)
+                bmatch = pool['Κατασκευαστής'].fillna('').str.strip().str.upper() == tb
+                pool.loc[bmatch, 'Final_Score'] += 90000
 
-        elif logic_key == 'SB_UPGRADE':
-            # discovery / upsell: a higher-tier, cross-brand soundbar
-            pool = pool[~pool['Title'].fillna('').str.contains('|'.join(SOUNDBAR_PC_BRANDS), case=False, na=False)]
-            pool.loc[pool['_p'] > tprice * 1.15, 'Final_Score'] += 250000
-            pool.loc[pool['_p'] <= tprice, 'Final_Score'] -= 200000
-            if tb:
-                same_brand = pool['Κατασκευαστής'].fillna('').str.strip().str.upper() == tb
-                pool.loc[same_brand, 'Final_Score'] -= 80000
+        elif logic_key == 'PARTY':
+            cap = {'entry': 180, 'mid': 300, 'premium': 500, 'flagship': 800}[tier]
+            pool.loc[(pool['_p'] >= 40) & (pool['_p'] <= cap), 'Final_Score'] += 150000
+            pool.loc[pool['_p'] > cap, 'Final_Score'] -= 200000
 
         elif logic_key == 'PORTABLE':
             cap = {'entry': 120, 'mid': 200, 'premium': 350, 'flagship': 500}[tier]
